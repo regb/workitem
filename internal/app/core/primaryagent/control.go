@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 
 	"github.com/regb/workitem/internal/agent"
@@ -91,10 +93,16 @@ func (s *Service) ControlSocketPath(itemID string, runtime *model.AgentRuntime) 
 		return ""
 	}
 	relative := runtimepath.ControlSocket(itemID, runtime.ID)
+	var socketPath string
 	if strings.TrimSpace(s.RuntimeSocketRoot) != "" {
-		return filepath.Join(s.RuntimeSocketRoot, filepath.FromSlash(relative))
+		socketPath = filepath.Join(s.RuntimeSocketRoot, filepath.FromSlash(relative))
+	} else {
+		socketPath = filepath.Join(s.store.ItemDir(itemID), "agent", "control.sock")
 	}
-	return filepath.Join(s.store.ItemDir(itemID), "agent", "control.sock")
+	if goruntime.GOOS == "darwin" && len(socketPath) >= 100 {
+		return filepath.Join("/tmp", fmt.Sprintf("wi-%d", os.Getuid()), filepath.FromSlash(relative))
+	}
+	return socketPath
 }
 
 func (s *Service) LogPath(itemID string, runtime *model.AgentRuntime) string {

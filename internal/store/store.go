@@ -751,6 +751,9 @@ func FindByWorktreeFromManifests(manifests []model.Manifest, path string) (model
 	if err != nil {
 		return model.Manifest{}, err
 	}
+	if resolved, resolveErr := filepath.EvalSymlinks(abs); resolveErr == nil {
+		abs = resolved
+	}
 	var matches []model.Manifest
 	for _, m := range manifests {
 		if m.Checkout.Path == nil {
@@ -759,6 +762,9 @@ func FindByWorktreeFromManifests(manifests []model.Manifest, path string) (model
 		checkoutAbs, err := filepath.Abs(*m.Checkout.Path)
 		if err != nil {
 			continue
+		}
+		if resolved, resolveErr := filepath.EvalSymlinks(checkoutAbs); resolveErr == nil {
+			checkoutAbs = resolved
 		}
 		if abs == checkoutAbs || isSubpath(abs, checkoutAbs) {
 			matches = append(matches, m)

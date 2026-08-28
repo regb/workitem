@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -53,7 +54,11 @@ func TestShutdownOperationEnvironmentDoesNotLookAttached(t *testing.T) {
 }
 
 func TestShutdownFromTmuxSchedulesDetachedWorker(t *testing.T) {
-	application := &app.App{SelfPath: "/bin/true"}
+	truePath, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true executable is unavailable")
+	}
+	application := &app.App{SelfPath: truePath}
 	var stdout, stderr bytes.Buffer
 	cfg := Config{Stdout: &stdout, Stderr: &stderr, Env: map[string]string{"TMUX": "/tmp/tmux"}, App: application, StateRoot: t.TempDir()}
 	if err := runShutdown(context.Background(), nil, cfg, true); err != nil {

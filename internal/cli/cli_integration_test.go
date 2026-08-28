@@ -1188,7 +1188,7 @@ func TestRemovedTopLevelPlumbingAliasesAreUnknown(t *testing.T) {
 
 func bindTestCoordinator(t *testing.T, application *app.App, st *store.Store) {
 	t.Helper()
-	socket := filepath.Join(t.TempDir(), "daemon.sock")
+	socket := filepath.Join(testutil.ShortTempDir(t), "daemon.sock")
 	server, err := coordinator.NewServer(st.Root, socket)
 	if err != nil {
 		t.Fatal(err)
@@ -1228,7 +1228,7 @@ func configuredApp(t *testing.T) (*bytes.Buffer, *bytes.Buffer, *app.App) {
 		Commit: commit,
 	}}
 	application := app.New(st, fg)
-	socket := filepath.Join(t.TempDir(), "daemon.sock")
+	socket := filepath.Join(testutil.ShortTempDir(t), "daemon.sock")
 	server, err := coordinator.NewServer(root, socket)
 	if err != nil {
 		t.Fatal(err)

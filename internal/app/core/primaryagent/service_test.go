@@ -12,6 +12,7 @@ import (
 	"github.com/regb/workitem/internal/app/contract"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/runtimepath"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 type runtimeStore struct {
@@ -147,7 +148,7 @@ func TestObserveOwnershipRejectsReusedPID(t *testing.T) {
 }
 
 func TestObserveOwnershipRequiresLiveControlSocket(t *testing.T) {
-	root := t.TempDir()
+	root := testutil.ShortTempDir(t)
 	s := New(&runtimeStore{}, process(true), nil, nil, nil, nil, nil, nil)
 	s.RuntimeSocketRoot = root
 	withoutSocket := s.ObserveOwnership(&model.AgentRuntime{ID: "without-socket", WorkItemID: "item-1", Mode: string(agent.ModeTUI), HostPID: 42, HostProcessGroup: 42, HostStartTime: 42})

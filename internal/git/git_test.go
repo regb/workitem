@@ -25,7 +25,7 @@ func TestDetectRepository(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Repository.RootAtCreation != repo {
+	if !samePath(t, info.Repository.RootAtCreation, repo) {
 		t.Fatalf("root = %q, want %q", info.Repository.RootAtCreation, repo)
 	}
 	if !filepath.IsAbs(info.Repository.GitCommonDir) || !strings.HasSuffix(info.Repository.GitCommonDir, ".git") {
@@ -67,7 +67,7 @@ func TestRepositoryHomeReturnsPrimaryCheckoutFromLinkedWorktree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if home.Path != repo || home.Branch != branch || home.Bare || home.Detached {
+	if !samePath(t, home.Path, repo) || home.Branch != branch || home.Bare || home.Detached {
 		t.Fatalf("home=%+v", home)
 	}
 }
@@ -131,7 +131,7 @@ func TestDefaultBranchWorktreeAndPlumbing(t *testing.T) {
 		t.Fatalf("paths=%v err=%v", paths, err)
 	}
 	wt, err := client.TargetWorktreeForBranch(ctx, repo, "feature")
-	if err != nil || wt == nil || wt.Path != feature {
+	if err != nil || wt == nil || !samePath(t, wt.Path, feature) {
 		t.Fatalf("worktree=%+v err=%v", wt, err)
 	}
 	if err := client.UpdateRef(ctx, repo, "refs/heads/"+branch, newSHA, oldSHA, "test fast-forward"); err != nil {
@@ -140,6 +140,13 @@ func TestDefaultBranchWorktreeAndPlumbing(t *testing.T) {
 	if err := client.UpdateRef(ctx, repo, "refs/heads/"+branch, oldSHA, oldSHA, "stale CAS"); err == nil {
 		t.Fatal("expected compare-and-swap update to fail")
 	}
+}
+
+func samePath(t *testing.T, left, right string) bool {
+	t.Helper()
+	leftInfo, leftErr := os.Stat(left)
+	rightInfo, rightErr := os.Stat(right)
+	return leftErr == nil && rightErr == nil && os.SameFile(leftInfo, rightInfo)
 }
 
 func TestWorktreeAddRemoveAndBranchExists(t *testing.T) {

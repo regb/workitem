@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/regb/workitem/internal/agent"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestControlSocketReturnsRuntimeRejection(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "control.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "control.sock")
 	server, err := agent.ListenControlSocket(path)
 	if err != nil {
 		t.Fatal(err)
@@ -29,7 +30,7 @@ func TestControlSocketReturnsRuntimeRejection(t *testing.T) {
 }
 
 func TestControlSocketRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "control.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "control.sock")
 	server, err := agent.ListenControlSocket(path)
 	if err != nil {
 		t.Fatal(err)

@@ -79,6 +79,9 @@ func TestEnvironmentReloadsWatchedSourceWhenCallerHasPreviouslyLoadedEnvironment
 		t.Skip("direnv is not installed")
 	}
 	dir := t.TempDir()
+	if resolved, resolveErr := filepath.EvalSymlinks(dir); resolveErr == nil {
+		dir = resolved
+	}
 	values := filepath.Join(dir, "values.envrc")
 	if err := os.WriteFile(values, []byte("export WI_DIRENV_RELOAD_SENTINEL=old\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -86,11 +89,19 @@ func TestEnvironmentReloadsWatchedSourceWhenCallerHasPreviouslyLoadedEnvironment
 	if err := os.WriteFile(filepath.Join(dir, ".envrc"), []byte("source_env_if_exists ./values.envrc\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if output, err := exec.Command(path, "allow", filepath.Join(dir, ".envrc")).CombinedOutput(); err != nil {
+	home := t.TempDir()
+	dataHome := filepath.Join(home, "data")
+	configHome := filepath.Join(home, "config")
+	cacheHome := filepath.Join(home, "cache")
+	baseEnv := map[string]string{"HOME": home, "PATH": os.Getenv("PATH"), "XDG_DATA_HOME": dataHome, "XDG_CONFIG_HOME": configHome, "XDG_CACHE_HOME": cacheHome}
+	allow := exec.Command(path, "allow", filepath.Join(dir, ".envrc"))
+	allow.Dir = dir
+	allow.Env = []string{"HOME=" + home, "PATH=" + os.Getenv("PATH"), "XDG_DATA_HOME=" + dataHome, "XDG_CONFIG_HOME=" + configHome, "XDG_CACHE_HOME=" + cacheHome}
+	if output, err := allow.CombinedOutput(); err != nil {
 		t.Fatalf("allow fixture: %v: %s", err, output)
 	}
 	client := direnv.Client{Path: path, Runner: direnv.ExecRunner{}}
-	loaded, err := client.Environment(context.Background(), dir, nil)
+	loaded, err := client.Environment(context.Background(), dir, baseEnv)
 	if err != nil || loaded["WI_DIRENV_RELOAD_SENTINEL"] != "old" {
 		t.Fatalf("initial environment sentinel=%q err=%v", loaded["WI_DIRENV_RELOAD_SENTINEL"], err)
 	}

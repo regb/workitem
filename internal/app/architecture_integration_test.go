@@ -1922,7 +1922,7 @@ func TestAgentExecHoldsLockAndRunsPiWithExplicitRootSessionPath(t *testing.T) {
 	application.Tmux = &fakeTmux{}
 	application.Pi = fp
 	application.AgentRuntimeStateRoot = filepath.Join(t.TempDir(), "state")
-	application.AgentRuntimeSocketRoot = filepath.Join(t.TempDir(), "runtime")
+	application.AgentRuntimeSocketRoot = filepath.Join(testutil.ShortTempDir(t), "runtime")
 	application.Clock = fixedClock{testutil.Time()}
 	ids := []string{itemID, sessionID}
 	idx := 0
