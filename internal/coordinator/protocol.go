@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -153,7 +155,7 @@ func SocketPath(runtimeDir, dataRoot string) (string, error) {
 		return "", err
 	}
 	name := key + ".sock"
-	return filepath.Join(runtimeDir, "wi", name), nil
+	return portableSocketPath(filepath.Join(runtimeDir, "wi", name), "wi", name), nil
 }
 
 // AgentSocketPath is the restricted control-plane endpoint intended for
@@ -167,5 +169,15 @@ func AgentSocketPath(runtimeDir, dataRoot string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(runtimeDir, "wi-agent", key, "daemon.sock"), nil
+	return portableSocketPath(filepath.Join(runtimeDir, "wi-agent", key, "daemon.sock"), "wi-agent", key, "daemon.sock"), nil
+}
+
+func portableSocketPath(candidate string, parts ...string) string {
+	// Darwin limits Unix socket addresses to 104 bytes. Its default temporary
+	// directory is often already long enough to consume most of that budget.
+	if runtime.GOOS == "darwin" && len(candidate) >= 100 {
+		base := filepath.Join("/tmp", fmt.Sprintf("wi-%d", os.Getuid()))
+		return filepath.Join(append([]string{base}, parts...)...)
+	}
+	return candidate
 }

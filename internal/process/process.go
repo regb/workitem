@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -142,6 +144,9 @@ func (i Inspector) findDescendantSnapshot(rootPID int, needles []string) (Info, 
 }
 
 func (i Inspector) snapshot() (map[int]Info, error) {
+	if runtime.GOOS == "darwin" && (i.ProcRoot == "" || i.ProcRoot == "/proc") {
+		return darwinSnapshot()
+	}
 	root := i.ProcRoot
 	if root == "" {
 		root = "/proc"
@@ -169,6 +174,17 @@ func (i Inspector) snapshot() (map[int]Info, error) {
 }
 
 func (i Inspector) readInfo(pid int) (Info, error) {
+	if runtime.GOOS == "darwin" && (i.ProcRoot == "" || i.ProcRoot == "/proc") {
+		infos, err := darwinSnapshot()
+		if err != nil {
+			return Info{}, err
+		}
+		info, ok := infos[pid]
+		if !ok {
+			return Info{}, os.ErrNotExist
+		}
+		return info, nil
+	}
 	root := i.ProcRoot
 	if root == "" {
 		root = "/proc"
@@ -186,6 +202,42 @@ func (i Inspector) readInfo(pid int) (Info, error) {
 		info.Cmdline = cmdline
 	}
 	return info, nil
+}
+
+func darwinSnapshot() (map[int]Info, error) {
+	// lstart is stable for the life of a PID and avoids relying on Linux /proc.
+	out, err := exec.Command("ps", "-axo", "pid=,ppid=,pgid=,state=,lstart=,comm=,args=").Output()
+	if err != nil {
+		return nil, fmt.Errorf("inspect processes with ps: %w", err)
+	}
+	infos := map[int]Info{}
+	for _, line := range strings.Split(string(out), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 10 {
+			continue
+		}
+		pid, e1 := strconv.Atoi(fields[0])
+		ppid, e2 := strconv.Atoi(fields[1])
+		pgrp, e3 := strconv.Atoi(fields[2])
+		if e1 != nil || e2 != nil || e3 != nil {
+			continue
+		}
+		// ps lstart occupies fields 4 through 8. Hash its text into the durable
+		// numeric identity used by the existing process contract.
+		startText := strings.Join(fields[4:9], " ")
+		var start uint64 = 1469598103934665603
+		for j := 0; j < len(startText); j++ {
+			start ^= uint64(startText[j])
+			start *= 1099511628211
+		}
+		command := filepath.Base(fields[9])
+		args := append([]string(nil), fields[10:]...)
+		if len(args) == 0 {
+			args = []string{fields[9]}
+		}
+		infos[pid] = Info{PID: pid, PPID: ppid, PGRP: pgrp, State: fields[3], StartTime: start, Command: command, Cmdline: args}
+	}
+	return infos, nil
 }
 
 func parseStat(pid int, stat string) (Info, error) {

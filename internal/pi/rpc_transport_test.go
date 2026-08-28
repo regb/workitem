@@ -15,6 +15,7 @@ import (
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestNativeRPCTransportRetriesLiveEventUntilDaemonAcknowledges(t *testing.T) {
@@ -121,7 +122,7 @@ func TestNativeRPCTransportRejectsMismatchedControlIdentity(t *testing.T) {
 }
 
 func TestNativeRPCTransportControlsAndPublishesOnlyCompactEvents(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.ShortTempDir(t)
 	fakePi := filepath.Join(dir, "fake-pi")
 	script := `#!/usr/bin/env bash
 set -euo pipefail
