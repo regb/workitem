@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+unformatted=$(
+    git diff --cached --name-only --diff-filter=ACMR -z -- '*.go' |
+        xargs -0 -r gofmt -l
+)
+if [ -n "$unformatted" ]; then
+    echo "pre-commit: staged Go files need gofmt:" >&2
+    printf '%s\n' "$unformatted" >&2
+    exit 1
+fi
+
+go test -short ./...

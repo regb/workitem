@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "install-hooks: not inside a Git checkout" >&2
+    exit 1
+}
+cd "$root"
+
+current=$(git config --local --get core.hooksPath || true)
+if [ -n "$current" ] && [ "$current" != ".githooks" ]; then
+    echo "install-hooks: core.hooksPath is already $current; refusing to replace it" >&2
+    exit 1
+fi
+
+git config --local core.hooksPath .githooks
+echo "installed repository hooks via core.hooksPath=.githooks"
+echo "post-commit auto-install requires a clean checkout; disable per commit with WI_AUTO_INSTALL=0"

@@ -1,0 +1,36 @@
+/* Keep the site close to stock Starlight. These overrides only set a quiet
+   neutral palette and make the reading/navigation columns easier to scan. */
+:root {
+  --sl-color-accent-low: #12342d;
+  --sl-color-accent: #43b898;
+  --sl-color-accent-high: #c1f3e5;
+  --sl-sidebar-width: 17.5rem;
+  --sl-content-width: 48rem;
+  --sl-font: Inter, ui-sans-serif, system-ui, sans-serif;
+  --sl-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #d9f2ea;
+  --sl-color-accent: #14765d;
+  --sl-color-accent-high: #103e32;
+  --sl-color-bg-nav: #ffffff;
+  --sl-color-bg-sidebar: #f7f9f8;
+  --sl-color-hairline: #e3e8e5;
+  --sl-color-hairline-light: #edf0ee;
+  --sl-color-hairline-shade: #d8dfdb;
+}
+
+@media (min-width: 50rem) {
+  .sidebar-pane {
+    border-inline-end: 1px solid var(--sl-color-hairline);
+  }
+}
+
+.sl-markdown-content > :is(p, ul, ol) {
+  max-width: 44rem;
+}
+
+.sl-markdown-content table {
+  width: 100%;
+}

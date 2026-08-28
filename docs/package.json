@@ -1,0 +1,21 @@
+{
+  "name": "wi-docs",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "astro build --force",
+    "check": "astro check",
+    "dev": "astro dev",
+    "preview": "astro preview",
+    "test:site": "node --test tests/built-site.test.mjs"
+  },
+  "dependencies": {
+    "@astrojs/sitemap": "^3.7.3",
+    "@astrojs/starlight": "^0.41.7",
+    "astro": "^7.2.4"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,25 @@
+# Build and test output
+/wi
+*.test
+*.out
+coverage*.txt
+coverage*.html
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+
+# Editors and operating systems
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Local diagnostics and databases
+*.log
+*.db
+*.sqlite
+*.sqlite3

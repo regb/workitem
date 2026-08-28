@@ -1,0 +1,63 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    cat <<'EOF'
+usage: scripts/release-local <vMAJOR.MINOR.PATCH[-PRERELEASE]>
+
+Test and build the current clean commit, create an annotated local tag, and
+atomically install that exact release binary. The tag is not pushed.
+EOF
+}
+
+if [ "$#" -ne 1 ]; then
+    usage >&2
+    exit 2
+fi
+version=$1
+if ! printf '%s\n' "$version" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$'; then
+    echo "release-local: invalid version $version" >&2
+    usage >&2
+    exit 2
+fi
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "release-local: not inside a Git checkout" >&2
+    exit 1
+}
+cd "$root"
+
+if [ -n "$(git status --porcelain --untracked-files=normal)" ]; then
+    echo "release-local: checkout is dirty; commit or remove every change before tagging" >&2
+    exit 3
+fi
+if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
+    echo "release-local: tag $version already exists" >&2
+    exit 1
+fi
+
+echo "testing $(git rev-parse --short=12 HEAD)"
+go test ./...
+
+tmpdir=$(mktemp -d)
+trap 'rm -rf "$tmpdir"' EXIT HUP INT TERM
+ldflags="-X github.com/regb/workitem/internal/version.release=$version"
+go build -buildvcs=true -trimpath -ldflags "$ldflags" -o "$tmpdir/wi" ./cmd/wi
+
+# Tag only after tests and the exact release artifact have been built.
+git tag -a "$version" -m "wi $version"
+
+gobin=$(go env GOBIN)
+if [ -z "$gobin" ]; then
+    gopath=$(go env GOPATH)
+    gobin=${gopath%%:*}/bin
+fi
+mkdir -p "$gobin"
+staged="$gobin/.wi.$$.tmp"
+install -m 0755 "$tmpdir/wi" "$staged"
+mv -f "$staged" "$gobin/wi"
+
+"$gobin/wi" version
+echo "created local tag: $version"
+echo "installed: $gobin/wi"
+echo "tag was not pushed"

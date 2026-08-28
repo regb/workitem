@@ -1,0 +1,53 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    cat <<'EOF'
+usage: scripts/install-local [--clean] [--quiet]
+
+Build and install the current checkout as a development version.
+
+  --clean  Refuse to install when tracked, staged, or untracked changes exist.
+  --quiet  Do not print the installed version after a successful install.
+EOF
+}
+
+require_clean=0
+quiet=0
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --clean) require_clean=1 ;;
+        --quiet) quiet=1 ;;
+        -h|--help) usage; exit 0 ;;
+        *) usage >&2; exit 2 ;;
+    esac
+    shift
+done
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "install-local: not inside a Git checkout" >&2
+    exit 1
+}
+cd "$root"
+
+dirty=$(git status --porcelain --untracked-files=normal)
+if [ -n "$dirty" ]; then
+    if [ "$require_clean" -eq 1 ]; then
+        echo "install-local: checkout is dirty; refusing an exact commit publication" >&2
+        exit 3
+    fi
+    echo "install-local: warning: installing a dirty development build" >&2
+fi
+
+go install -buildvcs=true ./cmd/wi
+
+gobin=$(go env GOBIN)
+if [ -z "$gobin" ]; then
+    gopath=$(go env GOPATH)
+    gobin=${gopath%%:*}/bin
+fi
+
+if [ "$quiet" -eq 0 ]; then
+    "$gobin/wi" version
+    echo "installed: $gobin/wi"
+fi

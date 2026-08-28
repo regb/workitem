@@ -1,0 +1,30 @@
+# wi
+
+> Durable local work items for AI-assisted development.
+
+## Start here
+
+- [Overview](https://regb.github.io/workitem/): What wi is and the basic workflow.
+- [Quick start](https://regb.github.io/workitem/getting-started/quick-start/): Create, start, merge, and archive an item.
+- [Work items](https://regb.github.io/workitem/concepts/work-items/): The durable record at the center of wi.
+- [Lifecycle](https://regb.github.io/workitem/concepts/lifecycle/): Backlog, working, waiting, and archived.
+
+## Concepts
+
+- [Workspaces](https://regb.github.io/workitem/concepts/workspaces/): Managed slots and repository-home claims.
+- [Agents and conversations](https://regb.github.io/workitem/concepts/agents/): Durable conversations, TUI, and RPC runtimes.
+- [Attention](https://regb.github.io/workitem/concepts/attention/): How wi ranks work that needs a human.
+
+## Workflows
+
+- [Everyday workflow](https://regb.github.io/workitem/guides/everyday-workflow/): Capture, supervise, integrate, and archive work.
+- [Delegate work](https://regb.github.io/workitem/guides/delegation/): Start an unattached TUI or headless RPC agent.
+- [Review agent work](https://regb.github.io/workitem/guides/review-and-follow-up/): Inspect changes and send corrections.
+- [Merge completed work](https://regb.github.io/workitem/guides/merging/): Rebase and fast-forward a local target.
+
+## Reference
+
+- [Command map](https://regb.github.io/workitem/reference/commands/): Commands grouped by responsibility.
+- [Configuration](https://regb.github.io/workitem/reference/configuration/): Config files and environment variables.
+- [Data and diagnostics](https://regb.github.io/workitem/reference/data-and-diagnostics/): Durable data, paths, and daemon diagnostics.
+- [Troubleshooting](https://regb.github.io/workitem/reference/troubleshooting/): Common startup, runtime, workspace, and cleanup failures.
