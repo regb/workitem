@@ -114,6 +114,7 @@ func selectWithFZF(ctx context.Context, cfg Config, candidates []pickerCandidate
 		"--header-first",
 		"--height=100%",
 		"--layout=reverse",
+		"--cycle",
 		"--border=none",
 		"--pointer=▌",
 	}
