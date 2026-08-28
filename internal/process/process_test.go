@@ -17,6 +17,20 @@ func TestParseStatHandlesCommandWithSpaces(t *testing.T) {
 	}
 }
 
+func TestParseDarwinSnapshotNormalizesProcessState(t *testing.T) {
+	infos := parseDarwinSnapshot("42 1 42 Z+ Fri Aug 28 16:00:00 2026 /usr/bin/pi /usr/bin/pi --rpc\n43 1 43 S+ Fri Aug 28 16:00:01 2026 /bin/sh /bin/sh")
+	zombie := infos[42]
+	if zombie.State != "Z" || zombie.Command != "pi" || zombie.PID != 42 || zombie.PPID != 1 || zombie.PGRP != 42 || zombie.StartTime == 0 {
+		t.Fatalf("zombie = %+v", zombie)
+	}
+	if len(zombie.Cmdline) != 2 || zombie.Cmdline[0] != "/usr/bin/pi" || zombie.Cmdline[1] != "--rpc" {
+		t.Fatalf("zombie command line = %q", zombie.Cmdline)
+	}
+	if state := infos[43].State; state != "S" {
+		t.Fatalf("running state = %q", state)
+	}
+}
+
 func TestFindDescendantUsesTargetedChildrenTraversal(t *testing.T) {
 	root := t.TempDir()
 	writeProcess := func(pid, ppid int, command, children string) {

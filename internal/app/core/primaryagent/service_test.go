@@ -139,6 +139,25 @@ func TestSubmitControlPopulatesProtocolIdentity(t *testing.T) {
 	}
 }
 
+func TestPortableControlSocketPathKeepsDataRootsIsolated(t *testing.T) {
+	relative := runtimepath.ControlSocket("item-1", "runtime-1")
+	candidate := filepath.Join("/private/var/folders", strings.Repeat("long-runtime-root", 8), filepath.FromSlash(relative))
+	first := portableControlSocketPath("darwin", candidate, "/data/root-one", relative)
+	second := portableControlSocketPath("darwin", candidate, "/data/root-two", relative)
+	if first == candidate || second == candidate {
+		t.Fatalf("long Darwin path did not use fallback: first=%q second=%q", first, second)
+	}
+	if first == second {
+		t.Fatalf("different data roots share fallback path %q", first)
+	}
+	if again := portableControlSocketPath("darwin", candidate, "/data/root-one", relative); again != first {
+		t.Fatalf("fallback path is unstable: %q != %q", again, first)
+	}
+	if len(first) >= 100 || len(second) >= 100 {
+		t.Fatalf("fallback paths remain too long: first=%d second=%d", len(first), len(second))
+	}
+}
+
 func TestObserveOwnershipRejectsReusedPID(t *testing.T) {
 	s := New(&runtimeStore{}, process(true), nil, nil, nil, nil, nil, nil)
 	ownership := s.ObserveOwnership(&model.AgentRuntime{ID: "runtime", HostPID: 42, HostProcessGroup: 42, HostStartTime: 999})

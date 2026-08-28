@@ -2,6 +2,7 @@ package primaryagent
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
@@ -93,16 +94,24 @@ func (s *Service) ControlSocketPath(itemID string, runtime *model.AgentRuntime) 
 		return ""
 	}
 	relative := runtimepath.ControlSocket(itemID, runtime.ID)
+	namespace := strings.TrimSpace(s.RuntimeSocketRoot)
 	var socketPath string
-	if strings.TrimSpace(s.RuntimeSocketRoot) != "" {
-		socketPath = filepath.Join(s.RuntimeSocketRoot, filepath.FromSlash(relative))
+	if namespace != "" {
+		socketPath = filepath.Join(namespace, filepath.FromSlash(relative))
 	} else {
-		socketPath = filepath.Join(s.store.ItemDir(itemID), "agent", "control.sock")
+		namespace = s.store.ItemDir(itemID)
+		socketPath = filepath.Join(namespace, "agent", "control.sock")
 	}
-	if goruntime.GOOS == "darwin" && len(socketPath) >= 100 {
-		return filepath.Join("/tmp", fmt.Sprintf("wi-%d", os.Getuid()), filepath.FromSlash(relative))
+	return portableControlSocketPath(goruntime.GOOS, socketPath, namespace, relative)
+}
+
+func portableControlSocketPath(goos, candidate, namespace, relative string) string {
+	if goos != "darwin" || len(candidate) < 100 {
+		return candidate
 	}
-	return socketPath
+	digest := sha256.Sum256([]byte(filepath.Clean(namespace)))
+	rootKey := fmt.Sprintf("%x", digest[:6])
+	return filepath.Join("/tmp", fmt.Sprintf("wi-%d", os.Getuid()), "control", rootKey, filepath.FromSlash(relative))
 }
 
 func (s *Service) LogPath(itemID string, runtime *model.AgentRuntime) string {

@@ -206,12 +206,16 @@ func (i Inspector) readInfo(pid int) (Info, error) {
 
 func darwinSnapshot() (map[int]Info, error) {
 	// lstart is stable for the life of a PID and avoids relying on Linux /proc.
-	out, err := exec.Command("ps", "-axo", "pid=,ppid=,pgid=,state=,lstart=,comm=,args=").Output()
+	out, err := exec.Command("/bin/ps", "-axo", "pid=,ppid=,pgid=,state=,lstart=,comm=,args=").Output()
 	if err != nil {
 		return nil, fmt.Errorf("inspect processes with ps: %w", err)
 	}
+	return parseDarwinSnapshot(string(out)), nil
+}
+
+func parseDarwinSnapshot(out string) map[int]Info {
 	infos := map[int]Info{}
-	for _, line := range strings.Split(string(out), "\n") {
+	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 10 {
 			continue
@@ -235,9 +239,13 @@ func darwinSnapshot() (map[int]Info, error) {
 		if len(args) == 0 {
 			args = []string{fields[9]}
 		}
-		infos[pid] = Info{PID: pid, PPID: ppid, PGRP: pgrp, State: fields[3], StartTime: start, Command: command, Cmdline: args}
+		state := fields[3]
+		if state != "" {
+			state = state[:1]
+		}
+		infos[pid] = Info{PID: pid, PPID: ppid, PGRP: pgrp, State: state, StartTime: start, Command: command, Cmdline: args}
 	}
-	return infos, nil
+	return infos
 }
 
 func parseStat(pid int, stat string) (Info, error) {
