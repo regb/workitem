@@ -19,7 +19,7 @@ Without an item, `switch` opens an `fzf` picker:
 wi switch
 ```
 
-The picker shows active work and resumes a selected waiting item before entering it.
+The picker shows working and waiting items first, followed by backlog items in a distinct color. Selecting a waiting item resumes it; selecting a backlog item starts it. Either choice then enters the item's TUI.
 
 ## Navigate by attention
 

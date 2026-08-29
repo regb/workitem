@@ -242,14 +242,14 @@ var helpDocs = map[string]helpDoc{
 		Examples:    []string{`wi start auth-race`, `wi start --new "Fix typo"`, `wi start --new --home "Mainline maintenance"`, `wi start --new --agent-mode rpc "Audit dependencies"`},
 	},
 	"switch": {
-		Summary: "Select and switch to an active work item",
+		Summary: "Select and switch to a work item",
 		Usage: []string{
 			"wi switch [--no-agent] [--no-preview] [--label <rule>]...",
 			"wi switch [--item <selector>] <item>",
 			"wi switch --current",
 		},
 		Description: []string{
-			"Without an item, opens an interactive fzf picker over working/waiting items using the same actionability projection and label rules as wi list. Selecting a waiting item resumes it before entering its TUI; selecting a working item is state-neutral. The daemon refreshes native activity before capturing candidates; the open picker is an explicitly marked frozen snapshot and can be reopened to refresh. A tmux key binding can host the complete operation in a popup so startup prompts and errors remain visible.",
+			"Without an item, opens an interactive fzf picker over working, waiting, and backlog items using the same actionability projection and label rules as wi list. Backlog items appear last in a distinct color. Selecting a backlog item starts it, selecting a waiting item resumes it, and selecting a working item is state-neutral before entering its TUI. The daemon refreshes native activity before capturing candidates; the open picker is an explicitly marked frozen snapshot and can be reopened to refresh. A tmux key binding can host the complete operation in a popup so startup prompts and errors remain visible.",
 			"With an explicit item, or with --current, performs the existing state-neutral switch directly: enter a verified existing TUI terminal even when its checkout needs repair, otherwise ensure the worktree, primary TUI runtime, and tmux access, then attach or switch the client. JSON requires an explicit item or --current and never attaches.",
 		},
 		Options: []helpOption{

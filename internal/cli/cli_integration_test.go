@@ -397,6 +397,31 @@ func TestPickerResumesSelectedWaitingItem(t *testing.T) {
 	}
 }
 
+func TestPickerStartsSelectedBacklogItem(t *testing.T) {
+	stdout, stderr, application := configuredApp(t)
+	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Backlog Picker Target", CWD: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fzf := filepath.Join(t.TempDir(), "fake-fzf")
+	if err := os.WriteFile(fzf, []byte("#!/bin/sh\nhead -n 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	code := cli.Run(context.Background(), []string{"switch", "--no-agent", "--no-preview"}, cli.Config{
+		Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{"WI_FZF": fzf}, App: application,
+	})
+	if code != cli.ExitOK {
+		t.Fatalf("switch picker exit code=%d stderr=%s", code, stderr.String())
+	}
+	manifest, err := application.Store.LoadManifest(created.Manifest.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.State != model.StateWorking {
+		t.Fatalf("selected backlog item state = %s", manifest.State)
+	}
+}
+
 func TestWorkspaceStatusTextExplainsBranchMismatch(t *testing.T) {
 	stdout, stderr, application := configuredApp(t)
 	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Workspace Diagnostics", CWD: t.TempDir()})

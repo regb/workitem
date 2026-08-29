@@ -30,7 +30,7 @@ func TestPromptDirenvApprovalAcceptsExplicitYes(t *testing.T) {
 	}
 }
 
-func TestPickerCandidatesIncludeOnlyWorkingAndWaiting(t *testing.T) {
+func TestPickerCandidatesIncludeWorkingWaitingAndBacklog(t *testing.T) {
 	res := app.WorkListResult{Sections: app.WorkListSections{
 		Working:  []app.WorkListItem{{ID: "working", State: model.StateWorking}},
 		Waiting:  []app.WorkListItem{{ID: "waiting", State: model.StateWaiting}},
@@ -38,7 +38,7 @@ func TestPickerCandidatesIncludeOnlyWorkingAndWaiting(t *testing.T) {
 		Archived: []app.WorkListItem{{ID: "archived", State: model.StateArchived}},
 	}}
 	candidates := pickerCandidates(res, nil, "waiting")
-	if len(candidates) != 2 || !candidates[1].Current {
+	if len(candidates) != 3 || !candidates[1].Current || candidates[2].Item.State != model.StateBacklog || candidates[2].Section != "BACKLOG" {
 		t.Fatalf("candidates = %+v", candidates)
 	}
 }
@@ -48,6 +48,9 @@ func TestPickerRowsUseStyledFixedWidthColumns(t *testing.T) {
 	row := renderPickerCandidate(candidate, 12, 18)
 	if !strings.Contains(row, pickerMagenta+"● ") || !strings.Contains(row, pickerYellow+"ATTENTION") || !strings.Contains(row, "a-very-long…") || !strings.Contains(row, pickerDim+"owner/repository") {
 		t.Fatalf("styled row = %q", row)
+	}
+	if badge := pickerSectionBadge("BACKLOG"); !strings.Contains(badge, pickerCyan+"BACKLOG") {
+		t.Fatalf("backlog badge = %q", badge)
 	}
 	header := renderPickerHeader(12, 18)
 	if !strings.Contains(header, "FROZEN SNAPSHOT") || !strings.Contains(header, "STATUS") || !strings.Contains(header, "ITEM") || !strings.Contains(header, "REPOSITORY") {

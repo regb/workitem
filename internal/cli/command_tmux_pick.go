@@ -58,20 +58,24 @@ func runPicker(ctx context.Context, cfg Config, labels []string, noAgent, noPrev
 	}
 	candidates := pickerCandidates(res, agents, currentID)
 	if len(candidates) == 0 {
-		return fmt.Errorf("no selectable active work items")
+		return fmt.Errorf("no selectable work items")
 	}
 	selected, ok, err := selectWithFZF(ctx, cfg, candidates, noPreview)
 	if err != nil || !ok {
 		return err
 	}
-	if selected.Item.State == model.StateWaiting {
-		return resumePickerItem(ctx, cfg, selected.Item.ID)
+	switch selected.Item.State {
+	case model.StateWaiting:
+		return startPickerItem(ctx, cfg, selected.Item.ID, "work_item.resumed")
+	case model.StateBacklog:
+		return startPickerItem(ctx, cfg, selected.Item.ID, "work_item.started")
+	default:
+		return switchSelectedItem(ctx, cfg, selected.Item.ID, false)
 	}
-	return switchSelectedItem(ctx, cfg, selected.Item.ID, false)
 }
 
-func resumePickerItem(ctx context.Context, cfg Config, selector string) error {
-	res, err := coordinatorStartWorkItem(ctx, cfg, selector, false, true, agent.ModeTUI, "work_item.resumed")
+func startPickerItem(ctx context.Context, cfg Config, selector, eventType string) error {
+	res, err := coordinatorStartWorkItem(ctx, cfg, selector, false, true, agent.ModeTUI, eventType)
 	if err != nil {
 		return err
 	}
@@ -83,7 +87,7 @@ func pickerCandidates(res app.WorkListResult, agents map[string]string, currentI
 	out := []pickerCandidate{}
 	for _, section := range workDisplaySections(res, "active", agents) {
 		for _, item := range section.Items {
-			if item.State != model.StateWorking && item.State != model.StateWaiting {
+			if item.State != model.StateWorking && item.State != model.StateWaiting && item.State != model.StateBacklog {
 				continue
 			}
 			out = append(out, pickerCandidate{Item: item, Section: section.Name, Current: item.ID == currentID})
@@ -163,6 +167,7 @@ const (
 	pickerYellow  = "\x1b[33m"
 	pickerBlue    = "\x1b[34m"
 	pickerMagenta = "\x1b[35m"
+	pickerCyan    = "\x1b[36m"
 )
 
 func pickerColumnWidths(candidates []pickerCandidate) (int, int) {
@@ -209,6 +214,8 @@ func pickerSectionBadge(section string) string {
 		label, color = "ACTIVE", pickerGreen
 	case "WAITING":
 		label, color = "WAITING", pickerBlue
+	case "BACKLOG":
+		label, color = "BACKLOG", pickerCyan
 	}
 	return pickerBold + color + pickerCell(label, 9) + pickerReset
 }
