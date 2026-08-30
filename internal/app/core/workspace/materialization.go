@@ -78,7 +78,7 @@ func (s *Service) CheckoutCreate(ctx context.Context, opts contract.ResolveOptio
 		}
 	}
 	if m.Checkout.Kind == model.WorkspaceKindRepositoryHome {
-		path := strings.TrimSpace(m.Repository.RootAtCreation)
+		path := m.Repository.OperationalRoot()
 		if path == "" {
 			return CheckoutCreateResult{}, fmt.Errorf("repository-home checkout has no durable home path")
 		}

@@ -42,7 +42,10 @@ func runShow(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 		fmt.Fprintf(cfg.Stdout, "Description: %s\n", res.Description)
 	}
 	fmt.Fprintf(cfg.Stdout, "Labels: %s\n", strings.Join(m.Labels, ", "))
-	fmt.Fprintf(cfg.Stdout, "Repository: %s\n", m.Repository.RootAtCreation)
+	fmt.Fprintf(cfg.Stdout, "Repository: %s\n", m.Repository.OperationalRoot())
+	if m.Repository.CurrentRoot != "" {
+		fmt.Fprintf(cfg.Stdout, "Repository at creation: %s\n", m.Repository.RootAtCreation)
+	}
 	if m.Repository.RemoteURL != "" {
 		fmt.Fprintf(cfg.Stdout, "Remote: %s\n", m.Repository.RemoteURL)
 	}
@@ -53,7 +56,7 @@ func runShow(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	if m.Checkout.Path != nil {
 		fmt.Fprintf(cfg.Stdout, "Checkout path: %s\n", *m.Checkout.Path)
 	} else if m.Checkout.Kind == model.WorkspaceKindRepositoryHome {
-		fmt.Fprintf(cfg.Stdout, "Repository home: %s\n", m.Repository.RootAtCreation)
+		fmt.Fprintf(cfg.Stdout, "Repository home: %s\n", m.Repository.OperationalRoot())
 	}
 	fmt.Fprintf(cfg.Stdout, "Terminal: %s %s\n", "tmux", m.TerminalSessionName())
 	if m.RootPiSession != nil {

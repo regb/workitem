@@ -26,6 +26,17 @@ wi start exact-active-slug
 
 Create missing work with `wi new`, then start the slug returned by that command.
 
+## The repository moved after item creation
+
+A start or workspace ensure may fail because the recorded repository checkout no longer exists. Point the item at the moved checkout without changing its creation provenance:
+
+```bash
+wi workspace relocate --repository /new/path/to/repository --item ITEM
+wi switch ITEM
+```
+
+The replacement repository must have the recorded origin and contain the created-from commit. Relocation requires an absent workspace. Release an assigned workspace first if it is still safe and accessible.
+
 ## Deep-work capacity is full
 
 Working and waiting deep items consume configured capacity. Inspect them:

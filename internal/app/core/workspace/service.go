@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -20,6 +21,7 @@ type Store interface {
 }
 
 type Git interface {
+	DetectRepository(context.Context, string, string) (model.RepositoryInfo, error)
 	Head(context.Context, string) (string, error)
 	StatusPorcelain(context.Context, string) (string, error)
 	CurrentBranch(context.Context, string) (string, error)
@@ -73,9 +75,54 @@ type StatusResult struct {
 	Warnings   []string       `json:"warnings"`
 }
 
+type RelocateRepositoryResult struct {
+	WorkItemID   string         `json:"work_item_id"`
+	PreviousRoot string         `json:"previous_root"`
+	CurrentRoot  string         `json:"current_root"`
+	Changed      bool           `json:"changed"`
+	Manifest     model.Manifest `json:"manifest"`
+}
+
 func ExpectedBranch(m model.Manifest) string {
 	return strings.TrimSpace(m.Checkout.Branch)
 }
+
+func (s *Service) RelocateRepository(ctx context.Context, opts contract.ResolveOptions, path string) (RelocateRepositoryResult, error) {
+	m, err := s.resolve(ctx, opts)
+	if err != nil {
+		return RelocateRepositoryResult{}, err
+	}
+	if m.Checkout.Present() {
+		return RelocateRepositoryResult{}, fmt.Errorf("cannot relocate repository while checkout %s is assigned; release the workspace first", *m.Checkout.Path)
+	}
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return RelocateRepositoryResult{}, fmt.Errorf("repository path is required")
+	}
+	candidate, err := s.git.DetectRepository(ctx, path, m.Repository.CreatedFromCommit)
+	if err != nil {
+		return RelocateRepositoryResult{}, fmt.Errorf("inspect replacement repository: %w", err)
+	}
+	if recorded := strings.TrimSpace(m.Repository.RemoteURL); recorded != "" && candidate.Repository.RemoteURL != recorded {
+		return RelocateRepositoryResult{}, fmt.Errorf("replacement repository origin %q does not match recorded origin %q", candidate.Repository.RemoteURL, recorded)
+	}
+	previous := m.Repository.OperationalRoot()
+	current := candidate.Repository.RootAtCreation
+	result := RelocateRepositoryResult{WorkItemID: m.ID, PreviousRoot: previous, CurrentRoot: current, Manifest: m}
+	if current == previous {
+		return result, nil
+	}
+	now := s.now()
+	m.Repository.CurrentRoot = current
+	m.UpdatedAt = now
+	if err := s.store.SaveManifest(ctx, m); err != nil {
+		return RelocateRepositoryResult{}, err
+	}
+	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "repository.relocated", "user", map[string]any{"previous_root": previous, "current_root": current}))
+	result.Changed, result.Manifest = true, m
+	return result, nil
+}
+
 func (s *Service) Status(ctx context.Context, opts contract.ResolveOptions) (StatusResult, error) {
 	m, e := s.resolve(ctx, opts)
 	if e != nil {

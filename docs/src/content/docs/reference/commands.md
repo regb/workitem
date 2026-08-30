@@ -77,6 +77,7 @@ See [Troubleshooting](../troubleshooting/) when a protected cleanup or runtime o
 | `wi workspace status` | Inspect checkout assignment and Git state |
 | `wi workspace ensure` | Materialize or reclaim a checkout |
 | `wi workspace release` | Release the item's checkout claim when safe |
+| `wi workspace relocate` | Use a repository checkout after its directory moved |
 
 ## Agents
 
@@ -116,6 +117,15 @@ See [Troubleshooting](../troubleshooting/) when a protected cleanup or runtime o
 | `wi delete` | Permanently remove cleaned archived case files |
 | `wi shutdown` | Stop runtimes, terminals, and the daemon |
 | `wi merge` | Rebase and fast-forward a local target branch |
+
+`wi archive` retains the item. To restore one, use its archived ID:
+
+```bash
+wi list --archived --ids
+wi state set backlog --item <item-id>
+```
+
+The state change assigns a fresh active slug but does not recreate workspace or agent resources. Use `wi start --item <item-id>` when you are ready to resume work.
 
 ## Daemon and diagnostics
 

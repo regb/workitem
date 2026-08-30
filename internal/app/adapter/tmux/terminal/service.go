@@ -280,10 +280,11 @@ func (s *Service) spec(m model.Manifest, environment map[string]string) tmuxpkg.
 	env["WI_ID"] = m.ID
 	env["WI_DIR"] = s.store.ItemDir(m.ID)
 	env["PI_CODING_AGENT_SESSION_DIR"] = filepath.Join(s.store.ItemDir(m.ID), "sessions", "pi")
-	if m.Repository.RootAtCreation != "" {
-		env["WI_REPOSITORY"] = m.Repository.RootAtCreation
+	repositoryRoot := m.Repository.OperationalRoot()
+	if repositoryRoot != "" {
+		env["WI_REPOSITORY"] = repositoryRoot
 	}
-	cwd := m.Repository.RootAtCreation
+	cwd := repositoryRoot
 	if m.Checkout.Path != nil && *m.Checkout.Path != "" {
 		env["WI_WORKTREE"], cwd = *m.Checkout.Path, *m.Checkout.Path
 	}

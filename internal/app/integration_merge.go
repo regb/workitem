@@ -95,7 +95,7 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (MergeResult
 	if err := mg.EnsureClean(ctx, res.SourcePath); err != nil {
 		return res, fmt.Errorf("source checkout must be completely clean before merge: %w", err)
 	}
-	repoRoot := m.Repository.RootAtCreation
+	repoRoot := m.Repository.OperationalRoot()
 	target := strings.TrimSpace(opts.Target)
 	if target == "" {
 		target, err = mg.DefaultBranch(ctx, repoRoot)
@@ -222,7 +222,7 @@ func (a *App) failMergeWithRollback(ctx context.Context, itemID string, mg merge
 	if tx.Result.TargetAdvanced {
 		repoRoot := ""
 		if m, err := a.Store.LoadManifest(itemID); err == nil {
-			repoRoot = m.Repository.RootAtCreation
+			repoRoot = m.Repository.OperationalRoot()
 		}
 		if repoRoot == "" {
 			rollbackErrors = append(rollbackErrors, "could not resolve repository root for target rollback")

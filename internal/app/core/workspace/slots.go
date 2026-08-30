@@ -93,7 +93,7 @@ func (s *Service) finishSlotAssignment(ctx context.Context, m model.Manifest, pa
 }
 
 func (s *Service) switchExistingSlot(ctx context.Context, m model.Manifest, path, branch, startPoint string) (string, error) {
-	exists, err := s.git.BranchExists(ctx, m.Repository.RootAtCreation, branch)
+	exists, err := s.git.BranchExists(ctx, m.Repository.OperationalRoot(), branch)
 	if err != nil {
 		return "", err
 	}
@@ -110,17 +110,17 @@ func (s *Service) switchExistingSlot(ctx context.Context, m model.Manifest, path
 }
 
 func (s *Service) createSlot(ctx context.Context, m model.Manifest, path, branch, startPoint string) (string, error) {
-	exists, err := s.git.BranchExists(ctx, m.Repository.RootAtCreation, branch)
+	exists, err := s.git.BranchExists(ctx, m.Repository.OperationalRoot(), branch)
 	if err != nil {
 		return "", err
 	}
 	if exists {
-		if err := s.git.WorktreeAdd(ctx, model.WorktreeAddOptions{RepoRoot: m.Repository.RootAtCreation, Path: path, Branch: branch}); err != nil {
+		if err := s.git.WorktreeAdd(ctx, model.WorktreeAddOptions{RepoRoot: m.Repository.OperationalRoot(), Path: path, Branch: branch}); err != nil {
 			return "", fmt.Errorf("create slot from branch: %w", err)
 		}
 		return filepath.Base(path) + " branch " + branch, nil
 	}
-	if err := s.git.WorktreeAdd(ctx, model.WorktreeAddOptions{RepoRoot: m.Repository.RootAtCreation, Path: path, Branch: branch, StartPoint: startPoint, NewBranch: true}); err != nil {
+	if err := s.git.WorktreeAdd(ctx, model.WorktreeAddOptions{RepoRoot: m.Repository.OperationalRoot(), Path: path, Branch: branch, StartPoint: startPoint, NewBranch: true}); err != nil {
 		return "", fmt.Errorf("create slot from %s: %w", startPoint, err)
 	}
 	return filepath.Base(path) + " new branch " + branch + " from " + startPoint, nil

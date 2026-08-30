@@ -44,6 +44,15 @@ Most day-to-day transitions should use the safer composed commands:
 - `wi archive` shuts down and releases clean resources before archiving.
 - `wi delete` permanently removes an already archived, fully cleaned item.
 
+To restore an archived item, find its ID and move it to backlog:
+
+```bash
+wi list --archived --ids
+wi state set backlog --item <item-id>
+```
+
+Restoration retains the item's ID and history and assigns a fresh active slug. It changes lifecycle only. Run `wi start --item <item-id>` when you want to recreate its workspace and agent resources.
+
 These commands can report partial outcomes. If a durable transition succeeds and a later resource operation fails, `wi` retains the durable result and tells you what remains.
 
 ## State is not status

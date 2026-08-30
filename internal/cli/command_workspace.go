@@ -10,7 +10,7 @@ import (
 
 func runWorkspace(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	if len(args) == 0 {
-		return usageErr{errors.New("usage: wi workspace <status|ensure|release> [options] [item]")}
+		return usageErr{errors.New("usage: wi workspace <status|ensure|release|relocate> [options] [item]")}
 	}
 	switch args[0] {
 	case "status":
@@ -19,6 +19,8 @@ func runWorkspace(ctx context.Context, args []string, cfg Config, jsonOut bool) 
 		return runWorkspaceEnsure(ctx, args[1:], cfg, jsonOut)
 	case "release":
 		return runWorkspaceRelease(ctx, args[1:], cfg, jsonOut)
+	case "relocate":
+		return runWorkspaceRelocate(ctx, args[1:], cfg, jsonOut)
 	default:
 		return usageErr{fmt.Errorf("unknown workspace command %q", args[0])}
 	}
@@ -90,6 +92,37 @@ func workspaceDiagnostic(res app.WorkspaceStatusResult) (string, string) {
 		return "changed", "checkout HEAD differs from the item's created-from commit"
 	}
 	return "clean", "checkout matches the expected branch and created-from commit"
+}
+
+func runWorkspaceRelocate(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
+	fs := newFlagSet("workspace relocate", cfg.Stderr)
+	var item, repository string
+	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
+	fs.StringVar(&repository, "repository", "", "replacement repository checkout path")
+	if err := fs.Parse(args); err != nil {
+		return usageErr{err}
+	}
+	if repository == "" {
+		return usageErr{errors.New("--repository is required")}
+	}
+	selector, err := itemSelectorFromFlag(fs, item)
+	if err != nil {
+		return usageErr{err}
+	}
+	res, err := cfg.App.RelocateWorkItemRepository(ctx, app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env}, repository)
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		return writeJSON(cfg.Stdout, res)
+	}
+	if res.Changed {
+		fmt.Fprintf(cfg.Stdout, "relocated repository for %s\n", res.WorkItemID)
+	} else {
+		fmt.Fprintf(cfg.Stdout, "repository already located for %s\n", res.WorkItemID)
+	}
+	fmt.Fprintf(cfg.Stdout, "repository: %s\n", res.CurrentRoot)
+	return nil
 }
 
 func runWorkspaceEnsure(ctx context.Context, args []string, cfg Config, jsonOut bool) error {

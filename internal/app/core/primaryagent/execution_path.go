@@ -14,7 +14,7 @@ func ExecutionCWD(m model.Manifest, _ model.PiSession) string {
 			return path
 		}
 	}
-	return strings.TrimSpace(m.Repository.RootAtCreation)
+	return m.Repository.OperationalRoot()
 }
 
 func CheckoutContainsPath(checkoutPath, candidate string) bool {

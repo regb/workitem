@@ -23,6 +23,16 @@ wi workspace release add-pagination
 
 Release refuses while an active runtime or terminal depends on the checkout.
 
+## Relocated repositories
+
+If the source repository checkout moves after item creation, update an item before materializing its workspace:
+
+```bash
+wi workspace relocate --repository ~/vcs/new/project --item add-pagination
+```
+
+`wi` verifies that the replacement checkout has the recorded origin and contains the item's created-from commit. The workspace must be absent. Relocation records the current operational path while retaining the original creation path as provenance.
+
 ## Repository-home claims
 
 Some work must happen in the repository's primary checkout on its local default branch:

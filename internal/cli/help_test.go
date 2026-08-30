@@ -24,12 +24,23 @@ func TestGlobalHelpGroupsCommands(t *testing.T) {
 	}
 }
 
+func TestArchiveHelpExplainsRestoration(t *testing.T) {
+	var out bytes.Buffer
+	if !printHelp(&out, "archive") {
+		t.Fatal("archive help topic is missing")
+	}
+	text := out.String()
+	if !strings.Contains(text, "wi state set backlog --item <item-id>") || !strings.Contains(text, "does not recreate workspace or agent resources") {
+		t.Fatalf("archive help does not explain restoration:\n%s", text)
+	}
+}
+
 func TestAllPublicHelpTopicsAreDocumented(t *testing.T) {
 	topics := []string{
 		"version", "new", "list", "show", "events", "start", "switch", "next", "resume", "merge", "shelve", "archive", "delete", "shutdown", "label", "deep",
 		"state", "state show", "state set",
 		"attention", "attention activity", "attention defer", "attention queue",
-		"workspace", "workspace status", "workspace ensure", "workspace release",
+		"workspace", "workspace status", "workspace ensure", "workspace release", "workspace relocate",
 		"terminal", "terminal status", "terminal ensure", "terminal enter", "terminal close",
 		"agent", "agent status", "agent control", "agent control send", "agent control abort", "agent control shutdown",
 		"agent runtime", "agent runtime status", "agent runtime ensure", "agent runtime stop", "agent monitor",

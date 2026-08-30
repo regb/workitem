@@ -231,7 +231,7 @@ func repositoryName(repo model.Repository, folders int) string {
 		}
 		return lastSegments(common, folders, string(filepath.Separator))
 	}
-	return lastSegments(repo.RootAtCreation, folders, string(filepath.Separator))
+	return lastSegments(repo.OperationalRoot(), folders, string(filepath.Separator))
 }
 func remotePath(remote string) string {
 	remote = strings.TrimSuffix(strings.TrimRight(remote, "/"), ".git")

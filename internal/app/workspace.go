@@ -12,6 +12,7 @@ type CheckoutRemoveResult = workspacecore.CheckoutRemoveResult
 type CheckoutStatusResult = workspacecore.CheckoutStatusResult
 type WorkspaceGitStatus = workspacecore.GitStatus
 type WorkspaceStatusResult = workspacecore.StatusResult
+type RelocateRepositoryResult = workspacecore.RelocateRepositoryResult
 type WorkspaceReleaseResult = workspacecore.ReleaseResult
 type checkoutRelease = workspacecore.CheckoutRelease
 
@@ -30,6 +31,10 @@ func (a *App) CheckoutStatus(ctx context.Context, opts ResolveOptions) (Checkout
 // WorkspaceStatus inspects only the repository worktree.
 func (a *App) WorkspaceStatus(ctx context.Context, opts ResolveOptions) (WorkspaceStatusResult, error) {
 	return a.workspaceService().Status(ctx, opts)
+}
+
+func (a *App) RelocateWorkItemRepository(ctx context.Context, opts ResolveOptions, path string) (RelocateRepositoryResult, error) {
+	return a.workspaceService().RelocateRepository(ctx, opts, path)
 }
 
 // EnsureWorkItemWorkspace materializes only the repository worktree.

@@ -45,6 +45,17 @@ type Repository struct {
 	GitCommonDir      string `json:"git_common_dir"`
 	RemoteURL         string `json:"remote_url"`
 	CreatedFromCommit string `json:"created_from_commit"`
+	CurrentRoot       string `json:"current_root,omitempty"`
+}
+
+// OperationalRoot returns the repository checkout used for current Git
+// operations. RootAtCreation remains immutable provenance when a repository is
+// relocated.
+func (r Repository) OperationalRoot() string {
+	if root := strings.TrimSpace(r.CurrentRoot); root != "" {
+		return root
+	}
+	return strings.TrimSpace(r.RootAtCreation)
 }
 
 type Checkout struct {

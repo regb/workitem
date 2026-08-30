@@ -82,7 +82,7 @@ func (a *App) agentRuntimeEnvironment(ctx context.Context, m model.Manifest) (ma
 }
 
 func (a *App) direnvAutoTrusts(repo model.Repository) bool {
-	candidates := []string{repo.RootAtCreation}
+	candidates := []string{repo.OperationalRoot(), repo.RootAtCreation}
 	if common := strings.TrimSpace(repo.GitCommonDir); filepath.Base(common) == ".git" {
 		candidates = append(candidates, filepath.Dir(common))
 	}

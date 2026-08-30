@@ -267,9 +267,9 @@ var helpDocs = map[string]helpDoc{
 	},
 	"workspace": {
 		Summary:     "Inspect and manage the repository worktree",
-		Usage:       []string{"wi workspace <status|ensure|release> [options] [item]"},
+		Usage:       []string{"wi workspace <status|ensure|release|relocate> [options] [item]"},
 		Description: []string{"This core area owns only repository checkout claims and materialization. Tmux access and agent runtimes are separate resources."},
-		SeeAlso:     []string{"workspace status", "workspace ensure", "workspace release", "terminal", "agent runtime"},
+		SeeAlso:     []string{"workspace status", "workspace ensure", "workspace release", "workspace relocate", "terminal", "agent runtime"},
 	},
 	"workspace status": {
 		Summary:     "Inspect worktree and Git condition",
@@ -288,6 +288,13 @@ var helpDocs = map[string]helpDoc{
 		Usage:       []string{"wi workspace release [--item <selector>] [--force] [item]"},
 		Description: []string{"Releases only the workspace claim. Managed slots are retained for reuse; repository-home directories are never modified. Active agent runtimes and terminal sessions must be stopped explicitly first."},
 		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}, {"--force", "Pass through to managed worktree release where safe."}},
+	},
+	"workspace relocate": {
+		Summary:     "Use a repository after its checkout moved",
+		Usage:       []string{"wi workspace relocate --repository <path> [--item <selector>] [item]"},
+		Description: []string{"Validates that the replacement repository has the recorded origin and created-from commit, then records it as the current location. The original creation path remains provenance. The item must not have an assigned workspace."},
+		Options:     []helpOption{{"--repository <path>", "Select the replacement repository checkout."}, {"--item <selector>", "Select an item explicitly."}},
+		Examples:    []string{`wi workspace relocate --repository ~/vcs/new/project --item project-bug`},
 	},
 	"terminal": {
 		Summary:     "Manage optional terminal access",
@@ -337,13 +344,17 @@ var helpDocs = map[string]helpDoc{
 		},
 	},
 	"archive": {
-		Summary:     "Archive a work item",
-		Usage:       []string{"wi archive [--item <selector>] [--force] [item]"},
-		Description: []string{"Gracefully stops an idle agent runtime, waits for it to exit, closes terminal access, releases the clean workspace claim, then transitions the item to archived and clears its active slug. Busy runtimes require --force, which aborts before shutdown."},
+		Summary: "Archive a work item",
+		Usage:   []string{"wi archive [--item <selector>] [--force] [item]"},
+		Description: []string{
+			"Gracefully stops an idle agent runtime, waits for it to exit, closes terminal access, releases the clean workspace claim, then transitions the item to archived and clears its active slug. Busy runtimes require --force, which aborts before shutdown.",
+			"To restore an archived item, run `wi state set backlog --item <item-id>`. Restoration retains its ID and history, assigns a fresh active slug, and does not recreate workspace or agent resources.",
+		},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
 			{"--force", "Abort a busy runtime before shutdown and allow archiving while retaining an unclosable current terminal."},
 		},
+		Examples: []string{`wi archive add-api-retries`, `wi state set backlog --item 01KZ39T`},
 	},
 	"label": {
 		Summary: "List, add, or remove item labels",

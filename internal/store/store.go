@@ -317,7 +317,7 @@ func normalizeManifest(m *model.Manifest) error {
 	if m.Checkout.Path != nil && strings.TrimSpace(*m.Checkout.Path) == "" {
 		return fmt.Errorf("checkout path must not be empty")
 	}
-	if m.Checkout.Kind == model.WorkspaceKindRepositoryHome && strings.TrimSpace(m.Repository.RootAtCreation) == "" {
+	if m.Checkout.Kind == model.WorkspaceKindRepositoryHome && m.Repository.OperationalRoot() == "" {
 		return fmt.Errorf("repository-home checkout requires repository root")
 	}
 	return nil
