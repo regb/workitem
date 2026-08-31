@@ -54,19 +54,15 @@ bind-key O display-popup -EE \
   -d '#{pane_current_path}' -w 90% -h 80% -T 'wi work items' \
   'WI_TMUX_CLIENT="#{client_name}" wi switch'
 
-# Run navigation in a popup. It closes on success and remains on error.
-bind-key N display-popup -EE \
-  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi next' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next'
-bind-key P display-popup -EE \
-  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi defer current' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --defer'
-bind-key W display-popup -EE \
-  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi wait current' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --wait'
-bind-key A display-popup -EE \
-  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi archive current' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --archive'
+# Run navigation silently. On failure, -E opens stderr in tmux view mode.
+bind-key N run-shell -b -E -c '#{pane_current_path}' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next >/dev/null'
+bind-key P run-shell -b -E -c '#{pane_current_path}' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --defer >/dev/null'
+bind-key W run-shell -b -E -c '#{pane_current_path}' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --wait >/dev/null'
+bind-key A run-shell -b -E -c '#{pane_current_path}' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --archive >/dev/null'
 ```
 
 Reload tmux:
@@ -77,15 +73,9 @@ tmux source-file ~/.tmux.conf
 
 These are ordinary tmux bindings, not a plugin. Change the keys, popup dimensions, or commands directly in your configuration. `WI_TMUX_CLIENT` tells `wi` which client initiated the command when more than one client is attached.
 
-Two `-E` flags make tmux close a popup only when its command succeeds. On failure, the full `wi` error remains visible until you dismiss the popup with `Escape` or `Ctrl-C`. This is clearer than redirecting stderr and briefly displaying a generic status-bar message. If you prefer status-bar errors, remove the stderr redirect, increase tmux's `display-time`, and display the captured error rather than a fixed `wi next failed` string. The status bar is still a poor fit for multiline errors.
+For `run-shell`, `-E` redirects stderr to stdout so tmux displays failures in view mode. Redirecting ordinary stdout keeps successful navigation silent. The picker uses `display-popup -EE`; two `-E` flags close that popup on success but leave it open when selection or startup fails.
 
-If your list filters come from a repository `.envrc`, wrap the command with `direnv exec .`. For example:
-
-```text
-bind-key O display-popup -EE \
-  -d '#{pane_current_path}' -w 90% -h 80% -T 'wi work items' \
-  'WI_TMUX_CLIENT="#{client_name}" direnv exec . wi switch'
-```
+`wi` reads `WI_LIST_LABELS` and `WI_ITEM_DEFAULT_LABELS` from an allowed `.envrc` in the command's working directory. Tmux bindings do not need to invoke `direnv`. Explicit caller values still take precedence, and `wi` does not import paths, socket locations, or identity variables from `.envrc` into CLI configuration.
 
 ## JSON does not attach
 

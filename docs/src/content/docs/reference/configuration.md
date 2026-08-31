@@ -72,6 +72,8 @@ More strategies can be added without changing the configuration shape.
 
 Interactive runtime startup asks before allowing an untrusted `.envrc`. The user configuration can automatically trust absolute paths for repositories you control.
 
+For commands that consume project-scoped CLI settings, `wi` also reads `WI_LIST_LABELS` and `WI_ITEM_DEFAULT_LABELS` from an already allowed `.envrc` in the current directory. Explicit caller values win. Other values from `.envrc` are not imported into CLI configuration.
+
 Repository configuration cannot grant execution trust. This prevents a checked-in file from approving its own commands.
 
 ## Environment variables

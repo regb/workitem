@@ -93,11 +93,19 @@ func Main(ctx context.Context, args []string) int {
 	mux := tmux.New("tmux")
 	application.Tmux = mux
 	application.Pi = pi.New("pi")
-	application.Direnv = direnv.New("direnv")
+	direnvClient := direnv.New("direnv")
+	application.Direnv = direnvClient
 	if self, err := os.Executable(); err == nil {
 		application.SelfPath = self
 	}
 	cwd, _ := os.Getwd()
+	if commandUsesCLIProjectEnvironment(args) {
+		env, err = loadCLIProjectEnvironment(ctx, direnvClient, cwd, env)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return ExitError
+		}
+	}
 	application.AgentRuntimeStateRoot = paths.DataStateRoot
 	application.AgentRuntimeSocketRoot = paths.DataRuntimeRoot
 	runConfig := Config{Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, CWD: cwd, Env: env, StateRoot: paths.DataStateRoot, App: application}

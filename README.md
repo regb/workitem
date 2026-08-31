@@ -101,20 +101,18 @@ bind-key O display-popup -EE \
   -d '#{pane_current_path}' -w 90% -h 80% -T 'wi work items' \
   'WI_TMUX_CLIENT="#{client_name}" wi switch'
 
-# Two -E flags close the popup on success and leave errors visible.
-bind-key N display-popup -EE \
-  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi next' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next'
-bind-key P display-popup -EE \
-  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi defer current' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --defer'
-bind-key W display-popup -EE \
-  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi wait current' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --wait'
-bind-key A display-popup -EE \
-  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi archive current' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --archive'
+# Stay silent on success; -E opens stderr in tmux view mode on failure.
+bind-key N run-shell -b -E -c '#{pane_current_path}' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next >/dev/null'
+bind-key P run-shell -b -E -c '#{pane_current_path}' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --defer >/dev/null'
+bind-key W run-shell -b -E -c '#{pane_current_path}' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --wait >/dev/null'
+bind-key A run-shell -b -E -c '#{pane_current_path}' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --archive >/dev/null'
 ```
+
+`wi` loads `WI_LIST_LABELS` and `WI_ITEM_DEFAULT_LABELS` from an allowed `.envrc` in the binding's working directory. Do not wrap these commands with `direnv exec`.
 
 ## Development
 
