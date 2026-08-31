@@ -121,6 +121,7 @@ func selectWithFZF(ctx context.Context, cfg Config, candidates []pickerCandidate
 		"--cycle",
 		"--border=none",
 		"--pointer=▌",
+		"--bind=" + pickerBindings(candidates),
 	}
 	if !noPreview {
 		self := strings.TrimSpace(cfg.App.SelfPath)
@@ -169,6 +170,17 @@ const (
 	pickerMagenta = "\x1b[35m"
 	pickerCyan    = "\x1b[36m"
 )
+
+func pickerBindings(candidates []pickerCandidate) string {
+	bindings := []string{"change:first"}
+	for index, candidate := range candidates {
+		if candidate.Current {
+			bindings = append(bindings, fmt.Sprintf("load:pos(%d)", index+1))
+			break
+		}
+	}
+	return strings.Join(bindings, ",")
+}
 
 func pickerColumnWidths(candidates []pickerCandidate) (int, int) {
 	itemWidth, repositoryWidth := len("ITEM"), len("REPOSITORY")

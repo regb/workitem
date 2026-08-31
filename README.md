@@ -101,14 +101,19 @@ bind-key O display-popup -EE \
   -d '#{pane_current_path}' -w 90% -h 80% -T 'wi work items' \
   'WI_TMUX_CLIENT="#{client_name}" wi switch'
 
-bind-key N run-shell -b -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next >/dev/null 2>&1 || tmux display-message "wi next failed"'
-bind-key P run-shell -b -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --defer >/dev/null 2>&1 || tmux display-message "wi next --defer failed"'
-bind-key W run-shell -b -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --wait >/dev/null 2>&1 || tmux display-message "wi next --wait failed"'
-bind-key A run-shell -b -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --archive >/dev/null 2>&1 || tmux display-message "wi next --archive failed"'
+# Two -E flags close the popup on success and leave errors visible.
+bind-key N display-popup -EE \
+  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi next' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next'
+bind-key P display-popup -EE \
+  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi defer current' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --defer'
+bind-key W display-popup -EE \
+  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi wait current' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --wait'
+bind-key A display-popup -EE \
+  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi archive current' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --archive'
 ```
 
 ## Development

@@ -19,7 +19,7 @@ Without an item, `switch` opens an `fzf` picker:
 wi switch
 ```
 
-The picker shows working and waiting items first, followed by backlog items in a distinct color. Selecting a waiting item resumes it; selecting a backlog item starts it. Either choice then enters the item's TUI.
+The picker shows working and waiting items first, followed by backlog items in a distinct color. It initially selects the current item when that item is present. Typing a filter moves the cursor to the first match. Selecting a waiting item resumes it; selecting a backlog item starts it. Either choice then enters the item's TUI.
 
 ## Navigate by attention
 
@@ -54,15 +54,19 @@ bind-key O display-popup -EE \
   -d '#{pane_current_path}' -w 90% -h 80% -T 'wi work items' \
   'WI_TMUX_CLIENT="#{client_name}" wi switch'
 
-# Run navigation commands without opening a popup.
-bind-key N run-shell -b -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next >/dev/null 2>&1 || tmux display-message "wi next failed"'
-bind-key P run-shell -b -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --defer >/dev/null 2>&1 || tmux display-message "wi next --defer failed"'
-bind-key W run-shell -b -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --wait >/dev/null 2>&1 || tmux display-message "wi next --wait failed"'
-bind-key A run-shell -b -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --archive >/dev/null 2>&1 || tmux display-message "wi next --archive failed"'
+# Run navigation in a popup. It closes on success and remains on error.
+bind-key N display-popup -EE \
+  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi next' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next'
+bind-key P display-popup -EE \
+  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi defer current' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --defer'
+bind-key W display-popup -EE \
+  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi wait current' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --wait'
+bind-key A display-popup -EE \
+  -d '#{pane_current_path}' -w 80% -h 40% -T 'wi archive current' \
+  'WI_TMUX_CLIENT="#{client_name}" wi next --archive'
 ```
 
 Reload tmux:
@@ -72,6 +76,8 @@ tmux source-file ~/.tmux.conf
 ```
 
 These are ordinary tmux bindings, not a plugin. Change the keys, popup dimensions, or commands directly in your configuration. `WI_TMUX_CLIENT` tells `wi` which client initiated the command when more than one client is attached.
+
+Two `-E` flags make tmux close a popup only when its command succeeds. On failure, the full `wi` error remains visible until you dismiss the popup with `Escape` or `Ctrl-C`. This is clearer than redirecting stderr and briefly displaying a generic status-bar message. If you prefer status-bar errors, remove the stderr redirect, increase tmux's `display-time`, and display the captured error rather than a fixed `wi next failed` string. The status bar is still a poor fit for multiline errors.
 
 If your list filters come from a repository `.envrc`, wrap the command with `direnv exec .`. For example:
 

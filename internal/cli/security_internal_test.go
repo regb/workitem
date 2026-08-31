@@ -43,6 +43,20 @@ func TestPickerCandidatesIncludeWorkingWaitingAndBacklog(t *testing.T) {
 	}
 }
 
+func TestPickerBindingsSelectCurrentAndResetFilteredCursor(t *testing.T) {
+	candidates := []pickerCandidate{
+		{Item: app.WorkListItem{ID: "one"}},
+		{Item: app.WorkListItem{ID: "two"}, Current: true},
+		{Item: app.WorkListItem{ID: "three"}},
+	}
+	if got := pickerBindings(candidates); got != "change:first,load:pos(2)" {
+		t.Fatalf("bindings = %q", got)
+	}
+	if got := pickerBindings(candidates[:1]); got != "change:first" {
+		t.Fatalf("bindings without current item = %q", got)
+	}
+}
+
 func TestPickerRowsUseStyledFixedWidthColumns(t *testing.T) {
 	candidate := pickerCandidate{Section: "NEEDS ATTENTION", Current: true, Item: app.WorkListItem{Slug: "a-very-long-item-name", Repository: "owner/repository", Title: "Readable title"}}
 	row := renderPickerCandidate(candidate, 12, 18)
