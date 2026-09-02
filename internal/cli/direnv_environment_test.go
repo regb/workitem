@@ -48,14 +48,17 @@ func TestLoadCLIProjectEnvironmentPreservesExplicitCallerValue(t *testing.T) {
 }
 
 func TestLoadCLIProjectEnvironmentReplacesStaleDirenvValue(t *testing.T) {
-	diff := encodedDirenvDiff(t, `{"p":{"WI_LIST_LABELS":null,"SECRET":null}}`)
+	diff := encodedDirenvDiff(t, `{"p":{"WI_LIST_LABELS":null,"SECRET":null,"PATH":null}}`)
 	client := &fakeCLIDirenv{status: model.DirenvStatus{Found: true, Allowed: true}, environment: map[string]string{"WI_LIST_LABELS": "+current"}}
-	got, err := loadCLIProjectEnvironment(context.Background(), client, "/repo", map[string]string{"DIRENV_DIFF": diff, "WI_LIST_LABELS": "+stale", "SECRET": "old"})
+	got, err := loadCLIProjectEnvironment(context.Background(), client, "/repo", map[string]string{"DIRENV_DIFF": diff, "WI_LIST_LABELS": "+stale", "SECRET": "old", "PATH": "/usr/bin"})
 	if err != nil || got["WI_LIST_LABELS"] != "+current" {
 		t.Fatalf("environment=%+v err=%v", got, err)
 	}
 	if _, exists := client.base["SECRET"]; exists {
 		t.Fatalf("stale managed variable passed to direnv: %+v", client.base)
+	}
+	if client.base["PATH"] != "/usr/bin" {
+		t.Fatalf("PATH was not preserved for direnv: %+v", client.base)
 	}
 }
 

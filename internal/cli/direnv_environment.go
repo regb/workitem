@@ -55,6 +55,12 @@ func loadCLIProjectEnvironment(ctx context.Context, client cliDirenv, cwd string
 	}
 	base := cloneEnvironment(source)
 	for key := range managed {
+		// direnv itself and commands run by .envrc need the caller's tool and
+		// home paths. This matches runtime environment loading, which also
+		// preserves PATH and HOME while scrubbing project-specific values.
+		if key == "PATH" || key == "HOME" {
+			continue
+		}
 		delete(base, key)
 	}
 	for key := range base {
