@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -42,6 +43,18 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	}
 	if m.State == model.StateArchived {
 		return EnsureAgentRuntimeResult{}, fmt.Errorf("work item %s is archived; set it to backlog before ensuring an agent runtime", m.ID)
+	}
+	if m.Checkout.Executor != "" && m.Checkout.Executor != model.ExecutorLocal {
+		warnings := []string{}
+		if !m.Checkout.Present() {
+			m, warnings, err = a.ensureRemoteWorkspace(ctx, m)
+			if err != nil {
+				return EnsureAgentRuntimeResult{}, err
+			}
+		}
+		result, err := a.ensureRemoteRuntime(ctx, m, string(mode))
+		result.Warnings = append(result.Warnings, warnings...)
+		return result, err
 	}
 	m, warnings, err := a.ensureWorkspaceCheckout(ctx, opts, m, true)
 	if err != nil {
@@ -202,10 +215,66 @@ func (a *App) prepareAgentRuntime(ctx context.Context, m model.Manifest, session
 }
 
 func (a *App) StopAgentRuntime(ctx context.Context, opts ResolveOptions, force bool) (StopAgentRuntimeResult, error) {
+	manifest, err := a.ResolveItem(ctx, opts)
+	if err != nil {
+		return StopAgentRuntimeResult{}, err
+	}
+	if manifest.Checkout.Executor != "" && manifest.Checkout.Executor != model.ExecutorLocal {
+		client, err := a.executorClient(manifest.Checkout.Executor)
+		if err != nil {
+			return StopAgentRuntimeResult{}, err
+		}
+		if force {
+			_, _ = client.RuntimeControl(ctx, manifest.ID, agent.CommandAbort, "")
+		}
+		remote, err := client.RuntimeControl(ctx, manifest.ID, agent.CommandShutdown, "")
+		if err != nil {
+			return StopAgentRuntimeResult{}, err
+		}
+		var runtime model.AgentRuntime
+		if err := json.Unmarshal(remote.RuntimeJSON, &runtime); err != nil {
+			return StopAgentRuntimeResult{}, err
+		}
+		runtime.Executor = manifest.Checkout.Executor
+		runtime.HostPID, runtime.HostProcessGroup, runtime.HostStartTime = 0, 0, 0
+		_ = a.Store.SaveAgentRuntime(ctx, manifest.ID, runtime)
+		warnings := a.ingestExecutorEvents(ctx, remote.EventsJSON)
+		if err := a.checkpointExecutorConversation(ctx, manifest, remote.Conversation); err != nil {
+			warnings = append(warnings, "could not checkpoint executor conversation: "+err.Error())
+		}
+		return StopAgentRuntimeResult{WorkItemID: manifest.ID, Changed: true, Runtime: &runtime, Warnings: warnings}, nil
+	}
 	return a.primaryAgentService().Stop(ctx, opts, force)
 }
 
 func (a *App) AgentRuntimeStatus(ctx context.Context, opts ResolveOptions) (AgentRuntimeStatusResult, error) {
+	manifest, err := a.ResolveItem(ctx, opts)
+	if err != nil {
+		return AgentRuntimeStatusResult{}, err
+	}
+	if manifest.Checkout.Executor != "" && manifest.Checkout.Executor != model.ExecutorLocal {
+		client, err := a.executorClient(manifest.Checkout.Executor)
+		if err != nil {
+			return AgentRuntimeStatusResult{}, err
+		}
+		remote, err := client.RuntimeStatus(ctx, manifest.ID)
+		if err != nil {
+			return AgentRuntimeStatusResult{}, err
+		}
+		var runtime model.AgentRuntime
+		if err := json.Unmarshal(remote.RuntimeJSON, &runtime); err != nil {
+			return AgentRuntimeStatusResult{}, err
+		}
+		runtime.Executor = manifest.Checkout.Executor
+		runtime.HostPID, runtime.HostProcessGroup, runtime.HostStartTime = 0, 0, 0
+		_ = a.Store.SaveAgentRuntime(ctx, manifest.ID, runtime)
+		warnings := a.ingestExecutorEvents(ctx, remote.EventsJSON)
+		if err := a.checkpointExecutorConversation(ctx, manifest, remote.Conversation); err != nil {
+			warnings = append(warnings, "could not checkpoint executor conversation: "+err.Error())
+		}
+		online := runtime.State == model.AgentRuntimeStarting || runtime.State == model.AgentRuntimeRunning
+		return AgentRuntimeStatusResult{WorkItemID: manifest.ID, Runtime: &runtime, Online: online, Capabilities: runtime.Capabilities, Warnings: warnings}, nil
+	}
 	res, err := a.primaryAgentService().RuntimeStatus(ctx, opts)
 	if err != nil {
 		return AgentRuntimeStatusResult{}, err

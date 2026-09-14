@@ -18,6 +18,8 @@ const (
 
 	WorkspaceKindManagedSlot    = "managed-slot"
 	WorkspaceKindRepositoryHome = "repository-home"
+
+	ExecutorLocal = "local"
 )
 
 type Manifest struct {
@@ -60,9 +62,11 @@ func (r Repository) OperationalRoot() string {
 }
 
 type Checkout struct {
-	Kind   string  `json:"kind"`
-	Path   *string `json:"path"`
-	Branch string  `json:"branch"`
+	Kind     string  `json:"kind"`
+	Executor string  `json:"executor"`
+	Slot     string  `json:"slot,omitempty"`
+	Path     *string `json:"path"`
+	Branch   string  `json:"branch"`
 }
 
 func (c Checkout) Present() bool {
@@ -77,10 +81,11 @@ func (c Checkout) Presence() string {
 }
 
 type Conversation struct {
-	Driver  string `json:"driver,omitempty"`
-	ID      string `json:"id"`
-	Locator string `json:"locator,omitempty"`
-	Format  string `json:"format,omitempty"`
+	Driver   string `json:"driver,omitempty"`
+	Executor string `json:"executor,omitempty"`
+	ID       string `json:"id"`
+	Locator  string `json:"locator,omitempty"`
+	Format   string `json:"format,omitempty"`
 }
 
 func (c Conversation) NativeLocator() string { return c.Locator }
@@ -89,6 +94,9 @@ func (c Conversation) NativeLocator() string { return c.Locator }
 func NewManifest(id, slug, title string, labels []string, deepWork bool, now time.Time, repo Repository, checkout Checkout) Manifest {
 	if checkout.Kind == "" {
 		checkout.Kind = WorkspaceKindManagedSlot
+	}
+	if checkout.Executor == "" {
+		checkout.Executor = ExecutorLocal
 	}
 	if strings.TrimSpace(checkout.Branch) == "" {
 		checkout.Branch = ItemBranchName(slug, id)

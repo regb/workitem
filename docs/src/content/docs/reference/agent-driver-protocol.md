@@ -36,7 +36,8 @@ Drivers also handle short-lived process requests:
 - `conversation.cwd` reads the checkout recorded by a native conversation.
 - `conversation.fork` copies or rewrites a conversation for a reassigned checkout.
 - `conversation.observe` returns compact status without returning prompts, responses, or tool arguments.
-- `conversation.decode` converts batches of native records into compact facts for daemon indexing.
+- `conversation.decode` converts batches of native records into compact facts for daemon indexing. Native lines use encoded byte payloads so malformed or partially written records can be reported instead of breaking protocol encoding.
+- `conversation.export` and `conversation.import` checkpoint driver-owned native content without teaching the coordinator its file format.
 
 `wi` starts the configured driver command for these operations. Driver-specific parsers and filesystem rules do not run in generic application or coordinator packages.
 

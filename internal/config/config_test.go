@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/regb/workitem/internal/config"
@@ -35,6 +36,46 @@ func TestLoadRejectsRelativeDirenvAutoTrustRepository(t *testing.T) {
 	writeFile(t, path, "[direnv]\nauto_trust_repositories = [\"relative/repo\"]\n")
 	if _, _, err := config.Load(path); err == nil {
 		t.Fatal("expected relative auto-trust path rejection")
+	}
+}
+
+func TestLoadExecutorDefinition(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	content := `[executors.macbook]
+destination = "macbook"
+ssh_command = "/usr/bin/ssh"
+wi_command = "/Users/regb/go/bin/wi"
+shell = "/run/current-system/sw/bin/bash"
+shell_config = "~/.bashrc"
+tmux_config = "~/.tmux.conf"
+forward_env = ["TERM", "COLORTERM"]
+
+[executors.macbook.agents.default.config]
+executable = "/Users/regb/.nix-profile/bin/pi"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warnings, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings=%v", warnings)
+	}
+	got := cfg.Executors["macbook"]
+	if got.Transport != "ssh" || got.Destination != "macbook" || got.WICommand != "/Users/regb/go/bin/wi" || got.TmuxConfig != "~/.tmux.conf" || len(got.ForwardEnv) != 2 || got.Agents["default"].Config["executable"] != "/Users/regb/.nix-profile/bin/pi" {
+		t.Fatalf("executor=%+v", got)
+	}
+}
+
+func TestLoadExecutorRejectsMissingDestination(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[executors.bad]\ntransport = \"ssh\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "requires destination") {
+		t.Fatalf("err=%v", err)
 	}
 }
 

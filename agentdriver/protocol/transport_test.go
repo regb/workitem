@@ -2,6 +2,7 @@ package driverprotocol
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 	"time"
@@ -36,6 +37,21 @@ func TestBootstrapHandshake(t *testing.T) {
 	}
 	if !ready.Capabilities.Prompt {
 		t.Fatalf("ready=%+v", ready)
+	}
+}
+
+func TestConversationDecodeTransportsMalformedNativeLines(t *testing.T) {
+	request := Request{ProtocolVersion: Version, Driver: "test", Operation: OperationConversationDecode, Conversation: &ConversationRequest{Lines: [][]byte{[]byte(`{"type":"message"} trailing`)}}}
+	encoded, err := json.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded Request
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if len(decoded.Conversation.Lines) != 1 || string(decoded.Conversation.Lines[0]) != `{"type":"message"} trailing` {
+		t.Fatalf("lines=%q", decoded.Conversation.Lines)
 	}
 }
 

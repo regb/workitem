@@ -20,7 +20,8 @@
 - `workspace`: The logical Git checkout claim and its materialization for one item. A workspace is not a directory alone, a tmux session, or a coding-agent process.
 - `materialization`: Creation or attachment of external resources described by durable state, such as assigning a managed slot, checking out the implementation branch, or recognizing a claimed repository home.
 - `worktree`: A concrete Git working tree observed by wi. Managed worktrees may remain as warm reusable slot directories after an item releases its workspace claim.
-- `managed slot`: A wi-owned reusable worktree location. Slots are claimed by items, reset and validated before reuse, and retained to preserve build caches.
+- `managed slot`: A wi-owned reusable worktree location on one executor. Slots are claimed by items, reset and validated before reuse, and retained to preserve build caches.
+- `executor`: The machine that materializes a managed slot and runs its agent runtime. `local` is the coordinator machine; configured SSH executors use coordinator-owned worker caches and do not own work-item lifecycle or identity.
 - `repository-home claim`: An exclusive logical claim on the repository's primary checkout. Releasing or deleting the item relinquishes the claim but does not modify or delete that checkout.
 - `lifecycle`: The durable work-item state: `backlog`, `working`, `waiting`, or `archived`. Lifecycle does not by itself describe whether a workspace, runtime, or terminal currently exists.
 - `deep work`: A durable item classification subject to configured active-capacity policy. It is not a label.
@@ -42,6 +43,7 @@
 - `data root`: The canonical per-installation durable root, normally `$XDG_DATA_HOME/wi`. Each distinct absolute data root has its own `wi.db`, daemon, and deterministic runtime socket namespace.
 - `operator endpoint`: The user-only daemon Unix socket with the full local API. Normal CLI commands and host-side driver bridges use it.
 - `agent endpoint`: The separately mountable restricted daemon Unix socket for sandboxed tools. It permits health/minimal creation reads and safe absent managed-slot backlog creation, but rejects lifecycle, workspace, runtime, terminal, delete, and shutdown control.
+- `executor endpoint`: The restricted authoritative daemon Unix socket reverse-forwarded over a coordinator-owned SSH tunnel into remote executor environments. It permits canonical catalog and observation reads, one-shot access handoffs, and safe same-repository, same-executor backlog creation, but rejects lifecycle, workspace, runtime, terminal, delete, and shutdown control.
 - `runtime control socket`: A driver-owned per-runtime Unix socket used for direct prompt, steer, follow-up, abort, and shutdown commands. It speaks the public driver protocol and is not canonical state.
 - `runtime event socket`: A host-owned per-runtime Unix socket that accepts compact public driver events. The runtime host validates identity and relays accepted events through the private daemon API.
 - `native content`: Canonical filesystem content intentionally kept out of `wi.db`, currently descriptions and driver-owned native conversations.
@@ -74,6 +76,8 @@
 
 - Keep durable-item primitives independent of workspace, agent, attention, and tmux operations.
 - Workspace primitives must not create terminal sessions or agent conversations.
+- The coordinator remains canonical for remotely executed items. Executor state is a materialization cache and must not become an independent work-item authority.
+- Repository-home claims are local-only. Remote execution uses managed slots.
 - Primary-agent core must not conceptually depend on tmux; only TUI composition may require it.
 - Attention may rank observations but must not choose or enter an access mechanism.
 - Low-level terminal operations must not select work or create an agent.

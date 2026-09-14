@@ -14,6 +14,7 @@ import (
 
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
+	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -24,6 +25,9 @@ type pickerCandidate struct {
 }
 
 func runPicker(ctx context.Context, cfg Config, labels []string, noAgent, noPreview bool) error {
+	if cfg.ControlAccess == coordinator.AccessExecutor {
+		noPreview = true
+	}
 	if !noAgent {
 		barrierCtx, cancel := context.WithTimeout(ctx, 2500*time.Millisecond)
 		barrier, err := cfg.Coordinator.ActivityBarrier(barrierCtx)
@@ -63,6 +67,22 @@ func runPicker(ctx context.Context, cfg Config, labels []string, noAgent, noPrev
 	selected, ok, err := selectWithFZF(ctx, cfg, candidates, noPreview)
 	if err != nil || !ok {
 		return err
+	}
+	if cfg.ControlAccess == coordinator.AccessExecutor {
+		sourceItemID := strings.TrimSpace(cfg.Env["WI_ID"])
+		if !model.ValidID(sourceItemID) {
+			return fmt.Errorf("executor switch requires the current remote work item id")
+		}
+		if _, err := cfg.Coordinator.RequestExecutorAccess(ctx, sourceItemID, selected.Item.ID); err != nil {
+			return err
+		}
+		detacher, ok := cfg.App.Tmux.(interface {
+			DetachClient(context.Context, string) error
+		})
+		if !ok {
+			return fmt.Errorf("tmux terminal adapter cannot detach for executor handoff")
+		}
+		return detacher.DetachClient(ctx, strings.TrimSpace(cfg.Env["WI_TMUX_CLIENT"]))
 	}
 	switch selected.Item.State {
 	case model.StateWaiting:

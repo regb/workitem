@@ -15,9 +15,10 @@ import (
 )
 
 type Client struct {
-	SocketPath    string
-	BuildIdentity string
-	counter       atomic.Uint64
+	SocketPath         string
+	BuildIdentity      string
+	AllowBuildMismatch bool
+	counter            atomic.Uint64
 }
 
 func (c *Client) Call(ctx context.Context, method string, payload any, result any) error {
@@ -70,7 +71,7 @@ func (c *Client) Call(ctx context.Context, method string, payload any, result an
 	if response.ID != requestID {
 		return fmt.Errorf("invalid coordinator response identity")
 	}
-	if method != MethodShutdown && method != MethodRuntimeEvent && response.BuildIdentity != buildIdentity {
+	if !c.AllowBuildMismatch && method != MethodShutdown && method != MethodRuntimeEvent && response.BuildIdentity != buildIdentity {
 		return &CompatibilityError{Kind: "build", Expected: buildIdentity, Actual: response.BuildIdentity}
 	}
 	if !response.OK {
@@ -125,6 +126,18 @@ func (c *Client) Conversation(ctx context.Context, itemID string) (ConversationP
 func (c *Client) AgentObservation(ctx context.Context, itemID string) (AgentObservationResult, error) {
 	var result AgentObservationResult
 	err := c.Call(ctx, MethodAgentObservation, ItemRequest{ItemID: itemID}, &result)
+	return result, err
+}
+
+func (c *Client) RequestExecutorAccess(ctx context.Context, sourceItemID, targetItemID string) (ExecutorAccessResult, error) {
+	var result ExecutorAccessResult
+	err := c.Call(ctx, MethodExecutorAccessRequest, ExecutorAccessRequest{SourceItemID: sourceItemID, TargetItemID: targetItemID}, &result)
+	return result, err
+}
+
+func (c *Client) ConsumeExecutorAccess(ctx context.Context, sourceItemID string) (ExecutorAccessResult, error) {
+	var result ExecutorAccessResult
+	err := c.Call(ctx, MethodExecutorAccessConsume, ExecutorAccessRequest{SourceItemID: sourceItemID}, &result)
 	return result, err
 }
 

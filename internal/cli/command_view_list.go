@@ -267,6 +267,9 @@ func printWorkList(w io.Writer, res app.WorkListResult, mode string, color bool,
 				displayCell = colorBold(displayCell, color)
 			}
 			repository := item.Repository
+			if item.Executor != "" && item.Executor != model.ExecutorLocal {
+				repository += " @" + item.Executor
+			}
 			if item.RepositoryHome {
 				repository += " (" + colorBold("home", color) + ")"
 			}

@@ -36,6 +36,18 @@ func (r *recordingRunner) Run(ctx context.Context, path string, args []string, e
 	return out, err
 }
 
+func TestDedicatedServerArgumentsApplyToEveryCommand(t *testing.T) {
+	r := &recordingRunner{}
+	client := tmux.Client{Path: "tmux", SocketPath: "/tmp/wi.sock", ConfigPath: "/tmp/wi.conf", Runner: r}
+	if _, err := client.HasSession(context.Background(), "wi-test"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"-S", "/tmp/wi.sock", "-f", "/tmp/wi.conf", "has-session", "-t", "wi-test"}
+	if len(r.calls) != 1 || !reflect.DeepEqual(r.calls[0].Args, want) {
+		t.Fatalf("calls=%+v want args=%v", r.calls, want)
+	}
+}
+
 func TestListSessionsSortsAndIgnoresEmptyLines(t *testing.T) {
 	r := &recordingRunner{outs: [][]byte{[]byte("wi-z\n\nwi-a\n")}}
 	client := tmux.Client{Path: "tmux", Runner: r}
@@ -48,6 +60,15 @@ func TestListSessionsSortsAndIgnoresEmptyLines(t *testing.T) {
 	}
 	if !reflect.DeepEqual(r.calls[0].Args, []string{"list-sessions", "-F", "#{session_name}"}) {
 		t.Fatalf("args = %#v", r.calls[0].Args)
+	}
+}
+
+func TestListSessionsTreatsMissingDedicatedSocketAsEmpty(t *testing.T) {
+	r := &recordingRunner{errs: []error{errors.New("error connecting to /tmp/wi.sock (No such file or directory): exit status 1")}}
+	client := tmux.Client{Path: "tmux", SocketPath: "/tmp/wi.sock", Runner: r}
+	sessions, err := client.ListSessions(context.Background())
+	if err != nil || len(sessions) != 0 {
+		t.Fatalf("sessions=%v err=%v", sessions, err)
 	}
 }
 
@@ -255,6 +276,42 @@ func TestAttachOrSwitchRecoversUnexpandedClientFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(r.calls[0].Args, []string{"display-message", "-p", "#{client_name}"}) || !reflect.DeepEqual(r.calls[1].Args, []string{"switch-client", "-c", "/dev/pts/42", "-t", "wi-session"}) {
+		t.Fatalf("calls=%+v", r.calls)
+	}
+}
+
+func TestDetachClientTargetsOriginatingClient(t *testing.T) {
+	r := &recordingRunner{}
+	client := tmux.Client{Path: "tmux", Runner: r}
+	if err := client.DetachClient(context.Background(), "client-7"); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.calls) != 1 || !reflect.DeepEqual(r.calls[0].Args, []string{"detach-client", "-t", "client-7"}) {
+		t.Fatalf("calls=%+v", r.calls)
+	}
+}
+
+func TestDetachClientAndRunUsesDirectClientReplacement(t *testing.T) {
+	r := &recordingRunner{}
+	client := tmux.Client{Path: "tmux", Runner: r}
+	command := []string{"ssh", "-t", "worker", "/path with space/wi", "internal-executor-attach", "master", "item"}
+	if err := client.DetachClientAndRun(context.Background(), command, "client-7"); err != nil {
+		t.Fatal(err)
+	}
+	wantCommand := "ssh -t worker '/path with space/wi' internal-executor-attach master item"
+	want := []string{"detach-client", "-E", wantCommand, "-t", "client-7"}
+	if len(r.calls) != 1 || !reflect.DeepEqual(r.calls[0].Args, want) {
+		t.Fatalf("calls=%+v want=%v", r.calls, want)
+	}
+}
+
+func TestDetachClientAndRunRejectsInvalidClient(t *testing.T) {
+	r := &recordingRunner{}
+	client := tmux.Client{Path: "tmux", Runner: r}
+	if err := client.DetachClientAndRun(context.Background(), []string{"ssh", "worker"}, "bad\nclient"); err == nil {
+		t.Fatal("expected invalid client error")
+	}
+	if len(r.calls) != 0 {
 		t.Fatalf("calls=%+v", r.calls)
 	}
 }

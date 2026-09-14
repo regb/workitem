@@ -17,6 +17,9 @@ func coordinatorAgentStatus(ctx context.Context, cfg Config, selector string, st
 	if err != nil {
 		return app.AgentStatusResult{}, err
 	}
+	if manifest.Checkout.Executor != "" && manifest.Checkout.Executor != model.ExecutorLocal {
+		return cfg.App.AgentStatus(ctx, app.AgentStatusOptions{ResolveOptions: app.ResolveOptions{Selector: manifest.ID, CWD: cfg.CWD, Env: cfg.Env}, StaleAfter: staleAfter})
+	}
 	projection, err := cfg.Coordinator.AgentObservation(ctx, manifest.ID)
 	if err != nil {
 		return app.AgentStatusResult{}, err

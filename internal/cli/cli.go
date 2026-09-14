@@ -17,6 +17,7 @@ import (
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/dataroot"
 	"github.com/regb/workitem/internal/direnv"
 	"github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
@@ -85,14 +86,18 @@ func Main(ctx context.Context, args []string) int {
 	application.DirenvConfig = cfgFile.Direnv
 	application.AgentsConfig = cfgFile.Agents
 	application.DriversConfig = cfgFile.Drivers
+	application.ExecutorsConfig = cfgFile.Executors
+	application.Environment = env
+	application.Home = env["HOME"]
+	application.MasterID, _ = dataroot.Key(paths.DataRoot)
 	_, jsonOut := extractGlobals(args)
 	if !jsonOut && inputIsTerminal(os.Stdin) {
 		application.ApproveDirenv = func(ctx context.Context, manifest model.Manifest, rcPath string) (bool, error) {
 			return promptDirenvApproval(os.Stdin, os.Stderr, manifest, rcPath)
 		}
 	}
-	mux := tmux.New("tmux")
-	application.Tmux = mux
+	muxClient := tmux.NewWithServer("tmux", env["WI_TMUX_SOCKET"], env["WI_TMUX_CONFIG"])
+	application.Tmux = muxClient
 	direnvClient := direnv.New("direnv")
 	application.Direnv = direnvClient
 	if self, err := os.Executable(); err == nil {
@@ -119,15 +124,31 @@ func Main(ctx context.Context, args []string) int {
 		return ExitError
 	}
 	agentSocketPath := strings.TrimSpace(env["WI_AGENT_DAEMON_SOCKET"])
+	executorSocketPath := strings.TrimSpace(env["WI_EXECUTOR_DAEMON_SOCKET"])
+	if executorSocketPath == "" && commandUsesExecutorAuthority(args) {
+		executorSocketPath = discoverExecutorAuthoritySocket(paths)
+	}
 	if agentSocketPath != "" && !filepath.IsAbs(agentSocketPath) {
 		fmt.Fprintln(os.Stderr, "WI_AGENT_DAEMON_SOCKET must be an absolute path")
+		return ExitError
+	}
+	if executorSocketPath != "" && !filepath.IsAbs(executorSocketPath) {
+		fmt.Fprintln(os.Stderr, "WI_EXECUTOR_DAEMON_SOCKET must be an absolute path")
+		return ExitError
+	}
+	useExecutorAuthority := executorSocketPath != "" && commandUsesExecutorAuthority(args)
+	if agentSocketPath != "" && useExecutorAuthority {
+		fmt.Fprintln(os.Stderr, "WI_AGENT_DAEMON_SOCKET and WI_EXECUTOR_DAEMON_SOCKET cannot both control this command")
 		return ExitError
 	}
 	socketPath := defaultSocketPath
 	if agentSocketPath != "" {
 		socketPath = agentSocketPath
 	}
-	client := &coordinator.Client{SocketPath: socketPath}
+	if useExecutorAuthority {
+		socketPath = executorSocketPath
+	}
+	client := &coordinator.Client{SocketPath: socketPath, AllowBuildMismatch: useExecutorAuthority}
 	probeCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
 	status, probeErr := client.Status(probeCtx)
 	cancel()
@@ -136,10 +157,16 @@ func Main(ctx context.Context, args []string) int {
 			fmt.Fprintln(os.Stderr, "WI_AGENT_DAEMON_SOCKET does not identify a restricted agent endpoint")
 			return ExitError
 		}
+		if useExecutorAuthority && status.Access != coordinator.AccessExecutor {
+			fmt.Fprintln(os.Stderr, "WI_EXECUTOR_DAEMON_SOCKET does not identify a restricted executor endpoint")
+			return ExitError
+		}
 		runConfig.Coordinator = client
 		runConfig.ControlAccess = status.Access
-	} else if agentSocketPath == "" {
-		status, _, startErr := ensureDaemonRunning(ctx, paths, socketPath)
+		application.ExecutorDaemonSocketPath = status.ExecutorSocketPath
+	} else if agentSocketPath == "" && !useExecutorAuthority {
+		var startErr error
+		status, _, startErr = ensureDaemonRunning(ctx, paths, socketPath)
 		if startErr != nil {
 			fmt.Fprintf(os.Stderr, "daemon is required for this command: %s\n", startErr)
 			return ExitError
@@ -147,8 +174,15 @@ func Main(ctx context.Context, args []string) int {
 		runConfig.Coordinator = client
 		runConfig.ControlAccess = status.Access
 	} else {
-		fmt.Fprintf(os.Stderr, "configured agent endpoint is unavailable: %s\n", probeErr)
+		endpoint := "agent"
+		if useExecutorAuthority {
+			endpoint = "executor authority"
+		}
+		fmt.Fprintf(os.Stderr, "configured %s endpoint is unavailable: %s\n", endpoint, probeErr)
 		return ExitError
+	}
+	if status.Access == coordinator.AccessOperator {
+		application.ExecutorDaemonSocketPath = status.ExecutorSocketPath
 	}
 	BindCoordinatorApp(application, st, runConfig.Coordinator)
 	return Run(ctx, args, runConfig)
@@ -248,6 +282,14 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = runDeep(ctx, args[1:], cfg, jsonOut)
 	case "agent":
 		err = runAgent(ctx, args[1:], cfg, jsonOut)
+	case "executor":
+		err = runExecutor(ctx, args[1:], cfg, jsonOut)
+	case "internal-executor-enter":
+		if jsonOut {
+			err = errors.New("internal-executor-enter does not support --json")
+		} else {
+			err = runInternalExecutorEnter(ctx, args[1:], cfg)
+		}
 	default:
 		fmt.Fprintf(cfg.Stderr, "unknown command %q\n", cmd)
 		return ExitUsage
@@ -330,6 +372,26 @@ func runAgentExec(ctx context.Context, args []string, cfg Config) error {
 		return usageErr{err}
 	}
 	return cfg.App.AgentExec(ctx, itemID, conversationID, runtimeID, mode)
+}
+
+func discoverExecutorAuthoritySocket(paths xdg.Paths) string {
+	workerRoot := filepath.Dir(filepath.Dir(paths.DataHome))
+	var marker struct {
+		Executor string `json:"executor"`
+	}
+	content, err := os.ReadFile(filepath.Join(workerRoot, "authority.json"))
+	if err != nil || json.Unmarshal(content, &marker) != nil || strings.TrimSpace(marker.Executor) == "" {
+		return ""
+	}
+	return filepath.Join(workerRoot, "authority.sock")
+}
+
+func commandUsesExecutorAuthority(args []string) bool {
+	filtered, _ := extractGlobals(args)
+	if len(filtered) == 0 {
+		return false
+	}
+	return filtered[0] == "list" || filtered[0] == "new" || filtered[0] == "switch"
 }
 
 func versionCommandRequested(args []string) bool {

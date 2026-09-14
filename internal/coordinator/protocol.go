@@ -23,26 +23,29 @@ const (
 const (
 	AccessOperator = "operator"
 	AccessAgent    = "agent"
+	AccessExecutor = "executor"
 )
 
 const (
-	MethodPing              = "ping"
-	MethodStatus            = "status"
-	MethodShutdown          = "shutdown"
-	MethodListManifests     = "list_manifests"
-	MethodConversation      = "conversation"
-	MethodAgentObservation  = "agent_observation"
-	MethodCanonicalManifest = "canonical_manifest"
-	MethodManifestCommand   = "manifest_command"
-	MethodManifestQueue     = "manifest_command_queue"
-	MethodCreateItem        = "create_item"
-	MethodStoreCommand      = "store_command"
-	MethodRuntimeEvent      = "runtime_event"
-	MethodRuntimeEvents     = "runtime_events"
-	MethodItemEvents        = "item_events"
-	MethodActivityBarrier   = "activity_barrier"
-	MethodActionability     = "actionability_snapshot"
-	MethodItemResources     = "item_resources"
+	MethodPing                  = "ping"
+	MethodStatus                = "status"
+	MethodShutdown              = "shutdown"
+	MethodListManifests         = "list_manifests"
+	MethodConversation          = "conversation"
+	MethodAgentObservation      = "agent_observation"
+	MethodCanonicalManifest     = "canonical_manifest"
+	MethodManifestCommand       = "manifest_command"
+	MethodManifestQueue         = "manifest_command_queue"
+	MethodCreateItem            = "create_item"
+	MethodStoreCommand          = "store_command"
+	MethodRuntimeEvent          = "runtime_event"
+	MethodRuntimeEvents         = "runtime_events"
+	MethodItemEvents            = "item_events"
+	MethodActivityBarrier       = "activity_barrier"
+	MethodActionability         = "actionability_snapshot"
+	MethodItemResources         = "item_resources"
+	MethodExecutorAccessRequest = "executor_access_request"
+	MethodExecutorAccessConsume = "executor_access_consume"
 )
 
 type Request struct {
@@ -96,6 +99,18 @@ type ItemRequest struct {
 	ItemID string `json:"item_id"`
 }
 
+type ExecutorAccessRequest struct {
+	SourceItemID string `json:"source_item_id"`
+	TargetItemID string `json:"target_item_id,omitempty"`
+}
+
+type ExecutorAccessResult struct {
+	Found        bool      `json:"found"`
+	SourceItemID string    `json:"source_item_id,omitempty"`
+	TargetItemID string    `json:"target_item_id,omitempty"`
+	RequestedAt  time.Time `json:"requested_at,omitempty"`
+}
+
 type ItemEventsResult struct {
 	Events []model.Event `json:"events"`
 }
@@ -141,6 +156,7 @@ type Status struct {
 	DataRoot           string                   `json:"data_root"`
 	SocketPath         string                   `json:"socket_path"`
 	AgentSocketPath    string                   `json:"agent_socket_path,omitempty"`
+	ExecutorSocketPath string                   `json:"executor_socket_path,omitempty"`
 	Access             string                   `json:"access"`
 	Database           DatabaseStatus           `json:"database"`
 	ConversationImport ConversationImportReport `json:"conversation_import"`
@@ -170,6 +186,20 @@ func AgentSocketPath(runtimeDir, dataRoot string) (string, error) {
 		return "", err
 	}
 	return portableSocketPath(filepath.Join(runtimeDir, "wi-agent", key, "daemon.sock"), "wi-agent", key, "daemon.sock"), nil
+}
+
+// ExecutorSocketPath is the restricted authoritative endpoint forwarded to
+// remote executors. It exposes canonical reads and constrained item creation,
+// but not operator resource or lifecycle control.
+func ExecutorSocketPath(runtimeDir, dataRoot string) (string, error) {
+	if strings.TrimSpace(runtimeDir) == "" || strings.TrimSpace(dataRoot) == "" {
+		return "", errors.New("runtime directory and data root are required")
+	}
+	key, err := dataroot.Key(dataRoot)
+	if err != nil {
+		return "", err
+	}
+	return portableSocketPath(filepath.Join(runtimeDir, "wi-executor", key, "daemon.sock"), "wi-executor", key, "daemon.sock"), nil
 }
 
 func portableSocketPath(candidate string, parts ...string) string {

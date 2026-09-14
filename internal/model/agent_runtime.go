@@ -29,6 +29,7 @@ type AgentRuntime struct {
 	Mode             string              `json:"mode"`
 	State            string              `json:"state"`
 	ConversationID   string              `json:"conversation_id"`
+	Executor         string              `json:"executor,omitempty"`
 	Capabilities     RuntimeCapabilities `json:"capabilities"`
 	HostPID          int                 `json:"host_pid,omitempty"`
 	HostProcessGroup int                 `json:"host_process_group,omitempty"`
