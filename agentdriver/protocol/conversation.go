@@ -12,6 +12,8 @@ const (
 	OperationConversationFork    = "conversation.fork"
 	OperationConversationObserve = "conversation.observe"
 	OperationConversationDecode  = "conversation.decode"
+	OperationConversationExport  = "conversation.export"
+	OperationConversationImport  = "conversation.import"
 )
 
 type Request struct {
@@ -32,16 +34,17 @@ type Response struct {
 }
 
 type ConversationRequest struct {
-	ID           string            `json:"id,omitempty"`
-	Conversation Conversation      `json:"conversation,omitempty"`
-	Path         string            `json:"path,omitempty"`
-	SourcePath   string            `json:"source_path,omitempty"`
-	TargetPath   string            `json:"target_path,omitempty"`
-	TargetCWD    string            `json:"target_cwd,omitempty"`
-	Now          time.Time         `json:"now,omitempty"`
-	StartLine    uint64            `json:"start_line,omitempty"`
-	LineNumbers  []uint64          `json:"line_numbers,omitempty"`
-	Lines        []json.RawMessage `json:"lines,omitempty"`
+	ID           string       `json:"id,omitempty"`
+	Conversation Conversation `json:"conversation,omitempty"`
+	Path         string       `json:"path,omitempty"`
+	SourcePath   string       `json:"source_path,omitempty"`
+	TargetPath   string       `json:"target_path,omitempty"`
+	TargetCWD    string       `json:"target_cwd,omitempty"`
+	Now          time.Time    `json:"now,omitempty"`
+	StartLine    uint64       `json:"start_line,omitempty"`
+	LineNumbers  []uint64     `json:"line_numbers,omitempty"`
+	Lines        [][]byte     `json:"lines,omitempty"`
+	Data         []byte       `json:"data,omitempty"`
 }
 
 type ConversationResponse struct {
@@ -51,6 +54,7 @@ type ConversationResponse struct {
 	Facts        []ConversationFact       `json:"facts,omitempty"`
 	Decoded      []bool                   `json:"decoded,omitempty"`
 	Warnings     []string                 `json:"warnings,omitempty"`
+	Data         []byte                   `json:"data,omitempty"`
 }
 
 type ConversationObservation struct {

@@ -25,11 +25,12 @@ func runAgentControl(ctx context.Context, args []string, cfg Config, jsonOut boo
 
 func runAgentControlMessage(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("agent control send", cfg.Stderr)
-	var item, actor, filePath string
+	var item, actor, filePath, commandType string
 	var fromStdin, followUp bool
 	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
 	fs.StringVar(&actor, "actor", "", "control actor/source")
 	fs.StringVar(&filePath, "file", "", "read message from file")
+	fs.StringVar(&commandType, "type", agent.CommandSteer, "control type: prompt or steer")
 	fs.BoolVar(&fromStdin, "stdin", false, "read message from stdin")
 	fs.BoolVar(&followUp, "follow-up", false, "deliver after the current agent run settles")
 	if err := fs.Parse(args); err != nil {
@@ -39,8 +40,13 @@ func runAgentControlMessage(ctx context.Context, args []string, cfg Config, json
 	if err != nil {
 		return usageErr{err}
 	}
-	commandType := agent.CommandSteer
+	if commandType != agent.CommandPrompt && commandType != agent.CommandSteer {
+		return usageErr{fmt.Errorf("--type must be prompt or steer")}
+	}
 	if followUp {
+		if commandType != agent.CommandSteer {
+			return usageErr{errors.New("--follow-up cannot be combined with --type prompt")}
+		}
 		commandType = agent.CommandFollowUp
 	}
 	res, err := cfg.App.AgentControl(ctx, app.AgentControlOptions{

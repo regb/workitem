@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Configure capacity, labels, attention ranking, direnv trust, and display.
+description: Configure capacity, agents, remote executors, and display.
 ---
 
 User configuration lives at:
@@ -46,6 +46,15 @@ driver = "pi"
 
 [agents.web-search.config]
 extensions = ["/home/me/tools/web-search.ts"]
+
+[executors.macbook]
+destination = "macbook"
+wi_command = "/Users/me/go/bin/wi"
+shell = "/opt/homebrew/bin/bash"
+forward_env = ["TERM", "COLORTERM"]
+
+[executors.macbook.agents.default.config]
+executable = "/Users/me/.nix-profile/bin/pi"
 ```
 
 ## Deep-work capacity
@@ -101,6 +110,18 @@ wi start --new --agent web-search "Investigate rendering"
 
 External driver programs use wi's versioned bootstrap protocol. The standard Pi driver runs as the separate `wi internal-driver pi` process from the installed `wi` binary, so it is always present and has the same build version. A configured `drivers.<name>.command` selects a trusted external driver executable; repository configuration cannot register drivers or agent definitions.
 
+## Executors
+
+`[executors.<name>]` registers an SSH execution worker. `destination` is one SSH destination or host alias. `ssh_command` and `wi_command` select local SSH and remote wi executables. The worker must already have compatible wi, Git, tmux, the selected coding agent, and the project toolchain. `wi` does not install them.
+
+`shell` selects the worker executable that tmux uses to launch the persistent TUI command. The worker uses a generated private tmux configuration with one pane, no prefix, no status line, no mouse handling, and no user plugins. Local tmux owns the work-item session. Its agent pane attaches to the persistent TUI, and its shell panes attach to private persistent shells in the executor worktree.
+
+`forward_env` is an explicit allowlist. Only listed variables are copied. Credentials and arbitrary caller environment are not forwarded.
+
+Agent configuration is forwarded after removing Pi's host-local `executable` and `extensions` values. `[executors.<name>.agents.<agent>.config]` supplies worker-specific replacements. This keeps local paths from leaking into a worker launch.
+
+Use `wi executor doctor <name>` to verify SSH, versions, required tools, generated persistent-terminal configuration, and shell selection. The doctor uses a temporary isolated tmux socket and does not contact or alter the worker's ordinary tmux server.
+
 ## Environment variables
 
 Use command help to see variables accepted by a specific command. Common variables include:
@@ -112,3 +133,4 @@ Use command help to see variables accepted by a specific command. Common variabl
 | `NO_COLOR` | Disable colored text output |
 | `WI_ID` | Resolve the current item inside managed environments |
 | `WI_AGENT_DAEMON_SOCKET` | Use the restricted agent-tool daemon endpoint |
+| `WI_EXECUTOR_DAEMON_SOCKET` | Coordinator-managed authoritative endpoint forwarded into remote executor environments |

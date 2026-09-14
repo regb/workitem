@@ -106,6 +106,13 @@ func TestNewManifestUsesEmptyLabelsAndNoPiRegistry(t *testing.T) {
 	}
 }
 
+func TestNewManifestUsesLocalExecutor(t *testing.T) {
+	manifest := model.NewManifest("01KZYHGDCECSFS4BJ2SNTQP49V", "executor", "Executor", nil, false, time.Now(), model.Repository{}, model.Checkout{})
+	if manifest.Checkout.Executor != model.ExecutorLocal {
+		t.Fatalf("executor=%q", manifest.Checkout.Executor)
+	}
+}
+
 func TestNames(t *testing.T) {
 	id := "01K1ABCDE0000000000000000"
 	if got := model.ItemBranchName("Fix Race", id); got != "wi/fix-race-00000000" {

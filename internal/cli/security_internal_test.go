@@ -10,7 +10,33 @@ import (
 
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/xdg"
 )
+
+func TestDiscoverExecutorAuthoritySocketRequiresWorkerMarker(t *testing.T) {
+	root := t.TempDir()
+	paths := xdg.Paths{DataHome: filepath.Join(root, "xdg", "data")}
+	if got := discoverExecutorAuthoritySocket(paths); got != "" {
+		t.Fatalf("socket without marker=%q", got)
+	}
+	if err := os.WriteFile(filepath.Join(root, "authority.json"), []byte(`{"executor":"macbook"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(root, "authority.sock")
+	if got := discoverExecutorAuthoritySocket(paths); got != want {
+		t.Fatalf("socket=%q want=%q", got, want)
+	}
+}
+
+func TestRemoteExecutorListLabelHasDedicatedHighlight(t *testing.T) {
+	if got := colorRemoteExecutor("@macbook", false); got != "@macbook" {
+		t.Fatalf("plain=%q", got)
+	}
+	got := colorRemoteExecutor("@macbook", true)
+	if got != "\x1b[1;96m@macbook\x1b[0m" {
+		t.Fatalf("colored=%q", got)
+	}
+}
 
 func TestPromptDirenvApprovalDefaultsToNo(t *testing.T) {
 	for _, input := range []string{"\n", "no\n", "unexpected\n"} {

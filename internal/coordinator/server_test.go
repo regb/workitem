@@ -169,6 +169,74 @@ func TestAgentSocketCreatesOnlySafeBacklogItems(t *testing.T) {
 	}
 }
 
+func TestExecutorSocketReadsCanonicalCatalogAndCreatesOnParentExecutor(t *testing.T) {
+	root, err := os.MkdirTemp("/tmp", "wi-executor-endpoint-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
+	runtime := filepath.Join(root, "run")
+	if err := os.MkdirAll(runtime, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	operatorSocket, _ := SocketPath(runtime, root)
+	agentSocket, _ := AgentSocketPath(runtime, root)
+	executorSocket, _ := ExecutorSocketPath(runtime, root)
+	server, err := NewServerWithRestrictedSockets(root, operatorSocket, agentSocket, executorSocket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- server.Serve(context.Background()) }()
+	operator, executorClient := &Client{SocketPath: operatorSocket}, &Client{SocketPath: executorSocket, BuildIdentity: "cross-platform-worker-build", AllowBuildMismatch: true}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	parentRepo := model.Repository{RootAtCreation: "/coordinator/repo", GitCommonDir: "/coordinator/repo/.git", CreatedFromCommit: strings.Repeat("a", 40)}
+	parent := model.NewManifest(importTestID, "remote-parent", "Remote parent", nil, false, time.Now().UTC(), parentRepo, model.Checkout{Kind: model.WorkspaceKindManagedSlot, Executor: "macbook", Branch: model.ItemBranchName("remote-parent", importTestID)})
+	parentCommand := CreateItemCommand{ID: "parent-create", ProtocolVersion: ProtocolVersion, Manifest: parent, DescriptionDigest: DescriptionDigest("parent"), Actor: "user", CreatedAt: parent.CreatedAt}
+	if _, err := operator.CreateItem(ctx, CreateItemRequest{Command: parentCommand, Description: "parent"}); err != nil {
+		t.Fatal(err)
+	}
+	status, err := executorClient.Status(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Access != AccessExecutor || status.SocketPath != executorSocket || status.DataRoot != "" || status.Database.Path != "" {
+		t.Fatalf("status=%+v", status)
+	}
+	projection, err := executorClient.ManifestProjection(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(projection.Manifests) != 1 || projection.Manifests[0].Repository.RootAtCreation != parentRepo.RootAtCreation || projection.Manifests[0].Checkout.Executor != "macbook" {
+		t.Fatalf("projection=%+v", projection.Manifests)
+	}
+	childID := "01K00000000000000000000002"
+	child := model.NewManifest(childID, "remote-child", "Remote child", nil, false, time.Now().UTC(), model.Repository{RootAtCreation: "/worker/repo", GitCommonDir: "/worker/repo.git", CreatedFromCommit: strings.Repeat("b", 40)}, model.Checkout{Kind: model.WorkspaceKindManagedSlot, Branch: model.ItemBranchName("remote-child", childID)})
+	childCommand := CreateItemCommand{ID: "child-create", ProtocolVersion: ProtocolVersion, Manifest: child, DescriptionDigest: DescriptionDigest("child"), Actor: "user", CreatedAt: child.CreatedAt}
+	created, err := executorClient.CreateItem(ctx, CreateItemRequest{Command: childCommand, Description: "child", AuthorityItemID: parent.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Manifest.Checkout.Executor != "macbook" || created.Manifest.Checkout.Path != nil || created.Manifest.Repository.RootAtCreation != parentRepo.RootAtCreation || created.Manifest.Repository.CreatedFromCommit != strings.Repeat("b", 40) {
+		t.Fatalf("created=%+v", created.Manifest)
+	}
+	if err := executorClient.Shutdown(ctx); err == nil || !strings.Contains(err.Error(), "does not allow shutdown") {
+		t.Fatalf("shutdown err=%v", err)
+	}
+	if err := operator.Shutdown(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{operatorSocket, agentSocket, executorSocket} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("socket remains: %s: %v", path, err)
+		}
+	}
+}
+
 func TestActivityBarrierIndexesPromptBeforeReturningSnapshot(t *testing.T) {
 	root := t.TempDir()
 	native := store.New(root)

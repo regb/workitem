@@ -75,7 +75,7 @@ type ExternalObserver struct {
 }
 
 func NewExternalObserver(database *Database, _ string) *ExternalObserver {
-	return &ExternalObserver{database: database, process: processpkg.New(), git: gitpkg.New("git"), tmux: tmuxpkg.New("tmux")}
+	return &ExternalObserver{database: database, process: processpkg.New(), git: gitpkg.New("git"), tmux: tmuxpkg.NewWithServer("tmux", os.Getenv("WI_TMUX_SOCKET"), os.Getenv("WI_TMUX_CONFIG"))}
 }
 
 func (o *ExternalObserver) Reconcile(ctx context.Context) error {
@@ -264,6 +264,10 @@ func (o *ExternalObserver) observe(ctx context.Context, manifest model.Manifest,
 			observation.Process.TmuxWindow = "agent"
 		}
 	}
+	if runtime != nil && runtime.Executor != "" && runtime.Executor != model.ExecutorLocal && (runtime.State == model.AgentRuntimeStarting || runtime.State == model.AgentRuntimeRunning) {
+		observation.ProcessOnline = true
+		observation.Process.DiscoverySource = "executor"
+	}
 	if runtime != nil && runtime.HostPID > 0 && runtime.HostStartTime > 0 {
 		if info, err := o.process.Info(runtime.HostPID); err == nil && info.State != "Z" && info.StartTime == runtime.HostStartTime && (runtime.HostProcessGroup == 0 || info.PGRP == runtime.HostProcessGroup) {
 			observation.ProcessOnline = true
@@ -316,6 +320,11 @@ func (o *ExternalObserver) observeWorktree(ctx context.Context, manifest model.M
 		return result
 	}
 	result.CheckoutPath = *manifest.Checkout.Path
+	if manifest.Checkout.Executor != "" && manifest.Checkout.Executor != model.ExecutorLocal {
+		result.Status = "clean"
+		result.Reason = "remote managed slot was materialized; live status awaits executor synchronization"
+		return result
+	}
 	if _, err := os.Stat(result.CheckoutPath); err != nil {
 		result.Status = "problem"
 		result.Reason = "checkout path is unavailable: " + err.Error()

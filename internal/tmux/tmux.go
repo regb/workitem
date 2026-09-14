@@ -66,15 +66,32 @@ func (ExecRunner) RunInteractive(ctx context.Context, path string, args []string
 }
 
 type Client struct {
-	Path   string
-	Runner Runner
+	Path       string
+	SocketPath string
+	ConfigPath string
+	Runner     Runner
 }
 
 func New(path string) Client {
+	return NewWithServer(path, "", "")
+}
+
+func NewWithServer(path, socketPath, configPath string) Client {
 	if path == "" {
 		path = "tmux"
 	}
-	return Client{Path: path, Runner: ExecRunner{}}
+	return Client{Path: path, SocketPath: socketPath, ConfigPath: configPath, Runner: ExecRunner{}}
+}
+
+func (c Client) serverArgs(args []string) []string {
+	prefix := []string{}
+	if strings.TrimSpace(c.SocketPath) != "" {
+		prefix = append(prefix, "-S", c.SocketPath)
+	}
+	if strings.TrimSpace(c.ConfigPath) != "" {
+		prefix = append(prefix, "-f", c.ConfigPath)
+	}
+	return append(prefix, args...)
 }
 
 func (c Client) HasSession(ctx context.Context, name string) (bool, error) {
@@ -124,6 +141,45 @@ func (c Client) EnsureSession(ctx context.Context, spec SessionSpec) (bool, erro
 	return true, nil
 }
 
+// EnsureCommandSession creates a one-window session whose first pane runs command.
+// Existing sessions are reused without restarting their pane.
+func (c Client) EnsureCommandSession(ctx context.Context, spec SessionSpec, windowName string, command []string) (bool, error) {
+	if strings.TrimSpace(spec.Name) == "" {
+		return false, fmt.Errorf("tmux session name is required")
+	}
+	if strings.TrimSpace(spec.CWD) == "" {
+		return false, fmt.Errorf("tmux session working directory is required")
+	}
+	if len(command) == 0 {
+		return false, fmt.Errorf("command is required")
+	}
+	exists, err := c.HasSession(ctx, spec.Name)
+	if err != nil {
+		return false, err
+	}
+	if exists {
+		if err := c.applySessionEnvironment(ctx, spec.Name, spec.Env, spec.Scrub); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+	if strings.TrimSpace(windowName) == "" {
+		windowName = "agent"
+	}
+	shellCommand, err := ShellCommand(command)
+	if err != nil {
+		return false, err
+	}
+	cmdEnv := mergeEnv(envWithoutKeys(os.Environ(), scrubSet(spec.Scrub)), spec.Env)
+	if _, err := c.run(ctx, []string{"new-session", "-d", "-s", spec.Name, "-c", spec.CWD, "-n", windowName, shellCommand}, cmdEnv); err != nil {
+		return false, err
+	}
+	if err := c.applySessionEnvironment(ctx, spec.Name, spec.Env, spec.Scrub); err != nil {
+		return true, err
+	}
+	return true, nil
+}
+
 // applySessionEnvironment sets the requested environment on a session and masks
 // any scrub variables that are not part of it. The tmux server's global
 // environment can carry secrets exported by whichever shell started the server;
@@ -162,6 +218,10 @@ func (c Client) SessionEnvironment(ctx context.Context, name string) (map[string
 	return c.showEnvironment(ctx, "-t", name)
 }
 
+func (c Client) SetSessionEnvironment(ctx context.Context, name string, environment map[string]string) error {
+	return c.setSessionEnvironment(ctx, name, environment)
+}
+
 func (c Client) showEnvironment(ctx context.Context, args ...string) (map[string]string, error) {
 	tmuxArgs := append([]string{"show-environment"}, args...)
 	out, err := c.run(ctx, tmuxArgs, nil)
@@ -181,6 +241,62 @@ func (c Client) showEnvironment(ctx context.Context, args ...string) (map[string
 		env[key] = value
 	}
 	return env, nil
+}
+
+func (c Client) EnsureGatewaySession(ctx context.Context, spec SessionSpec, agentCommand, shellCommand []string) (bool, error) {
+	created, err := c.EnsureCommandSession(ctx, spec, "agent", agentCommand)
+	if err != nil {
+		return false, err
+	}
+	defaultCommand, err := ShellCommand(shellCommand)
+	if err != nil {
+		return false, err
+	}
+	if err := c.setSessionOption(ctx, spec.Name, "default-command", defaultCommand); err != nil {
+		return false, err
+	}
+	for _, window := range []struct {
+		name    string
+		command []string
+	}{{"agent", agentCommand}, {"shell", shellCommand}} {
+		if _, err := c.ensureWindowCommand(ctx, LaunchSpec{SessionName: spec.Name, WindowName: window.name, CWD: spec.CWD, Command: window.command, Env: spec.Env, Scrub: spec.Scrub}); err != nil {
+			return false, err
+		}
+	}
+	return created, nil
+}
+
+func (c Client) ensureWindowCommand(ctx context.Context, spec LaunchSpec) (bool, error) {
+	name := strings.TrimSpace(spec.WindowName)
+	if name == "" {
+		return false, fmt.Errorf("window name is required")
+	}
+	exists, err := c.windowExists(ctx, spec.SessionName, name)
+	if err != nil {
+		return false, err
+	}
+	if exists {
+		return false, nil
+	}
+	if len(spec.Env) > 0 {
+		if err := c.applySessionEnvironment(ctx, spec.SessionName, spec.Env, spec.Scrub); err != nil {
+			return false, err
+		}
+	}
+	command, err := ShellCommand(spec.Command)
+	if err != nil {
+		return false, err
+	}
+	_, err = c.run(ctx, []string{"new-window", "-d", "-t", spec.SessionName + ":", "-n", name, "-c", spec.CWD, command}, nil)
+	return err == nil, err
+}
+
+func (c Client) setSessionOption(ctx context.Context, session, name, value string) error {
+	if strings.TrimSpace(session) == "" || strings.TrimSpace(name) == "" {
+		return fmt.Errorf("tmux session and option names are required")
+	}
+	_, err := c.run(ctx, []string{"set-option", "-t", session, name, value}, nil)
+	return err
 }
 
 func (c Client) LaunchCommand(ctx context.Context, spec LaunchSpec) error {
@@ -266,21 +382,9 @@ func (c Client) AttachOrSwitch(ctx context.Context, name string, inTmux bool) er
 func (c Client) AttachOrSwitchClient(ctx context.Context, name string, inTmux bool, originatingClient string) error {
 	if inTmux {
 		args := []string{"switch-client"}
-		client := strings.TrimSpace(originatingClient)
-		if strings.ContainsAny(client, "\r\n\x00") {
-			return fmt.Errorf("invalid tmux client name")
-		}
-		// Treat an unexpanded tmux format from an older/misparsed binding as
-		// absent rather than passing the literal through to switch-client.
-		if strings.Contains(client, "#{") {
-			client = ""
-		}
-		// Bindings capture the originating client before launching a popup or
-		// background shell. Fall back to tmux discovery for manual invocations.
-		if client == "" {
-			if out, err := c.run(ctx, []string{"display-message", "-p", "#{client_name}"}, nil); err == nil {
-				client = strings.TrimSpace(string(out))
-			}
+		client, err := c.resolveClient(ctx, originatingClient)
+		if err != nil {
+			return err
 		}
 		if client != "" {
 			args = append(args, "-c", client)
@@ -288,17 +392,37 @@ func (c Client) AttachOrSwitchClient(ctx context.Context, name string, inTmux bo
 		// switch-client is a server command and does not need a controlling
 		// terminal. Keeping it non-interactive allows tmux run-shell bindings to
 		// navigate silently in the background.
-		_, err := c.run(ctx, append(args, "-t", name), nil)
+		_, err = c.run(ctx, append(args, "-t", name), nil)
 		return err
 	}
 	return c.runInteractive(ctx, []string{"attach-session", "-t", name}, nil)
+}
+
+func (c Client) resolveClient(ctx context.Context, originatingClient string) (string, error) {
+	client := strings.TrimSpace(originatingClient)
+	if strings.ContainsAny(client, "\r\n\x00") {
+		return "", fmt.Errorf("invalid tmux client name")
+	}
+	// Treat an unexpanded tmux format from an older or misparsed binding as
+	// absent rather than passing the literal to tmux.
+	if strings.Contains(client, "#{") {
+		client = ""
+	}
+	// Bindings capture the originating client before launching a popup or
+	// background shell. Fall back to tmux discovery for manual invocations.
+	if client == "" {
+		if out, err := c.run(ctx, []string{"display-message", "-p", "#{client_name}"}, nil); err == nil {
+			client = strings.TrimSpace(string(out))
+		}
+	}
+	return client, nil
 }
 
 func (c Client) ListSessions(ctx context.Context) ([]string, error) {
 	out, err := c.run(ctx, []string{"list-sessions", "-F", "#{session_name}"}, nil)
 	if err != nil {
 		message := strings.ToLower(err.Error())
-		if isExitError(err) && (strings.Contains(message, "no server running") || strings.Contains(message, "no sessions")) {
+		if isExitError(err) && (strings.Contains(message, "no server running") || strings.Contains(message, "no sessions") || strings.Contains(message, "no such file or directory")) {
 			return []string{}, nil
 		}
 		return nil, err
@@ -316,6 +440,30 @@ func (c Client) ListSessions(ctx context.Context) ([]string, error) {
 func (c Client) KillSession(ctx context.Context, name string) error {
 	_, err := c.run(ctx, []string{"kill-session", "-t", name}, nil)
 	return err
+}
+
+func (c Client) SourceFile(ctx context.Context, path string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("tmux configuration path is required")
+	}
+	_, err := c.run(ctx, []string{"source-file", path}, nil)
+	return err
+}
+
+func (c Client) KillServer(ctx context.Context) error {
+	_, err := c.run(ctx, []string{"kill-server"}, nil)
+	return err
+}
+
+func (c Client) GlobalOption(ctx context.Context, name string) (string, error) {
+	if strings.TrimSpace(name) == "" || strings.ContainsAny(name, " \t\r\n\x00") {
+		return "", fmt.Errorf("tmux option name is invalid")
+	}
+	out, err := c.run(ctx, []string{"show-options", "-gv", name}, nil)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // KillSessionAsync asks the tmux server to destroy a session after a short
@@ -390,6 +538,7 @@ func (c Client) run(ctx context.Context, args []string, env []string) ([]byte, e
 	if runner == nil {
 		runner = ExecRunner{}
 	}
+	args = c.serverArgs(args)
 	out, err := runner.Run(ctx, path, args, env)
 	if err != nil {
 		text := strings.TrimSpace(string(out))
@@ -410,13 +559,18 @@ func (c Client) runInteractive(ctx context.Context, args []string, env []string)
 	if runner == nil {
 		runner = ExecRunner{}
 	}
+	args = c.serverArgs(args)
 	if interactive, ok := runner.(InteractiveRunner); ok {
 		if err := interactive.RunInteractive(ctx, path, args, env); err != nil {
 			return fmt.Errorf("tmux %s: %w", strings.Join(args, " "), err)
 		}
 		return nil
 	}
-	_, err := c.run(ctx, args, env)
+	// run already adds server arguments; avoid adding them twice when the
+	// configured runner does not implement interactive execution.
+	plain := c
+	plain.SocketPath, plain.ConfigPath = "", ""
+	_, err := plain.run(ctx, args, env)
 	return err
 }
 

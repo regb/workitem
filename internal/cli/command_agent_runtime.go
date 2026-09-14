@@ -51,6 +51,9 @@ func runAgentRuntimeStatus(ctx context.Context, args []string, cfg Config, jsonO
 	}
 	fmt.Fprintf(cfg.Stdout, "runtime: %s\n", res.Runtime.ID)
 	fmt.Fprintf(cfg.Stdout, "mode: %s\n", res.Runtime.Mode)
+	if res.Runtime.Executor != "" && res.Runtime.Executor != "local" {
+		fmt.Fprintf(cfg.Stdout, "executor: %s\n", res.Runtime.Executor)
+	}
 	fmt.Fprintf(cfg.Stdout, "state: %s\n", res.Runtime.State)
 	fmt.Fprintf(cfg.Stdout, "online: %t\n", res.Online)
 	if res.Runtime.HostPID > 0 {

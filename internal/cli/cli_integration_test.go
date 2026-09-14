@@ -15,6 +15,7 @@ import (
 	pidriver "github.com/regb/workitem/internal/agentdriver/pi"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/cli"
+	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
@@ -273,6 +274,24 @@ func TestNewJSONOutputStability(t *testing.T) {
 	}
 	if got.Manifest.TerminalSessionName() == "" {
 		t.Fatalf("terminal configuration missing from manifest json")
+	}
+}
+
+func TestNewAssignsConfiguredExecutorWithoutMaterializing(t *testing.T) {
+	stdout, stderr, application := configuredApp(t)
+	application.ExecutorsConfig = map[string]config.ExecutorConfig{"macbook": {Destination: "macbook"}}
+	code := cli.Run(context.Background(), []string{"--json", "new", "--executor", "macbook", "Remote item"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application})
+	if code != cli.ExitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	var result struct {
+		Manifest model.Manifest `json:"manifest"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Manifest.Checkout.Executor != "macbook" || result.Manifest.Checkout.Present() {
+		t.Fatalf("checkout=%+v", result.Manifest.Checkout)
 	}
 }
 
@@ -718,6 +737,31 @@ func TestListOmitsStateAndMarksRepositoryHome(t *testing.T) {
 	out := stdout.String()
 	if strings.Contains(out, "STATE") || !strings.Contains(out, "(home)") {
 		t.Fatalf("list output:\n%s", out)
+	}
+}
+
+func TestListUsesProjectionWithoutContactingRemoteExecutor(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	st := store.New(t.TempDir())
+	manifest := model.NewManifest(testutil.ID(t, 57), "remote", "Remote", nil, false, testutil.Time(), model.Repository{RootAtCreation: t.TempDir(), CreatedFromCommit: strings.Repeat("a", 40)}, model.Checkout{Kind: model.WorkspaceKindManagedSlot, Executor: "unconfigured", Branch: "wi/remote"})
+	application := app.New(st, &fakeGit{})
+	bindTestCoordinator(t, application, st)
+	if err := application.Store.CreateItem(context.Background(), manifest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: manifest.ID}, model.StateWorking, false); err != nil {
+		t.Fatal(err)
+	}
+	code := cli.Run(context.Background(), []string{"list"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application})
+	if code != cli.ExitOK {
+		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "executor") {
+		t.Fatalf("list contacted remote executor instead of using its projection:\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "remote") {
+		t.Fatalf("list output missing remote item:\n%s", stdout.String())
 	}
 }
 

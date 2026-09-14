@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 
 	workspacecore "github.com/regb/workitem/internal/app/core/workspace"
 	"github.com/regb/workitem/internal/model"
@@ -30,6 +32,26 @@ func (a *App) CheckoutStatus(ctx context.Context, opts ResolveOptions) (Checkout
 
 // WorkspaceStatus inspects only the repository worktree.
 func (a *App) WorkspaceStatus(ctx context.Context, opts ResolveOptions) (WorkspaceStatusResult, error) {
+	manifest, err := a.ResolveItem(ctx, opts)
+	if err != nil {
+		return WorkspaceStatusResult{}, err
+	}
+	if manifest.Checkout.Executor != "" && manifest.Checkout.Executor != model.ExecutorLocal {
+		client, err := a.executorClient(manifest.Checkout.Executor)
+		if err != nil {
+			return WorkspaceStatusResult{}, err
+		}
+		remote, err := client.WorkspaceStatus(ctx, manifest.ID)
+		if err != nil {
+			return WorkspaceStatusResult{}, err
+		}
+		var result WorkspaceStatusResult
+		if err := json.Unmarshal(remote.StatusJSON, &result); err != nil {
+			return WorkspaceStatusResult{}, err
+		}
+		result.Checkout, result.Manifest = manifest.Checkout, manifest
+		return result, nil
+	}
 	return a.workspaceService().Status(ctx, opts)
 }
 
@@ -39,6 +61,14 @@ func (a *App) RelocateWorkItemRepository(ctx context.Context, opts ResolveOption
 
 // EnsureWorkItemWorkspace materializes only the repository worktree.
 func (a *App) EnsureWorkItemWorkspace(ctx context.Context, opts ResolveOptions) (CompositionResult, error) {
+	manifest, err := a.ResolveItem(ctx, opts)
+	if err != nil {
+		return CompositionResult{}, err
+	}
+	if manifest.Checkout.Executor != "" && manifest.Checkout.Executor != model.ExecutorLocal {
+		manifest, warnings, err := a.ensureRemoteWorkspace(ctx, manifest)
+		return CompositionResult{WorkItemID: manifest.ID, Checkout: manifest.Checkout, Manifest: manifest, Warnings: warnings}, err
+	}
 	res, err := a.workspaceService().Ensure(ctx, opts)
 	if err != nil {
 		return CompositionResult{}, err
@@ -51,14 +81,70 @@ func (a *App) ensureWorkspaceCheckout(ctx context.Context, opts ResolveOptions, 
 }
 
 func (a *App) ReleaseWorkItemWorkspace(ctx context.Context, opts ResolveOptions, force bool) (WorkspaceReleaseResult, error) {
+	manifest, err := a.ResolveItem(ctx, opts)
+	if err != nil {
+		return WorkspaceReleaseResult{}, err
+	}
+	if manifest.Checkout.Executor != "" && manifest.Checkout.Executor != model.ExecutorLocal {
+		hadCheckout := manifest.Checkout.Present()
+		if !hadCheckout {
+			return WorkspaceReleaseResult{WorkItemID: manifest.ID, Manifest: manifest}, nil
+		}
+		client, err := a.executorClient(manifest.Checkout.Executor)
+		if err != nil {
+			return WorkspaceReleaseResult{}, err
+		}
+		remote, err := client.ReleaseWorkspace(ctx, manifest, force)
+		if err != nil {
+			return WorkspaceReleaseResult{}, err
+		}
+		if err := client.ImportWorkspaceBundle(ctx, manifest, remote.GitBundle); err != nil {
+			return WorkspaceReleaseResult{}, err
+		}
+		manifest.Checkout.Path, manifest.Checkout.Slot = nil, ""
+		manifest.UpdatedAt = a.now()
+		if err := a.Store.SaveManifest(ctx, manifest); err != nil {
+			return WorkspaceReleaseResult{}, err
+		}
+		_ = a.Store.AppendEvent(ctx, manifest.ID, model.NewEvent(a.now(), "workspace.released", "user", map[string]any{"executor": manifest.Checkout.Executor, "forced": force}))
+		return WorkspaceReleaseResult{WorkItemID: manifest.ID, Changed: true, Manifest: manifest, Warnings: []string{}}, nil
+	}
 	return a.workspaceService().Release(ctx, opts, force)
 }
 
 func (a *App) ensureCheckoutReleasable(ctx context.Context, m model.Manifest) error {
+	if m.Checkout.Executor != "" && m.Checkout.Executor != model.ExecutorLocal {
+		status, err := a.WorkspaceStatus(ctx, ResolveOptions{Selector: m.ID})
+		if err != nil {
+			return err
+		}
+		if status.Git.BranchMismatch {
+			return fmt.Errorf("remote checkout branch differs from expected branch")
+		}
+		if status.Git.Dirty {
+			return fmt.Errorf("remote checkout has uncommitted changes")
+		}
+		return nil
+	}
 	return a.workspaceService().EnsureReleasable(ctx, m)
 }
 
 func (a *App) releaseCheckout(ctx context.Context, m model.Manifest, force bool) (checkoutRelease, error) {
+	if m.Checkout.Executor != "" && m.Checkout.Executor != model.ExecutorLocal {
+		client, err := a.executorClient(m.Checkout.Executor)
+		if err != nil {
+			return checkoutRelease{}, err
+		}
+		remote, err := client.ReleaseWorkspace(ctx, m, force)
+		if err != nil {
+			return checkoutRelease{}, err
+		}
+		if err := client.ImportWorkspaceBundle(ctx, m, remote.GitBundle); err != nil {
+			return checkoutRelease{}, err
+		}
+		m.Checkout.Path, m.Checkout.Slot = nil, ""
+		return checkoutRelease{Manifest: m, Slot: true}, nil
+	}
 	return a.workspaceService().ReleaseCheckout(ctx, m, force)
 }
 

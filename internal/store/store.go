@@ -308,6 +308,9 @@ func normalizeManifest(m *model.Manifest) error {
 	if m.Checkout.Kind == "" {
 		m.Checkout.Kind = model.WorkspaceKindManagedSlot
 	}
+	if strings.TrimSpace(m.Checkout.Executor) == "" {
+		m.Checkout.Executor = model.ExecutorLocal
+	}
 	if m.Checkout.Kind != model.WorkspaceKindManagedSlot && m.Checkout.Kind != model.WorkspaceKindRepositoryHome {
 		return fmt.Errorf("unsupported checkout kind %q", m.Checkout.Kind)
 	}
@@ -316,6 +319,9 @@ func normalizeManifest(m *model.Manifest) error {
 	}
 	if m.Checkout.Path != nil && strings.TrimSpace(*m.Checkout.Path) == "" {
 		return fmt.Errorf("checkout path must not be empty")
+	}
+	if m.Checkout.Kind == model.WorkspaceKindRepositoryHome && m.Checkout.Executor != model.ExecutorLocal {
+		return fmt.Errorf("repository-home checkout requires the local executor")
 	}
 	if m.Checkout.Kind == model.WorkspaceKindRepositoryHome && m.Repository.OperationalRoot() == "" {
 		return fmt.Errorf("repository-home checkout requires repository root")

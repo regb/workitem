@@ -47,6 +47,7 @@ func runWorkspaceStatus(ctx context.Context, args []string, cfg Config, jsonOut 
 	fmt.Fprintf(cfg.Stdout, "work item: %s\n", res.WorkItemID)
 	fmt.Fprintf(cfg.Stdout, "state: %s\n", res.State)
 	fmt.Fprintf(cfg.Stdout, "workspace kind: %s\n", res.Checkout.Kind)
+	fmt.Fprintf(cfg.Stdout, "executor: %s\n", res.Checkout.Executor)
 	fmt.Fprintf(cfg.Stdout, "checkout: %s\n", res.Checkout.Presence())
 	if res.Checkout.Path != nil {
 		fmt.Fprintf(cfg.Stdout, "checkout path: %s\n", *res.Checkout.Path)

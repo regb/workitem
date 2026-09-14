@@ -31,6 +31,11 @@ func handleConversationOperation(ctx context.Context, envelope driverprotocol.Re
 	case driverprotocol.OperationConversationObserve:
 		observation, warnings := ObserveConversationPath(request.Path, request.Now)
 		return driverprotocol.ConversationResponse{Observation: &observation, Warnings: warnings}, nil
+	case driverprotocol.OperationConversationExport:
+		data, err := exportConversation(request.Path)
+		return driverprotocol.ConversationResponse{Data: data}, err
+	case driverprotocol.OperationConversationImport:
+		return driverprotocol.ConversationResponse{}, importConversation(request.Path, request.Data)
 	case driverprotocol.OperationConversationDecode:
 		response := driverprotocol.ConversationResponse{Facts: make([]driverprotocol.ConversationFact, 0, len(request.Lines)), Decoded: make([]bool, len(request.Lines))}
 		for i, raw := range request.Lines {

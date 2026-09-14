@@ -23,6 +23,14 @@ wi workspace release add-pagination
 
 Release refuses while an active runtime or terminal depends on the checkout.
 
+A managed slot may select a configured executor. The source context and item remain on the coordinator, while Git objects, checkout materialization, runtime, and optional terminal run on the worker.
+
+```bash
+wi new --executor macbook "Check macOS behavior"
+```
+
+The slot identity is scoped by executor and repository. Remote release imports committed branch history before relinquishing the worker claim. See [Remote executors](../guides/remote-executors/) for configuration and current limits.
+
 ## Relocated repositories
 
 If the source repository checkout moves after item creation, update an item before materializing its workspace:
@@ -41,7 +49,7 @@ Some work must happen in the repository's primary checkout on its local default 
 wi new --home "Update release metadata"
 ```
 
-A repository-home item borrows that checkout. `wi` validates that it exists, is on the local default branch, and has no other active home claim. It does not switch, reset, clean, or remove the directory.
+Repository-home work is local-only. A repository-home item borrows that checkout. `wi` validates that it exists, is on the local default branch, and has no other active home claim. It does not switch, reset, clean, or remove the directory.
 
 Only one active item can claim a repository home at a time.
 

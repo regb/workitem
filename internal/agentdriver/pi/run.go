@@ -80,17 +80,25 @@ func launch(ctx context.Context, request driverprotocol.LaunchRequest, reply fun
 	if err := reply(driverprotocol.Ready{ProtocolVersion: driverprotocol.Version, BackendPath: resolved, Capabilities: driverprotocol.Capabilities{NativeTUI: capabilities.NativeTUI, Headless: capabilities.Headless, Streaming: capabilities.Streaming, Prompt: true, Steering: capabilities.Steering, FollowUp: capabilities.FollowUp, Cancel: capabilities.Cancel, Monitor: capabilities.Monitor}}); err != nil {
 		return err
 	}
-	environment := map[string]string{}
-	for _, value := range os.Environ() {
-		key, _, ok := strings.Cut(value, "=")
-		if ok && (strings.HasPrefix(key, "PI_CODING_AGENT_") || strings.HasPrefix(key, "PI_AGENT_")) {
-			environment[key] = ""
-		}
-	}
-	for key, value := range request.Environment {
-		environment[key] = value
-	}
+	environment := piEnvironmentOverrides(os.Environ(), request.Environment)
 	environment["PI_CODING_AGENT_SESSION_DIR"] = filepath.Dir(request.Conversation.Locator)
 	client := New(resolved)
 	return client.ExecMode(ctx, ExecSpec{SessionPath: request.Conversation.Locator, Mode: mode, CWD: request.Runtime.CWD, LogPath: request.Runtime.LogPath, WorkItemID: request.Runtime.WorkItemID, RuntimeID: request.Runtime.ID, ControlSocketPath: request.Runtime.ControlSocketPath, EventSocketPath: request.Runtime.EventSocketPath, Env: environment, Extensions: config.Extensions})
+}
+
+func piEnvironmentOverrides(inherited []string, requested map[string]string) map[string]string {
+	environment := map[string]string{}
+	for _, value := range inherited {
+		key, _, ok := strings.Cut(value, "=")
+		if !ok || key == "PI_CODING_AGENT_DIR" {
+			continue
+		}
+		if strings.HasPrefix(key, "PI_CODING_AGENT_") || strings.HasPrefix(key, "PI_AGENT_") {
+			environment[key] = ""
+		}
+	}
+	for key, value := range requested {
+		environment[key] = value
+	}
+	return environment
 }

@@ -28,8 +28,9 @@ type CreateItemCommand struct {
 }
 
 type CreateItemRequest struct {
-	Command     CreateItemCommand `json:"command"`
-	Description string            `json:"description"`
+	Command         CreateItemCommand `json:"command"`
+	Description     string            `json:"description"`
+	AuthorityItemID string            `json:"authority_item_id,omitempty"`
 }
 
 type CreateItemResult struct {

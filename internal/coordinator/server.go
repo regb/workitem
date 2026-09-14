@@ -27,6 +27,8 @@ type Server struct {
 	listener               *net.UnixListener
 	agentListener          *net.UnixListener
 	agentSocketPath        string
+	executorListener       *net.UnixListener
+	executorSocketPath     string
 	startedAt              time.Time
 	buildIdentity          string
 	domainMu               sync.Mutex
@@ -42,22 +44,37 @@ type Server struct {
 }
 
 func NewServer(dataRoot, socketPath string, decoders ...ConversationDecoders) (*Server, error) {
-	return newServer(dataRoot, socketPath, "", firstConversationDecoders(decoders))
+	return newServer(dataRoot, socketPath, "", "", firstConversationDecoders(decoders))
 }
 
 func NewServerWithAgentSocket(dataRoot, socketPath, agentSocketPath string, decoders ...ConversationDecoders) (*Server, error) {
 	if strings.TrimSpace(agentSocketPath) == "" {
 		return nil, errors.New("agent socket path is required")
 	}
-	return newServer(dataRoot, socketPath, agentSocketPath, firstConversationDecoders(decoders))
+	return newServer(dataRoot, socketPath, agentSocketPath, "", firstConversationDecoders(decoders))
 }
 
-func newServer(dataRoot, socketPath, agentSocketPath string, conversationDecoders ConversationDecoders) (*Server, error) {
+func NewServerWithRestrictedSockets(dataRoot, socketPath, agentSocketPath, executorSocketPath string, decoders ...ConversationDecoders) (*Server, error) {
+	if strings.TrimSpace(agentSocketPath) == "" || strings.TrimSpace(executorSocketPath) == "" {
+		return nil, errors.New("agent and executor socket paths are required")
+	}
+	return newServer(dataRoot, socketPath, agentSocketPath, executorSocketPath, firstConversationDecoders(decoders))
+}
+
+func newServer(dataRoot, socketPath, agentSocketPath, executorSocketPath string, conversationDecoders ConversationDecoders) (*Server, error) {
 	if strings.TrimSpace(socketPath) == "" {
 		return nil, errors.New("socket path is required")
 	}
-	if agentSocketPath != "" && filepath.Clean(agentSocketPath) == filepath.Clean(socketPath) {
-		return nil, errors.New("operator and agent socket paths must differ")
+	paths := []string{socketPath, agentSocketPath, executorSocketPath}
+	for i := range paths {
+		if paths[i] == "" {
+			continue
+		}
+		for j := 0; j < i; j++ {
+			if paths[j] != "" && filepath.Clean(paths[i]) == filepath.Clean(paths[j]) {
+				return nil, errors.New("operator, agent, and executor socket paths must differ")
+			}
+		}
 	}
 	database, err := OpenDatabase(dataRoot)
 	if err != nil {
@@ -91,23 +108,38 @@ func newServer(dataRoot, socketPath, agentSocketPath string, conversationDecoder
 		database.Close()
 		return nil, fmt.Errorf("listen on coordinator socket: %w", err)
 	}
-	var agentListener *net.UnixListener
-	if agentSocketPath != "" {
-		if err := prepareSocketPath(agentSocketPath); err != nil {
-			listener.Close()
-			database.Close()
-			_ = os.Remove(socketPath)
+	listenRestricted := func(path, name string) (*net.UnixListener, error) {
+		if path == "" {
+			return nil, nil
+		}
+		if err := prepareSocketPath(path); err != nil {
 			return nil, err
 		}
-		agentListener, err = listenUnixSocket(agentSocketPath)
+		restricted, err := listenUnixSocket(path)
 		if err != nil {
-			listener.Close()
-			database.Close()
-			_ = os.Remove(socketPath)
-			return nil, fmt.Errorf("listen on agent coordinator socket: %w", err)
+			return nil, fmt.Errorf("listen on %s coordinator socket: %w", name, err)
 		}
+		return restricted, nil
 	}
-	server := &Server{dataRoot: dataRoot, socketPath: socketPath, agentSocketPath: agentSocketPath, database: database, observer: observer, native: nativeStore, listener: listener, agentListener: agentListener, startedAt: time.Now().UTC(), buildIdentity: version.BuildIdentity(), lastConversationImport: conversationReport, conversationDecoders: conversationDecoders, eventNotify: make(chan struct{}), closed: make(chan struct{}), closeDone: make(chan struct{})}
+	agentListener, err := listenRestricted(agentSocketPath, "agent")
+	if err != nil {
+		listener.Close()
+		database.Close()
+		_ = os.Remove(socketPath)
+		return nil, err
+	}
+	executorListener, err := listenRestricted(executorSocketPath, "executor")
+	if err != nil {
+		listener.Close()
+		if agentListener != nil {
+			agentListener.Close()
+		}
+		database.Close()
+		_ = os.Remove(socketPath)
+		_ = os.Remove(agentSocketPath)
+		return nil, err
+	}
+	server := &Server{dataRoot: dataRoot, socketPath: socketPath, agentSocketPath: agentSocketPath, executorSocketPath: executorSocketPath, database: database, observer: observer, native: nativeStore, listener: listener, agentListener: agentListener, executorListener: executorListener, startedAt: time.Now().UTC(), buildIdentity: version.BuildIdentity(), lastConversationImport: conversationReport, conversationDecoders: conversationDecoders, eventNotify: make(chan struct{}), closed: make(chan struct{}), closeDone: make(chan struct{})}
 	return server, nil
 }
 
@@ -169,10 +201,16 @@ func (s *Server) Serve(ctx context.Context) error {
 	if s.agentListener != nil {
 		listenerCount++
 	}
+	if s.executorListener != nil {
+		listenerCount++
+	}
 	failures := make(chan error, listenerCount)
 	go s.acceptConnections(s.listener, AccessOperator, failures)
 	if s.agentListener != nil {
 		go s.acceptConnections(s.agentListener, AccessAgent, failures)
+	}
+	if s.executorListener != nil {
+		go s.acceptConnections(s.executorListener, AccessExecutor, failures)
 	}
 	select {
 	case <-s.closed:
@@ -318,6 +356,11 @@ func (s *Server) Close() error {
 				result = err
 			}
 		}
+		if s.executorListener != nil {
+			if err := s.executorListener.Close(); result == nil {
+				result = err
+			}
+		}
 		s.wg.Wait()
 		if err := s.database.Close(); result == nil {
 			result = err
@@ -326,6 +369,10 @@ func (s *Server) Close() error {
 		if s.agentSocketPath != "" {
 			_ = os.Remove(s.agentSocketPath)
 			_ = os.Remove(filepath.Dir(s.agentSocketPath))
+		}
+		if s.executorSocketPath != "" {
+			_ = os.Remove(s.executorSocketPath)
+			_ = os.Remove(filepath.Dir(s.executorSocketPath))
 		}
 		close(s.closeDone)
 	})
@@ -353,7 +400,7 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		s.writeError(conn, request.ID, "protocol_mismatch", fmt.Sprintf("unsupported protocol %d; expected %d", request.ProtocolVersion, ProtocolVersion))
 		return
 	}
-	if request.BuildIdentity != "" && request.BuildIdentity != s.buildIdentity && request.Method != MethodStatus && request.Method != MethodShutdown && request.Method != MethodRuntimeEvent {
+	if access != AccessExecutor && request.BuildIdentity != "" && request.BuildIdentity != s.buildIdentity && request.Method != MethodStatus && request.Method != MethodShutdown && request.Method != MethodRuntimeEvent {
 		s.writeError(conn, request.ID, "build_mismatch", "client and daemon builds differ; restart the older process")
 		return
 	}
@@ -363,6 +410,10 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	}
 	if access == AccessAgent && !agentMethodAllowed(request.Method) {
 		s.writeError(conn, request.ID, "permission_denied", "agent endpoint does not allow "+request.Method)
+		return
+	}
+	if access == AccessExecutor && !executorMethodAllowed(request.Method) {
+		s.writeError(conn, request.ID, "permission_denied", "executor endpoint does not allow "+request.Method)
 		return
 	}
 	var result any
@@ -376,10 +427,15 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			return
 		}
 		status.Access = access
-		if access == AccessAgent {
+		if access == AccessAgent || access == AccessExecutor {
 			status.DataRoot = ""
-			status.SocketPath = s.agentSocketPath
+			if access == AccessAgent {
+				status.SocketPath = s.agentSocketPath
+			} else {
+				status.SocketPath = s.executorSocketPath
+			}
 			status.AgentSocketPath = ""
+			status.ExecutorSocketPath = ""
 			status.Database.Path = ""
 		}
 		result = status
@@ -585,6 +641,14 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 				return
 			}
 		}
+		if access == AccessExecutor {
+			prepared, err := s.prepareExecutorCreate(createRequest)
+			if err != nil {
+				s.writeError(conn, request.ID, "permission_denied", err.Error())
+				return
+			}
+			createRequest = prepared
+		}
 		if err := validateCreateDescription(createRequest.Command, createRequest.Description); err != nil {
 			s.writeError(conn, request.ID, "invalid_request", err.Error())
 			return
@@ -690,6 +754,15 @@ func agentMethodAllowed(method string) bool {
 	}
 }
 
+func executorMethodAllowed(method string) bool {
+	switch method {
+	case MethodPing, MethodStatus, MethodListManifests, MethodCreateItem, MethodActivityBarrier, MethodAgentObservation:
+		return true
+	default:
+		return false
+	}
+}
+
 func agentVisibleManifest(manifest model.Manifest) model.Manifest {
 	manifest.Repository = model.Repository{}
 	manifest.Checkout = model.Checkout{Kind: manifest.Checkout.Kind}
@@ -716,6 +789,32 @@ func validateAgentCreateItem(manifest model.Manifest) error {
 	return nil
 }
 
+func (s *Server) prepareExecutorCreate(request CreateItemRequest) (CreateItemRequest, error) {
+	if !model.ValidID(request.AuthorityItemID) {
+		return CreateItemRequest{}, errors.New("executor item creation requires the current authoritative item id")
+	}
+	parent, err := s.database.CanonicalManifest(request.AuthorityItemID)
+	if err != nil {
+		return CreateItemRequest{}, fmt.Errorf("resolve executor authority item: %w", err)
+	}
+	if parent.Manifest.Checkout.Executor == "" || parent.Manifest.Checkout.Executor == model.ExecutorLocal {
+		return CreateItemRequest{}, errors.New("executor authority item is not assigned to a remote executor")
+	}
+	manifest := request.Command.Manifest
+	if err := validateAgentCreateItem(manifest); err != nil {
+		return CreateItemRequest{}, errors.New(strings.NewReplacer("agent endpoint", "executor endpoint").Replace(err.Error()))
+	}
+	createdFrom := manifest.Repository.CreatedFromCommit
+	manifest.Repository = parent.Manifest.Repository
+	manifest.Repository.CreatedFromCommit = createdFrom
+	manifest.Checkout.Executor = parent.Manifest.Checkout.Executor
+	manifest.Checkout.Path = nil
+	manifest.Checkout.Slot = ""
+	request.Command.Manifest = manifest
+	request.Command.Actor = "user"
+	return request, nil
+}
+
 func (s *Server) status() (Status, error) {
 	database, err := s.database.Status()
 	if err != nil {
@@ -724,7 +823,7 @@ func (s *Server) status() (Status, error) {
 	s.importMu.RLock()
 	lastConversationImport := s.lastConversationImport
 	s.importMu.RUnlock()
-	return Status{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, PID: os.Getpid(), StartedAt: s.startedAt.Format(time.RFC3339Nano), DataRoot: s.dataRoot, SocketPath: s.socketPath, AgentSocketPath: s.agentSocketPath, Access: AccessOperator, Database: database, ConversationImport: lastConversationImport}, nil
+	return Status{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, PID: os.Getpid(), StartedAt: s.startedAt.Format(time.RFC3339Nano), DataRoot: s.dataRoot, SocketPath: s.socketPath, AgentSocketPath: s.agentSocketPath, ExecutorSocketPath: s.executorSocketPath, Access: AccessOperator, Database: database, ConversationImport: lastConversationImport}, nil
 }
 
 func (s *Server) writeError(conn net.Conn, id, code, message string) {

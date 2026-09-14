@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	itemcore "github.com/regb/workitem/internal/app/core/item"
 	"github.com/regb/workitem/internal/model"
@@ -20,6 +21,7 @@ type NewWorkItemOptions struct {
 	CWD             string
 	Env             map[string]string
 	Agent           string
+	Executor        string
 }
 
 type NewWorkItemResult struct {
@@ -43,11 +45,15 @@ func (a *App) PrepareNewWorkItem(ctx context.Context, opts NewWorkItemOptions) (
 	if err != nil {
 		return PreparedNewWorkItem{}, err
 	}
+	executorName, err := a.resolveExecutorName(opts.Executor, opts.Home)
+	if err != nil {
+		return PreparedNewWorkItem{}, err
+	}
 	res, err := a.itemService().NewWorkItem(ctx, itemcore.NewOptions{
 		Title: opts.Title, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
 		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
 		DeepWork: opts.DeepWork, Base: opts.Base, Home: opts.Home,
-		CWD: opts.CWD, Env: opts.Env, PrepareOnly: true,
+		CWD: opts.CWD, Env: opts.Env, PrepareOnly: true, Executor: executorName,
 	})
 	if err != nil {
 		return PreparedNewWorkItem{}, err
@@ -65,16 +71,36 @@ func (a *App) NewWorkItem(ctx context.Context, opts NewWorkItemOptions) (NewWork
 	if err != nil {
 		return NewWorkItemResult{}, err
 	}
+	executorName, err := a.resolveExecutorName(opts.Executor, opts.Home)
+	if err != nil {
+		return NewWorkItemResult{}, err
+	}
 	res, err := a.itemService().NewWorkItem(ctx, itemcore.NewOptions{
 		Title: opts.Title, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
 		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
 		DeepWork: opts.DeepWork, Base: opts.Base, Home: opts.Home,
-		CWD: opts.CWD, Env: opts.Env,
+		CWD: opts.CWD, Env: opts.Env, Executor: executorName,
 	})
 	if err != nil {
 		return NewWorkItemResult{}, err
 	}
 	return NewWorkItemResult{Manifest: res.Manifest, ItemDir: res.ItemDir, Warnings: res.Warnings}, nil
+}
+
+func (a *App) resolveExecutorName(value string, home bool) (string, error) {
+	if value = strings.TrimSpace(value); value == "" {
+		value = model.ExecutorLocal
+	}
+	if value == model.ExecutorLocal {
+		return value, nil
+	}
+	if home {
+		return "", fmt.Errorf("repository-home checkout requires the local executor")
+	}
+	if _, ok := a.ExecutorsConfig[value]; !ok {
+		return "", fmt.Errorf("executor %q is not configured", value)
+	}
+	return value, nil
 }
 
 func (a *App) resolveAgentName(value string) (string, error) {

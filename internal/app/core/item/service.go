@@ -60,6 +60,7 @@ type NewOptions struct {
 	Env             map[string]string
 	PrepareOnly     bool
 	Agent           string
+	Executor        string
 }
 
 type NewResult struct {
@@ -224,10 +225,14 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 	if err != nil {
 		return NewResult{}, err
 	}
-	checkout := model.Checkout{Kind: model.WorkspaceKindManagedSlot, Branch: model.ItemBranchName(slug, id)}
+	executor := strings.TrimSpace(opts.Executor)
+	if executor == "" {
+		executor = model.ExecutorLocal
+	}
+	checkout := model.Checkout{Kind: model.WorkspaceKindManagedSlot, Executor: executor, Branch: model.ItemBranchName(slug, id)}
 	if opts.Home {
 		path := home.Path
-		checkout = model.Checkout{Kind: model.WorkspaceKindRepositoryHome, Path: &path, Branch: defaultBranch}
+		checkout = model.Checkout{Kind: model.WorkspaceKindRepositoryHome, Executor: model.ExecutorLocal, Path: &path, Branch: defaultBranch}
 	} else {
 		exists, err := s.git.BranchExists(ctx, repo.Repository.RootAtCreation, checkout.Branch)
 		if err != nil {
@@ -243,7 +248,7 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 	if m.Agent == "" {
 		m.Agent = "default"
 	}
-	createEvent := model.NewEvent(now, "work_item.created", "user", map[string]any{"title": title, "slug": slug, "workspace_kind": checkout.Kind})
+	createEvent := model.NewEvent(now, "work_item.created", "user", map[string]any{"title": title, "slug": slug, "workspace_kind": checkout.Kind, "executor": checkout.Executor})
 	if opts.PrepareOnly {
 		return NewResult{Manifest: m, ItemDir: s.store.ItemDir(id), Warnings: warnings, Description: opts.Description, CreateEvent: createEvent}, nil
 	}

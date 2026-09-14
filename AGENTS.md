@@ -7,7 +7,7 @@
 - A workspace is a Git checkout claim/materialization, not a tmux session or coding-agent process.
 - Checkout kinds are reusable `managed-slot` worktrees and exclusive borrowed `repository-home` claims.
 - Each item has at most one durable primary agent conversation, created when agent work starts, and at most one active runtime owner.
-- TUI runtimes use tmux; headless runtimes must remain tmux-independent.
+- TUI runtimes use tmux; headless runtimes must remain tmux-independent. Local tmux owns user-facing navigation and layout. Executor tmux is a private persistent-terminal implementation and must not become part of the local session model.
 - Agent status (`busy`, `idle`, `problem`) and worktree status (`absent`, `clean`, `changed`, `problem`) are separate observations.
 - The daemon's private `wi.db` is canonical for domain state, revisions, compact events, and read projections. Native agent conversations and descriptions remain canonical filesystem content. Runtime and terminal metadata are rebuildable caches; diagnostic logs live under XDG state and sockets under the XDG runtime directory.
 
@@ -20,7 +20,8 @@
 - `workspace`: The logical Git checkout claim and its materialization for one item. A workspace is not a directory alone, a tmux session, or a coding-agent process.
 - `materialization`: Creation or attachment of external resources described by durable state, such as assigning a managed slot, checking out the implementation branch, or recognizing a claimed repository home.
 - `worktree`: A concrete Git working tree observed by wi. Managed worktrees may remain as warm reusable slot directories after an item releases its workspace claim.
-- `managed slot`: A wi-owned reusable worktree location. Slots are claimed by items, reset and validated before reuse, and retained to preserve build caches.
+- `managed slot`: A wi-owned reusable worktree location on one executor. Slots are claimed by items, reset and validated before reuse, and retained to preserve build caches.
+- `executor`: The machine that materializes a managed slot and runs its agent runtime. `local` is the coordinator machine; configured SSH executors use coordinator-owned worker caches and do not own work-item lifecycle or identity.
 - `repository-home claim`: An exclusive logical claim on the repository's primary checkout. Releasing or deleting the item relinquishes the claim but does not modify or delete that checkout.
 - `lifecycle`: The durable work-item state: `backlog`, `working`, `waiting`, or `archived`. Lifecycle does not by itself describe whether a workspace, runtime, or terminal currently exists.
 - `deep work`: A durable item classification subject to configured active-capacity policy. It is not a label.
@@ -31,7 +32,7 @@
 - `runtime activity`: Compact semantic facts reported by the current runtime, such as ready, turn started, tool started, and settled. Activity drives busy/idle observation but does not contain unrestricted prompts, responses, deltas, tool arguments, paths, or errors.
 - `agent status`: The derived `busy|idle|problem` observation for the primary agent. It is separate from lifecycle and worktree status.
 - `worktree status`: The derived `absent|clean|changed|problem` observation for the checkout. It is separate from agent status.
-- `terminal`: Optional access metadata for an interactive runtime, currently a wi-owned tmux session and panes. Terminal identity is rebuildable and is not durable conversation or runtime identity.
+- `terminal`: Optional access metadata for an interactive runtime. Local tmux owns the user-facing work-item session. A remote executor may use a private one-pane tmux session as a persistent terminal host behind an SSH gateway pane. Terminal identity is rebuildable and is not durable conversation or runtime identity.
 - `access mechanism`: How a user enters or observes work, currently local tmux attachment or switching. Access code may enter an already selected resource but must not become work-item, conversation, or runtime identity.
 - `attention`: Policy that selects and ranks actionable working items from lifecycle, activity, defer facts, agent status, and worktree status. Attention does not choose or invoke an access mechanism.
 - `NEEDS ATTENTION`: A view bucket for working items whose primary agent is idle and whose agent/worktree observations do not report a problem. It is derived, not a lifecycle state.
@@ -42,6 +43,7 @@
 - `data root`: The canonical per-installation durable root, normally `$XDG_DATA_HOME/wi`. Each distinct absolute data root has its own `wi.db`, daemon, and deterministic runtime socket namespace.
 - `operator endpoint`: The user-only daemon Unix socket with the full local API. Normal CLI commands and host-side driver bridges use it.
 - `agent endpoint`: The separately mountable restricted daemon Unix socket for sandboxed tools. It permits health/minimal creation reads and safe absent managed-slot backlog creation, but rejects lifecycle, workspace, runtime, terminal, delete, and shutdown control.
+- `executor endpoint`: The restricted authoritative daemon Unix socket reverse-forwarded over a coordinator-owned SSH tunnel into remote executor environments. It permits canonical catalog and observation reads plus safe same-repository, same-executor backlog creation, but rejects lifecycle, workspace, runtime, terminal, delete, and shutdown control.
 - `runtime control socket`: A driver-owned per-runtime Unix socket used for direct prompt, steer, follow-up, abort, and shutdown commands. It speaks the public driver protocol and is not canonical state.
 - `runtime event socket`: A host-owned per-runtime Unix socket that accepts compact public driver events. The runtime host validates identity and relays accepted events through the private daemon API.
 - `native content`: Canonical filesystem content intentionally kept out of `wi.db`, currently descriptions and driver-owned native conversations.
@@ -74,6 +76,8 @@
 
 - Keep durable-item primitives independent of workspace, agent, attention, and tmux operations.
 - Workspace primitives must not create terminal sessions or agent conversations.
+- The coordinator remains canonical for remotely executed items. Executor state is a materialization cache and must not become an independent work-item authority.
+- Repository-home claims are local-only. Remote execution uses managed slots.
 - Primary-agent core must not conceptually depend on tmux; only TUI composition may require it.
 - Attention may rank observations but must not choose or enter an access mechanism.
 - Low-level terminal operations must not select work or create an agent.
