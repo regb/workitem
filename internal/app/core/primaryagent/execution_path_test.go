@@ -9,7 +9,7 @@ import (
 
 func TestExecutionCWDPrefersCurrentCheckoutOverHistoricalConversationPath(t *testing.T) {
 	current := filepath.Join(t.TempDir(), "slot-0002")
-	m := model.Manifest{Repository: model.Repository{RootAtCreation: "/repo"}, Checkout: model.Checkout{Path: &current}}
+	m := model.Manifest{Repository: model.Repository{RootAtCreation: "/repo"}, Checkout: model.Checkout{Claim: &model.WorkspaceClaim{ID: "test-claim", Executor: model.ExecutorLocal, Path: current}}}
 	session := model.Conversation{}
 	if got := ExecutionCWD(m, session); got != current {
 		t.Fatalf("ExecutionCWD = %q, want %q", got, current)

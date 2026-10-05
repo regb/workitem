@@ -9,8 +9,8 @@ import (
 
 // ExecutionCWD keeps a runtime anchored to the item's current checkout.
 func ExecutionCWD(m model.Manifest, _ model.Conversation) string {
-	if m.Checkout.Present() && m.Checkout.Path != nil {
-		if path := strings.TrimSpace(*m.Checkout.Path); path != "" {
+	if m.Checkout.Present() && m.Checkout.Claim != nil {
+		if path := strings.TrimSpace(m.Checkout.Claim.Path); path != "" {
 			return path
 		}
 	}

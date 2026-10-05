@@ -42,6 +42,8 @@ export default defineConfig({
             { label: 'Delegate work', slug: 'guides/delegation' },
             { label: 'Review agent work', slug: 'guides/review-and-follow-up' },
             { label: 'Use tmux', slug: 'guides/tmux' },
+            { label: 'Use remote executors', slug: 'guides/remote-executors' },
+            { label: 'Workspace move plan', slug: 'guides/workspace-moves' },
             { label: 'Merge completed work', slug: 'guides/merging' },
           ],
         },

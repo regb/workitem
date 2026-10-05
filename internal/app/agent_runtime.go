@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -41,6 +42,18 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	}
 	if m.State == model.StateArchived {
 		return EnsureAgentRuntimeResult{}, fmt.Errorf("work item %s is archived; set it to backlog before ensuring an agent runtime", m.ID)
+	}
+	if m.Checkout.Specification.Executor != "" && m.Checkout.Specification.Executor != model.ExecutorLocal {
+		warnings := []string{}
+		if !m.Checkout.Present() {
+			m, warnings, err = a.ensureRemoteWorkspace(ctx, m)
+			if err != nil {
+				return EnsureAgentRuntimeResult{}, err
+			}
+		}
+		result, err := a.ensureRemoteRuntime(ctx, m, string(mode))
+		result.Warnings = append(result.Warnings, warnings...)
+		return result, err
 	}
 	m, warnings, err := a.ensureWorkspaceCheckout(ctx, opts, m, true)
 	if err != nil {
@@ -83,11 +96,14 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 		if err != nil {
 			return EnsureAgentRuntimeResult{}, err
 		}
-		terminal, err := a.ensureTerminalWorkspaceWithEnvironment(ctx, opts, m, true, runtimeEnv, scrub)
-		if err != nil {
-			return EnsureAgentRuntimeResult{}, err
+		terminal := TerminalResult{WorkItemID: m.ID, Session: m.TerminalSessionName(), Checkout: m.Checkout, Warnings: []string{}}
+		if !a.SinglePaneTUITerminal {
+			terminal, err = a.ensureTerminalWorkspaceWithEnvironment(ctx, opts, m, true, runtimeEnv, scrub)
+			if err != nil {
+				return EnsureAgentRuntimeResult{}, err
+			}
+			warnings = append(warnings, terminal.Warnings...)
 		}
-		warnings = append(warnings, terminal.Warnings...)
 		launchWarnings, err := a.launchAgentInTmuxWithEnvironment(ctx, m, session, true, runtimeEnv, scrub)
 		if err != nil {
 			return EnsureAgentRuntimeResult{}, err
@@ -161,7 +177,13 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 }
 
 func (a *App) validateRuntimeCheckout(ctx context.Context, m model.Manifest, runtime model.AgentRuntime) ([]string, error) {
-	if runtime.Mode != string(agent.ModeTUI) || a.Tmux == nil || m.Checkout.Path == nil || strings.TrimSpace(*m.Checkout.Path) == "" {
+	if runtime.WorkspaceClaimID != "" {
+		claim := m.Checkout.Claim
+		if claim == nil || claim.ID != runtime.WorkspaceClaimID || claim.Generation != runtime.WorkspaceClaimGeneration {
+			return nil, fmt.Errorf("agent runtime %s belongs to superseded workspace claim %s generation %d", runtime.ID, runtime.WorkspaceClaimID, runtime.WorkspaceClaimGeneration)
+		}
+	}
+	if runtime.Mode != string(agent.ModeTUI) || a.Tmux == nil || m.Checkout.Claim == nil || strings.TrimSpace(m.Checkout.Claim.Path) == "" {
 		return nil, nil
 	}
 	window := "agent"
@@ -189,7 +211,7 @@ func (a *App) validateRuntimeCheckout(ctx context.Context, m model.Manifest, run
 	if panePath == "" {
 		return []string{"could not verify active agent pane checkout: tmux reported an empty pane path"}, nil
 	}
-	checkoutPath := strings.TrimSpace(*m.Checkout.Path)
+	checkoutPath := strings.TrimSpace(m.Checkout.Claim.Path)
 	if !agentcore.CheckoutContainsPath(checkoutPath, panePath) {
 		return nil, fmt.Errorf("agent runtime %s is running in %s, but work item %s now owns checkout %s; stop the runtime and start or switch the item again", runtime.ID, panePath, m.ID, checkoutPath)
 	}
@@ -201,10 +223,66 @@ func (a *App) prepareAgentRuntime(ctx context.Context, m model.Manifest, session
 }
 
 func (a *App) StopAgentRuntime(ctx context.Context, opts ResolveOptions, force bool) (StopAgentRuntimeResult, error) {
+	manifest, err := a.ResolveItem(ctx, opts)
+	if err != nil {
+		return StopAgentRuntimeResult{}, err
+	}
+	if manifest.Checkout.Specification.Executor != "" && manifest.Checkout.Specification.Executor != model.ExecutorLocal {
+		client, err := a.executorClient(manifest.Checkout.Specification.Executor)
+		if err != nil {
+			return StopAgentRuntimeResult{}, err
+		}
+		if force {
+			_, _ = client.RuntimeControl(ctx, manifest.ID, agent.CommandAbort, "")
+		}
+		remote, err := client.RuntimeControl(ctx, manifest.ID, agent.CommandShutdown, "")
+		if err != nil {
+			return StopAgentRuntimeResult{}, err
+		}
+		var runtime model.AgentRuntime
+		if err := json.Unmarshal(remote.RuntimeJSON, &runtime); err != nil {
+			return StopAgentRuntimeResult{}, err
+		}
+		runtime.Executor = manifest.Checkout.Specification.Executor
+		runtime.HostPID, runtime.HostProcessGroup, runtime.HostStartTime = 0, 0, 0
+		_ = a.Store.SaveAgentRuntime(ctx, manifest.ID, runtime)
+		warnings := a.ingestExecutorEvents(ctx, remote.EventsJSON)
+		if err := a.checkpointExecutorConversation(ctx, manifest, remote.Conversation); err != nil {
+			warnings = append(warnings, "could not checkpoint executor conversation: "+err.Error())
+		}
+		return StopAgentRuntimeResult{WorkItemID: manifest.ID, Changed: true, Runtime: &runtime, Warnings: warnings}, nil
+	}
 	return a.primaryAgentService().Stop(ctx, opts, force)
 }
 
 func (a *App) AgentRuntimeStatus(ctx context.Context, opts ResolveOptions) (AgentRuntimeStatusResult, error) {
+	manifest, err := a.ResolveItem(ctx, opts)
+	if err != nil {
+		return AgentRuntimeStatusResult{}, err
+	}
+	if manifest.Checkout.Specification.Executor != "" && manifest.Checkout.Specification.Executor != model.ExecutorLocal {
+		client, err := a.executorClient(manifest.Checkout.Specification.Executor)
+		if err != nil {
+			return AgentRuntimeStatusResult{}, err
+		}
+		remote, err := client.RuntimeStatus(ctx, manifest.ID)
+		if err != nil {
+			return AgentRuntimeStatusResult{}, err
+		}
+		var runtime model.AgentRuntime
+		if err := json.Unmarshal(remote.RuntimeJSON, &runtime); err != nil {
+			return AgentRuntimeStatusResult{}, err
+		}
+		runtime.Executor = manifest.Checkout.Specification.Executor
+		runtime.HostPID, runtime.HostProcessGroup, runtime.HostStartTime = 0, 0, 0
+		_ = a.Store.SaveAgentRuntime(ctx, manifest.ID, runtime)
+		warnings := a.ingestExecutorEvents(ctx, remote.EventsJSON)
+		if err := a.checkpointExecutorConversation(ctx, manifest, remote.Conversation); err != nil {
+			warnings = append(warnings, "could not checkpoint executor conversation: "+err.Error())
+		}
+		online := runtime.State == model.AgentRuntimeStarting || runtime.State == model.AgentRuntimeRunning
+		return AgentRuntimeStatusResult{WorkItemID: manifest.ID, Runtime: &runtime, Online: online, Capabilities: runtime.Capabilities, Warnings: warnings}, nil
+	}
 	res, err := a.primaryAgentService().RuntimeStatus(ctx, opts)
 	if err != nil {
 		return AgentRuntimeStatusResult{}, err

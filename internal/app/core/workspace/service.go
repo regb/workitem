@@ -84,7 +84,7 @@ type RelocateRepositoryResult struct {
 }
 
 func ExpectedBranch(m model.Manifest) string {
-	return strings.TrimSpace(m.Checkout.Branch)
+	return strings.TrimSpace(m.Checkout.Specification.Branch)
 }
 
 func (s *Service) RelocateRepository(ctx context.Context, opts contract.ResolveOptions, path string) (RelocateRepositoryResult, error) {
@@ -93,7 +93,7 @@ func (s *Service) RelocateRepository(ctx context.Context, opts contract.ResolveO
 		return RelocateRepositoryResult{}, err
 	}
 	if m.Checkout.Present() {
-		return RelocateRepositoryResult{}, fmt.Errorf("cannot relocate repository while checkout %s is assigned; release the workspace first", *m.Checkout.Path)
+		return RelocateRepositoryResult{}, fmt.Errorf("cannot relocate repository while checkout %s is assigned; release the workspace first", m.Checkout.Claim.Path)
 	}
 	path = strings.TrimSpace(path)
 	if path == "" {
@@ -130,27 +130,27 @@ func (s *Service) Status(ctx context.Context, opts contract.ResolveOptions) (Sta
 	}
 	res := StatusResult{WorkItemID: m.ID, State: m.State, Checkout: m.Checkout, Manifest: m, Warnings: []string{}}
 	res.Git.ExpectedBranch = ExpectedBranch(m)
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		res.Warnings = append(res.Warnings, "checkout is absent")
 		return res, nil
 	}
-	if _, e = os.Stat(*m.Checkout.Path); e != nil {
+	if _, e = os.Stat(m.Checkout.Claim.Path); e != nil {
 		res.Warnings = append(res.Warnings, "checkout path is unavailable: "+e.Error())
 		return res, nil
 	}
-	if b, e := s.git.CurrentBranch(ctx, *m.Checkout.Path); e == nil {
+	if b, e := s.git.CurrentBranch(ctx, m.Checkout.Claim.Path); e == nil {
 		res.Git.CurrentBranch = b
 		res.Git.BranchMatches = b == res.Git.ExpectedBranch
 		res.Git.BranchMismatch = b != "" && b != res.Git.ExpectedBranch
 	} else {
 		res.Warnings = append(res.Warnings, "could not inspect checkout branch: "+e.Error())
 	}
-	if h, e := s.git.Head(ctx, *m.Checkout.Path); e == nil {
+	if h, e := s.git.Head(ctx, m.Checkout.Claim.Path); e == nil {
 		res.Git.CurrentHead = h
 	} else {
 		res.Warnings = append(res.Warnings, "could not resolve checkout HEAD: "+e.Error())
 	}
-	if x, e := s.git.StatusPorcelain(ctx, *m.Checkout.Path); e == nil {
+	if x, e := s.git.StatusPorcelain(ctx, m.Checkout.Claim.Path); e == nil {
 		res.Git.StatusPorcelain = x
 		res.Git.Dirty = strings.TrimSpace(x) != ""
 	} else {

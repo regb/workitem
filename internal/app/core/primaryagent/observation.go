@@ -151,10 +151,19 @@ func (s *Service) AgentStatus(ctx context.Context, opts AgentStatusOptions) (Age
 	worktreeStatus, worktreeWarnings := s.inspectWorktree(ctx, m)
 	res.Worktree = worktreeStatus
 	res.Warnings = append(res.Warnings, worktreeWarnings...)
-	if res.Process.Online && res.Process.RuntimeMode == string(agent.ModeTUI) && m.Checkout.Path != nil && strings.TrimSpace(res.Process.TmuxPanePath) != "" && !CheckoutContainsPath(*m.Checkout.Path, res.Process.TmuxPanePath) {
+	if runtime := res.Runtime; res.Process.Online && runtime != nil && runtime.WorkspaceClaimID != "" {
+		claim := m.Checkout.Claim
+		if claim == nil || claim.ID != runtime.WorkspaceClaimID || claim.Generation != runtime.WorkspaceClaimGeneration {
+			res.Status = "problem"
+			res.Reason = "active agent runtime belongs to a superseded workspace claim"
+			res.Warnings = append(res.Warnings, fmt.Sprintf("agent runtime %s belongs to workspace claim %s generation %d", runtime.ID, runtime.WorkspaceClaimID, runtime.WorkspaceClaimGeneration))
+			return res, nil
+		}
+	}
+	if res.Process.Online && res.Process.RuntimeMode == string(agent.ModeTUI) && m.Checkout.Claim != nil && strings.TrimSpace(res.Process.TmuxPanePath) != "" && !CheckoutContainsPath(m.Checkout.Claim.Path, res.Process.TmuxPanePath) {
 		res.Status = "problem"
 		res.Reason = "active agent pane is outside the current work-item checkout"
-		res.Warnings = append(res.Warnings, fmt.Sprintf("agent pane path %s does not belong to current checkout %s", res.Process.TmuxPanePath, *m.Checkout.Path))
+		res.Warnings = append(res.Warnings, fmt.Sprintf("agent pane path %s does not belong to current checkout %s", res.Process.TmuxPanePath, m.Checkout.Claim.Path))
 		return res, nil
 	}
 	res.Status, res.Reason = deriveAgentStatus(res.Process, res.Conversation, now, staleAfter)
@@ -164,6 +173,10 @@ func (s *Service) AgentStatus(ctx context.Context, opts AgentStatusOptions) (Age
 func (s *Service) RecordPrimaryTerminalRuntime(ctx context.Context, m model.Manifest, window string) []string {
 	warnings := []string{}
 	terminal := model.TerminalRuntime{UpdatedAt: s.now(), TmuxWindow: window}
+	if claim := m.Checkout.Claim; claim != nil {
+		terminal.WorkspaceClaimID = claim.ID
+		terminal.WorkspaceClaimGeneration = claim.Generation
+	}
 	if s.tmux != nil {
 		pane, err := s.tmux.PaneInfo(ctx, m.TerminalSessionName()+":"+window)
 		if err != nil {
@@ -175,7 +188,7 @@ func (s *Service) RecordPrimaryTerminalRuntime(ctx context.Context, m model.Mani
 	if err := s.store.SaveTerminalRuntime(ctx, m.ID, terminal); err != nil {
 		warnings = append(warnings, "could not save terminal-runtime handle cache: "+err.Error())
 	} else {
-		_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(terminal.UpdatedAt, "terminal_runtime.recorded", "wi", map[string]any{"tmux_window": terminal.TmuxWindow, "tmux_pane_id": terminal.TmuxPaneID, "tmux_pane_pid": terminal.TmuxPanePID}))
+		_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(terminal.UpdatedAt, "terminal_runtime.recorded", "wi", map[string]any{"workspace_claim_id": terminal.WorkspaceClaimID, "workspace_claim_generation": terminal.WorkspaceClaimGeneration, "tmux_window": terminal.TmuxWindow, "tmux_pane_id": terminal.TmuxPaneID, "tmux_pane_pid": terminal.TmuxPanePID}))
 	}
 	return warnings
 }
@@ -263,10 +276,10 @@ func (s *Service) inspectPrimaryAgentProcess(ctx context.Context, m model.Manife
 func (s *Service) inspectWorktree(ctx context.Context, m model.Manifest) (*WorktreeStatus, []string) {
 	warnings := []string{}
 	wt := &WorktreeStatus{Status: "absent", ExpectedBranch: expectedBranch(m), Reason: "checkout is absent"}
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		return wt, warnings
 	}
-	wt.CheckoutPath = *m.Checkout.Path
+	wt.CheckoutPath = m.Checkout.Claim.Path
 	wt.Status = "problem"
 	wt.Reason = ""
 	if s.git == nil {
@@ -342,7 +355,7 @@ func (s *Service) inspectWorktree(ctx context.Context, m model.Manifest) (*Workt
 }
 
 func expectedBranch(m model.Manifest) string {
-	return strings.TrimSpace(m.Checkout.Branch)
+	return strings.TrimSpace(m.Checkout.Specification.Branch)
 }
 
 func deriveAgentStatus(process AgentProcessStatus, session ConversationStatus, now time.Time, staleAfter time.Duration) (string, string) {

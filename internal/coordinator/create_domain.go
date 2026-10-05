@@ -28,8 +28,9 @@ type CreateItemCommand struct {
 }
 
 type CreateItemRequest struct {
-	Command     CreateItemCommand `json:"command"`
-	Description string            `json:"description"`
+	Command         CreateItemCommand `json:"command"`
+	Description     string            `json:"description"`
+	AuthorityItemID string            `json:"authority_item_id,omitempty"`
 }
 
 type CreateItemResult struct {
@@ -121,7 +122,7 @@ func (d *Database) executeCreateItemCommand(command CreateItemCommand, actor str
 		if err := validateCanonicalCreateClaims(normalized, manifests); err != nil {
 			return err
 		}
-		payload, _ := json.Marshal(map[string]any{"title": normalized.Title, "slug": normalized.Slug, "workspace_kind": normalized.Checkout.Kind})
+		payload, _ := json.Marshal(map[string]any{"title": normalized.Title, "slug": normalized.Slug, "workspace_kind": normalized.Checkout.Specification.Kind})
 		meta := tx.Bucket(bucketMeta)
 		sequence := decodeUint64(meta.Get(keyGlobalSequence)) + 1
 		eventID := domainEventID(command.ID, 0)
@@ -178,8 +179,8 @@ func validateCanonicalCreateClaims(manifest model.Manifest, existing []model.Man
 		if other.State != model.StateArchived && other.Slug == manifest.Slug {
 			return fmt.Errorf("slug %q is already taken by active work item %s", manifest.Slug, other.ID)
 		}
-		if manifest.Checkout.Kind == model.WorkspaceKindRepositoryHome && manifest.Checkout.Present() &&
-			other.Checkout.Kind == model.WorkspaceKindRepositoryHome && other.Checkout.Present() && sameRepositoryIdentity(manifest.Repository, other.Repository) {
+		if manifest.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome && manifest.Checkout.Present() &&
+			other.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome && other.Checkout.Present() && sameRepositoryIdentity(manifest.Repository, other.Repository) {
 			return fmt.Errorf("repository home is already claimed by work item %s (%s)", other.ID, other.Slug)
 		}
 	}

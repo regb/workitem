@@ -17,6 +17,7 @@ import (
 	"github.com/regb/workitem/internal/agent"
 	piadapter "github.com/regb/workitem/internal/agentdriver/pi"
 	"github.com/regb/workitem/internal/app"
+	"github.com/regb/workitem/internal/config"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
@@ -31,6 +32,40 @@ func newTestApp(st *store.Store, git app.Git) *app.App {
 	application.ConversationBackends["pi"] = fakeConversationBackend{}
 	application.ConversationProjectionObserver = piadapter.ObserveConversation(st.ItemDir)
 	return application
+}
+
+func TestNewRemoteWorkItemWarnsThatLocalDirtyStateIsNotTransferred(t *testing.T) {
+	st := store.New(t.TempDir())
+	fg := newFakeGit(t)
+	fg.status = " M tracked.txt\n?? untracked.txt\n"
+	application := newTestApp(st, fg)
+	application.ExecutorsConfig["worker"] = config.ExecutorConfig{Destination: "worker"}
+
+	assertWarning := func(warnings []string) {
+		t.Helper()
+		joined := strings.Join(warnings, "\n")
+		commit := fg.info.Repository.CreatedFromCommit
+		if len(commit) > 12 {
+			commit = commit[:12]
+		}
+		for _, want := range []string{"local checkout has uncommitted changes", `executor "worker"`, commit, "does not include staged, unstaged, or untracked files"} {
+			if !strings.Contains(joined, want) {
+				t.Fatalf("warnings %q do not contain %q", joined, want)
+			}
+		}
+	}
+
+	prepared, err := application.PrepareNewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Prepared remote dirty warning", CWD: fg.info.Repository.RootAtCreation, Executor: "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertWarning(prepared.Warnings)
+
+	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Remote dirty warning", CWD: fg.info.Repository.RootAtCreation, Executor: "worker"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertWarning(created.Warnings)
 }
 
 type fakeConversationBackend struct{}
@@ -571,7 +606,7 @@ func TestShelveDirtyCheckoutDoesNotKillTmux(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.State != model.StateWorking || !m.Checkout.Present() || m.Checkout.Path == nil {
+	if m.State != model.StateWorking || !m.Checkout.Present() || m.Checkout.Claim == nil {
 		t.Fatalf("dirty checkout should remain assigned: %+v", m)
 	}
 	if len(ft.killed) != 0 {
@@ -604,7 +639,7 @@ func TestShelveDoesNotReleaseCheckoutWhenTmuxCloseFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.State != model.StateWorking || !m.Checkout.Present() || m.Checkout.Path == nil {
+	if m.State != model.StateWorking || !m.Checkout.Present() || m.Checkout.Claim == nil {
 		t.Fatalf("workspace should remain assigned after tmux close failure: %+v", m)
 	}
 	if len(ft.killed) != 1 || ft.killed[0] != started.Workspace.Terminal.Session {
@@ -639,7 +674,7 @@ func TestShelveForceFromCurrentTmuxLeavesWorkspaceAssigned(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := res.Manifest
-	if m.State != model.StateBacklog || !m.Checkout.Present() || m.Checkout.Path == nil {
+	if m.State != model.StateBacklog || !m.Checkout.Present() || m.Checkout.Claim == nil {
 		t.Fatalf("forced shelve from current tmux should keep workspace assigned: %+v", m)
 	}
 	if len(ft.killed) != 0 {
@@ -729,7 +764,7 @@ func TestArchivedItemsLoseSlugAndDoNotReserveIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstBranch := first.Manifest.Checkout.Branch
+	firstBranch := first.Manifest.Checkout.Specification.Branch
 	archived, err := application.Archive(context.Background(), app.ResolveOptions{Selector: first.Manifest.Slug}, false)
 	if err != nil {
 		t.Fatal(err)
@@ -747,7 +782,7 @@ func TestArchivedItemsLoseSlugAndDoNotReserveIt(t *testing.T) {
 	if second.Manifest.Slug != "reusable-slug" {
 		t.Fatalf("new item slug = %q", second.Manifest.Slug)
 	}
-	if second.Manifest.Checkout.Branch == firstBranch {
+	if second.Manifest.Checkout.Specification.Branch == firstBranch {
 		t.Fatalf("reused slug produced duplicate branch %q", firstBranch)
 	}
 	restored, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: first.Manifest.ID}, model.StateBacklog, false)
@@ -757,8 +792,8 @@ func TestArchivedItemsLoseSlugAndDoNotReserveIt(t *testing.T) {
 	if restored.Manifest.Slug != "reusable-slug-2" {
 		t.Fatalf("restored slug = %q", restored.Manifest.Slug)
 	}
-	if restored.Manifest.Checkout.Branch != firstBranch {
-		t.Fatalf("restoring item renamed branch from %q to %q", firstBranch, restored.Manifest.Checkout.Branch)
+	if restored.Manifest.Checkout.Specification.Branch != firstBranch {
+		t.Fatalf("restoring item renamed branch from %q to %q", firstBranch, restored.Manifest.Checkout.Specification.Branch)
 	}
 }
 
@@ -801,7 +836,7 @@ func TestCheckoutStatusReportsBranchMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !res.BranchMismatch || res.CurrentBranch != "main" || res.ExpectedBranch != newRes.Manifest.Checkout.Branch {
+	if !res.BranchMismatch || res.CurrentBranch != "main" || res.ExpectedBranch != newRes.Manifest.Checkout.Specification.Branch {
 		t.Fatalf("branch status = %+v", res)
 	}
 	if len(res.Warnings) == 0 || !strings.Contains(strings.Join(res.Warnings, "\n"), "branch mismatch") {
@@ -1088,8 +1123,8 @@ func TestNewWorkItemAllocatesUniqueSlugs(t *testing.T) {
 	if first.Manifest.Slug != "duplicate-slug" || second.Manifest.Slug != "duplicate-slug-2" {
 		t.Fatalf("slugs = %q, %q", first.Manifest.Slug, second.Manifest.Slug)
 	}
-	if first.Manifest.Checkout.Branch != model.ItemBranchName(first.Manifest.Slug, first.Manifest.ID) || second.Manifest.Checkout.Branch != model.ItemBranchName(second.Manifest.Slug, second.Manifest.ID) {
-		t.Fatalf("branches = %q, %q", first.Manifest.Checkout.Branch, second.Manifest.Checkout.Branch)
+	if first.Manifest.Checkout.Specification.Branch != model.ItemBranchName(first.Manifest.Slug, first.Manifest.ID) || second.Manifest.Checkout.Specification.Branch != model.ItemBranchName(second.Manifest.Slug, second.Manifest.ID) {
+		t.Fatalf("branches = %q, %q", first.Manifest.Checkout.Specification.Branch, second.Manifest.Checkout.Specification.Branch)
 	}
 	resolved, err := st.Resolve("duplicate-slug-2")
 	if err != nil {
@@ -1121,12 +1156,12 @@ func TestNewWorkItemCreatesBacklogWithoutCheckout(t *testing.T) {
 	if res.Manifest.ID != id || res.Manifest.Slug != "fix-refresh-token-race" {
 		t.Fatalf("manifest identity = %+v", res.Manifest)
 	}
-	if res.Manifest.Checkout.Present() || res.Manifest.Checkout.Path != nil {
+	if res.Manifest.Checkout.Present() || res.Manifest.Checkout.Claim != nil {
 		t.Fatalf("checkout = %+v", res.Manifest.Checkout)
 	}
 	wantBranch := model.ItemBranchName(res.Manifest.Slug, id)
-	if res.Manifest.Checkout.Branch != wantBranch {
-		t.Fatalf("branch = %q", res.Manifest.Checkout.Branch)
+	if res.Manifest.Checkout.Specification.Branch != wantBranch {
+		t.Fatalf("branch = %q", res.Manifest.Checkout.Specification.Branch)
 	}
 	if fg.branches[wantBranch] {
 		t.Fatalf("branch should not be created until checkout assignment")
@@ -1806,7 +1841,7 @@ func TestEnsureAgentRuntimeForksConversationAfterSlotReassignment(t *testing.T) 
 		t.Fatal(err)
 	}
 	manifest := started.Workspace.Manifest
-	currentCheckout := *manifest.Checkout.Path
+	currentCheckout := manifest.Checkout.Claim.Path
 	sourcePath := filepath.Join(st.ItemDir(itemID), filepath.FromSlash(manifest.PrimaryConversation.NativeLocator()))
 	oldCheckout := filepath.Join(filepath.Dir(currentCheckout), "slot-0004")
 	source := fmt.Sprintf("{\"type\":\"session\",\"version\":3,\"id\":\"11111111-1111-4111-8111-111111111111\",\"timestamp\":\"2026-08-03T07:48:31.948Z\",\"cwd\":%q}\n{\"type\":\"message\",\"id\":\"abcd1234\",\"parentId\":null,\"timestamp\":\"2026-08-03T07:49:00Z\",\"message\":{\"role\":\"user\",\"content\":\"hello\"}}\n", oldCheckout)
@@ -1860,7 +1895,7 @@ func TestEnsureAgentRuntimeRetriesEmptyPanePathAndRejectsDifferentCheckout(t *te
 	if err := st.SaveAgentRuntime(context.Background(), itemID, runtime); err != nil {
 		t.Fatal(err)
 	}
-	ft.panePathResponses = []string{"", *started.Workspace.Manifest.Checkout.Path}
+	ft.panePathResponses = []string{"", started.Workspace.Manifest.Checkout.Claim.Path}
 	if _, err = application.EnsureAgentRuntime(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, agent.ModeTUI); err != nil {
 		t.Fatalf("transient empty pane path was not retried: %v", err)
 	}
@@ -2080,7 +2115,7 @@ func TestAgentExecHoldsLockAndRunsPiWithExplicitRootConversationLocator(t *testi
 	if fp.sessionPath != wantPath {
 		t.Fatalf("pi session path = %q, want %q", fp.sessionPath, wantPath)
 	}
-	if manifest.Checkout.Path == nil || fp.cwd != *manifest.Checkout.Path {
+	if manifest.Checkout.Claim == nil || fp.cwd != manifest.Checkout.Claim.Path {
 		t.Fatalf("pi cwd = %q, checkout = %+v", fp.cwd, manifest.Checkout)
 	}
 	if fp.env["WI_ID"] != itemID || fp.env["WI_DIR"] != st.ItemDir(itemID) {
@@ -2173,7 +2208,7 @@ func TestArchiveRepositoryHomeReleasesClaimWithoutTouchingCheckout(t *testing.T)
 		t.Fatal(err)
 	}
 	checkout := archived.Manifest.Checkout
-	if checkout.Kind != model.WorkspaceKindRepositoryHome || checkout.Present() || checkout.Path != nil {
+	if checkout.Specification.Kind != model.WorkspaceKindRepositoryHome || checkout.Present() || checkout.Claim != nil {
 		t.Fatalf("checkout=%+v", checkout)
 	}
 	if _, err := os.Stat(root); err != nil {
@@ -2196,8 +2231,8 @@ func TestNewWorkItemUsesStableReadableBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := model.ItemBranchName(res.Manifest.Slug, id)
-	if res.Manifest.Checkout.Branch != want {
-		t.Fatalf("branch = %q, want %q", res.Manifest.Checkout.Branch, want)
+	if res.Manifest.Checkout.Specification.Branch != want {
+		t.Fatalf("branch = %q, want %q", res.Manifest.Checkout.Specification.Branch, want)
 	}
 }
 
@@ -2223,10 +2258,10 @@ func TestStartWorkItemReturnsTmuxCreationFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.Checkout.Path == nil {
+	if loaded.Checkout.Claim == nil {
 		t.Fatalf("checkout should have been assigned before tmux failure: %+v", loaded.Checkout)
 	}
-	if _, err := os.Stat(*loaded.Checkout.Path); err != nil {
+	if _, err := os.Stat(loaded.Checkout.Claim.Path); err != nil {
 		t.Fatalf("slot should remain after start failure, stat err=%v", err)
 	}
 }
@@ -2246,15 +2281,15 @@ func TestCheckoutRemoveDoesNotArchiveAndCreateReusesBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	initialPath := *initial.Checkout.Path
-	if initial.Checkout.Kind != model.WorkspaceKindManagedSlot {
-		t.Fatalf("assigned checkout kind = %q", initial.Checkout.Kind)
+	initialPath := initial.Checkout.Claim.Path
+	if initial.Checkout.Specification.Kind != model.WorkspaceKindManagedSlot {
+		t.Fatalf("assigned checkout kind = %q", initial.Checkout.Specification.Kind)
 	}
 	removed, err := application.CheckoutRemove(context.Background(), app.ResolveOptions{Selector: id}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if removed.Manifest.State == model.StateArchived || removed.Checkout.Present() || removed.Checkout.Path != nil {
+	if removed.Manifest.State == model.StateArchived || removed.Checkout.Present() || removed.Checkout.Claim != nil {
 		t.Fatalf("removed = %+v", removed)
 	}
 	if _, err := os.Stat(initialPath); err != nil {
@@ -2264,10 +2299,10 @@ func TestCheckoutRemoveDoesNotArchiveAndCreateReusesBranch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(created.Source, "branch "+newRes.Manifest.Checkout.Branch) {
+	if !strings.Contains(created.Source, "branch "+newRes.Manifest.Checkout.Specification.Branch) {
 		t.Fatalf("source = %q", created.Source)
 	}
-	if !created.Checkout.Present() || created.Checkout.Path == nil {
+	if !created.Checkout.Present() || created.Checkout.Claim == nil {
 		t.Fatalf("created checkout = %+v", created.Checkout)
 	}
 }

@@ -11,17 +11,21 @@ func (a *App) EnrichWorkList(ctx context.Context, result *WorkListResult, resolv
 	observe := a.WorkListObserver
 	if observe == nil {
 		observe = func(ctx context.Context, itemID string) (viewapp.Observation, error) {
-			status, err := a.AgentStatus(ctx, AgentStatusOptions{ResolveOptions: ResolveOptions{Selector: itemID, CWD: resolve.CWD, Env: resolve.Env}})
-			if err != nil {
-				return viewapp.Observation{}, err
-			}
-			activity, activityWarnings := a.attentionActivity(itemID, status)
-			return viewapp.Observation{Status: status.Status, Reason: status.Reason, ProcessOnline: status.Process.Online, TurnState: status.Conversation.InferredTurnState, LastActivityAgeSeconds: status.Conversation.LastActivityAgeSeconds, Worktree: viewWorktreeStatus(status.Worktree), Activity: activity, ActivityWarnings: activityWarnings, Warnings: status.Warnings}, nil
+			return a.ObserveWorkListItem(ctx, itemID, resolve)
 		}
 	}
 	return a.viewService().Enrich(ctx, result, observe, func(_ string, observation viewapp.Observation) (viewapp.Activity, []string) {
 		return observation.Activity, observation.ActivityWarnings
 	}, viewapp.Markers{Busy: a.AgentStatusConfig.Markers.Busy, Idle: a.AgentStatusConfig.Markers.Idle, Problem: a.AgentStatusConfig.Markers.Problem}, a.AttentionConfig.Priority)
+}
+
+func (a *App) ObserveWorkListItem(ctx context.Context, itemID string, resolve ResolveOptions) (viewapp.Observation, error) {
+	status, err := a.AgentStatus(ctx, AgentStatusOptions{ResolveOptions: ResolveOptions{Selector: itemID, CWD: resolve.CWD, Env: resolve.Env}})
+	if err != nil {
+		return viewapp.Observation{}, err
+	}
+	activity, activityWarnings := a.attentionActivity(itemID, status)
+	return viewapp.Observation{Status: status.Status, Reason: status.Reason, ProcessOnline: status.Process.Online, TurnState: status.Conversation.InferredTurnState, LastActivityAgeSeconds: status.Conversation.LastActivityAgeSeconds, Worktree: viewWorktreeStatus(status.Worktree), Activity: activity, ActivityWarnings: activityWarnings, Warnings: status.Warnings}, nil
 }
 
 func (a *App) AttentionQueue(ctx context.Context, opts AttentionQueueOptions) (AttentionQueueResult, error) {

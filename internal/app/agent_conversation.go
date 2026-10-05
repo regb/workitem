@@ -109,7 +109,7 @@ func (a *App) ensureConversationCheckout(ctx context.Context, m model.Manifest) 
 		return created.Manifest, created.Conversation, nil, err
 	}
 	conversation := *m.PrimaryConversation
-	if !m.Checkout.Present() || m.Checkout.Path == nil || strings.TrimSpace(*m.Checkout.Path) == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || strings.TrimSpace(m.Checkout.Claim.Path) == "" {
 		return m, conversation, nil, nil
 	}
 	sourcePath, err := a.primaryAgentService().AbsPath(m.ID, conversation.NativeLocator())
@@ -127,7 +127,7 @@ func (a *App) ensureConversationCheckout(ctx context.Context, m model.Manifest) 
 	if err != nil {
 		return model.Manifest{}, model.Conversation{}, nil, err
 	}
-	checkoutPath := strings.TrimSpace(*m.Checkout.Path)
+	checkoutPath := strings.TrimSpace(m.Checkout.Claim.Path)
 	if conversationCWD == "" || agentcore.CheckoutContainsPath(checkoutPath, conversationCWD) {
 		return m, conversation, nil, nil
 	}
@@ -180,7 +180,7 @@ func (a *App) ensureConversationCheckout(ctx context.Context, m model.Manifest) 
 }
 
 func (a *App) validateConversationCheckout(m model.Manifest, conversation model.Conversation) error {
-	if !m.Checkout.Present() || m.Checkout.Path == nil || strings.TrimSpace(*m.Checkout.Path) == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || strings.TrimSpace(m.Checkout.Claim.Path) == "" {
 		return nil
 	}
 	backend := a.conversationBackend(m, conversation)
@@ -195,7 +195,7 @@ func (a *App) validateConversationCheckout(m model.Manifest, conversation model.
 	if err != nil {
 		return err
 	}
-	checkoutPath := strings.TrimSpace(*m.Checkout.Path)
+	checkoutPath := strings.TrimSpace(m.Checkout.Claim.Path)
 	if conversationCWD != "" && !agentcore.CheckoutContainsPath(checkoutPath, conversationCWD) {
 		return fmt.Errorf("conversation %s belongs to %s, but work item %s now owns checkout %s; stop the runtime so wi can fork it into the current checkout", conversation.ID, conversationCWD, m.ID, checkoutPath)
 	}

@@ -120,8 +120,8 @@ func (a *App) releaseWorkspaceBeforeDeferredTerminalClose(ctx context.Context, m
 	if err := a.ensureCheckoutReleasable(ctx, m); err != nil {
 		return m, warnings, false, "", err
 	}
-	if m.Checkout.Present() && m.Checkout.Path != nil && m.Checkout.Kind != model.WorkspaceKindRepositoryHome && !workspacecore.IsSlotPathName(*m.Checkout.Path) {
-		return m, warnings, false, "", fmt.Errorf("cannot defer terminal closure for non-slot worktree %s", *m.Checkout.Path)
+	if m.Checkout.Present() && m.Checkout.Claim != nil && m.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome && !workspacecore.IsSlotPathName(m.Checkout.Claim.Path) {
+		return m, warnings, false, "", fmt.Errorf("cannot defer terminal closure for non-slot worktree %s", m.Checkout.Claim.Path)
 	}
 	session := strings.TrimSpace(m.TerminalSessionName())
 	if a.Tmux != nil && session != "" {
@@ -133,7 +133,7 @@ func (a *App) releaseWorkspaceBeforeDeferredTerminalClose(ctx context.Context, m
 			session = ""
 		}
 	}
-	hadCheckoutClaim := m.Checkout.Present() && m.Checkout.Path != nil && *m.Checkout.Path != ""
+	hadCheckoutClaim := m.Checkout.Present() && m.Checkout.Claim != nil && m.Checkout.Claim.Path != ""
 	released, err := a.releaseCheckout(ctx, m, force)
 	if err != nil {
 		return m, warnings, false, "", err
@@ -147,7 +147,8 @@ func (a *App) stopRuntimeForArchive(ctx context.Context, m model.Manifest, opts 
 	if err != nil {
 		return nil, err
 	}
-	if !a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive {
+	remote := m.Checkout.Specification.Executor != "" && m.Checkout.Specification.Executor != model.ExecutorLocal
+	if runtime == nil || remote && runtime.State == model.AgentRuntimeStopped || !remote && !a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive {
 		return nil, nil
 	}
 	stopped, err := a.StopAgentRuntime(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}, force)
@@ -163,7 +164,19 @@ func (a *App) stopRuntimeForArchive(ctx context.Context, m model.Manifest, opts 
 		timeout = 10 * time.Second
 	}
 	deadline := time.Now().Add(timeout)
-	for a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive {
+	for {
+		alive := a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive
+		if remote {
+			status, statusErr := a.AgentRuntimeStatus(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env})
+			if statusErr != nil {
+				return warnings, statusErr
+			}
+			runtime = status.Runtime
+			alive = runtime != nil && runtime.State != model.AgentRuntimeStopped
+		}
+		if !alive {
+			return warnings, nil
+		}
 		if err := ctx.Err(); err != nil {
 			return warnings, err
 		}
@@ -178,7 +191,6 @@ func (a *App) stopRuntimeForArchive(ctx context.Context, m model.Manifest, opts 
 		case <-timer.C:
 		}
 	}
-	return warnings, nil
 }
 
 func (a *App) closeWorkspace(ctx context.Context, m model.Manifest, force bool, env map[string]string) (model.Manifest, []string, bool, error) {
@@ -241,8 +253,19 @@ func (a *App) closeWorkspace(ctx context.Context, m model.Manifest, force bool, 
 	if !canReleaseCheckout {
 		return m, warnings, changed, nil
 	}
+	if m.Checkout.Specification.Executor != "" && m.Checkout.Specification.Executor != model.ExecutorLocal {
+		client, err := a.executorClient(m.Checkout.Specification.Executor)
+		if err != nil {
+			return m, warnings, changed, err
+		}
+		if err := client.CloseTerminal(ctx, m.ID); err != nil {
+			return m, warnings, changed, fmt.Errorf("close executor terminals before releasing workspace: %w", err)
+		}
+		changed = true
+		warnings = append(warnings, "closed executor terminal resources")
+	}
 
-	hadCheckout := m.Checkout.Present() && m.Checkout.Path != nil && *m.Checkout.Path != ""
+	hadCheckout := m.Checkout.Present() && m.Checkout.Claim != nil && m.Checkout.Claim.Path != ""
 	released, err := a.releaseCheckout(ctx, m, force)
 	if err != nil {
 		return m, warnings, changed, err

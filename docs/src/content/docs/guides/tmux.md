@@ -39,16 +39,29 @@ Use these when you need direct control over access without starting an agent or 
 wi terminal status --item auth
 wi terminal ensure --item auth
 wi terminal enter --item auth
+wi terminal copy-mode --item auth
 wi terminal close --item auth
 ```
 
 `terminal ensure` requires an existing workspace. It does not create a conversation or runtime.
+
+Remote agent and shell panes run behind attached private worker tmux sessions. Their scrollback and initial copy buffers belong to those worker sessions, not to the local SSH gateway panes. `terminal copy-mode` enters copy mode on the worker agent pane by default; `--pane` identifies a gateway shell pane. The binding below routes both forms. Press `q` to leave worker copy mode.
+
+The worker sends yanks through OSC 52. Set the coordinator tmux `set-clipboard` server option to `on`, rather than its `external` default, so the coordinator accepts that update into its server-wide paste buffer. Afterward, text yanked in a remote pane is available through `prefix+]` in local work-item sessions.
 
 ## Add tmux bindings
 
 Add the commands you want directly to `~/.tmux.conf`:
 
 ```text
+# Accept remote tmux yanks into the coordinator's shared paste buffer.
+set-option -s set-clipboard on
+
+# Route prefix+[ to the matching worker copy mode for remote agent and shell
+# panes. Local panes retain ordinary local tmux copy mode.
+bind-key [ run-shell -E -t '#{pane_id}' \
+  'if [ -n "#{WI_EXECUTOR}" ] && [ "#{WI_EXECUTOR}" != local ]; then if [ "#{window_name}" = agent ]; then wi terminal copy-mode --item "#{WI_ID}" >/dev/null; else wi terminal copy-mode --item "#{WI_ID}" --pane "#{pane_id}" >/dev/null; fi; else tmux copy-mode -t "#{pane_id}"; fi'
+
 # Open the picker in a popup.
 bind-key O display-popup -EE \
   -d '#{pane_current_path}' -w 90% -h 80% -T 'wi work items' \

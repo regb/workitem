@@ -28,11 +28,16 @@ func (s *Service) Prepare(ctx context.Context, m model.Manifest, session model.C
 	}
 	now := s.now()
 	runtimeID := fmt.Sprintf("%s-%d", mode, now.UnixNano())
-	runtime := model.AgentRuntime{ID: runtimeID, WorkItemID: m.ID, Mode: string(mode), State: model.AgentRuntimeStarting, ConversationID: session.ID, StartedAt: now, UpdatedAt: now}
+	runtime := model.AgentRuntime{ID: runtimeID, WorkItemID: m.ID, Mode: string(mode), State: model.AgentRuntimeStarting, ConversationID: session.ID, Executor: m.Checkout.Specification.Executor, StartedAt: now, UpdatedAt: now}
+	if claim := m.Checkout.Claim; claim != nil {
+		runtime.Executor = claim.Executor
+		runtime.WorkspaceClaimID = claim.ID
+		runtime.WorkspaceClaimGeneration = claim.Generation
+	}
 	if err := s.store.SaveAgentRuntime(ctx, m.ID, runtime); err != nil {
 		return model.AgentRuntime{}, err
 	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "agent_runtime.prepared", "wi", map[string]any{"runtime_id": runtime.ID, "mode": runtime.Mode, "conversation_id": runtime.ConversationID}))
+	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "agent_runtime.prepared", "wi", map[string]any{"runtime_id": runtime.ID, "mode": runtime.Mode, "conversation_id": runtime.ConversationID, "workspace_claim_id": runtime.WorkspaceClaimID, "workspace_claim_generation": runtime.WorkspaceClaimGeneration}))
 	return runtime, nil
 }
 

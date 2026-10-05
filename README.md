@@ -89,7 +89,7 @@ Use `wi help <command>` for current flags and safety rules.
 - tmux for interactive TUI runtimes
 - fzf for the optional `wi switch` picker
 
-Headless Headless runtimes do not require tmux or fzf.
+Headless runtimes do not require tmux or fzf. Managed slots may also run on a preconfigured SSH executor; see the remote-executor guide for tool and transfer requirements.
 
 ## Tmux bindings
 

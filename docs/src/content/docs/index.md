@@ -55,5 +55,7 @@ wi archive add-request-retries
 - [Delegate work](guides/delegation/) covers background TUI and headless agents.
 - [Review agent work](guides/review-and-follow-up/) covers diffs, tests, and corrections.
 - [Use tmux](guides/tmux/) covers interactive navigation.
+- [Remote executors](guides/remote-executors/) covers worker setup and remote operation.
+- [Workspace move plan](guides/workspace-moves/) records the staged design for moving work and running agents between executors.
 - [Troubleshooting](reference/troubleshooting/) explains common refusals and failures.
 - [Command map](reference/commands/) lists commands by responsibility.

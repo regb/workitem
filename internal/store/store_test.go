@@ -120,6 +120,18 @@ func TestSaveManifestAtomic(t *testing.T) {
 	}
 }
 
+func TestAgentRuntimeRequiresCompleteWorkspaceClaimIdentity(t *testing.T) {
+	st := store.New(t.TempDir())
+	m := manifest(t, testutil.ID(t, 35), "Runtime Claim", testutil.Time())
+	if err := st.CreateItem(context.Background(), m); err != nil {
+		t.Fatal(err)
+	}
+	runtime := model.AgentRuntime{ID: "runtime-1", WorkspaceClaimID: "claim-1"}
+	if err := st.SaveAgentRuntime(context.Background(), m.ID, runtime); err == nil || !strings.Contains(err.Error(), "id and generation") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
 func TestTerminalRuntimeRoundTripAndRemove(t *testing.T) {
 	st := store.New(t.TempDir())
 	now := testutil.Time()
@@ -314,8 +326,5 @@ func manifest(t *testing.T, id, title string, now time.Time) model.Manifest {
 		GitCommonDir:      filepath.Join(t.TempDir(), ".git"),
 		RemoteURL:         "",
 		CreatedFromCommit: strings.Repeat("a", 40),
-	}, model.Checkout{
-		Path:   nil,
-		Branch: model.ItemBranchName("item", id),
-	})
+	}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("item", id)))
 }

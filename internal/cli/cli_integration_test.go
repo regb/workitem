@@ -15,6 +15,7 @@ import (
 	pidriver "github.com/regb/workitem/internal/agentdriver/pi"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/cli"
+	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
@@ -276,6 +277,24 @@ func TestNewJSONOutputStability(t *testing.T) {
 	}
 }
 
+func TestNewSelectsConfiguredExecutorWithoutMaterializing(t *testing.T) {
+	stdout, stderr, application := configuredApp(t)
+	application.ExecutorsConfig = map[string]config.ExecutorConfig{"macbook": {Destination: "macbook"}}
+	code := cli.Run(context.Background(), []string{"--json", "new", "--executor", "macbook", "Remote item"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application})
+	if code != cli.ExitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	var result struct {
+		Manifest model.Manifest `json:"manifest"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Manifest.Checkout.Specification.Executor != "macbook" || result.Manifest.Checkout.Present() {
+		t.Fatalf("checkout=%+v", result.Manifest.Checkout)
+	}
+}
+
 func TestNewExplicitSlugConflictFails(t *testing.T) {
 	stdout, stderr, application := configuredApp(t)
 	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}
@@ -333,7 +352,7 @@ func TestNewHomeCLIRecordsBorrowedCheckout(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.Manifest == nil || got.Manifest.Checkout.Kind != model.WorkspaceKindRepositoryHome || got.Manifest.Checkout.Path == nil || *got.Manifest.Checkout.Path != root {
+	if got.Manifest == nil || got.Manifest.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome || got.Manifest.Checkout.Claim == nil || got.Manifest.Checkout.Claim.Path != root {
 		t.Fatalf("result=%+v", got)
 	}
 }
@@ -452,7 +471,7 @@ func TestWorkspaceStatusTextExplainsBranchMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := *started.Workspace.Manifest.Checkout.Path
+	path := started.Workspace.Manifest.Checkout.Claim.Path
 	git := application.Git.(*fakeGit)
 	git.worktrees[path] = "temporary-fix"
 	code := cli.Run(context.Background(), []string{"workspace", "status", "--item", created.Manifest.ID}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application})
@@ -460,7 +479,7 @@ func TestWorkspaceStatusTextExplainsBranchMismatch(t *testing.T) {
 		t.Fatalf("workspace status code=%d stderr=%s", code, stderr.String())
 	}
 	output := stdout.String()
-	for _, expected := range []string{"worktree: problem", "reason: checkout branch temporary-fix differs from expected " + started.Workspace.Manifest.Checkout.Branch, "expected branch: " + started.Workspace.Manifest.Checkout.Branch, "current branch: temporary-fix", "created from commit:", "current HEAD:", "dirty: false"} {
+	for _, expected := range []string{"worktree: problem", "reason: checkout branch temporary-fix differs from expected " + started.Workspace.Manifest.Checkout.Specification.Branch, "expected branch: " + started.Workspace.Manifest.Checkout.Specification.Branch, "current branch: temporary-fix", "created from commit:", "current HEAD:", "dirty: false"} {
 		if !strings.Contains(output, expected) {
 			t.Fatalf("workspace status missing %q:\n%s", expected, output)
 		}
@@ -571,7 +590,7 @@ func TestStartNewSupportsRepositoryHome(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.New.Manifest.Checkout.Kind != model.WorkspaceKindRepositoryHome || result.Start.Transition.State != model.StateWorking {
+	if result.New.Manifest.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome || result.Start.Transition.State != model.StateWorking {
 		t.Fatalf("result = %+v", result)
 	}
 }
@@ -718,6 +737,31 @@ func TestListOmitsStateAndMarksRepositoryHome(t *testing.T) {
 	out := stdout.String()
 	if strings.Contains(out, "STATE") || !strings.Contains(out, "(home)") {
 		t.Fatalf("list output:\n%s", out)
+	}
+}
+
+func TestListUsesProjectionWithoutContactingRemoteExecutor(t *testing.T) {
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	st := store.New(t.TempDir())
+	manifest := model.NewManifest(testutil.ID(t, 57), "remote", "Remote", nil, false, testutil.Time(), model.Repository{RootAtCreation: t.TempDir(), CreatedFromCommit: strings.Repeat("a", 40)}, model.NewCheckout(model.WorkspaceKindManagedSlot, "unconfigured", "wi/remote"))
+	application := app.New(st, &fakeGit{})
+	bindTestCoordinator(t, application, st)
+	if err := application.Store.CreateItem(context.Background(), manifest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: manifest.ID}, model.StateWorking, false); err != nil {
+		t.Fatal(err)
+	}
+	code := cli.Run(context.Background(), []string{"list"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application})
+	if code != cli.ExitOK {
+		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String()+stderr.String(), "executor") {
+		t.Fatalf("list contacted remote executor instead of using its projection:\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "remote") {
+		t.Fatalf("list output missing remote item:\n%s", stdout.String())
 	}
 }
 
@@ -975,7 +1019,7 @@ func TestMergeJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := *started.Workspace.Checkout.Path
+	source := started.Workspace.Checkout.Claim.Path
 	if err := os.WriteFile(filepath.Join(source, "feature.txt"), []byte("feature\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

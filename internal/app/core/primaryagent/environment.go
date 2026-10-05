@@ -43,10 +43,10 @@ func MergeEnvironment(base []string, extra map[string]string) []string {
 
 func RuntimeEnvironment(ctx context.Context, direnv Direnv, m model.Manifest, autoTrust bool, approve DirenvApprover, base map[string]string) (map[string]string, []string, error) {
 	env, warnings := map[string]string{}, []string{}
-	if direnv == nil || m.Checkout.Path == nil || strings.TrimSpace(*m.Checkout.Path) == "" {
+	if direnv == nil || m.Checkout.Claim == nil || strings.TrimSpace(m.Checkout.Claim.Path) == "" {
 		return env, warnings, nil
 	}
-	status, err := direnv.Status(ctx, *m.Checkout.Path)
+	status, err := direnv.Status(ctx, m.Checkout.Claim.Path)
 	if err != nil {
 		if strings.Contains(err.Error(), "executable file not found") || strings.Contains(err.Error(), "no such file or directory") {
 			return env, warnings, nil
@@ -76,7 +76,7 @@ func RuntimeEnvironment(ctx context.Context, direnv Direnv, m model.Manifest, au
 			warnings = append(warnings, "trusted worktree .envrc after operator approval")
 		}
 	}
-	exported, err := direnv.Environment(ctx, *m.Checkout.Path, base)
+	exported, err := direnv.Environment(ctx, m.Checkout.Claim.Path, base)
 	if err != nil {
 		return env, warnings, fmt.Errorf("load trusted worktree .envrc for agent runtime: %w", err)
 	}

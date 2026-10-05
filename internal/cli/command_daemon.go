@@ -115,6 +115,11 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 		fmt.Fprintln(stderr, err)
 		return ExitError
 	}
+	executorSocketPath, err := coordinator.ExecutorSocketPath(paths.RuntimeDir, paths.DataRoot)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return ExitError
+	}
 	switch args[0] {
 	case "start":
 		if len(args) != 1 {
@@ -169,14 +174,14 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 				return converted, decoded, nil
 			}
 		}
-		server, err := coordinator.NewServerWithAgentSocket(paths.DataRoot, socketPath, agentSocketPath, decoders)
+		server, err := coordinator.NewServerWithRestrictedSockets(paths.DataRoot, socketPath, agentSocketPath, executorSocketPath, decoders)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return ExitError
 		}
 		defer server.Close()
 		if !jsonOut {
-			fmt.Fprintf(stderr, "wi daemon listening on %s (agent endpoint %s)\n", socketPath, agentSocketPath)
+			fmt.Fprintf(stderr, "wi daemon listening on %s (agent endpoint %s, executor endpoint %s)\n", socketPath, agentSocketPath, executorSocketPath)
 		}
 		if err := server.Serve(signalCtx); err != nil {
 			fmt.Fprintln(stderr, err)
@@ -205,6 +210,7 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 		fmt.Fprintf(stdout, "daemon: running (pid %d)\n", status.PID)
 		fmt.Fprintf(stdout, "socket: %s\n", status.SocketPath)
 		fmt.Fprintf(stdout, "agent socket: %s\n", status.AgentSocketPath)
+		fmt.Fprintf(stdout, "executor socket: %s\n", status.ExecutorSocketPath)
 		fmt.Fprintf(stdout, "database: %s (schema %d, sequence %d)\n", status.Database.Path, status.Database.SchemaVersion, status.Database.GlobalSequence)
 		return ExitOK
 	case "doctor":

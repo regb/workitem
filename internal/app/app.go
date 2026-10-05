@@ -123,7 +123,9 @@ type App struct {
 	Clock                          Clock
 	NewID                          func() (string, error)
 	SelfPath                       string
+	SinglePaneTUITerminal          bool
 	DaemonSocketPath               string
+	ExecutorDaemonSocketPath       string
 	AgentRuntimeStateRoot          string
 	AgentRuntimeSocketRoot         string
 	AgentRuntimeReadyTimeout       time.Duration
@@ -138,6 +140,11 @@ type App struct {
 	DirenvConfig                   config.DirenvConfig
 	AgentsConfig                   map[string]config.AgentDefinitionConfig
 	DriversConfig                  map[string]config.DriverDefinitionConfig
+	ExecutorsConfig                map[string]config.ExecutorConfig
+	ExecutorClients                map[string]ExecutorClient
+	MasterID                       string
+	Home                           string
+	Environment                    map[string]string
 	BundledDriverCommands          map[string]BundledDriverCommand
 	ApproveDirenv                  agentcore.DirenvApprover
 	AgentRuntimeLauncher           agent.Launcher
@@ -148,7 +155,7 @@ type App struct {
 
 func New(st Store, git Git) *App {
 	cfg := config.Default()
-	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DirenvConfig: cfg.Direnv, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
+	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DirenvConfig: cfg.Direnv, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, ExecutorsConfig: cfg.Executors, ExecutorClients: map[string]ExecutorClient{}, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
 	return a
 }
 

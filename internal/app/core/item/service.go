@@ -60,6 +60,7 @@ type NewOptions struct {
 	Env             map[string]string
 	PrepareOnly     bool
 	Agent           string
+	Executor        string
 }
 
 type NewResult struct {
@@ -224,17 +225,23 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 	if err != nil {
 		return NewResult{}, err
 	}
-	checkout := model.Checkout{Kind: model.WorkspaceKindManagedSlot, Branch: model.ItemBranchName(slug, id)}
+	executor := strings.TrimSpace(opts.Executor)
+	if executor == "" {
+		executor = model.ExecutorLocal
+	}
+	checkout := model.NewCheckout(model.WorkspaceKindManagedSlot, executor, model.ItemBranchName(slug, id))
 	if opts.Home {
-		path := home.Path
-		checkout = model.Checkout{Kind: model.WorkspaceKindRepositoryHome, Path: &path, Branch: defaultBranch}
+		checkout = model.NewCheckout(model.WorkspaceKindRepositoryHome, model.ExecutorLocal, defaultBranch)
+		if _, claimErr := checkout.AssignNewClaim(model.ExecutorLocal, model.RepositoryKey(repo.Repository), "", home.Path); claimErr != nil {
+			return NewResult{}, claimErr
+		}
 	} else {
-		exists, err := s.git.BranchExists(ctx, repo.Repository.RootAtCreation, checkout.Branch)
+		exists, err := s.git.BranchExists(ctx, repo.Repository.RootAtCreation, checkout.Specification.Branch)
 		if err != nil {
 			return NewResult{}, err
 		}
 		if exists {
-			return NewResult{}, fmt.Errorf("implementation branch %q already exists", checkout.Branch)
+			return NewResult{}, fmt.Errorf("implementation branch %q already exists", checkout.Specification.Branch)
 		}
 	}
 	now := s.now()
@@ -243,7 +250,7 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 	if m.Agent == "" {
 		m.Agent = "default"
 	}
-	createEvent := model.NewEvent(now, "work_item.created", "user", map[string]any{"title": title, "slug": slug, "workspace_kind": checkout.Kind})
+	createEvent := model.NewEvent(now, "work_item.created", "user", map[string]any{"title": title, "slug": slug, "workspace_kind": checkout.Specification.Kind, "executor": checkout.Specification.Executor})
 	if opts.PrepareOnly {
 		return NewResult{Manifest: m, ItemDir: s.store.ItemDir(id), Warnings: warnings, Description: opts.Description, CreateEvent: createEvent}, nil
 	}

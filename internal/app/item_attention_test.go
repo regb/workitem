@@ -226,7 +226,7 @@ func coreManifest(t *testing.T, id, slug, state string, deep bool, now time.Time
 	checkoutPath := "/workspace/must-remain-unchanged"
 	manifest := model.NewManifest(id, slug, strings.ReplaceAll(slug, "-", " "), nil, deep, now,
 		model.Repository{RootAtCreation: "/repository", GitCommonDir: "/repository/.git"},
-		model.Checkout{Path: &checkoutPath, Branch: model.ItemBranchName("item", id)},
+		model.Checkout{Specification: model.CheckoutSpecification{Branch: model.ItemBranchName("item", id)}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: checkoutPath}},
 	)
 	manifest.State = state
 	if state == model.StateArchived {

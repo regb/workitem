@@ -49,6 +49,12 @@ func (s *Service) Execute(ctx context.Context, itemID, sessionID, runtimeID stri
 	if runtime == nil || runtime.ID != runtimeID || runtime.ConversationID != session.ID || runtime.Mode != string(mode) {
 		return fmt.Errorf("agent runtime %s does not match work item %s conversation %s in %s mode", runtimeID, m.ID, session.ID, mode)
 	}
+	if runtime.WorkspaceClaimID != "" {
+		claim := m.Checkout.Claim
+		if claim == nil || claim.ID != runtime.WorkspaceClaimID || claim.Generation != runtime.WorkspaceClaimGeneration {
+			return fmt.Errorf("agent runtime %s belongs to superseded workspace claim %s generation %d", runtime.ID, runtime.WorkspaceClaimID, runtime.WorkspaceClaimGeneration)
+		}
+	}
 	absolute, err := s.AbsPath(m.ID, session.NativeLocator())
 	if err != nil {
 		return err

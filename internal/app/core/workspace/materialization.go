@@ -62,8 +62,8 @@ func (s *Service) CheckoutCreate(ctx context.Context, opts contract.ResolveOptio
 		return CheckoutCreateResult{}, fmt.Errorf("work item %s is archived; run `wi state set backlog --item %s` before creating workspace resources", m.ID, m.ID)
 	}
 	warnings := []string{}
-	if m.Checkout.Present() && m.Checkout.Path != nil && *m.Checkout.Path != "" {
-		if _, err := os.Stat(*m.Checkout.Path); err == nil {
+	if m.Checkout.Present() && m.Checkout.Claim != nil && m.Checkout.Claim.Path != "" {
+		if _, err := os.Stat(m.Checkout.Claim.Path); err == nil {
 			if err := s.ensureCheckoutBranch(ctx, m); err != nil {
 				return CheckoutCreateResult{}, err
 			}
@@ -71,13 +71,14 @@ func (s *Service) CheckoutCreate(ctx context.Context, opts contract.ResolveOptio
 		} else if !os.IsNotExist(err) {
 			return CheckoutCreateResult{}, fmt.Errorf("inspect checkout path: %w", err)
 		} else {
-			if m.Checkout.Kind == model.WorkspaceKindRepositoryHome {
-				return CheckoutCreateResult{}, fmt.Errorf("repository home checkout path is unavailable: %s", *m.Checkout.Path)
+			if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome {
+				return CheckoutCreateResult{}, fmt.Errorf("repository home checkout path is unavailable: %s", m.Checkout.Claim.Path)
 			}
-			warnings = append(warnings, "recorded checkout path is missing; assigning a slot")
+			warnings = append(warnings, "recorded checkout path is missing; assigning a new claim")
+			m.Checkout.ClearClaim()
 		}
 	}
-	if m.Checkout.Kind == model.WorkspaceKindRepositoryHome {
+	if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome {
 		path := m.Repository.OperationalRoot()
 		if path == "" {
 			return CheckoutCreateResult{}, fmt.Errorf("repository-home checkout has no durable home path")
@@ -89,7 +90,9 @@ func (s *Service) CheckoutCreate(ctx context.Context, opts contract.ResolveOptio
 		if !info.IsDir() {
 			return CheckoutCreateResult{}, fmt.Errorf("repository home checkout path is not a directory: %s", path)
 		}
-		m.Checkout.Path = &path
+		if _, err := m.Checkout.AssignNewClaim(model.ExecutorLocal, repositoryKey(m.Repository), "", path); err != nil {
+			return CheckoutCreateResult{}, err
+		}
 		if err := s.ensureCheckoutBranch(ctx, m); err != nil {
 			return CheckoutCreateResult{}, err
 		}
@@ -98,7 +101,7 @@ func (s *Service) CheckoutCreate(ctx context.Context, opts contract.ResolveOptio
 		if err := s.store.ClaimRepositoryHome(ctx, m); err != nil {
 			return CheckoutCreateResult{}, err
 		}
-		if err := s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "checkout.assigned", "wi", map[string]any{"path": path, "source": "repository home", "branch": m.Checkout.Branch})); err != nil {
+		if err := s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "checkout.assigned", "wi", map[string]any{"claim_id": m.Checkout.Claim.ID, "claim_generation": m.Checkout.Claim.Generation, "executor": m.Checkout.Claim.Executor, "path": path, "source": "repository home", "branch": m.Checkout.Specification.Branch})); err != nil {
 			warnings = append(warnings, "could not append checkout.assigned event: "+err.Error())
 		}
 		return CheckoutCreateResult{WorkItemID: m.ID, Checkout: m.Checkout, Source: "repository home", Manifest: m, Warnings: warnings}, nil
@@ -113,7 +116,7 @@ func (s *Service) CheckoutCreate(ctx context.Context, opts contract.ResolveOptio
 	if err := s.store.SaveManifest(ctx, m); err != nil {
 		return CheckoutCreateResult{}, err
 	}
-	if err := s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "checkout.assigned", "wi", map[string]any{"path": *m.Checkout.Path, "source": assigned.Source, "branch": m.Checkout.Branch})); err != nil {
+	if err := s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "checkout.assigned", "wi", map[string]any{"claim_id": m.Checkout.Claim.ID, "claim_generation": m.Checkout.Claim.Generation, "executor": m.Checkout.Claim.Executor, "path": m.Checkout.Claim.Path, "source": assigned.Source, "branch": m.Checkout.Specification.Branch})); err != nil {
 		warnings = append(warnings, "could not append checkout.assigned event: "+err.Error())
 	}
 	return CheckoutCreateResult{WorkItemID: m.ID, Checkout: m.Checkout, Source: assigned.Source, Manifest: m, Warnings: warnings}, nil
@@ -125,11 +128,12 @@ func (s *Service) CheckoutRemove(ctx context.Context, opts contract.ResolveOptio
 		return CheckoutRemoveResult{}, err
 	}
 	warnings := []string{}
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		warnings = append(warnings, "checkout is already absent")
 		return CheckoutRemoveResult{WorkItemID: m.ID, Checkout: m.Checkout, Manifest: m, Warnings: warnings}, nil
 	}
-	previousPath := *m.Checkout.Path
+	previousClaim := *m.Checkout.Claim
+	previousPath := previousClaim.Path
 	released, err := s.releaseCheckout(ctx, m, force)
 	if err != nil {
 		return CheckoutRemoveResult{}, err
@@ -140,7 +144,7 @@ func (s *Service) CheckoutRemove(ctx context.Context, opts contract.ResolveOptio
 	if err := s.store.SaveManifest(ctx, m); err != nil {
 		return CheckoutRemoveResult{}, err
 	}
-	if err := s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "checkout.released", "user", map[string]any{"path": previousPath, "last_head": released.LastHead, "slot": released.Slot})); err != nil {
+	if err := s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "checkout.released", "user", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "path": previousPath, "last_head": released.LastHead, "slot": released.Slot})); err != nil {
 		warnings = append(warnings, "could not append checkout.released event: "+err.Error())
 	}
 	return CheckoutRemoveResult{WorkItemID: m.ID, Checkout: m.Checkout, LastHead: released.LastHead, Dirty: released.Dirty, Manifest: m, Warnings: warnings}, nil
@@ -152,15 +156,15 @@ func (s *Service) CheckoutStatus(ctx context.Context, opts contract.ResolveOptio
 		return CheckoutStatusResult{}, err
 	}
 	res := CheckoutStatusResult{WorkItemID: m.ID, Checkout: m.Checkout, ExpectedBranch: ExpectedBranch(m), Warnings: []string{}}
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		res.Warnings = append(res.Warnings, "checkout is absent")
 		return res, nil
 	}
-	if _, err := os.Stat(*m.Checkout.Path); err != nil {
+	if _, err := os.Stat(m.Checkout.Claim.Path); err != nil {
 		res.Warnings = append(res.Warnings, "checkout path is unavailable: "+err.Error())
 		return res, nil
 	}
-	if branch, err := s.git.CurrentBranch(ctx, *m.Checkout.Path); err == nil {
+	if branch, err := s.git.CurrentBranch(ctx, m.Checkout.Claim.Path); err == nil {
 		res.CurrentBranch, res.BranchMatches = branch, branch == res.ExpectedBranch
 		res.BranchMismatch = res.ExpectedBranch != "" && branch != "" && branch != res.ExpectedBranch
 		if res.BranchMismatch {
@@ -169,12 +173,12 @@ func (s *Service) CheckoutStatus(ctx context.Context, opts contract.ResolveOptio
 	} else {
 		res.Warnings = append(res.Warnings, "could not inspect checkout branch: "+err.Error())
 	}
-	if head, err := s.git.Head(ctx, *m.Checkout.Path); err == nil {
+	if head, err := s.git.Head(ctx, m.Checkout.Claim.Path); err == nil {
 		res.CurrentHead = head
 	} else {
 		res.Warnings = append(res.Warnings, "could not resolve checkout HEAD: "+err.Error())
 	}
-	if status, err := s.git.StatusPorcelain(ctx, *m.Checkout.Path); err == nil {
+	if status, err := s.git.StatusPorcelain(ctx, m.Checkout.Claim.Path); err == nil {
 		res.StatusPorcelain, res.Dirty = status, strings.TrimSpace(status) != ""
 	} else {
 		res.Warnings = append(res.Warnings, "could not inspect checkout status: "+err.Error())
@@ -196,7 +200,7 @@ func (s *Service) Ensure(ctx context.Context, opts contract.ResolveOptions) (Ens
 
 func (s *Service) EnsureCheckout(ctx context.Context, opts contract.ResolveOptions, m model.Manifest, create bool) (model.Manifest, []string, error) {
 	warnings := []string{}
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		if !create {
 			return model.Manifest{}, warnings, fmt.Errorf("checkout is absent; run `wi workspace ensure` first")
 		}
@@ -205,7 +209,7 @@ func (s *Service) EnsureCheckout(ctx context.Context, opts contract.ResolveOptio
 			return model.Manifest{}, warnings, err
 		}
 		m, warnings = created.Manifest, append(warnings, created.Warnings...)
-	} else if _, err := os.Stat(*m.Checkout.Path); err != nil {
+	} else if _, err := os.Stat(m.Checkout.Claim.Path); err != nil {
 		if !os.IsNotExist(err) {
 			return model.Manifest{}, warnings, fmt.Errorf("checkout path is unavailable: %w", err)
 		}
@@ -225,10 +229,10 @@ func (s *Service) EnsureCheckout(ctx context.Context, opts contract.ResolveOptio
 }
 
 func (s *Service) EnsureUsable(m model.Manifest) error {
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		return fmt.Errorf("checkout is absent; run `wi workspace ensure` first")
 	}
-	if _, err := os.Stat(*m.Checkout.Path); err != nil {
+	if _, err := os.Stat(m.Checkout.Claim.Path); err != nil {
 		return fmt.Errorf("checkout path is unavailable: %w", err)
 	}
 	return nil
@@ -254,16 +258,21 @@ func (s *Service) Release(ctx context.Context, opts contract.ResolveOptions, for
 		}
 	}
 	if err := s.EnsureReleasable(ctx, m); err != nil {
-		missingRepositoryHome := force && m.Checkout.Kind == model.WorkspaceKindRepositoryHome && m.Checkout.Path != nil
+		missingRepositoryHome := force && m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome && m.Checkout.Claim != nil
 		if missingRepositoryHome {
-			_, statErr := os.Stat(*m.Checkout.Path)
+			_, statErr := os.Stat(m.Checkout.Claim.Path)
 			missingRepositoryHome = os.IsNotExist(statErr)
 		}
 		if !missingRepositoryHome {
 			return ReleaseResult{}, err
 		}
 	}
-	hadCheckout := m.Checkout.Present() && m.Checkout.Path != nil && *m.Checkout.Path != ""
+	hadCheckout := m.Checkout.Present() && m.Checkout.Claim != nil && m.Checkout.Claim.Path != ""
+	var previousClaim *model.WorkspaceClaim
+	if hadCheckout {
+		claim := *m.Checkout.Claim
+		previousClaim = &claim
+	}
 	released, err := s.releaseCheckout(ctx, m, force)
 	if err != nil {
 		return ReleaseResult{}, err
@@ -275,17 +284,17 @@ func (s *Service) Release(ctx context.Context, opts contract.ResolveOptions, for
 		if err := s.store.SaveManifest(ctx, closed); err != nil {
 			return ReleaseResult{}, err
 		}
-		_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "workspace.released", "user", map[string]any{"state": m.State, "forced": force}))
+		_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "workspace.released", "user", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "state": m.State, "forced": force}))
 	}
 	return ReleaseResult{WorkItemID: m.ID, Changed: hadCheckout, Manifest: closed, Warnings: released.Warnings}, nil
 }
 
 func (s *Service) EnsureReleasable(ctx context.Context, m model.Manifest) error {
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		return nil
 	}
-	path := *m.Checkout.Path
-	if m.Checkout.Kind != model.WorkspaceKindRepositoryHome {
+	path := m.Checkout.Claim.Path
+	if m.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome {
 		if err := s.validateManagedCheckoutPath(path); err != nil {
 			return err
 		}

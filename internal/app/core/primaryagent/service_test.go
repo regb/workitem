@@ -27,7 +27,8 @@ func (s *runtimeStore) LoadTerminalRuntime(string) (*model.TerminalRuntime, erro
 func (s *runtimeStore) SaveTerminalRuntime(context.Context, string, model.TerminalRuntime) error {
 	return nil
 }
-func (s *runtimeStore) SaveAgentRuntime(context.Context, string, model.AgentRuntime) error {
+func (s *runtimeStore) SaveAgentRuntime(_ context.Context, _ string, runtime model.AgentRuntime) error {
+	s.runtime = &runtime
 	return nil
 }
 func (s *runtimeStore) SaveManifest(_ context.Context, m model.Manifest) error {
@@ -35,6 +36,20 @@ func (s *runtimeStore) SaveManifest(_ context.Context, m model.Manifest) error {
 	return nil
 }
 func (s *runtimeStore) AppendEvent(context.Context, string, model.Event) error { return nil }
+
+func TestPrepareBindsRuntimeToWorkspaceClaim(t *testing.T) {
+	st := &runtimeStore{itemDir: t.TempDir()}
+	service := New(st, process(false), nil, nil, nil, nil, func() time.Time { return testutil.Time() }, nil)
+	manifest := model.Manifest{ID: testutil.ID(t, 1), Checkout: model.Checkout{Specification: model.CheckoutSpecification{Executor: "worker"}, ClaimGeneration: 4, Claim: &model.WorkspaceClaim{ID: "claim-4", Generation: 4, Executor: "worker", Path: "/workspace"}}}
+	conversation := model.Conversation{ID: testutil.ID(t, 2)}
+	runtime, err := service.Prepare(context.Background(), manifest, conversation, agent.ModeHeadless)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if runtime.Executor != "worker" || runtime.WorkspaceClaimID != "claim-4" || runtime.WorkspaceClaimGeneration != 4 {
+		t.Fatalf("runtime=%+v", runtime)
+	}
+}
 
 type process bool
 

@@ -85,6 +85,19 @@ See [Troubleshooting](../troubleshooting/) when a protected cleanup or runtime o
 | `wi workspace release` | Release the item's checkout claim when safe |
 | `wi workspace relocate` | Use a repository checkout after its directory moved |
 
+Pass `--executor <name>` to `wi new` or `wi start --new` to assign a managed slot to a configured SSH executor.
+
+## Executors
+
+| Command | Purpose |
+| --- | --- |
+| `wi executor list` | List configured execution workers |
+| `wi executor select --item <selector> <name>` | Select the executor before the first managed-slot materialization |
+| `wi executor doctor <name>` | Verify SSH, versions, tools, and the terminal profile |
+| `wi executor shutdown --force <name>` | Stop this coordinator's resources on a worker |
+
+See [Remote executors](../guides/remote-executors/) for setup and current transfer limits.
+
 ## Agents
 
 | Command | Purpose |
@@ -92,7 +105,7 @@ See [Troubleshooting](../troubleshooting/) when a protected cleanup or runtime o
 | `wi agent runtime status\|ensure\|stop` | Manage the exclusive runtime owner |
 | `wi agent status` | Inspect derived agent and worktree observations |
 | `wi agent monitor` | Read normalized runtime events |
-| `wi agent control send` | Send steering or follow-up input |
+| `wi agent control send` | Send prompt, steering, or follow-up input |
 | `wi agent control abort` | Abort the current agent run |
 
 ## Attention and views
@@ -108,7 +121,7 @@ See [Troubleshooting](../troubleshooting/) when a protected cleanup or runtime o
 
 | Command | Purpose |
 | --- | --- |
-| `wi terminal status\|ensure\|enter\|close` | Low-level tmux access |
+| `wi terminal status\|ensure\|enter\|copy-mode\|close` | Low-level tmux access, including remote agent scrollback |
 | `wi switch` | Pick or enter active work |
 | `wi next` | Select ready work and enter it |
 
