@@ -132,7 +132,7 @@ func TestNewHomeWorkItemBindsPrimaryDefaultCheckout(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkout := created.Manifest.Checkout
-	if checkout.Kind != model.WorkspaceKindRepositoryHome || !checkout.Present() || checkout.Path == nil || *checkout.Path != root || checkout.Branch != "main" || created.Manifest.Repository.CreatedFromCommit != "main-head" {
+	if checkout.Specification.Kind != model.WorkspaceKindRepositoryHome || !checkout.Present() || checkout.Claim == nil || checkout.Claim.Path != root || checkout.Specification.Branch != "main" || created.Manifest.Repository.CreatedFromCommit != "main-head" {
 		t.Fatalf("checkout=%+v", checkout)
 	}
 }
@@ -165,7 +165,7 @@ func TestNewHomeWorkItemRejectsExistingClaim(t *testing.T) {
 	root := t.TempDir()
 	now := testutil.Time()
 	path := root
-	existing := model.NewManifest(testutil.ID(t, 13), "existing", "Existing", nil, false, now, model.Repository{RootAtCreation: root, GitCommonDir: filepath.Join(root, ".git")}, model.Checkout{Kind: model.WorkspaceKindRepositoryHome, Path: &path, Branch: "main"})
+	existing := model.NewManifest(testutil.ID(t, 13), "existing", "Existing", nil, false, now, model.Repository{RootAtCreation: root, GitCommonDir: filepath.Join(root, ".git")}, model.Checkout{Specification: model.CheckoutSpecification{Kind: model.WorkspaceKindRepositoryHome, Executor: model.ExecutorLocal, Branch: "main"}, Claim: &model.WorkspaceClaim{ID: "test-claim", Executor: model.ExecutorLocal, Path: path}})
 	if err := st.CreateItem(context.Background(), existing); err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +244,7 @@ func TestNewAndShowWorkItem(t *testing.T) {
 	if created.Manifest.ID != id || created.Manifest.Slug != "focused-cleanup" || created.Manifest.State != model.StateBacklog || !created.Manifest.DeepWork {
 		t.Fatalf("manifest = %+v", created.Manifest)
 	}
-	if created.Manifest.Checkout.Present() || created.Manifest.Checkout.Branch != model.ItemBranchName(created.Manifest.Slug, id) {
+	if created.Manifest.Checkout.Present() || created.Manifest.Checkout.Specification.Branch != model.ItemBranchName(created.Manifest.Slug, id) {
 		t.Fatalf("checkout = %+v", created.Manifest.Checkout)
 	}
 	if info, err := os.Stat(filepath.Join(created.ItemDir, model.DescriptionFilename)); err != nil || info.Mode().Perm() != 0o600 {

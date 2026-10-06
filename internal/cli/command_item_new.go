@@ -18,12 +18,13 @@ import (
 func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("new", cfg.Stderr)
 	var labels repeatFlag
-	var descFile, prompt, slug, base, repoPath, agentMode, agentName string
+	var descFile, prompt, slug, base, repoPath, agentMode, agentName, executorName string
 	var deep, home, noDefaultLabels bool
 	fs.StringVar(&descFile, "desc-file", "", "read work-item description from file")
 	fs.StringVar(&prompt, "prompt", "", "use this description and start an agent immediately without attaching")
 	fs.StringVar(&agentMode, "agent-mode", "tui", "with --prompt, runtime mode: tui or headless")
 	fs.StringVar(&agentName, "agent", "default", "configured agent definition")
+	fs.StringVar(&executorName, "executor", "local", "managed-slot executor")
 	fs.StringVar(&slug, "slug", "", "explicit active slug for the new work item")
 	fs.Var(&labels, "label", "label to add (repeatable)")
 	fs.BoolVar(&noDefaultLabels, "no-default-labels", false, "do not inherit user or repository default labels")
@@ -53,12 +54,16 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	if agentModeSet && !promptSet {
 		return usageErr{errors.New("--agent-mode requires --prompt")}
 	}
-	if cfg.ControlAccess == coordinator.AccessAgent {
+	if cfg.ControlAccess == coordinator.AccessAgent || cfg.ControlAccess == coordinator.AccessExecutor {
+		endpoint := cfg.ControlAccess
 		if promptSet {
-			return errors.New("agent endpoint may create backlog items only; --prompt is not allowed")
+			return fmt.Errorf("%s endpoint may create backlog items only; --prompt is not allowed", endpoint)
 		}
 		if home {
-			return errors.New("agent endpoint may create managed-slot items only; --home is not allowed")
+			return fmt.Errorf("%s endpoint may create managed-slot items only; --home is not allowed", endpoint)
+		}
+		if cfg.ControlAccess == coordinator.AccessExecutor && strings.TrimSpace(repoPath) != "" {
+			return errors.New("executor endpoint creates work in the current authoritative repository; --repo is not allowed")
 		}
 	}
 	description := strings.TrimSpace(prompt)
@@ -81,7 +86,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	}
 	opts := app.NewWorkItemOptions{
 		Title: title, Slug: slug, Description: description, Labels: labels,
-		NoDefaultLabels: noDefaultLabels, DeepWork: deep, Base: base, Home: home, CWD: newCWD, Env: cfg.Env, Agent: agentName,
+		NoDefaultLabels: noDefaultLabels, DeepWork: deep, Base: base, Home: home, CWD: newCWD, Env: cfg.Env, Agent: agentName, Executor: executorName,
 	}
 	if promptSet {
 		mode, err := agent.ParseMode(agentMode)
@@ -149,14 +154,17 @@ func runCoordinatorNewAgent(ctx context.Context, cfg Config, opts app.NewWorkIte
 func printNewWorkItemResult(cfg Config, res app.NewWorkItemResult) {
 	fmt.Fprintf(cfg.Stdout, "created work item %s (%s)\n", res.Manifest.Slug, res.Manifest.ID)
 	fmt.Fprintf(cfg.Stdout, "title: %s\n", res.Manifest.Title)
-	fmt.Fprintf(cfg.Stdout, "item directory: %s\n", res.ItemDir)
+	if res.ItemDir != "" {
+		fmt.Fprintf(cfg.Stdout, "item directory: %s\n", res.ItemDir)
+	}
 	fmt.Fprintf(cfg.Stdout, "repository: %s\n", res.Manifest.Repository.RootAtCreation)
 	fmt.Fprintf(cfg.Stdout, "created from commit: %s\n", res.Manifest.Repository.CreatedFromCommit)
-	fmt.Fprintf(cfg.Stdout, "branch: %s\n", res.Manifest.Checkout.Branch)
-	fmt.Fprintf(cfg.Stdout, "workspace kind: %s\n", res.Manifest.Checkout.Kind)
+	fmt.Fprintf(cfg.Stdout, "branch: %s\n", res.Manifest.Checkout.Specification.Branch)
+	fmt.Fprintf(cfg.Stdout, "workspace kind: %s\n", res.Manifest.Checkout.Specification.Kind)
+	fmt.Fprintf(cfg.Stdout, "executor: %s\n", res.Manifest.Checkout.Specification.Executor)
 	fmt.Fprintf(cfg.Stdout, "checkout: %s\n", res.Manifest.Checkout.Presence())
-	if res.Manifest.Checkout.Path != nil {
-		fmt.Fprintf(cfg.Stdout, "checkout path: %s\n", *res.Manifest.Checkout.Path)
+	if res.Manifest.Checkout.Claim != nil {
+		fmt.Fprintf(cfg.Stdout, "checkout path: %s\n", res.Manifest.Checkout.Claim.Path)
 	}
 	if res.Manifest.PrimaryConversation != nil {
 		fmt.Fprintf(cfg.Stdout, "primary conversation: %s %s\n", res.Manifest.PrimaryConversation.ID, res.Manifest.PrimaryConversation.NativeLocator())

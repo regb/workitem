@@ -5,6 +5,8 @@ description: Enter TUI agents and navigate active work through tmux.
 
 Tmux is optional. `wi` uses it as the human-access layer for native Pi TUI sessions. Headless mode remains tmux-independent.
 
+Tmux runs on the Wi host. If Wi is installed on an always-on server, attach to that server over SSH and use its tmux server. The laptop does not need to mirror Wi sessions locally. See [Run wi on a server](../hosted-workstation/).
+
 ## Enter an item
 
 ```bash
@@ -71,7 +73,9 @@ Reload tmux:
 tmux source-file ~/.tmux.conf
 ```
 
-These are ordinary tmux bindings, not a plugin. Change the keys, popup dimensions, or commands directly in your configuration. `WI_TMUX_CLIENT` tells `wi` which client initiated the command when more than one client is attached.
+These are ordinary tmux bindings, not a plugin. Change the keys, popup dimensions, or commands directly in the Wi host's configuration. `WI_TMUX_CLIENT` tells `wi` which client initiated the command when more than one client is attached.
+
+When several SSH clients share the host, avoid controlling the same Pi TUI from two terminals at once. Tmux permits it, but input and resize events can interfere until Wi has explicit controller and observer roles.
 
 For `run-shell`, `-E` redirects stderr to stdout so tmux displays failures in view mode. Redirecting ordinary stdout keeps successful navigation silent. The picker uses `display-popup -EE`; two `-E` flags close that popup on success but leave it open when selection or startup fails.
 

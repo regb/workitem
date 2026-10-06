@@ -16,9 +16,9 @@ func TestDeleteWorkItemsDeletesOnlyValidatedArchivedSet(t *testing.T) {
 	st := store.New(t.TempDir())
 	now := testutil.Time()
 	archived := coreManifest(t, testutil.ID(t, 61), "archived", model.StateArchived, false, now)
-	archived.Checkout = model.Checkout{Branch: model.ItemBranchName("item", archived.ID)}
+	archived.Checkout = model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("item", archived.ID))
 	active := coreManifest(t, testutil.ID(t, 62), "active", model.StateBacklog, false, now)
-	active.Checkout = model.Checkout{Branch: model.ItemBranchName("item", active.ID)}
+	active.Checkout = model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("item", active.ID))
 	for _, manifest := range []model.Manifest{archived, active} {
 		if err := st.CreateItem(context.Background(), manifest); err != nil {
 			t.Fatal(err)
@@ -64,7 +64,7 @@ func TestDeleteWorkItemsValidatesAllBeforeDeletingAny(t *testing.T) {
 	st := store.New(t.TempDir())
 	now := testutil.Time()
 	clean := coreManifest(t, testutil.ID(t, 63), "clean", model.StateArchived, false, now)
-	clean.Checkout = model.Checkout{Branch: model.ItemBranchName("item", clean.ID)}
+	clean.Checkout = model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("item", clean.ID))
 	unsafe := coreManifest(t, testutil.ID(t, 64), "unsafe", model.StateArchived, false, now)
 	for _, manifest := range []model.Manifest{clean, unsafe} {
 		if err := st.CreateItem(context.Background(), manifest); err != nil {
@@ -84,7 +84,7 @@ func TestDeleteWorkItemsValidatesAllBeforeDeletingAny(t *testing.T) {
 func TestDeleteWorkItemsRejectsNonArchivedItem(t *testing.T) {
 	st := store.New(t.TempDir())
 	manifest := coreManifest(t, testutil.ID(t, 65), "active", model.StateBacklog, false, testutil.Time())
-	manifest.Checkout = model.Checkout{Branch: model.ItemBranchName("item", manifest.ID)}
+	manifest.Checkout = model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("item", manifest.ID))
 	if err := st.CreateItem(context.Background(), manifest); err != nil {
 		t.Fatal(err)
 	}

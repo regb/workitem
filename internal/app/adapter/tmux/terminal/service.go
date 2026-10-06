@@ -288,8 +288,13 @@ func (s *Service) spec(m model.Manifest, environment map[string]string) tmuxpkg.
 		env["WI_REPOSITORY"] = repositoryRoot
 	}
 	cwd := repositoryRoot
-	if m.Checkout.Path != nil && *m.Checkout.Path != "" {
-		env["WI_WORKTREE"], cwd = *m.Checkout.Path, *m.Checkout.Path
+	if m.Checkout.Claim != nil && m.Checkout.Claim.Path != "" {
+		env["WI_WORKTREE"] = m.Checkout.Claim.Path
+		if m.Checkout.Claim.Executor != "" && m.Checkout.Claim.Executor != model.ExecutorLocal {
+			cwd = s.store.ItemDir(m.ID)
+		} else {
+			cwd = m.Checkout.Claim.Path
+		}
 	}
 	return tmuxpkg.SessionSpec{Name: m.TerminalSessionName(), CWD: cwd, Env: env}
 }

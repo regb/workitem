@@ -10,7 +10,7 @@ import (
 
 func runTerminal(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	if len(args) == 0 {
-		return usageErr{errors.New("usage: wi terminal <status|ensure|enter|close> [options] [item]")}
+		return usageErr{errors.New("usage: wi terminal <status|ensure|enter|copy-mode|close> [options] [item]")}
 	}
 	switch args[0] {
 	case "status":
@@ -19,6 +19,8 @@ func runTerminal(ctx context.Context, args []string, cfg Config, jsonOut bool) e
 		return runTerminalEnsure(ctx, args[1:], cfg, jsonOut)
 	case "enter":
 		return runTerminalEnter(ctx, args[1:], cfg, jsonOut)
+	case "copy-mode":
+		return runTerminalCopyMode(ctx, args[1:], cfg, jsonOut)
 	case "close":
 		return runTerminalClose(ctx, args[1:], cfg, jsonOut)
 	default:
@@ -67,6 +69,28 @@ func runTerminalEnter(ctx context.Context, args []string, cfg Config, jsonOut bo
 		return err
 	}
 	return printTerminalResult(cfg, res, jsonOut, "entered")
+}
+
+func runTerminalCopyMode(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
+	fs := newFlagSet("terminal copy-mode", cfg.Stderr)
+	var item, pane string
+	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
+	fs.StringVar(&pane, "pane", "", "local gateway pane identity")
+	if err := fs.Parse(args); err != nil {
+		return usageErr{err}
+	}
+	selector, err := itemSelectorFromFlag(fs, item)
+	if err != nil {
+		return usageErr{err}
+	}
+	res, err := cfg.App.EnterTerminalCopyMode(ctx, app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env}, pane)
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		return writeJSON(cfg.Stdout, res)
+	}
+	return nil
 }
 
 func runTerminalClose(ctx context.Context, args []string, cfg Config, jsonOut bool) error {

@@ -18,7 +18,7 @@ type CreateConversationResult struct {
 }
 
 func (s *Service) CreateConversation(ctx context.Context, m model.Manifest, conversation model.Conversation) (CreateConversationResult, error) {
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		return CreateConversationResult{}, fmt.Errorf("checkout is absent; run `wi workspace ensure` first")
 	}
 	if strings.TrimSpace(conversation.Driver) == "" || strings.TrimSpace(conversation.ID) == "" || strings.TrimSpace(conversation.NativeLocator()) == "" {

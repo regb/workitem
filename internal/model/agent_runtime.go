@@ -24,16 +24,19 @@ type RuntimeCapabilities struct {
 }
 
 type AgentRuntime struct {
-	ID               string              `json:"id"`
-	WorkItemID       string              `json:"work_item_id"`
-	Mode             string              `json:"mode"`
-	State            string              `json:"state"`
-	ConversationID   string              `json:"conversation_id"`
-	Capabilities     RuntimeCapabilities `json:"capabilities"`
-	HostPID          int                 `json:"host_pid,omitempty"`
-	HostProcessGroup int                 `json:"host_process_group,omitempty"`
-	HostStartTime    uint64              `json:"host_start_time,omitempty"`
-	StartedAt        time.Time           `json:"started_at"`
-	UpdatedAt        time.Time           `json:"updated_at"`
-	StoppedAt        *time.Time          `json:"stopped_at,omitempty"`
+	ID                       string              `json:"id"`
+	WorkItemID               string              `json:"work_item_id"`
+	Mode                     string              `json:"mode"`
+	State                    string              `json:"state"`
+	ConversationID           string              `json:"conversation_id"`
+	Executor                 string              `json:"executor,omitempty"`
+	WorkspaceClaimID         string              `json:"workspace_claim_id,omitempty"`
+	WorkspaceClaimGeneration uint64              `json:"workspace_claim_generation,omitempty"`
+	Capabilities             RuntimeCapabilities `json:"capabilities"`
+	HostPID                  int                 `json:"host_pid,omitempty"`
+	HostProcessGroup         int                 `json:"host_process_group,omitempty"`
+	HostStartTime            uint64              `json:"host_start_time,omitempty"`
+	StartedAt                time.Time           `json:"started_at"`
+	UpdatedAt                time.Time           `json:"updated_at"`
+	StoppedAt                *time.Time          `json:"stopped_at,omitempty"`
 }

@@ -2,8 +2,6 @@ package workspace
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,7 +27,7 @@ type CheckoutRelease struct {
 }
 
 func (s *Service) assignSlot(ctx context.Context, m model.Manifest) (slotAssignment, error) {
-	branch := strings.TrimSpace(m.Checkout.Branch)
+	branch := strings.TrimSpace(m.Checkout.Specification.Branch)
 	if branch == "" {
 		return slotAssignment{}, fmt.Errorf("cannot assign checkout: implementation branch is missing")
 	}
@@ -88,7 +86,9 @@ func (s *Service) finishSlotAssignment(ctx context.Context, m model.Manifest, pa
 			warnings = append(warnings, "revoked prior direnv trust for reused slot; runtime startup will request approval again")
 		}
 	}
-	m.Checkout = model.Checkout{Kind: model.WorkspaceKindManagedSlot, Path: &path, Branch: branch}
+	if _, err := m.Checkout.AssignNewClaim(m.Checkout.Specification.Executor, repositoryKey(m.Repository), filepath.Base(path), path); err != nil {
+		return slotAssignment{}, err
+	}
 	return slotAssignment{Manifest: m, Source: source, Warnings: warnings}, nil
 }
 
@@ -133,10 +133,10 @@ func (s *Service) assignedCheckoutPaths(excludeID string) (map[string]bool, erro
 	}
 	assigned := map[string]bool{}
 	for _, item := range items {
-		if item.ID == excludeID || !item.Checkout.Present() || item.Checkout.Path == nil || *item.Checkout.Path == "" {
+		if item.ID == excludeID || !item.Checkout.Present() || item.Checkout.Claim == nil || item.Checkout.Claim.Path == "" {
 			continue
 		}
-		abs, err := filepath.Abs(*item.Checkout.Path)
+		abs, err := filepath.Abs(item.Checkout.Claim.Path)
 		if err != nil {
 			continue
 		}
@@ -177,27 +177,17 @@ func listSlots(root string) ([]slotInfo, int, error) {
 	return slots, maxIndex, nil
 }
 
-func repositoryKey(repo model.Repository) string {
-	key := strings.TrimSpace(repo.GitCommonDir)
-	if key == "" {
-		key = strings.TrimSpace(repo.RemoteURL)
-	}
-	if key == "" {
-		key = strings.TrimSpace(repo.RootAtCreation)
-	}
-	sum := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(sum[:])[:16]
-}
+func repositoryKey(repo model.Repository) string { return model.RepositoryKey(repo) }
 
 func expectedCheckoutBranch(m model.Manifest) string {
-	return strings.TrimSpace(m.Checkout.Branch)
+	return strings.TrimSpace(m.Checkout.Specification.Branch)
 }
 
 func (s *Service) ensureCheckoutBranch(ctx context.Context, m model.Manifest) error {
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		return nil
 	}
-	path := *m.Checkout.Path
+	path := m.Checkout.Claim.Path
 	expected := expectedCheckoutBranch(m)
 	current, err := s.git.CurrentBranch(ctx, path)
 	if err != nil {
@@ -213,27 +203,27 @@ func (s *Service) ensureCheckoutBranch(ctx context.Context, m model.Manifest) er
 }
 
 func (s *Service) releaseCheckout(ctx context.Context, m model.Manifest, force bool) (CheckoutRelease, error) {
-	if !m.Checkout.Present() || m.Checkout.Path == nil || *m.Checkout.Path == "" {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
 		return CheckoutRelease{Manifest: m}, nil
 	}
-	if m.Checkout.Kind == model.WorkspaceKindRepositoryHome {
+	if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome {
 		if force {
-			if _, err := os.Stat(*m.Checkout.Path); os.IsNotExist(err) {
-				m.Checkout.Path = nil
+			if _, err := os.Stat(m.Checkout.Claim.Path); os.IsNotExist(err) {
+				m.Checkout.ClearClaim()
 				return CheckoutRelease{Manifest: m, Slot: false, Warnings: []string{"missing repository-home checkout required no filesystem changes; released only its logical work-item claim"}}, nil
 			}
 		}
 		if err := s.ensureCheckoutBranch(ctx, m); err != nil {
 			return CheckoutRelease{}, err
 		}
-		head, err := s.git.Head(ctx, *m.Checkout.Path)
+		head, err := s.git.Head(ctx, m.Checkout.Claim.Path)
 		if err != nil {
 			return CheckoutRelease{}, fmt.Errorf("could not read repository-home HEAD: %w", err)
 		}
-		m.Checkout.Path = nil
+		m.Checkout.ClearClaim()
 		return CheckoutRelease{Manifest: m, LastHead: head, Slot: false, Warnings: []string{"repository-home checkout was left untouched; released only its logical work-item claim"}}, nil
 	}
-	path := *m.Checkout.Path
+	path := m.Checkout.Claim.Path
 	if err := s.validateManagedCheckoutPath(path); err != nil {
 		return CheckoutRelease{}, err
 	}
@@ -259,7 +249,7 @@ func (s *Service) releaseCheckout(ctx context.Context, m model.Manifest, force b
 	if !slot {
 		return CheckoutRelease{}, fmt.Errorf("managed checkout %s is outside the slot directory", path)
 	}
-	m.Checkout.Path = nil
+	m.Checkout.ClearClaim()
 	return CheckoutRelease{Manifest: m, LastHead: lastHead, Dirty: dirty, Slot: slot, Warnings: warnings}, nil
 }
 

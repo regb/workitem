@@ -88,6 +88,7 @@ var helpDocs = map[string]helpDoc{
 			{"--desc-file <path>", "Read DESCRIPTION.md content from a file."},
 			{"--prompt <text>", "Persist the text as DESCRIPTION.md and immediately start an unattached agent with it."},
 			{"--agent <name>", "Select a configured agent definition; default is default."},
+			{"--executor <name>", "Select the executor for future managed-slot materialization; default is local."},
 			{"--agent-mode <mode>", "With --prompt, start tui (default) or headless."},
 			{"--slug <slug>", "Set the initial active slug; must be unique."},
 			{"--label <label>", "Add a label after inherited defaults; repeatable."},
@@ -97,12 +98,13 @@ var helpDocs = map[string]helpDoc{
 			{"--repo <path>", "Create the item for another local Git repository."},
 			{"--base <revision>", "Use a specific revision instead of the local default branch; use HEAD for the current checkout."},
 		},
-		Environment: []helpOption{{"WI_ITEM_DEFAULT_LABELS", "Comma-separated additive default labels."}, {"WI_AGENT_DAEMON_SOCKET", "Use the restricted agent endpoint at an explicit absolute path; it is never auto-started."}},
+		Environment: []helpOption{{"WI_ITEM_DEFAULT_LABELS", "Comma-separated additive default labels."}, {"WI_AGENT_DAEMON_SOCKET", "Use the restricted agent endpoint at an explicit absolute path; it is never auto-started."}, {"WI_EXECUTOR_DAEMON_SOCKET", "Use the coordinator-managed executor authority endpoint for supported remote commands."}},
 		Examples: []string{
 			`wi new --label follow-up --desc-file handoff.md "Investigate refresh race"`,
 			`wi new --prompt "Investigate the race, add a regression test, and report findings." "Investigate refresh race"`,
 			`wi new --agent-mode headless --prompt "Run the audit and report findings." "Audit dependencies"`,
 			`wi new --deep --repo ../api "Redesign authentication"`,
+			`wi new --executor macbook "Run on the macOS worker"`,
 			`wi new --home "Mainline maintenance"`,
 		},
 	},
@@ -225,7 +227,7 @@ var helpDocs = map[string]helpDoc{
 		Summary: "Start backlog work, optionally creating a minimal item",
 		Usage: []string{
 			"wi start [--agent-mode <tui|headless>] [--force] <slug>",
-			"wi start --new [--home] [--no-default-labels] [--agent-mode <tui|headless>] [--force] <title>",
+			"wi start --new [--home | --executor <name>] [--no-default-labels] [--agent-mode <tui|headless>] [--force] <title>",
 		},
 		Description: []string{
 			"Without --new, resolves an exact active slug or one unambiguous active-slug substring. Exact matches take precedence; ambiguous substrings fail with candidate IDs and slugs. IDs, title keywords, implicit current-item selection, and --item are not accepted.",
@@ -237,7 +239,8 @@ var helpDocs = map[string]helpDoc{
 			{"--home", "With --new, borrow the repository's primary default-branch checkout."},
 			{"--no-default-labels", "With --new, do not inherit default labels."},
 			{"--agent <name>", "With --new, select a configured agent definition."},
-			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless Headless mode."},
+			{"--executor <name>", "With --new, select a configured managed-slot executor."},
+			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless mode."},
 			{"--force", "Override the deep-work active limit."},
 		},
 		Environment: []helpOption{{"WI_ITEM_DEFAULT_LABELS", "Comma-separated defaults applied when --new creates the item."}},
@@ -300,14 +303,20 @@ var helpDocs = map[string]helpDoc{
 	},
 	"terminal": {
 		Summary:     "Manage optional terminal access",
-		Usage:       []string{"wi terminal <status|ensure|enter|close> [options] [item]"},
+		Usage:       []string{"wi terminal <status|ensure|enter|copy-mode|close> [options] [item]"},
 		Description: []string{"Low-level tmux adapter plumbing operates over an existing worktree. It never creates a conversation or changes lifecycle state."},
-		SeeAlso:     []string{"terminal status", "terminal ensure", "terminal enter", "terminal close", "workspace"},
+		SeeAlso:     []string{"terminal status", "terminal ensure", "terminal enter", "terminal copy-mode", "terminal close", "workspace"},
 	},
 	"terminal status": {Summary: "Inspect optional terminal access", Usage: []string{"wi terminal status [--item <selector>] [item]"}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
 	"terminal ensure": {Summary: "Ensure optional terminal access", Usage: []string{"wi terminal ensure [--item <selector>] [item]"}, Description: []string{"Requires an existing worktree and creates no agent resources."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
 	"terminal enter":  {Summary: "Enter optional terminal access", Usage: []string{"wi terminal enter [--item <selector>] [item]"}, Description: []string{"Ensures tmux over an existing worktree and attaches unless JSON output is selected."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
-	"terminal close":  {Summary: "Close optional terminal access", Usage: []string{"wi terminal close [--item <selector>] [item]"}, Description: []string{"Closes tmux only. A TUI agent runtime must be stopped explicitly first."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
+	"terminal copy-mode": {
+		Summary:     "Enter copy mode in a remote agent terminal",
+		Usage:       []string{"wi terminal copy-mode [--item <selector>] [item]"},
+		Description: []string{"Asks the executor's private tmux server to enter copy mode for the item agent pane. This exposes remote scrollback that the local SSH gateway pane does not contain."},
+		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}, {"--pane <id>", "Target the worker shell attached to this local gateway pane."}},
+	},
+	"terminal close": {Summary: "Close optional terminal access", Usage: []string{"wi terminal close [--item <selector>] [item]"}, Description: []string{"Closes tmux only. A TUI agent runtime must be stopped explicitly first."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
 	"next": {
 		Summary: "Switch to the next item in the NEEDS ATTENTION ring",
 		Usage:   []string{"wi next [--defer | --wait | --archive] [--label <rule>]..."},
@@ -380,6 +389,33 @@ var helpDocs = map[string]helpDoc{
 			{"--item <selector>", "Select an item explicitly."},
 			{"--clear", "Clear deep-work classification."},
 		},
+	},
+	"executor": {
+		Summary:     "Inspect configured remote execution workers",
+		Usage:       []string{"wi executor <list|select|doctor|shutdown>"},
+		Description: []string{"Executors are coordinator-owned remote materialization targets. The worker must already provide wi, Git, tmux, the selected agent driver, and project tools."},
+		SeeAlso:     []string{"executor list", "executor select", "executor doctor", "executor shutdown", "workspace", "agent runtime"},
+	},
+	"executor list": {
+		Summary: "List configured execution workers",
+		Usage:   []string{"wi executor list"},
+	},
+	"executor select": {
+		Summary:     "Select an executor for future workspace materialization",
+		Usage:       []string{"wi executor select --item <selector> <executor>"},
+		Description: []string{"Changes desired placement before the workspace is first materialized. The selection is fixed after the first claim, even after release. Use local before materialization to keep work on the coordinator."},
+		Options:     []helpOption{{"--item <selector>", "Select the work item."}},
+	},
+	"executor doctor": {
+		Summary:     "Check SSH, tools, and the isolated terminal profile on a worker",
+		Usage:       []string{"wi executor doctor <name>"},
+		Description: []string{"Runs a bounded probe over SSH. It starts and removes a temporary session on a dedicated worker tmux server, using the generated persistent-terminal configuration and selected shell."},
+	},
+	"executor shutdown": {
+		Summary:     "Stop this coordinator's resources on a worker",
+		Usage:       []string{"wi executor shutdown --force <name>"},
+		Description: []string{"Stops worker runtimes, dedicated tmux sessions, and the worker cache daemon for the current coordinator data root. It does not affect the worker's ordinary tmux server."},
+		Options:     []helpOption{{"--force", "Confirm executor-wide shutdown."}},
 	},
 	"agent": {
 		Summary:     "Inspect, run, monitor, and communicate with the primary agent",
@@ -481,7 +517,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"label", "List, add, or remove labels"}, {"deep", "Set or clear deep-work classification"}, {"events", "Show item history"}, {"attention", "Inspect or defer attention"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Agent and checkout:")
-	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
+	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}, {"executor", "Inspect remote execution workers"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Administration:")
 	printCommandRows(w, [][2]string{{"merge", "Rebase and fast-forward a target branch"}, {"delete", "Delete archived work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})

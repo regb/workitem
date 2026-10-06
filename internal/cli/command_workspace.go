@@ -46,10 +46,11 @@ func runWorkspaceStatus(ctx context.Context, args []string, cfg Config, jsonOut 
 	}
 	fmt.Fprintf(cfg.Stdout, "work item: %s\n", res.WorkItemID)
 	fmt.Fprintf(cfg.Stdout, "state: %s\n", res.State)
-	fmt.Fprintf(cfg.Stdout, "workspace kind: %s\n", res.Checkout.Kind)
+	fmt.Fprintf(cfg.Stdout, "workspace kind: %s\n", res.Checkout.Specification.Kind)
+	fmt.Fprintf(cfg.Stdout, "executor: %s\n", res.Checkout.Specification.Executor)
 	fmt.Fprintf(cfg.Stdout, "checkout: %s\n", res.Checkout.Presence())
-	if res.Checkout.Path != nil {
-		fmt.Fprintf(cfg.Stdout, "checkout path: %s\n", *res.Checkout.Path)
+	if res.Checkout.Claim != nil {
+		fmt.Fprintf(cfg.Stdout, "checkout path: %s\n", res.Checkout.Claim.Path)
 	}
 	status, reason := workspaceDiagnostic(res)
 	fmt.Fprintf(cfg.Stdout, "worktree: %s\n", status)
@@ -76,7 +77,7 @@ func runWorkspaceStatus(ctx context.Context, args []string, cfg Config, jsonOut 
 }
 
 func workspaceDiagnostic(res app.WorkspaceStatusResult) (string, string) {
-	if !res.Checkout.Present() || res.Checkout.Path == nil || *res.Checkout.Path == "" {
+	if !res.Checkout.Present() || res.Checkout.Claim == nil || res.Checkout.Claim.Path == "" {
 		return "absent", "checkout is absent"
 	}
 	if res.Git.BranchMismatch {
@@ -188,8 +189,8 @@ func workspaceSelector(command string, args []string, cfg Config) (string, error
 }
 
 func printCompositionResult(cfg Config, res app.CompositionResult) {
-	if res.Checkout.Path != nil {
-		fmt.Fprintf(cfg.Stdout, "checkout: %s\n", *res.Checkout.Path)
+	if res.Checkout.Claim != nil {
+		fmt.Fprintf(cfg.Stdout, "checkout: %s\n", res.Checkout.Claim.Path)
 	}
 	if res.Terminal != nil {
 		fmt.Fprintf(cfg.Stdout, "terminal: %s\n", res.Terminal.Session)

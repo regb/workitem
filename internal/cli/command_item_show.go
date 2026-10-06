@@ -50,12 +50,18 @@ func runShow(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 		fmt.Fprintf(cfg.Stdout, "Remote: %s\n", m.Repository.RemoteURL)
 	}
 	fmt.Fprintf(cfg.Stdout, "Created from commit: %s\n", m.Repository.CreatedFromCommit)
-	fmt.Fprintf(cfg.Stdout, "Workspace kind: %s\n", m.Checkout.Kind)
+	fmt.Fprintf(cfg.Stdout, "Workspace kind: %s\n", m.Checkout.Specification.Kind)
+	fmt.Fprintf(cfg.Stdout, "Selected executor: %s\n", m.Checkout.Specification.Executor)
 	fmt.Fprintf(cfg.Stdout, "Checkout: %s\n", m.Checkout.Presence())
-	fmt.Fprintf(cfg.Stdout, "Branch: %s\n", m.Checkout.Branch)
-	if m.Checkout.Path != nil {
-		fmt.Fprintf(cfg.Stdout, "Checkout path: %s\n", *m.Checkout.Path)
-	} else if m.Checkout.Kind == model.WorkspaceKindRepositoryHome {
+	fmt.Fprintf(cfg.Stdout, "Branch: %s\n", m.Checkout.Specification.Branch)
+	if m.Checkout.Claim != nil {
+		fmt.Fprintf(cfg.Stdout, "Workspace claim: %s\n", m.Checkout.Claim.ID)
+		fmt.Fprintf(cfg.Stdout, "Claim executor: %s\n", m.Checkout.Claim.Executor)
+		if m.Checkout.Claim.Slot != "" {
+			fmt.Fprintf(cfg.Stdout, "Slot: %s\n", m.Checkout.Claim.Slot)
+		}
+		fmt.Fprintf(cfg.Stdout, "Checkout path: %s\n", m.Checkout.Claim.Path)
+	} else if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome {
 		fmt.Fprintf(cfg.Stdout, "Repository home: %s\n", m.Repository.OperationalRoot())
 	}
 	fmt.Fprintf(cfg.Stdout, "Terminal: %s %s\n", "tmux", m.TerminalSessionName())

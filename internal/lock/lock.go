@@ -18,6 +18,16 @@ type FileLock struct {
 }
 
 func Acquire(ctx context.Context, path string) (*FileLock, error) {
+	return acquire(ctx, path, syscall.LOCK_EX)
+}
+
+// AcquireShared holds a cross-process read lease. Exclusive acquisition waits
+// for all shared leases, while other shared leases may proceed concurrently.
+func AcquireShared(ctx context.Context, path string) (*FileLock, error) {
+	return acquire(ctx, path, syscall.LOCK_SH)
+}
+
+func acquire(ctx context.Context, path string, mode int) (*FileLock, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -29,7 +39,7 @@ func Acquire(ctx context.Context, path string) (*FileLock, error) {
 		return nil, fmt.Errorf("open lock file: %w", err)
 	}
 	for {
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		err = syscall.Flock(int(f.Fd()), mode|syscall.LOCK_NB)
 		if err == nil {
 			return &FileLock{path: path, file: f}, nil
 		}

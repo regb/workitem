@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-
 	"github.com/regb/workitem/internal/app/contract"
 	agentcore "github.com/regb/workitem/internal/app/core/primaryagent"
 	"github.com/regb/workitem/internal/model"

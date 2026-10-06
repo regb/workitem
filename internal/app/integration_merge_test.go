@@ -42,7 +42,7 @@ func TestMergeWorkItemRebasesFastForwardsAndSyncsTargetWorktree(t *testing.T) {
 		t.Fatalf("main=%s source=%s", mainSHA, sourceSHA)
 	}
 	manifest, err := application.Store.LoadManifest(itemID)
-	if err != nil || manifest.State != "working" || manifest.Checkout.Path == nil {
+	if err != nil || manifest.State != "working" || manifest.Checkout.Claim == nil {
 		t.Fatalf("manifest changed unexpectedly: %+v err=%v", manifest, err)
 	}
 	events, err := application.Store.(*store.Store).ReadEvents(itemID)
@@ -269,11 +269,11 @@ func TestMergeWorkItemRecordsManagedTargetEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	sourcePath := *source.Workspace.Checkout.Path
+	sourcePath := source.Workspace.Checkout.Claim.Path
 	writeMergeFile(t, sourcePath, "feature.txt", "feature\n")
 	runMergeGit(t, sourcePath, "add", "feature.txt")
 	runMergeGit(t, sourcePath, "commit", "-m", "feature")
-	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: sourceItem.Manifest.ID, Target: target.Workspace.Checkout.Branch, CWD: sourcePath})
+	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: sourceItem.Manifest.ID, Target: target.Workspace.Checkout.Specification.Branch, CWD: sourcePath})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func setupMergeWorkItem(t *testing.T) (*app.App, string, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	source := *started.Workspace.Checkout.Path
+	source := started.Workspace.Checkout.Claim.Path
 	runMergeGit(t, source, "config", "user.email", "test@example.com")
 	runMergeGit(t, source, "config", "user.name", "Test User")
 	return application, repo, source, created.Manifest.ID

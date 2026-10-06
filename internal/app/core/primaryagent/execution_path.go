@@ -9,12 +9,21 @@ import (
 
 // ExecutionCWD keeps a runtime anchored to the item's current checkout.
 func ExecutionCWD(m model.Manifest, _ model.Conversation) string {
-	if m.Checkout.Present() && m.Checkout.Path != nil {
-		if path := strings.TrimSpace(*m.Checkout.Path); path != "" {
+	if m.Checkout.Present() && m.Checkout.Claim != nil {
+		if path := strings.TrimSpace(m.Checkout.Claim.Path); path != "" {
 			return path
 		}
 	}
 	return m.Repository.OperationalRoot()
+}
+
+// HostExecutionCWD returns a directory that exists on the runtime host. A
+// remote workspace path is logical and must never be used as cmd.Dir locally.
+func HostExecutionCWD(m model.Manifest, conversation model.Conversation, itemDir string) string {
+	if claim := m.Checkout.Claim; claim != nil && claim.Executor != "" && claim.Executor != model.ExecutorLocal {
+		return filepath.Clean(itemDir)
+	}
+	return ExecutionCWD(m, conversation)
 }
 
 func CheckoutContainsPath(checkoutPath, candidate string) bool {

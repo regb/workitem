@@ -84,6 +84,13 @@ func launch(ctx context.Context, request driverprotocol.LaunchRequest, reply fun
 		environment = map[string]string{}
 	}
 	environment["PI_CODING_AGENT_SESSION_DIR"] = filepath.Dir(request.Conversation.Locator)
+	if environment["WI_WORKSPACE_TOOL_SOCKET"] != "" {
+		extensionPath, extensionErr := RemoteWorkspaceExtensionPath()
+		if extensionErr != nil {
+			return extensionErr
+		}
+		config.Extensions = append(config.Extensions, extensionPath)
+	}
 	client := New(resolved)
 	return client.ExecMode(ctx, ExecSpec{SessionPath: request.Conversation.Locator, Mode: mode, CWD: request.Runtime.CWD, LogPath: request.Runtime.LogPath, WorkItemID: request.Runtime.WorkItemID, RuntimeID: request.Runtime.ID, ControlSocketPath: request.Runtime.ControlSocketPath, EventSocketPath: request.Runtime.EventSocketPath, Env: environment, Extensions: config.Extensions})
 }

@@ -36,6 +36,30 @@ func (r *recordingRunner) Run(ctx context.Context, path string, args []string, e
 	return out, err
 }
 
+func TestDedicatedServerArgumentsApplyToEveryCommand(t *testing.T) {
+	r := &recordingRunner{}
+	client := tmux.Client{Path: "tmux", SocketPath: "/tmp/wi.sock", ConfigPath: "/tmp/wi.conf", Runner: r}
+	if _, err := client.HasSession(context.Background(), "wi-test"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"-S", "/tmp/wi.sock", "-f", "/tmp/wi.conf", "has-session", "-t", "wi-test"}
+	if len(r.calls) != 1 || !reflect.DeepEqual(r.calls[0].Args, want) {
+		t.Fatalf("calls=%+v want args=%v", r.calls, want)
+	}
+}
+
+func TestCopyModeTargetsDedicatedServerPane(t *testing.T) {
+	r := &recordingRunner{}
+	client := tmux.Client{Path: "tmux", SocketPath: "/tmp/wi.sock", ConfigPath: "/tmp/wi.conf", Runner: r}
+	if err := client.CopyMode(context.Background(), "wi-item"); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"-S", "/tmp/wi.sock", "-f", "/tmp/wi.conf", "copy-mode", "-t", "wi-item"}
+	if len(r.calls) != 1 || !reflect.DeepEqual(r.calls[0].Args, want) {
+		t.Fatalf("calls=%+v want=%v", r.calls, want)
+	}
+}
+
 func TestListSessionsSortsAndIgnoresEmptyLines(t *testing.T) {
 	r := &recordingRunner{outs: [][]byte{[]byte("wi-z\n\nwi-a\n")}}
 	client := tmux.Client{Path: "tmux", Runner: r}
@@ -48,6 +72,15 @@ func TestListSessionsSortsAndIgnoresEmptyLines(t *testing.T) {
 	}
 	if !reflect.DeepEqual(r.calls[0].Args, []string{"list-sessions", "-F", "#{session_name}"}) {
 		t.Fatalf("args = %#v", r.calls[0].Args)
+	}
+}
+
+func TestListSessionsTreatsMissingDedicatedSocketAsEmpty(t *testing.T) {
+	r := &recordingRunner{errs: []error{errors.New("error connecting to /tmp/wi.sock (No such file or directory): exit status 1")}}
+	client := tmux.Client{Path: "tmux", SocketPath: "/tmp/wi.sock", Runner: r}
+	sessions, err := client.ListSessions(context.Background())
+	if err != nil || len(sessions) != 0 {
+		t.Fatalf("sessions=%v err=%v", sessions, err)
 	}
 }
 
@@ -255,6 +288,43 @@ func TestAttachOrSwitchRecoversUnexpandedClientFormat(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(r.calls[0].Args, []string{"display-message", "-p", "#{client_name}"}) || !reflect.DeepEqual(r.calls[1].Args, []string{"switch-client", "-c", "/dev/pts/42", "-t", "wi-session"}) {
+		t.Fatalf("calls=%+v", r.calls)
+	}
+}
+
+func TestEnsureGatewaySessionCreatesAgentAndShellLayout(t *testing.T) {
+	r := &recordingRunner{
+		outs: [][]byte{nil, nil, nil, []byte("agent\n"), []byte("agent\n")},
+		errs: []error{errors.New("missing: exit status 1")},
+	}
+	client := tmux.Client{Path: "tmux", Runner: r}
+	created, err := client.EnsureGatewaySession(context.Background(), tmux.SessionSpec{Name: "wi-remote", CWD: "/tmp"}, []string{"ssh", "worker", "agent"}, []string{"ssh", "worker", "shell"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created {
+		t.Fatal("expected session creation")
+	}
+	wantOption := []string{"set-option", "-t", "wi-remote", "default-command", "ssh worker shell"}
+	wantShell := []string{"new-window", "-d", "-t", "wi-remote:", "-n", "shell", "-c", "/tmp", "ssh worker shell"}
+	if len(r.calls) != 7 || !reflect.DeepEqual(r.calls[3].Args, wantOption) || !reflect.DeepEqual(r.calls[6].Args, wantShell) {
+		t.Fatalf("calls=%+v", r.calls)
+	}
+}
+
+func TestEnsureCommandSessionStartsCommandInOnlyWindow(t *testing.T) {
+	r := &recordingRunner{errs: []error{errors.New("missing: exit status 1")}}
+	client := tmux.Client{Path: "tmux", Runner: r}
+	created, err := client.EnsureCommandSession(context.Background(), tmux.SessionSpec{Name: "wi-remote", CWD: "/tmp", Env: map[string]string{"WI_ID": "item"}}, "agent", []string{"ssh", "worker name"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created {
+		t.Fatal("expected session creation")
+	}
+	wantCreate := []string{"new-session", "-d", "-s", "wi-remote", "-c", "/tmp", "-n", "agent", "sleep 2147483647"}
+	wantStart := []string{"respawn-pane", "-k", "-c", "/tmp", "-t", "wi-remote:agent", "ssh 'worker name'"}
+	if len(r.calls) != 4 || !reflect.DeepEqual(r.calls[1].Args, wantCreate) || !reflect.DeepEqual(r.calls[2].Args, []string{"set-environment", "-t", "wi-remote", "WI_ID", "item"}) || !reflect.DeepEqual(r.calls[3].Args, wantStart) {
 		t.Fatalf("calls=%+v", r.calls)
 	}
 }

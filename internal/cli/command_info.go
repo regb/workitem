@@ -35,6 +35,11 @@ func runInfoMain(args []string, paths xdg.Paths, stdout, stderr io.Writer, jsonO
 		fmt.Fprintln(stderr, err)
 		return ExitError
 	}
+	executorSocket, err := coordinator.ExecutorSocketPath(paths.RuntimeDir, paths.DataRoot)
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return ExitError
+	}
 	values := []infoValue{
 		{name: "data-root", jsonName: "data_root", value: paths.DataRoot},
 		{name: "database", jsonName: "database", value: filepath.Join(paths.DataRoot, "wi.db")},
@@ -44,6 +49,7 @@ func runInfoMain(args []string, paths xdg.Paths, stdout, stderr io.Writer, jsonO
 		{name: "runtime-root", jsonName: "runtime_root", value: paths.DataRuntimeRoot},
 		{name: "operator-socket", jsonName: "operator_socket", value: operatorSocket},
 		{name: "agent-socket", jsonName: "agent_socket", value: agentSocket},
+		{name: "executor-socket", jsonName: "executor_socket", value: executorSocket},
 	}
 	if len(args) == 1 {
 		for _, entry := range values {
