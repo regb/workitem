@@ -2,7 +2,7 @@ package pi
 
 import (
 	"context"
-	_ "embed"
+	"embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,6 +14,9 @@ import (
 
 //go:embed bridge.ts
 var bridgeSource []byte
+
+//go:embed remoteexec/*.ts
+var remoteExecSource embed.FS
 
 type Runner interface {
 	RunInteractive(ctx context.Context, path string, args []string, cwd string, env []string) error
@@ -113,6 +116,58 @@ func BridgePath() (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+func RemoteWorkspaceExtensionPath() (string, error) {
+	cacheDir, err := os.UserCacheDir()
+	if err != nil {
+		return "", fmt.Errorf("resolve cache directory for Pi remote workspace extension: %w", err)
+	}
+	dir := filepath.Join(cacheDir, "wi", "pi", "remote-workspace")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", fmt.Errorf("create Pi remote workspace extension cache: %w", err)
+	}
+	entries, err := remoteExecSource.ReadDir("remoteexec")
+	if err != nil {
+		return "", err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		content, err := remoteExecSource.ReadFile("remoteexec/" + entry.Name())
+		if err != nil {
+			return "", err
+		}
+		path := filepath.Join(dir, entry.Name())
+		if current, readErr := os.ReadFile(path); readErr == nil && string(current) == string(content) {
+			continue
+		}
+		temporary, err := os.CreateTemp(dir, ".remote-workspace-*.tmp")
+		if err != nil {
+			return "", err
+		}
+		temporaryPath := temporary.Name()
+		if err := temporary.Chmod(0o600); err != nil {
+			_ = temporary.Close()
+			_ = os.Remove(temporaryPath)
+			return "", err
+		}
+		if _, err := temporary.Write(content); err != nil {
+			_ = temporary.Close()
+			_ = os.Remove(temporaryPath)
+			return "", err
+		}
+		if err := temporary.Close(); err != nil {
+			_ = os.Remove(temporaryPath)
+			return "", err
+		}
+		if err := os.Rename(temporaryPath, path); err != nil {
+			_ = os.Remove(temporaryPath)
+			return "", err
+		}
+	}
+	return filepath.Join(dir, "index.ts"), nil
 }
 
 func (c Client) Exec(ctx context.Context, sessionPath, cwd string, env map[string]string) error {

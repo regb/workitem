@@ -10,6 +10,7 @@ import (
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/model"
 )
 
 type agentRuntimeEventsResult struct {
@@ -42,10 +43,14 @@ func runAgentMonitor(ctx context.Context, args []string, cfg Config, jsonOut boo
 	if err != nil {
 		return err
 	}
-	return runCoordinatorAgentMonitor(ctx, cfg, manifest.ID, limit, follow, jsonOut)
+	remote := manifest.Checkout.Specification.Executor != "" && manifest.Checkout.Specification.Executor != model.ExecutorLocal
+	if remote {
+		_, _ = cfg.App.AgentRuntimeStatus(ctx, resolve)
+	}
+	return runCoordinatorAgentMonitor(ctx, cfg, manifest.ID, limit, follow, jsonOut, remote)
 }
 
-func runCoordinatorAgentMonitor(ctx context.Context, cfg Config, itemID string, limit int, follow, jsonOut bool) error {
+func runCoordinatorAgentMonitor(ctx context.Context, cfg Config, itemID string, limit int, follow, jsonOut, remote bool) error {
 	request := coordinator.RuntimeEventsRequest{ItemID: itemID, Limit: limit}
 	result, err := cfg.Coordinator.RuntimeEvents(ctx, request)
 	if err != nil {
@@ -82,7 +87,12 @@ func runCoordinatorAgentMonitor(ctx context.Context, cfg Config, itemID string, 
 			return nil
 		default:
 		}
-		result, err = cfg.Coordinator.RuntimeEvents(ctx, coordinator.RuntimeEventsRequest{ItemID: itemID, AfterSequence: after, Limit: 1000, WaitMillis: 30000})
+		waitMillis := 30000
+		if remote {
+			_, _ = cfg.App.AgentRuntimeStatus(ctx, app.ResolveOptions{Selector: itemID, CWD: cfg.CWD, Env: cfg.Env})
+			waitMillis = 500
+		}
+		result, err = cfg.Coordinator.RuntimeEvents(ctx, coordinator.RuntimeEventsRequest{ItemID: itemID, AfterSequence: after, Limit: 1000, WaitMillis: waitMillis})
 		if err != nil {
 			if ctx.Err() != nil {
 				return nil

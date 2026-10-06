@@ -228,7 +228,7 @@ func (s *Store) LoadManifest(id string) (model.Manifest, error) {
 }
 
 func (s *Store) validateRepositoryHomeClaim(manifest model.Manifest) error {
-	if manifest.Checkout.Kind != model.WorkspaceKindRepositoryHome || !manifest.Checkout.Present() {
+	if manifest.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome || !manifest.Checkout.Present() {
 		return nil
 	}
 	items, itemErrs := s.ListManifests()
@@ -236,7 +236,7 @@ func (s *Store) validateRepositoryHomeClaim(manifest model.Manifest) error {
 		return fmt.Errorf("inspect repository-home claims: %w", itemErrs[0])
 	}
 	for _, item := range items {
-		if item.ID != manifest.ID && item.Checkout.Kind == model.WorkspaceKindRepositoryHome && item.Checkout.Present() && sameRepositoryIdentity(item.Repository, manifest.Repository) {
+		if item.ID != manifest.ID && item.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome && item.Checkout.Present() && sameRepositoryIdentity(item.Repository, manifest.Repository) {
 			return fmt.Errorf("repository home is already claimed by work item %s (%s)", item.ID, item.Slug)
 		}
 	}
@@ -305,19 +305,55 @@ func normalizeManifest(m *model.Manifest) error {
 	if m.Labels == nil {
 		m.Labels = []string{}
 	}
-	if m.Checkout.Kind == "" {
-		m.Checkout.Kind = model.WorkspaceKindManagedSlot
+	if m.Checkout.Specification.Kind == "" {
+		m.Checkout.Specification.Kind = model.WorkspaceKindManagedSlot
 	}
-	if m.Checkout.Kind != model.WorkspaceKindManagedSlot && m.Checkout.Kind != model.WorkspaceKindRepositoryHome {
-		return fmt.Errorf("unsupported checkout kind %q", m.Checkout.Kind)
+	if strings.TrimSpace(m.Checkout.Specification.Executor) == "" {
+		m.Checkout.Specification.Executor = model.ExecutorLocal
 	}
-	if strings.TrimSpace(m.Checkout.Branch) == "" {
+	if m.Checkout.Specification.Kind != model.WorkspaceKindManagedSlot && m.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome {
+		return fmt.Errorf("unsupported checkout kind %q", m.Checkout.Specification.Kind)
+	}
+	if strings.TrimSpace(m.Checkout.Specification.Branch) == "" {
 		return fmt.Errorf("checkout branch is required")
 	}
-	if m.Checkout.Path != nil && strings.TrimSpace(*m.Checkout.Path) == "" {
-		return fmt.Errorf("checkout path must not be empty")
+	if claim := m.Checkout.Claim; claim != nil {
+		claim.ID = strings.TrimSpace(claim.ID)
+		claim.Executor = strings.TrimSpace(claim.Executor)
+		claim.RepositoryKey = strings.TrimSpace(claim.RepositoryKey)
+		claim.Slot = strings.TrimSpace(claim.Slot)
+		claim.Path = strings.TrimSpace(claim.Path)
+		if claim.ID == "" || strings.ContainsAny(claim.ID, "/\\\r\n\x00") {
+			return fmt.Errorf("workspace claim id is invalid")
+		}
+		if claim.Generation == 0 && m.Checkout.ClaimGeneration == 0 {
+			claim.Generation = 1
+			m.Checkout.ClaimGeneration = 1
+		} else if claim.Generation == 0 {
+			claim.Generation = m.Checkout.ClaimGeneration
+		} else if m.Checkout.ClaimGeneration == 0 {
+			m.Checkout.ClaimGeneration = claim.Generation
+		}
+		if claim.Generation == 0 || claim.Generation != m.Checkout.ClaimGeneration {
+			return fmt.Errorf("workspace claim generation %d does not match checkout generation %d", claim.Generation, m.Checkout.ClaimGeneration)
+		}
+		if claim.Executor == "" {
+			claim.Executor = m.Checkout.Specification.Executor
+		}
+		if claim.Executor != m.Checkout.Specification.Executor {
+			return fmt.Errorf("workspace claim executor %q does not match selected executor %q", claim.Executor, m.Checkout.Specification.Executor)
+		}
+		if claim.Path == "" {
+			return fmt.Errorf("workspace claim path is required")
+		}
+		if claim.RepositoryKey == "" {
+			claim.RepositoryKey = model.RepositoryKey(m.Repository)
+		}
 	}
-	if m.Checkout.Kind == model.WorkspaceKindRepositoryHome && m.Repository.OperationalRoot() == "" {
+	if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome && m.Checkout.Specification.Executor != model.ExecutorLocal {
+		return fmt.Errorf("repository-home checkout requires the local executor")
+	}
+	if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome && m.Repository.OperationalRoot() == "" {
 		return fmt.Errorf("repository-home checkout requires repository root")
 	}
 	return nil
@@ -483,6 +519,9 @@ func validateAgentRuntime(itemID string, runtime model.AgentRuntime) error {
 	}
 	if runtime.WorkItemID != "" && runtime.WorkItemID != itemID {
 		return fmt.Errorf("work_item_id %q does not match %q", runtime.WorkItemID, itemID)
+	}
+	if (strings.TrimSpace(runtime.WorkspaceClaimID) == "") != (runtime.WorkspaceClaimGeneration == 0) {
+		return fmt.Errorf("workspace claim id and generation must either both be set or both be absent")
 	}
 	return nil
 }
@@ -756,10 +795,10 @@ func FindByWorktreeFromManifests(manifests []model.Manifest, path string) (model
 	}
 	var matches []model.Manifest
 	for _, m := range manifests {
-		if m.Checkout.Path == nil {
+		if m.Checkout.Claim == nil {
 			continue
 		}
-		checkoutAbs, err := filepath.Abs(*m.Checkout.Path)
+		checkoutAbs, err := filepath.Abs(m.Checkout.Claim.Path)
 		if err != nil {
 			continue
 		}

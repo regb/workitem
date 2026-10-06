@@ -46,6 +46,9 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	if err != nil {
 		return EnsureAgentRuntimeResult{}, err
 	}
+	if err := a.validateRemoteWorkspaceAgent(m); err != nil {
+		return EnsureAgentRuntimeResult{}, err
+	}
 	existing, err := a.Store.LoadAgentRuntime(m.ID)
 	if err != nil {
 		return EnsureAgentRuntimeResult{}, err
@@ -83,11 +86,14 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 		if err != nil {
 			return EnsureAgentRuntimeResult{}, err
 		}
-		terminal, err := a.ensureTerminalWorkspaceWithEnvironment(ctx, opts, m, true, runtimeEnv, scrub)
-		if err != nil {
-			return EnsureAgentRuntimeResult{}, err
+		terminal := TerminalResult{WorkItemID: m.ID, Session: m.TerminalSessionName(), Checkout: m.Checkout, Warnings: []string{}}
+		if !a.SinglePaneTUITerminal {
+			terminal, err = a.ensureTerminalWorkspaceWithEnvironment(ctx, opts, m, true, runtimeEnv, scrub)
+			if err != nil {
+				return EnsureAgentRuntimeResult{}, err
+			}
+			warnings = append(warnings, terminal.Warnings...)
 		}
-		warnings = append(warnings, terminal.Warnings...)
 		launchWarnings, err := a.launchAgentInTmuxWithEnvironment(ctx, m, session, true, runtimeEnv, scrub)
 		if err != nil {
 			return EnsureAgentRuntimeResult{}, err
@@ -121,7 +127,7 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	if self == "" {
 		self = "wi"
 	}
-	cwd := agentcore.ExecutionCWD(m, session)
+	cwd := agentcore.HostExecutionCWD(m, session, a.Store.ItemDir(m.ID))
 	pid, err := a.AgentRuntimeLauncher.Start(agent.LaunchSpec{
 		Path:    self,
 		Args:    []string{"agent", "exec", "--item", m.ID, "--conversation", session.ID, "--runtime", runtime.ID, "--mode", string(mode)},
@@ -160,8 +166,30 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	return EnsureAgentRuntimeResult{WorkItemID: m.ID, Created: true, Runtime: runtime, Conversation: session, Capabilities: runtime.Capabilities, Warnings: warnings}, nil
 }
 
+func (a *App) validateRemoteWorkspaceAgent(m model.Manifest) error {
+	claim := m.Checkout.Claim
+	if claim == nil || claim.Executor == "" || claim.Executor == model.ExecutorLocal {
+		return nil
+	}
+	agentName := m.Agent
+	if agentName == "" {
+		agentName = "default"
+	}
+	definition, ok := a.AgentsConfig[agentName]
+	if !ok || definition.Driver != "pi" || strings.TrimSpace(a.DriversConfig[definition.Driver].Command) != "" {
+		return fmt.Errorf("agent %q does not support host runtime with remote workspace tools", agentName)
+	}
+	return nil
+}
+
 func (a *App) validateRuntimeCheckout(ctx context.Context, m model.Manifest, runtime model.AgentRuntime) ([]string, error) {
-	if runtime.Mode != string(agent.ModeTUI) || a.Tmux == nil || m.Checkout.Path == nil || strings.TrimSpace(*m.Checkout.Path) == "" {
+	if runtime.WorkspaceClaimID != "" {
+		claim := m.Checkout.Claim
+		if claim == nil || claim.ID != runtime.WorkspaceClaimID || claim.Generation != runtime.WorkspaceClaimGeneration {
+			return nil, fmt.Errorf("agent runtime %s belongs to superseded workspace claim %s generation %d", runtime.ID, runtime.WorkspaceClaimID, runtime.WorkspaceClaimGeneration)
+		}
+	}
+	if runtime.Mode != string(agent.ModeTUI) || a.Tmux == nil || m.Checkout.Claim == nil || strings.TrimSpace(m.Checkout.Claim.Path) == "" {
 		return nil, nil
 	}
 	window := "agent"
@@ -189,7 +217,7 @@ func (a *App) validateRuntimeCheckout(ctx context.Context, m model.Manifest, run
 	if panePath == "" {
 		return []string{"could not verify active agent pane checkout: tmux reported an empty pane path"}, nil
 	}
-	checkoutPath := strings.TrimSpace(*m.Checkout.Path)
+	checkoutPath := agentcore.HostExecutionCWD(m, model.Conversation{}, a.Store.ItemDir(m.ID))
 	if !agentcore.CheckoutContainsPath(checkoutPath, panePath) {
 		return nil, fmt.Errorf("agent runtime %s is running in %s, but work item %s now owns checkout %s; stop the runtime and start or switch the item again", runtime.ID, panePath, m.ID, checkoutPath)
 	}

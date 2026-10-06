@@ -140,12 +140,12 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 			Changed       bool   `json:"changed"`
 			Manifest      struct {
 				Checkout struct {
-					Path *string `json:"path"`
+					Claim any `json:"claim"`
 				} `json:"checkout"`
 			} `json:"manifest"`
 		}
 		decodeE2EJSON(t, output, &result)
-		if result.State != target || !result.Changed || result.Manifest.Checkout.Path != nil {
+		if result.State != target || !result.Changed || result.Manifest.Checkout.Claim != nil {
 			t.Fatalf("state set %s = %+v", target, result)
 		}
 	}

@@ -33,7 +33,7 @@ func TestAgentExecTUIDriverUsesPublicControlAndEventProtocol(t *testing.T) {
 	}
 	itemID, conversationID, runtimeID := "01KZYHGDCECSFS4BJ2SNTQP49V", "01KZYHGDCECSFS4BJ2SNTQP49W", "tui-runtime"
 	checkout := t.TempDir()
-	manifest := model.NewManifest(itemID, "tui-driver", "TUI driver", nil, false, time.Now().UTC(), model.Repository{RootAtCreation: checkout}, model.Checkout{Path: &checkout, Branch: "wi/tui-driver"})
+	manifest := model.NewManifest(itemID, "tui-driver", "TUI driver", nil, false, time.Now().UTC(), model.Repository{RootAtCreation: checkout}, model.Checkout{Specification: model.CheckoutSpecification{Branch: "wi/tui-driver"}, Claim: &model.WorkspaceClaim{ID: "test-claim", Executor: model.ExecutorLocal, Path: checkout}})
 	manifest.State = model.StateWorking
 	manifest.Agent = "test"
 	manifest.PrimaryConversation = &model.Conversation{Driver: "test", ID: conversationID, Locator: "sessions/test/conversation.jsonl", Format: "test-jsonl"}

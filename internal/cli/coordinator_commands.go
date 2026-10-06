@@ -22,13 +22,21 @@ func createCoordinatorWorkItem(ctx context.Context, cfg Config, opts app.NewWork
 		return app.NewWorkItemResult{}, err
 	}
 	command := coordinator.CreateItemCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Manifest: prepared.Manifest, DescriptionDigest: coordinator.DescriptionDigest(prepared.Description), Actor: "user", CreatedAt: prepared.Manifest.CreatedAt}
+	request := coordinator.CreateItemRequest{Command: command, Description: prepared.Description}
+	if cfg.ControlAccess == coordinator.AccessExecutor {
+		request.AuthorityItemID = strings.TrimSpace(cfg.Env["WI_ID"])
+	}
 	requestCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-	created, err := cfg.Coordinator.CreateItem(requestCtx, coordinator.CreateItemRequest{Command: command, Description: prepared.Description})
+	created, err := cfg.Coordinator.CreateItem(requestCtx, request)
 	cancel()
 	if err != nil {
 		return app.NewWorkItemResult{}, err
 	}
-	return app.NewWorkItemResult{Manifest: created.Manifest, ItemDir: prepared.ItemDir, Warnings: prepared.Warnings}, nil
+	itemDir := prepared.ItemDir
+	if cfg.ControlAccess == coordinator.AccessExecutor {
+		itemDir = ""
+	}
+	return app.NewWorkItemResult{Manifest: created.Manifest, ItemDir: itemDir, Warnings: prepared.Warnings}, nil
 }
 
 type coordinatorManifestCommandOptions struct {

@@ -3,7 +3,9 @@ title: wi documentation
 description: Learn how to organize and run durable AI-assisted development work with wi.
 ---
 
-`wi` is a Linux-first command-line tool for organizing AI-assisted development as durable work items. A work item keeps the task description, checkout, agent conversation, lifecycle, and history together across restarts.
+`wi` is a local-first, Linux-first command-line tool for organizing AI-assisted development as durable work items. A work item keeps the task description, checkout, agent conversation, lifecycle, and history together across restarts.
+
+"Local" means one Wi host, not necessarily your laptop. You can run Wi directly on a development machine or on an always-on Linux server and use it through SSH. The host owns the daemon, conversations, agent processes, workspaces, and tmux sessions.
 
 :::note[New to wi?]
 Follow the [installation guide](getting-started/installation/) and then the [quick start](getting-started/quick-start/). The quick start takes you through both interactive and unattended agent workflows.
@@ -55,5 +57,6 @@ wi archive add-request-retries
 - [Delegate work](guides/delegation/) covers background TUI and headless agents.
 - [Review agent work](guides/review-and-follow-up/) covers diffs, tests, and corrections.
 - [Use tmux](guides/tmux/) covers interactive navigation.
+- [Run wi on a server](guides/hosted-workstation/) covers an always-on workstation reached through SSH.
 - [Troubleshooting](reference/troubleshooting/) explains common refusals and failures.
 - [Command map](reference/commands/) lists commands by responsibility.

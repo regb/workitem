@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/regb/workitem/internal/config"
@@ -35,6 +36,56 @@ func TestLoadRejectsRelativeDirenvAutoTrustRepository(t *testing.T) {
 	writeFile(t, path, "[direnv]\nauto_trust_repositories = [\"relative/repo\"]\n")
 	if _, _, err := config.Load(path); err == nil {
 		t.Fatal("expected relative auto-trust path rejection")
+	}
+}
+
+func TestLoadExecutorDefinition(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	content := `[executors.macbook]
+destination = "macbook"
+ssh_command = "/usr/bin/ssh"
+wi_command = "/Users/regb/go/bin/wi"
+shell = "/run/current-system/sw/bin/bash"
+tmux_mode_keys = "vi"
+forward_env = ["TERM", "COLORTERM"]
+
+[executors.macbook.agents.default.config]
+executable = "/Users/regb/.nix-profile/bin/pi"
+
+[executors.macbook.drivers.custom]
+command = "/Users/regb/bin/custom-driver"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warnings, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(warnings) != 0 {
+		t.Fatalf("warnings=%v", warnings)
+	}
+	got := cfg.Executors["macbook"]
+	if got.Destination != "macbook" || got.WICommand != "/Users/regb/go/bin/wi" || got.TmuxModeKeys != "vi" || len(got.ForwardEnv) != 2 || got.Agents["default"].Config["executable"] != "/Users/regb/.nix-profile/bin/pi" || got.Drivers["custom"].Command != "/Users/regb/bin/custom-driver" {
+		t.Fatalf("executor=%+v", got)
+	}
+}
+
+func TestLoadExecutorRejectsInvalidTmuxModeKeys(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	writeFile(t, path, "[executors.bad]\ndestination = \"host\"\ntmux_mode_keys = \"vim\"\n")
+	if _, _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "must be vi or emacs") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestLoadExecutorRejectsMissingDestination(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[executors.bad]\nssh_command = \"ssh\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "requires destination") {
+		t.Fatalf("err=%v", err)
 	}
 }
 

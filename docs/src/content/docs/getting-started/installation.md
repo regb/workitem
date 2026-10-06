@@ -3,7 +3,7 @@ title: Install wi
 description: Install the current development build and its runtime dependencies.
 ---
 
-`wi` is currently distributed from source and follows `main`. It targets Linux first and requires Go 1.24 or newer. Expect development releases to change while the command set settles.
+`wi` is currently distributed from source and follows `main`. It targets Linux first and requires Go 1.24 or newer. Install it on the machine that will own your work items. This can be a laptop or an always-on Linux server reached through SSH. Expect development releases to change while the command set settles.
 
 ## Prerequisites
 
@@ -48,6 +48,8 @@ wi info
 Development versions include the Git revision and report a dirty checkout. This identifies the code behind a local installation without a manual development version number.
 
 The daemon starts automatically when an ordinary command needs it. You do not need to start tmux before running `wi`; TUI operations create or reuse the required server and sessions.
+
+For a hosted setup, perform the installation and Pi configuration on the server account, then attach with SSH. The server owns the Wi data root, conversations, agent processes, repositories, and tmux sessions. Read [Run wi on a server](../../guides/hosted-workstation/) before treating that host as persistent infrastructure.
 
 ## Update
 

@@ -65,16 +65,35 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (MergeResult
 		return MergeResult{}, err
 	}
 	res := MergeResult{WorkItemID: m.ID, SourceBranch: expectedCheckoutBranch(m), Warnings: []string{}}
-	if m.Checkout.Kind == model.WorkspaceKindRepositoryHome {
+	if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome {
 		return res, fmt.Errorf("repository-home work item is already on the local default branch; commit and push with normal Git commands instead of `wi merge`")
 	}
 	if m.State != model.StateWorking && m.State != model.StateWaiting {
 		return res, fmt.Errorf("work item %s is %s; merge requires a working or waiting item", m.ID, m.State)
 	}
-	if !m.Checkout.Present() || m.Checkout.Path == nil || strings.TrimSpace(*m.Checkout.Path) == "" {
+	if m.Checkout.Specification.Executor != "" && m.Checkout.Specification.Executor != model.ExecutorLocal {
+		released, err := a.ReleaseWorkItemWorkspace(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}, false)
+		if err != nil {
+			return res, fmt.Errorf("return remote workspace before merge: %w", err)
+		}
+		m = released.Manifest
+		previousExecutor := m.Checkout.Specification.Executor
+		m.Checkout.Specification.Executor = model.ExecutorLocal
+		m.UpdatedAt = a.now()
+		if err := a.Store.SaveManifest(ctx, m); err != nil {
+			return res, err
+		}
+		_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "checkout.executor_returned", "wi", map[string]any{"previous_executor": previousExecutor, "executor": model.ExecutorLocal}))
+		workspace, err := a.EnsureWorkItemWorkspace(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env})
+		if err != nil {
+			return res, fmt.Errorf("materialize returned workspace before merge: %w", err)
+		}
+		m = workspace.Manifest
+	}
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || strings.TrimSpace(m.Checkout.Claim.Path) == "" {
 		return res, fmt.Errorf("work item %s has no checkout; start it before merging", m.ID)
 	}
-	res.SourcePath = *m.Checkout.Path
+	res.SourcePath = m.Checkout.Claim.Path
 	mg, ok := a.Git.(mergeGit)
 	if !ok {
 		return res, fmt.Errorf("configured Git adapter does not support merge operations")

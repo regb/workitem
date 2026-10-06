@@ -267,6 +267,9 @@ func printWorkList(w io.Writer, res app.WorkListResult, mode string, color bool,
 				displayCell = colorBold(displayCell, color)
 			}
 			repository := item.Repository
+			if item.Executor != "" && item.Executor != model.ExecutorLocal {
+				repository += " " + colorRemoteExecutor("@"+item.Executor, color)
+			}
 			if item.RepositoryHome {
 				repository += " (" + colorBold("home", color) + ")"
 			}
@@ -506,6 +509,13 @@ func colorLabelWithKey(label, key string, enabled bool) string {
 	_, _ = h.Write([]byte(key))
 	code := palette[int(h.Sum32())%len(palette)]
 	return fmt.Sprintf("\x1b[%dm%s\x1b[0m", code, label)
+}
+
+func colorRemoteExecutor(s string, enabled bool) string {
+	if !enabled || s == "" {
+		return s
+	}
+	return "\x1b[1;96m" + s + "\x1b[0m"
 }
 
 func colorWarning(s string, enabled bool) string {

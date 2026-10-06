@@ -72,4 +72,6 @@ Data directories and daemon endpoints are restricted to the current user.
 
 The separate agent-tool socket grants fewer commands than the operator socket. Sandboxed agents can file safe managed-slot backlog work, but they cannot control lifecycle, workspaces, runtimes, terminals, deletion, or shutdown.
 
+The executor socket is also restricted. It is reserved for explicitly authorized commands from executor environments; workspace tool execution uses the separate claim-fenced executor protocol. The full operator socket is never forwarded.
+
 The database stores compact runtime events, not complete prompts, responses, text deltas, tool arguments, paths, or error text. Full conversation content remains in Pi's native session files.

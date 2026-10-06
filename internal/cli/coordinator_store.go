@@ -18,6 +18,9 @@ func BindCoordinatorApp(application *app.App, native *storepkg.Store, client *co
 	application.Store = newCoordinatorStore(native, client)
 	application.DaemonSocketPath = client.SocketPath
 	application.ConversationProjectionObserver = coordinatorConversationObserver(client)
+	// Lists read the daemon's observation projection for every item. Explicit
+	// status and control commands synchronize remote items over SSH, but a list
+	// must not open one SSH connection per remote item.
 	application.WorkListObserver = coordinatorWorkListObserver(client)
 }
 

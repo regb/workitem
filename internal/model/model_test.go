@@ -2,6 +2,7 @@ package model_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -103,6 +104,64 @@ func TestNewManifestUsesEmptyLabelsAndNoPiRegistry(t *testing.T) {
 	}
 	if m.PrimaryConversation != nil {
 		t.Fatalf("new manifest should not pre-register a primary conversation: %+v", m)
+	}
+}
+
+func TestNewManifestUsesLocalExecutor(t *testing.T) {
+	manifest := model.NewManifest("01KZYHGDCECSFS4BJ2SNTQP49V", "executor", "Executor", nil, false, time.Now(), model.Repository{}, model.Checkout{})
+	if manifest.Checkout.Specification.Executor != model.ExecutorLocal {
+		t.Fatalf("executor=%q", manifest.Checkout.Specification.Executor)
+	}
+}
+
+func TestCheckoutJSONSeparatesSpecificationAndClaim(t *testing.T) {
+	checkout := model.NewCheckout(model.WorkspaceKindManagedSlot, "macbook", "wi/example")
+	checkout.ClaimGeneration = 1
+	checkout.Claim = &model.WorkspaceClaim{ID: "claim-1", Generation: 1, Executor: "macbook", RepositoryKey: "repo", Slot: "slot-0001", Path: "/worker/slot-0001"}
+	encoded, err := json.Marshal(checkout)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(encoded)
+	if !strings.Contains(text, `"specification"`) || !strings.Contains(text, `"claim_generation":1`) || !strings.Contains(text, `"generation":1`) || strings.HasPrefix(text, `{"kind"`) {
+		t.Fatalf("checkout JSON=%s", text)
+	}
+}
+
+func TestWorkspaceClaimsHaveMonotonicGenerations(t *testing.T) {
+	checkout := model.NewCheckout(model.WorkspaceKindManagedSlot, "macbook", "wi/example")
+	first, err := checkout.AssignNewClaim("macbook", "repo", "slot-0001", "/worker/slot-0001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Generation != 1 || checkout.ClaimGeneration != 1 || !checkout.EverMaterialized() {
+		t.Fatalf("first=%+v checkout=%+v", first, checkout)
+	}
+	checkout.ClearClaim()
+	second, err := checkout.AssignNewClaim("macbook", "repo", "slot-0002", "/worker/slot-0002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Generation != 2 || checkout.ClaimGeneration != 2 {
+		t.Fatalf("second=%+v checkout=%+v", second, checkout)
+	}
+}
+
+func TestCheckoutRejectsSkippedClaimGeneration(t *testing.T) {
+	checkout := model.NewCheckout(model.WorkspaceKindManagedSlot, "macbook", "wi/example")
+	err := checkout.AcceptClaim(model.WorkspaceClaim{ID: "claim-2", Generation: 2, Executor: "macbook", Path: "/worker/slot"})
+	if err == nil || !strings.Contains(err.Error(), "does not follow") {
+		t.Fatalf("err=%v", err)
+	}
+}
+
+func TestCheckoutReadsLegacyFlatJSON(t *testing.T) {
+	var checkout model.Checkout
+	if err := json.Unmarshal([]byte(`{"kind":"managed-slot","executor":"macbook","slot":"slot-0002","path":"/worker/slot-0002","branch":"wi/example"}`), &checkout); err != nil {
+		t.Fatal(err)
+	}
+	if checkout.Specification.Executor != "macbook" || checkout.Specification.Branch != "wi/example" || checkout.ClaimGeneration != 1 || checkout.Claim == nil || checkout.Claim.Generation != 1 || checkout.Claim.Slot != "slot-0002" || checkout.Claim.Path != "/worker/slot-0002" {
+		t.Fatalf("checkout=%+v", checkout)
 	}
 }
 

@@ -7,7 +7,8 @@
 - A workspace is a Git checkout claim/materialization, not a tmux session or coding-agent process.
 - Checkout kinds are reusable `managed-slot` worktrees and exclusive borrowed `repository-home` claims.
 - Each item has at most one durable primary agent conversation, created when agent work starts, and at most one active runtime owner.
-- TUI runtimes use tmux; headless runtimes must remain tmux-independent.
+- Wi is local-first: one host owns a data root, daemon, native content, runtime processes, and user-facing tmux. That host may be a laptop or an always-on server reached through SSH.
+- TUI runtimes use tmux on the Wi host; headless runtimes must remain tmux-independent.
 - Agent status (`busy`, `idle`, `problem`) and worktree status (`absent`, `clean`, `changed`, `problem`) are separate observations.
 - The daemon's private `wi.db` is canonical for domain state, revisions, compact events, and read projections. Native agent conversations and descriptions remain canonical filesystem content. Runtime and terminal metadata are rebuildable caches; diagnostic logs live under XDG state and sockets under the XDG runtime directory.
 
@@ -15,18 +16,19 @@
 
 - `work item`: The stable durable aggregate. It owns identity, description, lifecycle, labels, deep-work classification, source context, checkout specification and claim state, primary conversation identity, and append-only history. It may exist without a materialized workspace, live runtime, or terminal.
 - `source context`: The repository identity and created-from commit recorded when the item is created. In the current schema this includes the repository root at creation, Git common directory, sanitized origin URL, and `created_from_commit`. It remains useful provenance after refs and the implementation branch advance.
-- `checkout specification`: The durable instructions and current claim for materializing work: checkout kind, implementation branch, and assigned path when present. The immutable created-from commit belongs to source context, not checkout state.
+- `checkout specification`: Durable instructions for materializing work: checkout kind, selected executor, and implementation branch. The immutable created-from commit belongs to source context, not checkout state. The specification may exist without a workspace claim.
 - `checkout kind`: The workspace policy. `managed-slot` uses a reusable wi-owned worktree slot. `repository-home` borrows the repository's primary checkout through an exclusive logical claim and never makes that external checkout wi-owned.
-- `workspace`: The logical Git checkout claim and its materialization for one item. A workspace is not a directory alone, a tmux session, or a coding-agent process.
+- `workspace claim`: The durable identity of one materialized checkout assignment: claim ID, monotonic generation, executor, repository key, slot, and path. It is absent before materialization and cleared on release, while the latest generation remains durable.
 - `materialization`: Creation or attachment of external resources described by durable state, such as assigning a managed slot, checking out the implementation branch, or recognizing a claimed repository home.
 - `worktree`: A concrete Git working tree observed by wi. Managed worktrees may remain as warm reusable slot directories after an item releases its workspace claim.
-- `managed slot`: A wi-owned reusable worktree location. Slots are claimed by items, reset and validated before reuse, and retained to preserve build caches.
+- `managed slot`: A wi-owned reusable worktree location on one executor. Slots are claimed by items, reset and validated before reuse, and retained to preserve build caches.
+- `executor`: A machine that materializes a managed slot and runs claim-fenced workspace tools. Pi, conversations, runtime ownership, and user-facing tmux remain on the Wi host. `local` is the Wi host.
 - `repository-home claim`: An exclusive logical claim on the repository's primary checkout. Releasing or deleting the item relinquishes the claim but does not modify or delete that checkout.
 - `lifecycle`: The durable work-item state: `backlog`, `working`, `waiting`, or `archived`. Lifecycle does not by itself describe whether a workspace, runtime, or terminal currently exists.
 - `deep work`: A durable item classification subject to configured active-capacity policy. It is not a label.
 - `primary conversation`: The item's durable driver-owned conversation identity and native history. It is created when agent work first starts and survives runtime restarts. An item has at most one primary conversation.
 - `runtime`: One live or recorded coding-agent process instance that owns the primary conversation for a period. Successive runtimes may resume the same conversation; a runtime is not the conversation itself.
-- `runtime owner`: The sole runtime currently authorized to write the primary conversation and affect runtime-activity projections. Ownership includes runtime ID and verified process identity; events from superseded runtime IDs are rejected.
+- `runtime owner`: The sole runtime currently authorized to write the primary conversation and affect runtime-activity projections. Ownership includes runtime ID, workspace claim ID and generation, and verified process identity. Events from superseded runtime IDs are rejected.
 - `runtime mode`: `tui` runs a driver's interactive interface and is composed with tmux. `headless` runs headlessly and must not depend on tmux.
 - `runtime activity`: Compact semantic facts reported by the current runtime, such as ready, turn started, tool started, and settled. Activity drives busy/idle observation but does not contain unrestricted prompts, responses, deltas, tool arguments, paths, or errors.
 - `agent status`: The derived `busy|idle|problem` observation for the primary agent. It is separate from lifecycle and worktree status.
@@ -69,12 +71,17 @@
 - `internal/agent/`: driver-neutral runtime protocol.
 - `internal/agentdriver/`: driver process host and clients; bundled driver implementations live in child packages such as `internal/agentdriver/pi/`.
 - `internal/git/`, `internal/tmux/`, `internal/direnv/`, `internal/process/`: external-system adapters.
+- `docs/internal/remote-agent-placement.md`: local-first deployment, hosted-workstation access, remote workspace tools, and future availability boundaries.
+- `docs/internal/remote-execution.md`: agreed per-item box design that replaces the transitional SSH executor and worker daemon; read it and `HANDOFF.md` before changing remote execution code.
 
 ## Architectural constraints
 
 - Keep durable-item primitives independent of workspace, agent, attention, and tmux operations.
 - Workspace primitives must not create terminal sessions or agent conversations.
 - Primary-agent core must not conceptually depend on tmux; only TUI composition may require it.
+- The Wi host remains canonical for remotely placed workspaces. Executors own replaceable Git materializations and claim-fenced tool processes, not work-item, conversation, or runtime authority.
+- Remote workspace operations must carry and validate the current claim identity and fail closed without local filesystem fallback.
+- Treat SSH and future web clients as access methods. They must not become work-item, conversation, workspace, or runtime identity.
 - Attention may rank observations but must not choose or enter an access mechanism.
 - Low-level terminal operations must not select work or create an agent.
 - Cross-cutting use cases may compose core areas and adapters. Lower layers must not invoke use cases.
