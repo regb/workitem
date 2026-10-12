@@ -292,39 +292,15 @@ func TestAttachOrSwitchRecoversUnexpandedClientFormat(t *testing.T) {
 	}
 }
 
-func TestEnsureGatewaySessionCreatesAgentAndShellLayout(t *testing.T) {
-	r := &recordingRunner{
-		outs: [][]byte{nil, nil, nil, []byte("agent\n"), []byte("agent\n")},
-		errs: []error{errors.New("missing: exit status 1")},
-	}
-	client := tmux.Client{Path: "tmux", Runner: r}
-	created, err := client.EnsureGatewaySession(context.Background(), tmux.SessionSpec{Name: "wi-remote", CWD: "/tmp"}, []string{"ssh", "worker", "agent"}, []string{"ssh", "worker", "shell"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !created {
-		t.Fatal("expected session creation")
-	}
-	wantOption := []string{"set-option", "-t", "wi-remote", "default-command", "ssh worker shell"}
-	wantShell := []string{"new-window", "-d", "-t", "wi-remote:", "-n", "shell", "-c", "/tmp", "ssh worker shell"}
-	if len(r.calls) != 7 || !reflect.DeepEqual(r.calls[3].Args, wantOption) || !reflect.DeepEqual(r.calls[6].Args, wantShell) {
-		t.Fatalf("calls=%+v", r.calls)
-	}
-}
-
-func TestEnsureCommandSessionStartsCommandInOnlyWindow(t *testing.T) {
+func TestEnsureSessionStartsExecutorShellWithoutChangingHostCWD(t *testing.T) {
 	r := &recordingRunner{errs: []error{errors.New("missing: exit status 1")}}
 	client := tmux.Client{Path: "tmux", Runner: r}
-	created, err := client.EnsureCommandSession(context.Background(), tmux.SessionSpec{Name: "wi-remote", CWD: "/tmp", Env: map[string]string{"WI_ID": "item"}}, "agent", []string{"ssh", "worker name"})
-	if err != nil {
-		t.Fatal(err)
+	created, err := client.EnsureSession(context.Background(), tmux.SessionSpec{Name: "wi-executor", CWD: "/host/item", ShellCommand: []string{"/host/wi", "internal-executor-attach", "item"}})
+	if err != nil || !created {
+		t.Fatalf("created=%t err=%v", created, err)
 	}
-	if !created {
-		t.Fatal("expected session creation")
-	}
-	wantCreate := []string{"new-session", "-d", "-s", "wi-remote", "-c", "/tmp", "-n", "agent", "sleep 2147483647"}
-	wantStart := []string{"respawn-pane", "-k", "-c", "/tmp", "-t", "wi-remote:agent", "ssh 'worker name'"}
-	if len(r.calls) != 4 || !reflect.DeepEqual(r.calls[1].Args, wantCreate) || !reflect.DeepEqual(r.calls[2].Args, []string{"set-environment", "-t", "wi-remote", "WI_ID", "item"}) || !reflect.DeepEqual(r.calls[3].Args, wantStart) {
+	want := []string{"new-window", "-t", "wi-executor:", "-n", "shell", "-c", "/host/item", "/host/wi internal-executor-attach item"}
+	if len(r.calls) != 4 || !reflect.DeepEqual(r.calls[2].Args, want) {
 		t.Fatalf("calls=%+v", r.calls)
 	}
 }

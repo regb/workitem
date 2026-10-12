@@ -28,7 +28,7 @@ func (s *Service) Prepare(ctx context.Context, m model.Manifest, session model.C
 	}
 	now := s.now()
 	runtimeID := fmt.Sprintf("%s-%d", mode, now.UnixNano())
-	runtime := model.AgentRuntime{ID: runtimeID, WorkItemID: m.ID, Mode: string(mode), State: model.AgentRuntimeStarting, ConversationID: session.ID, Executor: model.ExecutorLocal, StartedAt: now, UpdatedAt: now}
+	runtime := model.AgentRuntime{ID: runtimeID, WorkItemID: m.ID, Mode: string(mode), State: model.AgentRuntimeStarting, ConversationID: session.ID, StartedAt: now, UpdatedAt: now}
 	if claim := m.Checkout.Claim; claim != nil {
 		runtime.WorkspaceClaimID = claim.ID
 		runtime.WorkspaceClaimGeneration = claim.Generation

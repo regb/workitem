@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/regb/workitem/internal/executor"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/priority"
 )
@@ -19,6 +20,7 @@ const (
 )
 
 type Config struct {
+	Executors   map[string]executor.Profile       `json:"executors,omitempty"`
 	DeepWork    DeepWorkConfig                    `json:"deep_work"`
 	Item        ItemConfig                        `json:"item"`
 	List        ListConfig                        `json:"list"`
@@ -27,7 +29,6 @@ type Config struct {
 	Direnv      DirenvConfig                      `json:"direnv"`
 	Agents      map[string]AgentDefinitionConfig  `json:"agents"`
 	Drivers     map[string]DriverDefinitionConfig `json:"drivers"`
-	Executors   map[string]ExecutorConfig         `json:"executors,omitempty"`
 }
 
 type AgentDefinitionConfig struct {
@@ -38,25 +39,6 @@ type AgentDefinitionConfig struct {
 type DriverDefinitionConfig struct {
 	Command  string         `json:"command,omitempty"`
 	Defaults map[string]any `json:"defaults,omitempty"`
-}
-
-type ExecutorConfig struct {
-	Destination  string                          `json:"destination"`
-	SSHCommand   string                          `json:"ssh_command,omitempty"`
-	WICommand    string                          `json:"wi_command,omitempty"`
-	Shell        string                          `json:"shell,omitempty"`
-	TmuxModeKeys string                          `json:"tmux_mode_keys,omitempty"`
-	ForwardEnv   []string                        `json:"forward_env,omitempty"`
-	Agents       map[string]ExecutorAgentConfig  `json:"agents,omitempty"`
-	Drivers      map[string]ExecutorDriverConfig `json:"drivers,omitempty"`
-}
-
-type ExecutorDriverConfig struct {
-	Command string `json:"command"`
-}
-
-type ExecutorAgentConfig struct {
-	Config map[string]any `json:"config,omitempty"`
 }
 
 type ProjectConfig struct {
@@ -101,7 +83,7 @@ type DirenvConfig struct {
 }
 
 func Default() Config {
-	return Config{DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{"default": {Driver: "pi", Config: map[string]any{}}}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}}, Executors: map[string]ExecutorConfig{}}
+	return Config{Executors: map[string]executor.Profile{}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{"default": {Driver: "pi", Config: map[string]any{}}}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}}}
 }
 
 func Load(path string) (Config, []string, error) {
@@ -147,7 +129,7 @@ func Load(path string) (Config, []string, error) {
 		}
 		if handled, err := parseExecutorSetting(&cfg, section, key, value); handled {
 			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse %s.%s on line %d: %w", section, key, lineNo, err)
+				return cfg, warnings, fmt.Errorf("line %d: %w", lineNo, err)
 			}
 			continue
 		}
@@ -201,6 +183,14 @@ func Load(path string) (Config, []string, error) {
 }
 
 func Validate(cfg Config) error {
+	for name, profile := range cfg.Executors {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("executor profile name is required")
+		}
+		if err := profile.Validate(); err != nil {
+			return fmt.Errorf("executor %q: %w", name, err)
+		}
+	}
 	if cfg.DeepWork.MaxActive < 0 {
 		return fmt.Errorf("deep_work.max_active must be nonnegative")
 	}
@@ -228,109 +218,12 @@ func Validate(cfg Config) error {
 			return fmt.Errorf("agent %q selects unconfigured driver %q", name, definition.Driver)
 		}
 	}
-	for name, executor := range cfg.Executors {
-		if strings.TrimSpace(name) == "" {
-			return fmt.Errorf("executor definitions require a name")
-		}
-		if destination := strings.TrimSpace(executor.Destination); destination == "" {
-			return fmt.Errorf("executor %q requires destination", name)
-		} else if strings.HasPrefix(destination, "-") || strings.ContainsAny(destination, " \t") {
-			return fmt.Errorf("executor %q destination must be one SSH destination without options", name)
-		}
-		for _, value := range []string{executor.Destination, executor.SSHCommand, executor.WICommand, executor.Shell} {
-			if strings.ContainsAny(value, "\r\n\x00") {
-				return fmt.Errorf("executor %q contains an invalid command or destination", name)
-			}
-		}
-		if modeKeys := strings.TrimSpace(executor.TmuxModeKeys); modeKeys != "" && modeKeys != "vi" && modeKeys != "emacs" {
-			return fmt.Errorf("executor %q tmux_mode_keys must be vi or emacs", name)
-		}
-		for _, key := range executor.ForwardEnv {
-			if strings.TrimSpace(key) == "" || strings.ContainsAny(key, "=\r\n\x00") {
-				return fmt.Errorf("executor %q contains invalid forward_env key %q", name, key)
-			}
-		}
-		for driverName, driver := range executor.Drivers {
-			if strings.TrimSpace(driverName) == "" || strings.ContainsAny(driverName, ".\r\n\x00") {
-				return fmt.Errorf("executor %q contains invalid driver name %q", name, driverName)
-			}
-			if strings.ContainsAny(driver.Command, "\r\n\x00") {
-				return fmt.Errorf("executor %q driver %q contains an invalid command", name, driverName)
-			}
-		}
-	}
 	for _, repository := range cfg.Direnv.AutoTrustRepositories {
 		if !filepath.IsAbs(strings.TrimSpace(repository)) {
 			return fmt.Errorf("direnv.auto_trust_repositories entries must be absolute paths: %q", repository)
 		}
 	}
 	return nil
-}
-
-func parseExecutorSetting(cfg *Config, section, key, value string) (bool, error) {
-	parts := strings.Split(section, ".")
-	if len(parts) < 2 || parts[0] != "executors" {
-		return false, nil
-	}
-	name := strings.TrimSpace(parts[1])
-	executor := cfg.Executors[name]
-	if executor.Agents == nil {
-		executor.Agents = map[string]ExecutorAgentConfig{}
-	}
-	if executor.Drivers == nil {
-		executor.Drivers = map[string]ExecutorDriverConfig{}
-	}
-	if len(parts) == 4 && parts[2] == "drivers" {
-		driverName := strings.TrimSpace(parts[3])
-		driver := executor.Drivers[driverName]
-		if key != "command" {
-			return false, nil
-		}
-		driver.Command = parseStringValue(value)
-		executor.Drivers[driverName] = driver
-		cfg.Executors[name] = executor
-		return true, nil
-	}
-	if len(parts) == 5 && parts[2] == "agents" && parts[4] == "config" {
-		agentName := strings.TrimSpace(parts[3])
-		agent := executor.Agents[agentName]
-		if agent.Config == nil {
-			agent.Config = map[string]any{}
-		}
-		parsed, err := parseDriverValue(value)
-		if err != nil {
-			return true, err
-		}
-		agent.Config[key] = parsed
-		executor.Agents[agentName] = agent
-		cfg.Executors[name] = executor
-		return true, nil
-	}
-	if len(parts) != 2 {
-		return false, nil
-	}
-	switch key {
-	case "destination":
-		executor.Destination = parseStringValue(value)
-	case "ssh_command":
-		executor.SSHCommand = parseStringValue(value)
-	case "wi_command":
-		executor.WICommand = parseStringValue(value)
-	case "shell":
-		executor.Shell = parseStringValue(value)
-	case "tmux_mode_keys":
-		executor.TmuxModeKeys = parseStringValue(value)
-	case "forward_env":
-		values, err := parseStringArray(value)
-		if err != nil {
-			return true, err
-		}
-		executor.ForwardEnv = values
-	default:
-		return false, nil
-	}
-	cfg.Executors[name] = executor
-	return true, nil
 }
 
 func parseAgentDriverSetting(cfg *Config, section, key, value string) (bool, error) {

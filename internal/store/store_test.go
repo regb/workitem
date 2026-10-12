@@ -326,5 +326,5 @@ func manifest(t *testing.T, id, title string, now time.Time) model.Manifest {
 		GitCommonDir:      filepath.Join(t.TempDir(), ".git"),
 		RemoteURL:         "",
 		CreatedFromCommit: strings.Repeat("a", 40),
-	}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("item", id)))
+	}, model.NewCheckout(model.WorkspaceKindManagedSlot, "", model.ItemBranchName("item", id)))
 }

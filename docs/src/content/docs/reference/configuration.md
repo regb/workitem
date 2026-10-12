@@ -1,6 +1,6 @@
 ---
 title: Configuration
-description: Configure capacity, agents, remote executors, and display.
+description: Configure capacity, labels, attention ranking, direnv trust, and display.
 ---
 
 User configuration lives at:
@@ -46,10 +46,6 @@ driver = "pi"
 
 [agents.web-search.config]
 extensions = ["/home/me/tools/web-search.ts"]
-
-[executors.macbook]
-destination = "macbook"
-wi_command = "/Users/me/go/bin/wi"
 ```
 
 ## Deep-work capacity
@@ -105,15 +101,27 @@ wi start --new --agent web-search "Investigate rendering"
 
 External driver programs use wi's versioned bootstrap protocol. The standard Pi driver runs as the separate `wi internal-driver pi` process from the installed `wi` binary, so it is always present and has the same build version. A configured `drivers.<name>.command` selects a trusted external driver executable; repository configuration cannot register drivers or agent definitions.
 
-## Executors
+## Docker and SSH executors
 
-`[executors.<name>]` registers an SSH workspace executor. `destination` is one SSH destination or host alias. `ssh_command` and `wi_command` select the Wi-host SSH executable and executor-local Wi executable. The executor must already have a compatible Wi version, Git, and the project toolchain. Wi does not provision it.
+```toml
+[executors.dev]
+driver = "docker"
+image = "wi-dev"
+network = "none"
+```
 
-Pi and its configuration remain on the Wi host. The executor does not need Pi, user Pi settings, or tmux. Tool operations inherit the executor Wi process environment; arbitrary caller environment and host credentials are not forwarded as executor configuration.
+Select a profile with `wi new --executor dev` or `wi start --new --executor dev`. Docker network accepts `none`, the default, or `bridge`. For SSH, configure an existing host and a dedicated remote root instead:
 
-The older `shell`, `tmux_mode_keys`, `forward_env`, executor agent, and executor driver settings are reserved for persistent worker terminal support. They are not used to place Pi or its conversation on the executor.
+```toml
+[executors.builder]
+driver = "ssh"
+host = "build-server"
+root = "/home/dev/wi"
+```
 
-Use `wi executor doctor <name>` to verify SSH, Wi version, platform, and required tools.
+An optional `ssh_config` selects an absolute host-side OpenSSH config path. SSH profiles cannot specify image/network; Docker profiles cannot specify SSH fields. Claims pin these settings when provisioning starts. Unknown profile fields are rejected. Executor work requires the bundled Pi driver.
+
+See [Use executors](../../guides/executors/) for image requirements and limits.
 
 ## Environment variables
 
@@ -126,4 +134,3 @@ Use command help to see variables accepted by a specific command. Common variabl
 | `NO_COLOR` | Disable colored text output |
 | `WI_ID` | Resolve the current item inside managed environments |
 | `WI_AGENT_DAEMON_SOCKET` | Use the restricted agent-tool daemon endpoint |
-| `WI_EXECUTOR_DAEMON_SOCKET` | Coordinator-managed authoritative endpoint forwarded into remote executor environments |

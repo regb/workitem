@@ -20,7 +20,7 @@ func ExecutionCWD(m model.Manifest, _ model.Conversation) string {
 // HostExecutionCWD returns a directory that exists on the runtime host. A
 // remote workspace path is logical and must never be used as cmd.Dir locally.
 func HostExecutionCWD(m model.Manifest, conversation model.Conversation, itemDir string) string {
-	if claim := m.Checkout.Claim; claim != nil && claim.Executor != "" && claim.Executor != model.ExecutorLocal {
+	if claim := m.Checkout.Claim; claim != nil && claim.ExecutorProfile != "" {
 		return filepath.Clean(itemDir)
 	}
 	return ExecutionCWD(m, conversation)

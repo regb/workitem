@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
-	executorprotocol "github.com/regb/workitem/executor/protocol"
 	"github.com/regb/workitem/internal/agent"
 	agentcore "github.com/regb/workitem/internal/app/core/primaryagent"
 	"github.com/regb/workitem/internal/coordinator"
@@ -55,23 +54,21 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 	return a.primaryAgentService().Execute(ctx, itemID, conversationID, runtimeID, mode, func(ctx context.Context, spec agentcore.ExecutionSpec) error {
 		environment := map[string]string{"WI_ID": spec.WorkItemID, "WI_DIR": a.Store.ItemDir(spec.WorkItemID), "WI_WORKTREE": spec.CWD, "WI_AGENT_RUNTIME_ID": spec.RuntimeID, "WI_AGENT_MODE": string(spec.Mode), "WI_AGENT_CONTROL_SOCKET": spec.ControlSocketPath, "WI_AGENT_EVENT_SOCKET": spec.EventSocketPath, "WI_AGENT_CONVERSATION_DIR": spec.ConversationDir}
 		var workspaceTools *workspacetool.Server
-		if claim := manifest.Checkout.Claim; claim != nil && claim.Executor != "" && claim.Executor != model.ExecutorLocal {
-			client, err := a.executorClient(claim.Executor)
+		var syncExecutor chan<- struct{}
+		if claim := manifest.Checkout.Claim; claim != nil && claim.ExecutorProfile != "" {
+			client, err := a.executorClient(manifest)
 			if err != nil {
 				return err
 			}
 			toolSocketPath := strings.TrimSuffix(spec.ControlSocketPath, ".sock") + "-workspace.sock"
-			toolCtx, cancelTools := context.WithCancel(ctx)
-			workspaceTools, err = workspacetool.Listen(toolSocketPath, func(_ context.Context, request workspacetool.Request) (workspacetool.Response, error) {
-				result, err := client.ExecuteWorkspaceTool(toolCtx, executorprotocol.ToolRequest{ItemID: manifest.ID, ExecutorName: claim.Executor, ClaimID: claim.ID, ClaimGeneration: claim.Generation, RepositoryKey: claim.RepositoryKey, Slot: claim.Slot, CWD: request.CWD, Command: request.Command, Stdin: request.Stdin, Environment: request.Environment, TimeoutMS: request.TimeoutMS})
-				return workspacetool.Response{ExitCode: result.ExitCode, Stdout: result.Stdout, Stderr: result.Stderr, Truncated: result.Truncated}, err
-			})
+			if err := client.StopJobs(ctx); err != nil {
+				return fmt.Errorf("stop interrupted jobs before starting new runtime: %w", err)
+			}
+			workspaceTools, err = workspacetool.ListenStream(toolSocketPath, executorToolHandler(client, spec.RuntimeID))
 			if err != nil {
-				cancelTools()
 				return fmt.Errorf("listen for remote workspace tools: %w", err)
 			}
 			defer func() {
-				cancelTools()
 				_ = workspaceTools.Close()
 				_ = os.Remove(toolSocketPath)
 			}()
@@ -84,7 +81,11 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 				runtimeCommand = "wi"
 			}
 			environment["WI_WORKSPACE_RUNTIME"] = runtimeCommand
-			environment["WI_WORKSPACE_EXECUTOR"] = claim.Executor
+			environment["WI_WORKSPACE_PROFILE"] = claim.ExecutorProfile
+			environment["WI_EXECUTOR_NOTE"] = executorEnvironmentNote(manifest)
+			var stopSync func()
+			syncExecutor, stopSync = a.settledExecutorSync(ctx, manifest.ID, spec.RuntimeID, claim.ID)
+			defer stopSync()
 		}
 		events, err := driverprotocol.ListenEvents(spec.EventSocketPath)
 		if err != nil {
@@ -102,6 +103,12 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 				}
 				_, err := client.IngestRuntimeEvent(ctx, coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed})
 				request.Respond(err)
+				if err == nil && event.Type == driverprotocol.EventAgentSettled && syncExecutor != nil {
+					select {
+					case syncExecutor <- struct{}{}:
+					default:
+					}
+				}
 			}
 		}()
 		config, _ := json.Marshal(driverConfig)

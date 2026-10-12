@@ -31,24 +31,24 @@ type Options struct {
 	LabelRules      map[string]bool
 }
 type Item struct {
-	ID             string          `json:"id"`
-	Slug           string          `json:"slug"`
-	Title          string          `json:"title"`
-	State          string          `json:"state"`
-	Labels         []string        `json:"labels"`
-	DeepWork       bool            `json:"deep_work"`
-	CapacityFull   bool            `json:"capacity_full,omitempty"`
-	Repository     string          `json:"repository"`
-	Executor       string          `json:"executor"`
-	RepositoryHome bool            `json:"repository_home,omitempty"`
-	Agent          *AgentStatus    `json:"agent,omitempty"`
-	Worktree       *WorktreeStatus `json:"worktree,omitempty"`
-	Attention      *Activity       `json:"attention,omitempty"`
-	AttentionRank  int             `json:"attention_rank,omitempty"`
-	CreatedAt      time.Time       `json:"created_at"`
-	UpdatedAt      time.Time       `json:"updated_at"`
-	ChangedAt      time.Time       `json:"state_changed_at"`
-	Manifest       model.Manifest  `json:"manifest,omitempty"`
+	ID              string          `json:"id"`
+	Slug            string          `json:"slug"`
+	Title           string          `json:"title"`
+	State           string          `json:"state"`
+	Labels          []string        `json:"labels"`
+	DeepWork        bool            `json:"deep_work"`
+	CapacityFull    bool            `json:"capacity_full,omitempty"`
+	Repository      string          `json:"repository"`
+	ExecutorProfile string          `json:"executor_profile,omitempty"`
+	RepositoryHome  bool            `json:"repository_home,omitempty"`
+	Agent           *AgentStatus    `json:"agent,omitempty"`
+	Worktree        *WorktreeStatus `json:"worktree,omitempty"`
+	Attention       *Activity       `json:"attention,omitempty"`
+	AttentionRank   int             `json:"attention_rank,omitempty"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+	ChangedAt       time.Time       `json:"state_changed_at"`
+	Manifest        model.Manifest  `json:"manifest,omitempty"`
 }
 type AgentStatus struct {
 	Status                 string `json:"status"`
@@ -215,7 +215,7 @@ func ProjectItem(m model.Manifest, folders int) Item {
 }
 
 func makeItem(m model.Manifest, full bool, folders int) Item {
-	return Item{ID: m.ID, Slug: m.Slug, Title: m.Title, State: m.State, Labels: append([]string{}, m.Labels...), DeepWork: m.DeepWork, CapacityFull: full, Repository: repositoryName(m.Repository, folders), Executor: m.Checkout.Specification.Executor, RepositoryHome: m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, ChangedAt: m.StateChangedAt}
+	return Item{ID: m.ID, Slug: m.Slug, Title: m.Title, State: m.State, Labels: append([]string{}, m.Labels...), DeepWork: m.DeepWork, CapacityFull: full, Repository: repositoryName(m.Repository, folders), ExecutorProfile: m.Checkout.Specification.ExecutorProfile, RepositoryHome: m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, ChangedAt: m.StateChangedAt}
 }
 func repositoryName(repo model.Repository, folders int) string {
 	if folders < 1 {

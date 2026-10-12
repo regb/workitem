@@ -3,275 +3,239 @@ package app
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
-	"path/filepath"
-	"sort"
-	"strconv"
-	"strings"
 
-	executorprotocol "github.com/regb/workitem/executor/protocol"
-	executorclient "github.com/regb/workitem/internal/executor"
+	"github.com/regb/workitem/internal/executor"
+	"github.com/regb/workitem/internal/lock"
 	"github.com/regb/workitem/internal/model"
-	"github.com/regb/workitem/internal/version"
 )
 
-type ExecutorClient interface {
-	Doctor(context.Context) (executorprotocol.DoctorResult, error)
-	DeleteItem(context.Context, string) error
-	ReconcileItems(context.Context, []string) (executorprotocol.ItemsResult, error)
-	EnsureWorkspace(context.Context, model.Manifest, string, string, string, string) (executorprotocol.WorkspaceResult, error)
-	WorkspaceStatus(context.Context, string) (executorprotocol.WorkspaceResult, error)
-	ReleaseWorkspace(context.Context, model.Manifest, bool) (executorprotocol.WorkspaceResult, error)
-	ImportWorkspaceBundle(context.Context, model.Manifest, []byte) error
-	ExecuteWorkspaceTool(context.Context, executorprotocol.ToolRequest) (executorprotocol.ToolResult, error)
-	Shutdown(context.Context) error
+func (a *App) executorClient(m model.Manifest) (executor.Client, error) {
+	claim := m.Checkout.Claim
+	if claim == nil || claim.Executor == nil {
+		return executor.Client{}, fmt.Errorf("item has no executor claim")
+	}
+	b := claim.Executor
+	return executor.Client{Profile: executor.Profile{Driver: b.Driver, Image: b.Image, Network: b.Network, Host: b.Host, Root: b.Root, SSHConfig: b.SSHConfig}, Identity: executor.Identity{Name: b.Name, Owner: a.MasterID + ":" + m.ID, Claim: claim.ID, Generation: claim.Generation}, Transport: a.ExecutorTransport}, nil
 }
 
-type ExecutorInfo struct {
-	Name        string `json:"name"`
-	Destination string `json:"destination"`
-}
-
-type ExecutorSelectionResult struct {
-	WorkItemID string         `json:"work_item_id"`
-	Previous   string         `json:"previous"`
-	Executor   string         `json:"executor"`
-	Changed    bool           `json:"changed"`
-	Manifest   model.Manifest `json:"manifest"`
-}
-
-type ExecutorDoctorResult struct {
-	Executor     ExecutorInfo                  `json:"executor"`
-	LocalVersion string                        `json:"local_version"`
-	Compatible   bool                          `json:"compatible"`
-	Worker       executorprotocol.DoctorResult `json:"worker"`
-	Warnings     []string                      `json:"warnings"`
-}
-
-func (a *App) SelectExecutor(ctx context.Context, opts ResolveOptions, name string) (ExecutorSelectionResult, error) {
-	manifest, err := a.ResolveItem(ctx, opts)
+func (a *App) ensureExecutorWorkspace(ctx context.Context, m model.Manifest) (model.Manifest, []string, error) {
+	guard, err := lock.Acquire(ctx, a.Store.LockPath(m.ID)+".executor")
 	if err != nil {
-		return ExecutorSelectionResult{}, err
+		return m, nil, err
 	}
-	name, err = a.resolveExecutorName(name, false)
+	defer guard.Release()
+	m, err = a.Store.LoadManifest(m.ID)
 	if err != nil {
-		return ExecutorSelectionResult{}, err
+		return m, nil, err
 	}
-	result := ExecutorSelectionResult{WorkItemID: manifest.ID, Previous: manifest.Checkout.Specification.Executor, Executor: name, Manifest: manifest}
-	if manifest.Checkout.Specification.Kind != model.WorkspaceKindManagedSlot {
-		return result, fmt.Errorf("repository-home checkout cannot select an executor")
+	if m.State == model.StateArchived {
+		return m, nil, fmt.Errorf("archived item cannot materialize an executor workspace")
 	}
-	previous := manifest.Checkout.Specification.Executor
-	if previous == "" {
-		previous = model.ExecutorLocal
-	}
-	if previous == name {
-		result.Previous, result.Executor, result.Manifest = previous, name, manifest
-		return result, nil
-	}
-	materialized, err := a.workspaceEverMaterialized(manifest)
-	if err != nil {
-		return result, err
-	}
-	if materialized {
-		return result, fmt.Errorf("executor selection is fixed after the first workspace materialization; workspace movement is not supported yet")
-	}
-	if manifest.Checkout.Present() {
-		return result, fmt.Errorf("workspace has a claim before its first recorded materialization")
-	}
-	if manifest.PrimaryConversation != nil {
-		return result, fmt.Errorf("work item has a conversation before its first recorded materialization")
-	}
-	if runtime, loadErr := a.Store.LoadAgentRuntime(manifest.ID); loadErr != nil {
-		return result, loadErr
-	} else if runtime != nil {
-		return result, fmt.Errorf("work item has a runtime before its first recorded materialization")
-	}
-	manifest.Checkout.Specification.Executor = name
-	manifest.UpdatedAt = a.now()
-	if err := a.Store.SaveManifest(ctx, manifest); err != nil {
-		return ExecutorSelectionResult{}, err
-	}
-	_ = a.Store.AppendEvent(ctx, manifest.ID, model.NewEvent(a.now(), "checkout.executor_selected", "user", map[string]any{"previous_executor": previous, "executor": name}))
-	result.Previous, result.Executor, result.Changed, result.Manifest = previous, name, true, manifest
-	return result, nil
-}
-
-func (a *App) workspaceEverMaterialized(manifest model.Manifest) (bool, error) {
-	if manifest.Checkout.EverMaterialized() {
-		return true, nil
-	}
-	events, err := a.Store.ReadEvents(manifest.ID)
-	if err != nil {
-		return false, fmt.Errorf("read workspace history: %w", err)
-	}
-	for _, event := range events {
-		if event.Type == "checkout.assigned" {
-			return true, nil
+	if m.Checkout.Claim == nil {
+		profile, ok := a.ExecutorsConfig[m.Checkout.Specification.ExecutorProfile]
+		if !ok {
+			return m, nil, fmt.Errorf("executor profile %q is not configured", m.Checkout.Specification.ExecutorProfile)
 		}
-	}
-	return false, nil
-}
-
-func (a *App) Executors() []ExecutorInfo {
-	result := make([]ExecutorInfo, 0, len(a.ExecutorsConfig))
-	for name, definition := range a.ExecutorsConfig {
-		result = append(result, ExecutorInfo{Name: name, Destination: definition.Destination})
-	}
-	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })
-	return result
-}
-
-func (a *App) executorClient(name string) (ExecutorClient, error) {
-	definition, ok := a.ExecutorsConfig[name]
-	if !ok {
-		return nil, fmt.Errorf("executor %q is not configured", name)
-	}
-	if client := a.ExecutorClients[name]; client != nil {
-		return client, nil
-	}
-	return executorclient.Client{Name: name, Definition: definition, MasterID: a.MasterID}, nil
-}
-
-func (a *App) ensureRemoteWorkspace(ctx context.Context, manifest model.Manifest) (model.Manifest, []string, error) {
-	executorName := manifest.Checkout.Specification.Executor
-	client, err := a.executorClient(executorName)
-	if err != nil {
-		return model.Manifest{}, nil, err
-	}
-	if manifest.Checkout.Present() {
-		if _, err := client.WorkspaceStatus(ctx, manifest.ID); err != nil {
-			return model.Manifest{}, nil, fmt.Errorf("inspect existing executor workspace claim %s: %w", manifest.Checkout.Claim.ID, err)
+		if err := profile.Validate(); err != nil {
+			return m, nil, err
 		}
-		return manifest, nil, nil
-	}
-	doctor, err := client.Doctor(ctx)
-	if err != nil {
-		return model.Manifest{}, nil, err
-	}
-	if doctor.Version != version.Current().Version {
-		return model.Manifest{}, nil, fmt.Errorf("executor %s wi version %s does not match coordinator version %s", executorName, doctor.Version, version.Current().Version)
-	}
-	requiredTools := []string{"git"}
-	for _, tool := range requiredTools {
-		if doctor.Tools[tool] == "missing" {
-			return model.Manifest{}, nil, fmt.Errorf("executor %s is missing required tool %s", executorName, tool)
+		claim, err := m.Checkout.AssignNewClaim(m.Checkout.Specification.ExecutorProfile, model.RepositoryKey(m.Repository), "", executor.Workdir)
+		if err != nil {
+			return m, nil, err
 		}
-	}
-	warnings := []string{}
-	if reconciled, reconcileErr := client.ReconcileItems(ctx, a.executorReplicaKeepIDs(executorName)); reconcileErr != nil {
-		warnings = append(warnings, "could not reconcile executor item replicas: "+reconcileErr.Error())
-	} else if len(reconciled.BlockedIDs) > 0 {
-		warnings = append(warnings, fmt.Sprintf("executor retained %d stale item replicas with live resources", len(reconciled.BlockedIDs)))
-	}
-	repositoryKey := executorRepositoryKey(manifest.Repository)
-	existingSlot := ""
-	if manifest.Checkout.Claim != nil {
-		existingSlot = manifest.Checkout.Claim.Slot
-	}
-	slot, err := a.remoteSlot(manifest.ID, executorName, repositoryKey, existingSlot)
-	if err != nil {
-		return model.Manifest{}, nil, err
-	}
-	description, err := os.ReadFile(filepath.Join(a.Store.ItemDir(manifest.ID), model.DescriptionFilename))
-	if err != nil && !os.IsNotExist(err) {
-		return model.Manifest{}, nil, err
-	}
-	result, err := client.EnsureWorkspace(ctx, manifest, string(description), repositoryKey, slot, "")
-	if err != nil {
-		return model.Manifest{}, nil, err
-	}
-	if strings.TrimSpace(result.ClaimID) == "" || result.Executor != executorName || result.RepositoryKey != repositoryKey {
-		return model.Manifest{}, nil, fmt.Errorf("executor returned an invalid workspace claim")
-	}
-	claim := model.WorkspaceClaim{ID: result.ClaimID, Generation: result.ClaimGeneration, Executor: executorName, RepositoryKey: repositoryKey, Slot: result.Slot, Path: result.Path}
-	if err := manifest.Checkout.AcceptClaim(claim); err != nil {
-		return model.Manifest{}, nil, fmt.Errorf("accept executor workspace claim: %w", err)
-	}
-	manifest.UpdatedAt = a.now()
-	if err := a.Store.SaveManifest(ctx, manifest); err != nil {
-		return model.Manifest{}, nil, err
-	}
-	_ = a.Store.AppendEvent(ctx, manifest.ID, model.NewEvent(a.now(), "checkout.assigned", "wi", map[string]any{"claim_id": result.ClaimID, "claim_generation": result.ClaimGeneration, "executor": executorName, "slot": result.Slot, "path": result.Path, "source": result.Source}))
-	return manifest, warnings, nil
-}
-
-func (a *App) executorReplicaKeepIDs(executorName string) []string {
-	items, _ := a.Store.ListManifests()
-	ids := []string{}
-	for _, item := range items {
-		selected := item.Checkout.Specification.Executor == executorName
-		conversation := item.PrimaryConversation != nil && item.PrimaryConversation.Executor == executorName
-		if selected || conversation {
-			ids = append(ids, item.ID)
+		claim.Executor = &model.ExecutorClaim{Name: executor.Name(a.MasterID, m.ID, claim.Generation), Driver: profile.Driver, Image: profile.Image, Network: profile.Network, Host: profile.Host, Root: profile.Root, SSHConfig: profile.SSHConfig}
+		client, err := a.executorClient(m)
+		if err != nil {
+			return m, nil, err
 		}
-	}
-	sort.Strings(ids)
-	return ids
-}
-
-func (a *App) remoteSlot(itemID, executorName, repositoryKey, existing string) (string, error) {
-	if strings.TrimSpace(existing) != "" {
-		return existing, nil
-	}
-	items, errs := a.Store.ListManifests()
-	if len(errs) > 0 {
-		return "", errs[0]
-	}
-	used := map[int]bool{}
-	for _, item := range items {
-		if item.ID == itemID || item.Checkout.Specification.Executor != executorName || executorRepositoryKey(item.Repository) != repositoryKey {
-			continue
+		claim.Path = client.Workdir()
+		m.UpdatedAt = a.now()
+		if err := a.Store.SaveManifest(ctx, m); err != nil {
+			return m, nil, err
 		}
-		if item.Checkout.Claim != nil {
-			if n, err := strconv.Atoi(strings.TrimPrefix(item.Checkout.Claim.Slot, "slot-")); err == nil && n > 0 {
-				used[n] = true
+		_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "checkout.claimed", "wi", map[string]any{"claim_id": claim.ID, "generation": claim.Generation, "executor": claim.Executor.Name}))
+	}
+	c, err := a.executorClient(m)
+	if err != nil {
+		return m, nil, err
+	}
+	if m.Checkout.Claim.Executor.Releasing {
+		return m, nil, fmt.Errorf("executor release is incomplete; retry workspace release before starting")
+	}
+	if m.Checkout.Claim.Executor.Ready {
+		if err := c.Start(ctx); err != nil {
+			return m, nil, fmt.Errorf("existing executor is unavailable; claim retained: %w", err)
+		}
+		return m, nil, nil
+	}
+	if err := c.Ensure(ctx); err != nil {
+		return m, nil, fmt.Errorf("executor claim retained; retry workspace ensure: %w", err)
+	}
+	branch := m.Checkout.Specification.Branch
+	commit := m.Repository.CreatedFromCommit
+	if head, err := executor.Git(ctx, m.Repository.OperationalRoot(), "rev-parse", "--verify", "refs/heads/"+branch+"^{commit}"); err == nil {
+		commit = head
+	}
+	// A previous released generation's export is the implementation history.
+	if m.Checkout.ClaimGeneration > 1 {
+		for generation := m.Checkout.ClaimGeneration - 1; generation > 0; generation-- {
+			if head, err := executor.Git(ctx, m.Repository.OperationalRoot(), "rev-parse", "--verify", executor.QuarantineRef(m.ID, generation)+"^{commit}"); err == nil {
+				commit = head
+				break
 			}
 		}
 	}
-	for index := 1; ; index++ {
-		if !used[index] {
-			return fmt.Sprintf("slot-%04d", index), nil
+	base, _ := a.Git.DefaultBranch(ctx, m.Repository.OperationalRoot())
+	bundle, cleanup, err := executor.Bundle(ctx, m.Repository.OperationalRoot(), branch, commit, base)
+	if err != nil {
+		return m, nil, err
+	}
+	defer cleanup()
+	file, err := os.Open(bundle)
+	if err != nil {
+		return m, nil, err
+	}
+	defer file.Close()
+	name, _ := executor.Git(ctx, m.Repository.OperationalRoot(), "config", "user.name")
+	email, _ := executor.Git(ctx, m.Repository.OperationalRoot(), "config", "user.email")
+	if name == "" {
+		name = "Wi"
+	}
+	if email == "" {
+		email = "wi@localhost"
+	}
+	if err := c.Seed(ctx, file, branch, name, email); err != nil {
+		return m, nil, err
+	}
+	m.Checkout.Claim.Executor.Ready = true
+	m.UpdatedAt = a.now()
+	if err := a.Store.SaveManifest(ctx, m); err != nil {
+		return m, nil, err
+	}
+	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "checkout.assigned", "wi", map[string]any{"claim_id": m.Checkout.Claim.ID, "generation": m.Checkout.Claim.Generation, "executor": m.Checkout.Claim.Executor.Name}))
+	return m, nil, nil
+}
+
+func (a *App) exportExecutor(ctx context.Context, m model.Manifest) (model.Manifest, error) {
+	c, err := a.executorClient(m)
+	if err != nil {
+		return m, err
+	}
+	head, err := c.Import(ctx, m.Repository.OperationalRoot(), m.ID, m.Checkout.Specification.Branch)
+	if err != nil {
+		return m, err
+	}
+	m.Checkout.Claim.Executor.ExportedHead = head
+	if err := a.Store.SaveManifest(ctx, m); err != nil {
+		return m, err
+	}
+	return m, nil
+}
+
+func (a *App) releaseExecutor(ctx context.Context, m model.Manifest, force bool) (model.Manifest, error) {
+	guard, err := lock.Acquire(ctx, a.Store.LockPath(m.ID)+".executor")
+	if err != nil {
+		return m, err
+	}
+	defer guard.Release()
+	m, err = a.Store.LoadManifest(m.ID)
+	if err != nil {
+		return m, err
+	}
+	if m.Checkout.Claim == nil {
+		return m, nil
+	}
+	c, err := a.executorClient(m)
+	if err != nil {
+		return m, err
+	}
+	b := m.Checkout.Claim.Executor
+	exists, err := c.Exists(ctx)
+	if err != nil {
+		return m, err
+	}
+	if !exists && b.Ready && !b.Destroying && !force {
+		return m, fmt.Errorf("executor is missing; use --force to release its claim using only previously exported work")
+	}
+	if exists && b.Ready && !b.Destroying {
+		if !b.Releasing {
+			status, err := c.Status(ctx)
+			if err != nil {
+				return m, err
+			}
+			if status.Branch != m.Checkout.Specification.Branch {
+				return m, fmt.Errorf("executor branch differs from item branch")
+			}
+			if status.Dirty && !force {
+				return m, fmt.Errorf("executor has uncommitted changes; commit them or explicitly force release")
+			}
+			b.Releasing = true
+			if err := a.Store.SaveManifest(ctx, m); err != nil {
+				return m, err
+			}
+		}
+		if err := c.Release(ctx); err != nil {
+			return m, err
+		}
+		status, err := c.Status(ctx)
+		if err != nil {
+			return m, err
+		}
+		if status.Dirty && !force {
+			if err := c.Resume(ctx); err != nil {
+				return m, err
+			}
+			b.Releasing = false
+			if err := a.Store.SaveManifest(ctx, m); err != nil {
+				return m, err
+			}
+			return m, fmt.Errorf("executor changed during release; retained for repair in its shell")
+		}
+		m, err = a.exportExecutor(ctx, m)
+		if err != nil {
+			return m, err
 		}
 	}
+	b.Destroying = true
+	if err := a.Store.SaveManifest(ctx, m); err != nil {
+		return m, err
+	}
+	if err := c.Destroy(ctx); err != nil {
+		return m, err
+	}
+	claim := m.Checkout.Claim
+	m.Checkout.ClearClaim()
+	m.UpdatedAt = a.now()
+	if err := a.Store.SaveManifest(ctx, m); err != nil {
+		return m, err
+	}
+	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "workspace.released", "user", map[string]any{"claim_id": claim.ID, "generation": claim.Generation, "forced": force, "exported_head": claim.Executor.ExportedHead}))
+	return m, nil
 }
 
-func executorRepositoryKey(repository model.Repository) string {
-	return model.RepositoryKey(repository)
-}
-
-func (a *App) ExecutorShutdown(ctx context.Context, name string) error {
-	client, err := a.executorClient(strings.TrimSpace(name))
+func (a *App) AttachExecutor(ctx context.Context, opts ResolveOptions, in io.Reader, out, stderr io.Writer) error {
+	m, err := a.ResolveItem(ctx, opts)
 	if err != nil {
 		return err
 	}
-	return client.Shutdown(ctx)
+	c, err := a.executorClient(m)
+	if err != nil {
+		return err
+	}
+	return c.Attach(ctx, in, out, stderr)
 }
 
-func (a *App) ExecutorDoctor(ctx context.Context, name string) (ExecutorDoctorResult, error) {
-	name = strings.TrimSpace(name)
-	definition, ok := a.ExecutorsConfig[name]
-	if !ok {
-		return ExecutorDoctorResult{}, fmt.Errorf("executor %q is not configured", name)
+func executorEnvironmentNote(m model.Manifest) string {
+	b := m.Checkout.Claim.Executor
+	network := b.Network
+	if network == "" {
+		network = "none"
 	}
-	client, err := a.executorClient(name)
-	if err != nil {
-		return ExecutorDoctorResult{}, err
+	environment := fmt.Sprintf("Docker executor %s, network %s", b.Name, network)
+	if b.Driver == "ssh" {
+		environment = fmt.Sprintf("SSH host %s, owned workspace %s", b.Host, b.Name)
 	}
-	worker, err := client.Doctor(ctx)
-	if err != nil {
-		return ExecutorDoctorResult{}, fmt.Errorf("inspect executor %s: %w", name, err)
-	}
-	localVersion := version.Current().Version
-	result := ExecutorDoctorResult{Executor: ExecutorInfo{Name: name, Destination: definition.Destination}, LocalVersion: localVersion, Compatible: worker.Version == localVersion, Worker: worker, Warnings: []string{}}
-	if !result.Compatible {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("worker wi version %s does not match coordinator version %s", worker.Version, localVersion))
-	}
-	for tool, value := range worker.Tools {
-		if value == "missing" {
-			result.Warnings = append(result.Warnings, "worker tool "+tool+" is missing")
-		}
-	}
-	sort.Strings(result.Warnings)
-	return result, nil
+	return fmt.Sprintf("\n\n## Wi executor\nWorkspace: %s in %s, profile %s. Tools and ! commands run in the executor; Pi and its conversation stay on the host. Commit work on %s. origin is a host-provided Git bundle: fetch works, push does not. The host runs wi merge. Wi supplies no forwarded credentials or executable. SSH commands have the remote account's permissions. Use noninteractive commands. Editors and development tools run in the executor shell.\n", m.Checkout.Claim.Path, environment, m.Checkout.Specification.ExecutorProfile, m.Checkout.Specification.Branch)
 }

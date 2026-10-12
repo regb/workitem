@@ -23,7 +23,6 @@ const (
 const (
 	AccessOperator = "operator"
 	AccessAgent    = "agent"
-	AccessExecutor = "executor"
 )
 
 const (
@@ -142,7 +141,6 @@ type Status struct {
 	DataRoot           string                   `json:"data_root"`
 	SocketPath         string                   `json:"socket_path"`
 	AgentSocketPath    string                   `json:"agent_socket_path,omitempty"`
-	ExecutorSocketPath string                   `json:"executor_socket_path,omitempty"`
 	Access             string                   `json:"access"`
 	Database           DatabaseStatus           `json:"database"`
 	ConversationImport ConversationImportReport `json:"conversation_import"`
@@ -172,20 +170,6 @@ func AgentSocketPath(runtimeDir, dataRoot string) (string, error) {
 		return "", err
 	}
 	return portableSocketPath(filepath.Join(runtimeDir, "wi-agent", key, "daemon.sock"), "wi-agent", key, "daemon.sock"), nil
-}
-
-// ExecutorSocketPath is the restricted authoritative endpoint forwarded to
-// remote executors. It exposes canonical reads and constrained item creation,
-// but not operator resource or lifecycle control.
-func ExecutorSocketPath(runtimeDir, dataRoot string) (string, error) {
-	if strings.TrimSpace(runtimeDir) == "" || strings.TrimSpace(dataRoot) == "" {
-		return "", errors.New("runtime directory and data root are required")
-	}
-	key, err := dataroot.Key(dataRoot)
-	if err != nil {
-		return "", err
-	}
-	return portableSocketPath(filepath.Join(runtimeDir, "wi-executor", key, "daemon.sock"), "wi-executor", key, "daemon.sock"), nil
 }
 
 func portableSocketPath(candidate string, parts ...string) string {

@@ -26,7 +26,17 @@ func (a *App) Shelve(ctx context.Context, opts ResolveOptions, force bool) (Stat
 	if prevState != model.StateWorking && prevState != model.StateWaiting {
 		return StateTransitionResult{}, fmt.Errorf("invalid state transition %s -> %s", prevState, model.StateBacklog)
 	}
-	m, workspaceWarnings, workspaceChanged, err := a.closeWorkspace(ctx, m, force, opts.Env)
+	var workspaceWarnings []string
+	var workspaceChanged bool
+	if m.Checkout.Specification.Kind == model.WorkspaceKindExecutor {
+		workspaceWarnings, err = a.stopRuntimeForArchive(ctx, m, opts, force)
+		if err == nil && m.Checkout.Claim != nil && m.Checkout.Claim.Executor != nil && m.Checkout.Claim.Executor.Ready {
+			m, err = a.exportExecutor(ctx, m)
+			workspaceWarnings = append(workspaceWarnings, "executor and uncommitted files retained")
+		}
+	} else {
+		m, workspaceWarnings, workspaceChanged, err = a.closeWorkspace(ctx, m, force, opts.Env)
+	}
 	if err != nil {
 		return StateTransitionResult{}, err
 	}
@@ -61,8 +71,10 @@ func (a *App) Archive(ctx context.Context, opts ResolveOptions, force bool) (Sta
 
 func (a *App) prepareArchive(ctx context.Context, m model.Manifest, opts ResolveOptions, force bool) ([]string, error) {
 	// Validate worktree safety before changing any live runtime state.
-	if err := a.ensureCheckoutReleasable(ctx, m); err != nil {
-		return nil, err
+	if !(force && m.Checkout.Specification.Kind == model.WorkspaceKindExecutor) {
+		if err := a.ensureCheckoutReleasable(ctx, m); err != nil {
+			return nil, err
+		}
 	}
 	return a.stopRuntimeForArchive(ctx, m, opts, force)
 }
@@ -120,7 +132,7 @@ func (a *App) releaseWorkspaceBeforeDeferredTerminalClose(ctx context.Context, m
 	if err := a.ensureCheckoutReleasable(ctx, m); err != nil {
 		return m, warnings, false, "", err
 	}
-	if m.Checkout.Present() && m.Checkout.Claim != nil && m.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome && !workspacecore.IsSlotPathName(m.Checkout.Claim.Path) {
+	if m.Checkout.Present() && m.Checkout.Claim != nil && m.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome && m.Checkout.Specification.Kind != model.WorkspaceKindExecutor && !workspacecore.IsSlotPathName(m.Checkout.Claim.Path) {
 		return m, warnings, false, "", fmt.Errorf("cannot defer terminal closure for non-slot worktree %s", m.Checkout.Claim.Path)
 	}
 	session := strings.TrimSpace(m.TerminalSessionName())
@@ -193,8 +205,10 @@ func (a *App) closeWorkspace(ctx context.Context, m model.Manifest, force bool, 
 	} else if a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive {
 		return m, warnings, changed, fmt.Errorf("agent runtime %s is still active; run `wi agent runtime stop --item %s`, wait for it to exit, then retry", runtime.ID, m.ID)
 	}
-	if err := a.ensureCheckoutReleasable(ctx, m); err != nil {
-		return m, warnings, changed, err
+	if !(force && m.Checkout.Specification.Kind == model.WorkspaceKindExecutor) {
+		if err := a.ensureCheckoutReleasable(ctx, m); err != nil {
+			return m, warnings, changed, err
+		}
 	}
 
 	canReleaseCheckout := true

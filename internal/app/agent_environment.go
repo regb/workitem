@@ -82,7 +82,7 @@ func envFromSlice(entries []string) map[string]string {
 func (a *App) agentRuntimeEnvironment(ctx context.Context, m model.Manifest) (map[string]string, []string, []string, error) {
 	base, scrub := a.direnvBaseEnvironment(ctx)
 	environmentManifest := m
-	if claim := m.Checkout.Claim; claim != nil && claim.Executor != "" && claim.Executor != model.ExecutorLocal {
+	if claim := m.Checkout.Claim; claim != nil && claim.ExecutorProfile != "" {
 		environmentManifest.Checkout.Claim = nil
 	}
 	overrides, warnings, err := agentcore.RuntimeEnvironment(ctx, a.Direnv, environmentManifest, a.direnvAutoTrusts(m.Repository), a.ApproveDirenv, base)

@@ -280,8 +280,8 @@ func (s *Service) inspectWorktree(ctx context.Context, m model.Manifest) (*Workt
 		return wt, warnings
 	}
 	wt.CheckoutPath = m.Checkout.Claim.Path
-	if m.Checkout.Claim.Executor != "" && m.Checkout.Claim.Executor != model.ExecutorLocal {
-		wt.Reason = "checkout requires executor observation"
+	if m.Checkout.Claim.ExecutorProfile != "" {
+		wt.Reason = "executor checkout requires a executor observation"
 		return wt, warnings
 	}
 	wt.Status = "problem"

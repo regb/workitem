@@ -15,10 +15,9 @@ import (
 )
 
 type Client struct {
-	SocketPath         string
-	BuildIdentity      string
-	AllowBuildMismatch bool
-	counter            atomic.Uint64
+	SocketPath    string
+	BuildIdentity string
+	counter       atomic.Uint64
 }
 
 func (c *Client) Call(ctx context.Context, method string, payload any, result any) error {
@@ -71,7 +70,7 @@ func (c *Client) Call(ctx context.Context, method string, payload any, result an
 	if response.ID != requestID {
 		return fmt.Errorf("invalid coordinator response identity")
 	}
-	if !c.AllowBuildMismatch && method != MethodShutdown && method != MethodRuntimeEvent && response.BuildIdentity != buildIdentity {
+	if method != MethodShutdown && method != MethodRuntimeEvent && response.BuildIdentity != buildIdentity {
 		return &CompatibilityError{Kind: "build", Expected: buildIdentity, Actual: response.BuildIdentity}
 	}
 	if !response.OK {

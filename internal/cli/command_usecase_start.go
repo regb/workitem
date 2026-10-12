@@ -14,14 +14,14 @@ import (
 
 func runStart(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("start", cfg.Stderr)
-	var agentMode, agentName, executorName string
+	var agentMode, agentName, executorProfile string
 	var force, createNew, home, noDefaultLabels bool
 	fs.BoolVar(&createNew, "new", false, "create a minimal item from the title before starting")
 	fs.BoolVar(&home, "home", false, "with --new, borrow the repository's primary default-branch checkout")
 	fs.BoolVar(&noDefaultLabels, "no-default-labels", false, "do not inherit default labels when creating with --new")
 	fs.StringVar(&agentMode, "agent-mode", "tui", "agent runtime mode: tui or headless")
 	fs.StringVar(&agentName, "agent", "default", "with --new, configured agent definition")
-	fs.StringVar(&executorName, "executor", "local", "with --new, managed-slot executor")
+	fs.StringVar(&executorProfile, "executor", "", "with --new, Docker or SSH executor profile")
 	fs.BoolVar(&force, "force", false, "override deep work active limit")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
@@ -42,7 +42,7 @@ func runStart(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 	if !createNew && agentName != "default" {
 		return usageErr{errors.New("--agent requires --new")}
 	}
-	if !createNew && executorName != "local" {
+	if !createNew && executorProfile != "" {
 		return usageErr{errors.New("--executor requires --new")}
 	}
 	mode, err := agent.ParseMode(agentMode)
@@ -53,7 +53,7 @@ func runStart(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 		if cfg.ControlAccess == coordinator.AccessAgent {
 			return errors.New("agent endpoint may create backlog items only; start --new is not allowed")
 		}
-		created, createErr := createCoordinatorWorkItem(ctx, cfg, app.NewWorkItemOptions{Title: input, CWD: cfg.CWD, Env: cfg.Env, NoDefaultLabels: noDefaultLabels, Home: home, Agent: agentName, Executor: executorName})
+		created, createErr := createCoordinatorWorkItem(ctx, cfg, app.NewWorkItemOptions{Title: input, CWD: cfg.CWD, Env: cfg.Env, NoDefaultLabels: noDefaultLabels, Home: home, Agent: agentName, ExecutorProfile: executorProfile})
 		if createErr != nil {
 			return createErr
 		}

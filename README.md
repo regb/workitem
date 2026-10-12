@@ -1,8 +1,6 @@
 # WorkItem
 
-`wi` is a local-first, productivity-oriented command-line utility for organizing your work items.
-
-One Wi host owns the daemon, conversations, agent processes, workspace claims, and tmux sessions. That host can be your laptop or an always-on Linux server that you enter through SSH. Running on a server lets agents continue while laptops sleep and makes the same workstation available from another terminal. Optional SSH executors can materialize selected managed workspaces on another operating system or build machine while Pi stays on the Wi host.
+`wi` is a human-first, productivity-oriented command-line utility for organizing your work items.
 
 For each work item, you get:
 
@@ -91,9 +89,7 @@ Use `wi help <command>` for current flags and safety rules.
 - tmux for interactive TUI runtimes
 - fzf for the optional `wi switch` picker
 
-Headless runtimes do not require tmux or fzf.
-
-For an always-on setup, install the same requirements on a Linux server and attach to its tmux server over SSH. See [Run wi on a server](https://regb.github.io/workitem/guides/hosted-workstation/).
+Headless Headless runtimes do not require tmux or fzf.
 
 ## Tmux bindings
 

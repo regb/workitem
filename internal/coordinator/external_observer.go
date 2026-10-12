@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/regb/workitem/internal/dataroot"
+	"github.com/regb/workitem/internal/executor"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
@@ -68,14 +70,16 @@ type AgentObservationResult struct {
 }
 
 type ExternalObserver struct {
+	hostKey  string
 	database *Database
 	process  processpkg.Inspector
 	git      gitpkg.Client
 	tmux     tmuxpkg.Client
 }
 
-func NewExternalObserver(database *Database, _ string) *ExternalObserver {
-	return &ExternalObserver{database: database, process: processpkg.New(), git: gitpkg.New("git"), tmux: tmuxpkg.NewWithServer("tmux", os.Getenv("WI_TMUX_SOCKET"), os.Getenv("WI_TMUX_CONFIG"))}
+func NewExternalObserver(database *Database, dataRoot string) *ExternalObserver {
+	key, _ := dataroot.Key(dataRoot)
+	return &ExternalObserver{hostKey: key, database: database, process: processpkg.New(), git: gitpkg.New("git"), tmux: tmuxpkg.NewWithServer("tmux", os.Getenv("WI_TMUX_SOCKET"), os.Getenv("WI_TMUX_CONFIG"))}
 }
 
 func (o *ExternalObserver) Reconcile(ctx context.Context) error {
@@ -264,10 +268,6 @@ func (o *ExternalObserver) observe(ctx context.Context, manifest model.Manifest,
 			observation.Process.TmuxWindow = "agent"
 		}
 	}
-	if runtime != nil && runtime.Executor != "" && runtime.Executor != model.ExecutorLocal && (runtime.State == model.AgentRuntimeStarting || runtime.State == model.AgentRuntimeRunning) {
-		observation.ProcessOnline = true
-		observation.Process.DiscoverySource = "executor"
-	}
 	if runtime != nil && runtime.HostPID > 0 && runtime.HostStartTime > 0 {
 		if info, err := o.process.Info(runtime.HostPID); err == nil && info.State != "Z" && info.StartTime == runtime.HostStartTime && (runtime.HostProcessGroup == 0 || info.PGRP == runtime.HostProcessGroup) {
 			observation.ProcessOnline = true
@@ -320,9 +320,44 @@ func (o *ExternalObserver) observeWorktree(ctx context.Context, manifest model.M
 		return result
 	}
 	result.CheckoutPath = manifest.Checkout.Claim.Path
-	if manifest.Checkout.Specification.Executor != "" && manifest.Checkout.Specification.Executor != model.ExecutorLocal {
+	if manifest.Checkout.Specification.Kind == model.WorkspaceKindExecutor {
+		claim := manifest.Checkout.Claim
+		b := claim.Executor
+		if b == nil || !b.Ready {
+			result.Status = "problem"
+			result.Reason = "executor provisioning is incomplete"
+			return result
+		}
+		if b.Releasing {
+			result.Status = "problem"
+			result.Reason = "executor release is incomplete"
+			return result
+		}
+		probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+		client := executor.Client{Profile: executor.Profile{Driver: b.Driver, Image: b.Image, Network: b.Network, Host: b.Host, Root: b.Root, SSHConfig: b.SSHConfig}, Identity: executor.Identity{Name: b.Name, Owner: o.hostKey + ":" + manifest.ID, Claim: claim.ID, Generation: claim.Generation}}
+		status, err := client.Status(probeCtx)
+		if err != nil {
+			result.Status = "problem"
+			result.Reason = "executor unavailable: " + err.Error()
+			return result
+		}
+		result.Head = status.Head
+		result.CurrentBranch = status.Branch
+		result.Dirty = status.Dirty
+		result.BranchMatches = status.Branch == expected
+		result.BranchMismatch = !result.BranchMatches
+		result.HasChanges = status.Dirty || status.Head != manifest.Repository.CreatedFromCommit
 		result.Status = "clean"
-		result.Reason = "remote managed slot was materialized; live status awaits executor synchronization"
+		result.Reason = "executor checkout is clean"
+		if result.HasChanges {
+			result.Status = "changed"
+			result.Reason = "executor checkout has changes"
+		}
+		if result.BranchMismatch {
+			result.Status = "problem"
+			result.Reason = "executor branch differs from item branch"
+		}
 		return result
 	}
 	if _, err := os.Stat(result.CheckoutPath); err != nil {

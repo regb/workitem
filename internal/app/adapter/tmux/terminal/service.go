@@ -33,6 +33,7 @@ type WorkspaceEnsurer func(context.Context, contract.ResolveOptions, model.Manif
 type OwnershipObserver func(*model.AgentRuntime) (alive bool, mode string)
 
 type Service struct {
+	ShellCommand    func(model.Manifest) []string
 	store           Store
 	tmux            Tmux
 	resolve         Resolver
@@ -290,11 +291,15 @@ func (s *Service) spec(m model.Manifest, environment map[string]string) tmuxpkg.
 	cwd := repositoryRoot
 	if m.Checkout.Claim != nil && m.Checkout.Claim.Path != "" {
 		env["WI_WORKTREE"] = m.Checkout.Claim.Path
-		if m.Checkout.Claim.Executor != "" && m.Checkout.Claim.Executor != model.ExecutorLocal {
+		if m.Checkout.Claim.ExecutorProfile != "" {
 			cwd = s.store.ItemDir(m.ID)
 		} else {
 			cwd = m.Checkout.Claim.Path
 		}
 	}
-	return tmuxpkg.SessionSpec{Name: m.TerminalSessionName(), CWD: cwd, Env: env}
+	spec := tmuxpkg.SessionSpec{Name: m.TerminalSessionName(), CWD: cwd, Env: env}
+	if s.ShellCommand != nil {
+		spec.ShellCommand = s.ShellCommand(m)
+	}
+	return spec
 }

@@ -81,17 +81,6 @@ func (a *App) ShutdownAll(ctx context.Context, env map[string]string, force bool
 			continue
 		}
 		result.Items[itemIndex].RuntimeID = runtime.ID
-		if runtime.Executor != "" && runtime.Executor != model.ExecutorLocal {
-			stopped, err := a.StopAgentRuntime(ctx, ResolveOptions{Selector: manifest.ID, Env: env}, force)
-			if err != nil {
-				result.Items[itemIndex].RuntimeStopped = false
-				result.Failures = append(result.Failures, ShutdownFailure{WorkItemID: manifest.ID, Resource: "runtime", Error: err.Error()})
-				continue
-			}
-			result.Items[itemIndex].RuntimeStopRequested = stopped.Changed
-			result.Items[itemIndex].Warnings = append(result.Items[itemIndex].Warnings, stopped.Warnings...)
-			continue
-		}
 		if !service.ObserveOwnership(runtime).ProcessAlive {
 			continue
 		}

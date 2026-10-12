@@ -18,26 +18,6 @@ func TestConversationOperationRejectsUnknownConfiguration(t *testing.T) {
 	}
 }
 
-func TestConversationSnapshotOperations(t *testing.T) {
-	source := filepath.Join(t.TempDir(), "source.jsonl")
-	content := []byte("{\"type\":\"session\",\"id\":\"snapshot\"}\n")
-	if err := os.WriteFile(source, content, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	exported, err := handleConversationOperation(context.Background(), driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: "pi", Operation: driverprotocol.OperationConversationExport, Conversation: &driverprotocol.ConversationRequest{Path: source}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	target := filepath.Join(t.TempDir(), "target.jsonl")
-	if _, err := handleConversationOperation(context.Background(), driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: "pi", Operation: driverprotocol.OperationConversationImport, Conversation: &driverprotocol.ConversationRequest{Path: target, Data: exported.Data}}); err != nil {
-		t.Fatal(err)
-	}
-	got, err := os.ReadFile(target)
-	if err != nil || string(got) != string(content) {
-		t.Fatalf("content=%q err=%v", got, err)
-	}
-}
-
 func TestHeadlessRuntimeConformance(t *testing.T) {
 	backend := filepath.Join(t.TempDir(), "fake-pi")
 	script := `#!/usr/bin/env bash

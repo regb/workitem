@@ -308,21 +308,43 @@ func normalizeManifest(m *model.Manifest) error {
 	if m.Checkout.Specification.Kind == "" {
 		m.Checkout.Specification.Kind = model.WorkspaceKindManagedSlot
 	}
-	if strings.TrimSpace(m.Checkout.Specification.Executor) == "" {
-		m.Checkout.Specification.Executor = model.ExecutorLocal
-	}
-	if m.Checkout.Specification.Kind != model.WorkspaceKindManagedSlot && m.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome {
+	if m.Checkout.Specification.Kind != model.WorkspaceKindManagedSlot && m.Checkout.Specification.Kind != model.WorkspaceKindRepositoryHome && m.Checkout.Specification.Kind != model.WorkspaceKindExecutor {
 		return fmt.Errorf("unsupported checkout kind %q", m.Checkout.Specification.Kind)
+	}
+	if m.Checkout.Specification.Kind == model.WorkspaceKindExecutor && m.Checkout.Specification.ExecutorProfile == "" {
+		return fmt.Errorf("executor profile is required")
+	}
+	if m.Checkout.Specification.Kind != model.WorkspaceKindExecutor && m.Checkout.Specification.ExecutorProfile != "" {
+		return fmt.Errorf("only executor checkouts may select a executor profile")
 	}
 	if strings.TrimSpace(m.Checkout.Specification.Branch) == "" {
 		return fmt.Errorf("checkout branch is required")
 	}
 	if claim := m.Checkout.Claim; claim != nil {
 		claim.ID = strings.TrimSpace(claim.ID)
-		claim.Executor = strings.TrimSpace(claim.Executor)
+		claim.ExecutorProfile = strings.TrimSpace(claim.ExecutorProfile)
 		claim.RepositoryKey = strings.TrimSpace(claim.RepositoryKey)
 		claim.Slot = strings.TrimSpace(claim.Slot)
 		claim.Path = strings.TrimSpace(claim.Path)
+		if m.Checkout.Specification.Kind == model.WorkspaceKindExecutor {
+			if claim.Executor == nil || claim.Executor.Name == "" {
+				return fmt.Errorf("executor claim requires environment identity")
+			}
+			b := claim.Executor
+			if b.Driver == "docker" {
+				if b.Image == "" || b.Host != "" || b.Root != "" || b.SSHConfig != "" {
+					return fmt.Errorf("invalid Docker claim")
+				}
+			} else if b.Driver == "ssh" {
+				if b.Host == "" || b.Root == "" || b.Image != "" || b.Network != "" {
+					return fmt.Errorf("invalid SSH claim")
+				}
+			} else {
+				return fmt.Errorf("invalid executor claim driver")
+			}
+		} else if claim.Executor != nil {
+			return fmt.Errorf("local checkout cannot have a executor claim")
+		}
 		if claim.ID == "" || strings.ContainsAny(claim.ID, "/\\\r\n\x00") {
 			return fmt.Errorf("workspace claim id is invalid")
 		}
@@ -337,11 +359,11 @@ func normalizeManifest(m *model.Manifest) error {
 		if claim.Generation == 0 || claim.Generation != m.Checkout.ClaimGeneration {
 			return fmt.Errorf("workspace claim generation %d does not match checkout generation %d", claim.Generation, m.Checkout.ClaimGeneration)
 		}
-		if claim.Executor == "" {
-			claim.Executor = m.Checkout.Specification.Executor
+		if claim.ExecutorProfile == "" {
+			claim.ExecutorProfile = m.Checkout.Specification.ExecutorProfile
 		}
-		if claim.Executor != m.Checkout.Specification.Executor {
-			return fmt.Errorf("workspace claim executor %q does not match selected executor %q", claim.Executor, m.Checkout.Specification.Executor)
+		if claim.ExecutorProfile != m.Checkout.Specification.ExecutorProfile {
+			return fmt.Errorf("workspace claim profile %q does not match selected executor profile %q", claim.ExecutorProfile, m.Checkout.Specification.ExecutorProfile)
 		}
 		if claim.Path == "" {
 			return fmt.Errorf("workspace claim path is required")
@@ -350,8 +372,8 @@ func normalizeManifest(m *model.Manifest) error {
 			claim.RepositoryKey = model.RepositoryKey(m.Repository)
 		}
 	}
-	if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome && m.Checkout.Specification.Executor != model.ExecutorLocal {
-		return fmt.Errorf("repository-home checkout requires the local executor")
+	if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome && m.Checkout.Specification.ExecutorProfile != "" {
+		return fmt.Errorf("repository-home checkout cannot use a executor profile")
 	}
 	if m.Checkout.Specification.Kind == model.WorkspaceKindRepositoryHome && m.Repository.OperationalRoot() == "" {
 		return fmt.Errorf("repository-home checkout requires repository root")

@@ -12,8 +12,6 @@ const (
 	OperationConversationFork    = "conversation.fork"
 	OperationConversationObserve = "conversation.observe"
 	OperationConversationDecode  = "conversation.decode"
-	OperationConversationExport  = "conversation.export"
-	OperationConversationImport  = "conversation.import"
 )
 
 type Request struct {
@@ -44,7 +42,6 @@ type ConversationRequest struct {
 	StartLine    uint64       `json:"start_line,omitempty"`
 	LineNumbers  []uint64     `json:"line_numbers,omitempty"`
 	Lines        [][]byte     `json:"lines,omitempty"`
-	Data         []byte       `json:"data,omitempty"`
 }
 
 type ConversationResponse struct {
@@ -54,7 +51,6 @@ type ConversationResponse struct {
 	Facts        []ConversationFact       `json:"facts,omitempty"`
 	Decoded      []bool                   `json:"decoded,omitempty"`
 	Warnings     []string                 `json:"warnings,omitempty"`
-	Data         []byte                   `json:"data,omitempty"`
 }
 
 type ConversationObservation struct {

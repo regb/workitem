@@ -69,16 +69,6 @@ func (c Client) ObserveConversation(ctx context.Context, conversation model.Conv
 	return *response.Observation, response.Warnings, nil
 }
 
-func (c Client) ExportConversation(ctx context.Context, path string) ([]byte, error) {
-	response, err := c.request(ctx, driverprotocol.OperationConversationExport, "", nil, driverprotocol.ConversationRequest{Path: path})
-	return response.Data, err
-}
-
-func (c Client) ImportConversation(ctx context.Context, path string, data []byte) error {
-	_, err := c.request(ctx, driverprotocol.OperationConversationImport, "", nil, driverprotocol.ConversationRequest{Path: path, Data: data})
-	return err
-}
-
 func (c Client) DecodeConversation(ctx context.Context, conversation model.Conversation, lineNumbers []uint64, lines [][]byte) ([]driverprotocol.ConversationFact, []bool, error) {
 	response, err := c.request(ctx, driverprotocol.OperationConversationDecode, "", nil, driverprotocol.ConversationRequest{Conversation: driverprotocol.Conversation{ID: conversation.ID, Locator: conversation.NativeLocator(), Format: conversation.Format}, LineNumbers: lineNumbers, Lines: lines})
 	return response.Facts, response.Decoded, err

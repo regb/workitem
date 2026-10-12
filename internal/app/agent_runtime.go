@@ -46,7 +46,7 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	if err != nil {
 		return EnsureAgentRuntimeResult{}, err
 	}
-	if err := a.validateRemoteWorkspaceAgent(m); err != nil {
+	if err := a.validateExecutorAgent(m); err != nil {
 		return EnsureAgentRuntimeResult{}, err
 	}
 	existing, err := a.Store.LoadAgentRuntime(m.ID)
@@ -86,14 +86,11 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 		if err != nil {
 			return EnsureAgentRuntimeResult{}, err
 		}
-		terminal := TerminalResult{WorkItemID: m.ID, Session: m.TerminalSessionName(), Checkout: m.Checkout, Warnings: []string{}}
-		if !a.SinglePaneTUITerminal {
-			terminal, err = a.ensureTerminalWorkspaceWithEnvironment(ctx, opts, m, true, runtimeEnv, scrub)
-			if err != nil {
-				return EnsureAgentRuntimeResult{}, err
-			}
-			warnings = append(warnings, terminal.Warnings...)
+		terminal, err := a.ensureTerminalWorkspaceWithEnvironment(ctx, opts, m, true, runtimeEnv, scrub)
+		if err != nil {
+			return EnsureAgentRuntimeResult{}, err
 		}
+		warnings = append(warnings, terminal.Warnings...)
 		launchWarnings, err := a.launchAgentInTmuxWithEnvironment(ctx, m, session, true, runtimeEnv, scrub)
 		if err != nil {
 			return EnsureAgentRuntimeResult{}, err
@@ -166,9 +163,9 @@ func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	return EnsureAgentRuntimeResult{WorkItemID: m.ID, Created: true, Runtime: runtime, Conversation: session, Capabilities: runtime.Capabilities, Warnings: warnings}, nil
 }
 
-func (a *App) validateRemoteWorkspaceAgent(m model.Manifest) error {
+func (a *App) validateExecutorAgent(m model.Manifest) error {
 	claim := m.Checkout.Claim
-	if claim == nil || claim.Executor == "" || claim.Executor == model.ExecutorLocal {
+	if claim == nil || claim.ExecutorProfile == "" {
 		return nil
 	}
 	agentName := m.Agent

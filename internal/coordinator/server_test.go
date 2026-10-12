@@ -117,7 +117,7 @@ func TestAgentSocketCreatesOnlySafeBacklogItems(t *testing.T) {
 		t.Fatalf("agent status = %+v", status)
 	}
 	commit := strings.Repeat("a", 40)
-	manifest := model.NewManifest(importTestID, "agent-filed", "Agent filed", nil, false, time.Now().UTC(), model.Repository{RootAtCreation: "/repo", GitCommonDir: "/repo/.git", CreatedFromCommit: commit}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("agent-filed", importTestID)))
+	manifest := model.NewManifest(importTestID, "agent-filed", "Agent filed", nil, false, time.Now().UTC(), model.Repository{RootAtCreation: "/repo", GitCommonDir: "/repo/.git", CreatedFromCommit: commit}, model.NewCheckout(model.WorkspaceKindManagedSlot, "", model.ItemBranchName("agent-filed", importTestID)))
 	command := CreateItemCommand{ID: "agent-create", ProtocolVersion: ProtocolVersion, Manifest: manifest, DescriptionDigest: DescriptionDigest("follow-up"), Actor: "user", CreatedAt: manifest.CreatedAt}
 	created, err := agentClient.CreateItem(ctx, CreateItemRequest{Command: command, Description: "follow-up"})
 	if err != nil {
@@ -144,9 +144,9 @@ func TestAgentSocketCreatesOnlySafeBacklogItems(t *testing.T) {
 		t.Fatalf("agent shutdown error = %v", err)
 	}
 	homeID := "01K00000000000000000000001"
-	home := model.NewManifest(homeID, "unsafe-home", "Unsafe home", nil, false, time.Now().UTC(), manifest.Repository, model.NewCheckout(model.WorkspaceKindRepositoryHome, model.ExecutorLocal, "main"))
+	home := model.NewManifest(homeID, "unsafe-home", "Unsafe home", nil, false, time.Now().UTC(), manifest.Repository, model.NewCheckout(model.WorkspaceKindRepositoryHome, "", "main"))
 	homePath := "/repo"
-	home.Checkout.Claim = &model.WorkspaceClaim{ID: "test-claim", Executor: model.ExecutorLocal, Path: homePath}
+	home.Checkout.Claim = &model.WorkspaceClaim{ID: "home", Generation: 1, Path: homePath}
 	homeCommand := CreateItemCommand{ID: "agent-home", ProtocolVersion: ProtocolVersion, Manifest: home, DescriptionDigest: DescriptionDigest("unsafe"), Actor: "user", CreatedAt: home.CreatedAt}
 	if _, err := agentClient.CreateItem(ctx, CreateItemRequest{Command: homeCommand, Description: "unsafe"}); err == nil || !strings.Contains(err.Error(), "managed-slot") {
 		t.Fatalf("agent home creation error = %v", err)
@@ -165,79 +165,6 @@ func TestAgentSocketCreatesOnlySafeBacklogItems(t *testing.T) {
 	for _, path := range []string{operatorSocket, agentSocket} {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("socket remains after shutdown: %s: %v", path, err)
-		}
-	}
-}
-
-func TestExecutorSocketReadsCanonicalCatalogAndCreatesOnParentExecutor(t *testing.T) {
-	root, err := os.MkdirTemp("/tmp", "wi-executor-endpoint-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(root) })
-	runtime := filepath.Join(root, "run")
-	if err := os.MkdirAll(runtime, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	operatorSocket, _ := SocketPath(runtime, root)
-	agentSocket, _ := AgentSocketPath(runtime, root)
-	executorSocket, _ := ExecutorSocketPath(runtime, root)
-	server, err := NewServerWithRestrictedSockets(root, operatorSocket, agentSocket, executorSocket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(context.Background()) }()
-	operator, executorClient := &Client{SocketPath: operatorSocket}, &Client{SocketPath: executorSocket, BuildIdentity: "cross-platform-worker-build", AllowBuildMismatch: true}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	parentRepo := model.Repository{RootAtCreation: "/coordinator/repo", GitCommonDir: "/coordinator/repo/.git", CreatedFromCommit: strings.Repeat("a", 40)}
-	parent := model.NewManifest(importTestID, "remote-parent", "Remote parent", nil, false, time.Now().UTC(), parentRepo, model.NewCheckout(model.WorkspaceKindManagedSlot, "macbook", model.ItemBranchName("remote-parent", importTestID)))
-	parentCommand := CreateItemCommand{ID: "parent-create", ProtocolVersion: ProtocolVersion, Manifest: parent, DescriptionDigest: DescriptionDigest("parent"), Actor: "user", CreatedAt: parent.CreatedAt}
-	if _, err := operator.CreateItem(ctx, CreateItemRequest{Command: parentCommand, Description: "parent"}); err != nil {
-		t.Fatal(err)
-	}
-	status, err := executorClient.Status(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if status.Access != AccessExecutor || status.SocketPath != executorSocket || status.DataRoot != "" || status.Database.Path != "" {
-		t.Fatalf("status=%+v", status)
-	}
-	projection, err := executorClient.ManifestProjection(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(projection.Manifests) != 1 || projection.Manifests[0].Repository.RootAtCreation != parentRepo.RootAtCreation || projection.Manifests[0].Checkout.Specification.Executor != "macbook" {
-		t.Fatalf("projection=%+v", projection.Manifests)
-	}
-	childID := "01K00000000000000000000002"
-	child := model.NewManifest(childID, "remote-child", "Remote child", nil, false, time.Now().UTC(), model.Repository{RootAtCreation: "/worker/repo", GitCommonDir: "/worker/repo.git", CreatedFromCommit: parentRepo.CreatedFromCommit}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("remote-child", childID)))
-	childCommand := CreateItemCommand{ID: "child-create", ProtocolVersion: ProtocolVersion, Manifest: child, DescriptionDigest: DescriptionDigest("child"), Actor: "user", CreatedAt: child.CreatedAt}
-	created, err := executorClient.CreateItem(ctx, CreateItemRequest{Command: childCommand, Description: "child", AuthorityItemID: parent.ID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if created.Manifest.Checkout.Specification.Executor != "macbook" || created.Manifest.Checkout.Claim != nil || created.Manifest.Repository.RootAtCreation != parentRepo.RootAtCreation || created.Manifest.Repository.CreatedFromCommit != parentRepo.CreatedFromCommit {
-		t.Fatalf("created=%+v", created.Manifest)
-	}
-	missingCommitChild := model.NewManifest("01K00000000000000000000003", "remote-newer", "Remote newer", nil, false, time.Now().UTC(), model.Repository{CreatedFromCommit: strings.Repeat("b", 40)}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("remote-newer", "01K00000000000000000000003")))
-	missingCommitCommand := CreateItemCommand{ID: "executor-create-missing-commit", ProtocolVersion: ProtocolVersion, Manifest: missingCommitChild, DescriptionDigest: DescriptionDigest("child"), Actor: "user", CreatedAt: missingCommitChild.CreatedAt}
-	if _, err := executorClient.CreateItem(ctx, CreateItemRequest{Command: missingCommitCommand, Description: "child", AuthorityItemID: parent.ID}); err == nil || !strings.Contains(err.Error(), "parent created-from commit") {
-		t.Fatalf("missing commit creation error=%v", err)
-	}
-	if err := executorClient.Shutdown(ctx); err == nil || !strings.Contains(err.Error(), "does not allow shutdown") {
-		t.Fatalf("shutdown err=%v", err)
-	}
-	if err := operator.Shutdown(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-	for _, path := range []string{operatorSocket, agentSocket, executorSocket} {
-		if _, err := os.Stat(path); !os.IsNotExist(err) {
-			t.Fatalf("socket remains: %s: %v", path, err)
 		}
 	}
 }

@@ -24,7 +24,7 @@ func TestCreateItemCommandKeepsDescriptionOutOfDatabaseAndMaterializesNativeItem
 	}
 	description := "private-description-sentinel-7b9f"
 	now := time.Now().UTC()
-	manifest := model.NewManifest(importTestID, "created", "Created", []string{"backend"}, false, now, model.Repository{RootAtCreation: "/repo", GitCommonDir: "/repo/.git", CreatedFromCommit: strings.Repeat("a", 40)}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, model.ItemBranchName("created", importTestID)))
+	manifest := model.NewManifest(importTestID, "created", "Created", []string{"backend"}, false, now, model.Repository{RootAtCreation: "/repo", GitCommonDir: "/repo/.git", CreatedFromCommit: strings.Repeat("a", 40)}, model.NewCheckout(model.WorkspaceKindManagedSlot, "", model.ItemBranchName("created", importTestID)))
 	command := CreateItemCommand{ID: "create-command", ProtocolVersion: ProtocolVersion, Manifest: manifest, DescriptionDigest: DescriptionDigest(description), Actor: "user", CreatedAt: now}
 	if err := StageDescription(db, command.ID, description); err != nil {
 		t.Fatal(err)

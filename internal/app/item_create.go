@@ -21,7 +21,7 @@ type NewWorkItemOptions struct {
 	CWD             string
 	Env             map[string]string
 	Agent           string
-	Executor        string
+	ExecutorProfile string
 }
 
 type NewWorkItemResult struct {
@@ -45,7 +45,7 @@ func (a *App) PrepareNewWorkItem(ctx context.Context, opts NewWorkItemOptions) (
 	if err != nil {
 		return PreparedNewWorkItem{}, err
 	}
-	executorName, err := a.resolveExecutorName(opts.Executor, opts.Home)
+	executorProfile, err := a.resolveExecutorProfile(opts.ExecutorProfile, opts.Home)
 	if err != nil {
 		return PreparedNewWorkItem{}, err
 	}
@@ -53,7 +53,7 @@ func (a *App) PrepareNewWorkItem(ctx context.Context, opts NewWorkItemOptions) (
 		Title: opts.Title, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
 		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
 		DeepWork: opts.DeepWork, Base: opts.Base, Home: opts.Home,
-		CWD: opts.CWD, Env: opts.Env, PrepareOnly: true, Executor: executorName,
+		CWD: opts.CWD, Env: opts.Env, PrepareOnly: true, ExecutorProfile: executorProfile,
 	})
 	if err != nil {
 		return PreparedNewWorkItem{}, err
@@ -72,7 +72,7 @@ func (a *App) NewWorkItem(ctx context.Context, opts NewWorkItemOptions) (NewWork
 	if err != nil {
 		return NewWorkItemResult{}, err
 	}
-	executorName, err := a.resolveExecutorName(opts.Executor, opts.Home)
+	executorProfile, err := a.resolveExecutorProfile(opts.ExecutorProfile, opts.Home)
 	if err != nil {
 		return NewWorkItemResult{}, err
 	}
@@ -80,7 +80,7 @@ func (a *App) NewWorkItem(ctx context.Context, opts NewWorkItemOptions) (NewWork
 		Title: opts.Title, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
 		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
 		DeepWork: opts.DeepWork, Base: opts.Base, Home: opts.Home,
-		CWD: opts.CWD, Env: opts.Env, Executor: executorName,
+		CWD: opts.CWD, Env: opts.Env, ExecutorProfile: executorProfile,
 	})
 	if err != nil {
 		return NewWorkItemResult{}, err
@@ -90,7 +90,7 @@ func (a *App) NewWorkItem(ctx context.Context, opts NewWorkItemOptions) (NewWork
 }
 
 func (a *App) remoteSourceCheckoutWarnings(ctx context.Context, manifest model.Manifest, warnings []string) []string {
-	if manifest.Checkout.Specification.Kind != model.WorkspaceKindManagedSlot || manifest.Checkout.Specification.Executor == "" || manifest.Checkout.Specification.Executor == model.ExecutorLocal {
+	if manifest.Checkout.Specification.Kind != model.WorkspaceKindExecutor {
 		return warnings
 	}
 	status, err := a.Git.StatusPorcelain(ctx, manifest.Repository.OperationalRoot())
@@ -104,21 +104,21 @@ func (a *App) remoteSourceCheckoutWarnings(ctx context.Context, manifest model.M
 	if len(commit) > 12 {
 		commit = commit[:12]
 	}
-	return append(warnings, fmt.Sprintf("local checkout has uncommitted changes; remote workspace on executor %q starts from commit %s and does not include staged, unstaged, or untracked files", manifest.Checkout.Specification.Executor, commit))
+	return append(warnings, fmt.Sprintf("local checkout has uncommitted changes; executor workspace with profile %q starts from commit %s and does not include staged, unstaged, or untracked files", manifest.Checkout.Specification.ExecutorProfile, commit))
 }
 
-func (a *App) resolveExecutorName(value string, home bool) (string, error) {
+func (a *App) resolveExecutorProfile(value string, home bool) (string, error) {
 	if value = strings.TrimSpace(value); value == "" {
-		value = model.ExecutorLocal
+		value = ""
 	}
-	if value == model.ExecutorLocal {
+	if value == "" {
 		return value, nil
 	}
 	if home {
-		return "", fmt.Errorf("repository-home checkout requires the local executor")
+		return "", fmt.Errorf("--home and --executor are mutually exclusive")
 	}
 	if _, ok := a.ExecutorsConfig[value]; !ok {
-		return "", fmt.Errorf("executor %q is not configured", value)
+		return "", fmt.Errorf("executor profile %q is not configured", value)
 	}
 	return value, nil
 }

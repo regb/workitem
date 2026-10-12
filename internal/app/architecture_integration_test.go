@@ -17,7 +17,7 @@ import (
 	"github.com/regb/workitem/internal/agent"
 	piadapter "github.com/regb/workitem/internal/agentdriver/pi"
 	"github.com/regb/workitem/internal/app"
-	"github.com/regb/workitem/internal/config"
+	"github.com/regb/workitem/internal/executor"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
@@ -39,7 +39,7 @@ func TestNewRemoteWorkItemWarnsThatLocalDirtyStateIsNotTransferred(t *testing.T)
 	fg := newFakeGit(t)
 	fg.status = " M tracked.txt\n?? untracked.txt\n"
 	application := newTestApp(st, fg)
-	application.ExecutorsConfig["worker"] = config.ExecutorConfig{Destination: "worker"}
+	application.ExecutorsConfig["worker"] = executor.Profile{Driver: "docker", Image: "wi-executor-test"}
 
 	assertWarning := func(warnings []string) {
 		t.Helper()
@@ -48,20 +48,20 @@ func TestNewRemoteWorkItemWarnsThatLocalDirtyStateIsNotTransferred(t *testing.T)
 		if len(commit) > 12 {
 			commit = commit[:12]
 		}
-		for _, want := range []string{"local checkout has uncommitted changes", `executor "worker"`, commit, "does not include staged, unstaged, or untracked files"} {
+		for _, want := range []string{"local checkout has uncommitted changes", `profile "worker"`, commit, "does not include staged, unstaged, or untracked files"} {
 			if !strings.Contains(joined, want) {
 				t.Fatalf("warnings %q do not contain %q", joined, want)
 			}
 		}
 	}
 
-	prepared, err := application.PrepareNewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Prepared remote dirty warning", CWD: fg.info.Repository.RootAtCreation, Executor: "worker"})
+	prepared, err := application.PrepareNewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Prepared remote dirty warning", CWD: fg.info.Repository.RootAtCreation, ExecutorProfile: "worker"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	assertWarning(prepared.Warnings)
 
-	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Remote dirty warning", CWD: fg.info.Repository.RootAtCreation, Executor: "worker"})
+	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Remote dirty warning", CWD: fg.info.Repository.RootAtCreation, ExecutorProfile: "worker"})
 	if err != nil {
 		t.Fatal(err)
 	}

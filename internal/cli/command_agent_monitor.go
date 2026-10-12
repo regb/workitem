@@ -10,7 +10,6 @@ import (
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/model"
 )
 
 type agentRuntimeEventsResult struct {
@@ -43,7 +42,7 @@ func runAgentMonitor(ctx context.Context, args []string, cfg Config, jsonOut boo
 	if err != nil {
 		return err
 	}
-	remote := manifest.Checkout.Specification.Executor != "" && manifest.Checkout.Specification.Executor != model.ExecutorLocal
+	remote := manifest.Checkout.Specification.ExecutorProfile != ""
 	if remote {
 		_, _ = cfg.App.AgentRuntimeStatus(ctx, resolve)
 	}

@@ -15,7 +15,7 @@ func TestRemoteWorkspaceExtensionPathMaterializesBundle(t *testing.T) {
 	if filepath.Base(path) != "index.ts" {
 		t.Fatalf("path=%q", path)
 	}
-	for _, name := range []string{"index.ts", "core.ts", "bash-support.ts", "clipboard-image-support.ts", "find-support.ts", "grep-support.ts", "ls-support.ts", "recovery-support.ts", "shell-support.ts"} {
+	for _, name := range []string{"index.ts"} {
 		info, err := os.Stat(filepath.Join(filepath.Dir(path), name))
 		if err != nil {
 			t.Fatal(err)

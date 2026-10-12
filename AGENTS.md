@@ -5,10 +5,10 @@
 - A work item is the canonical durable aggregate: identity, description, lifecycle, labels, deep-work classification, checkout specification, conversation identity, and append-only history.
 - Lifecycle states are `backlog`, `working`, `waiting`, and `archived`.
 - A workspace is a Git checkout claim/materialization, not a tmux session or coding-agent process.
-- Checkout kinds are reusable `managed-slot` worktrees and exclusive borrowed `repository-home` claims.
+- Checkout kinds are reusable `managed-slot` worktrees, exclusive borrowed `repository-home` claims, and per-item Docker or SSH `executor` clones.
 - Each item has at most one durable primary agent conversation, created when agent work starts, and at most one active runtime owner.
 - Wi is local-first: one host owns a data root, daemon, native content, runtime processes, and user-facing tmux. That host may be a laptop or an always-on server reached through SSH.
-- TUI runtimes use tmux on the Wi host; headless runtimes must remain tmux-independent.
+- TUI runtimes use tmux on the Wi host; headless runtimes must not require host tmux. Executors require their own private tmux holder for jobs and shells.
 - Agent status (`busy`, `idle`, `problem`) and worktree status (`absent`, `clean`, `changed`, `problem`) are separate observations.
 - The daemon's private `wi.db` is canonical for domain state, revisions, compact events, and read projections. Native agent conversations and descriptions remain canonical filesystem content. Runtime and terminal metadata are rebuildable caches; diagnostic logs live under XDG state and sockets under the XDG runtime directory.
 
@@ -16,13 +16,14 @@
 
 - `work item`: The stable durable aggregate. It owns identity, description, lifecycle, labels, deep-work classification, source context, checkout specification and claim state, primary conversation identity, and append-only history. It may exist without a materialized workspace, live runtime, or terminal.
 - `source context`: The repository identity and created-from commit recorded when the item is created. In the current schema this includes the repository root at creation, Git common directory, sanitized origin URL, and `created_from_commit`. It remains useful provenance after refs and the implementation branch advance.
-- `checkout specification`: Durable instructions for materializing work: checkout kind, selected executor, and implementation branch. The immutable created-from commit belongs to source context, not checkout state. The specification may exist without a workspace claim.
-- `checkout kind`: The workspace policy. `managed-slot` uses a reusable wi-owned worktree slot. `repository-home` borrows the repository's primary checkout through an exclusive logical claim and never makes that external checkout wi-owned.
-- `workspace claim`: The durable identity of one materialized checkout assignment: claim ID, monotonic generation, executor, repository key, slot, and path. It is absent before materialization and cleared on release, while the latest generation remains durable.
+- `checkout specification`: Durable instructions for materializing work: checkout kind, optional executor profile, and implementation branch. The immutable created-from commit belongs to source context, not checkout state. The specification may exist without a workspace claim.
+- `checkout kind`: The workspace policy. `managed-slot` uses a reusable wi-owned worktree slot. `repository-home` borrows the repository's primary checkout through an exclusive logical claim and never makes that external checkout wi-owned. `executor` owns an independent clone in a per-item Docker container or dedicated directory on an existing SSH host.
+- `workspace claim`: The durable identity of one materialized checkout assignment: claim ID, monotonic generation, repository key, path, and either a local slot or an executor identity. An executor claim is reserved before provisioning and records readiness and release progress. It is absent before materialization and cleared on release, while the latest generation remains durable.
 - `materialization`: Creation or attachment of external resources described by durable state, such as assigning a managed slot, checking out the implementation branch, or recognizing a claimed repository home.
 - `worktree`: A concrete Git working tree observed by wi. Managed worktrees may remain as warm reusable slot directories after an item releases its workspace claim.
-- `managed slot`: A wi-owned reusable worktree location on one executor. Slots are claimed by items, reset and validated before reuse, and retained to preserve build caches.
-- `executor`: A machine that materializes a managed slot and runs claim-fenced workspace tools. Pi, conversations, runtime ownership, and user-facing tmux remain on the Wi host. `local` is the Wi host.
+- `managed slot`: A wi-owned reusable local worktree location. Slots are claimed by items, reset and validated before reuse, and retained to preserve build caches.
+- `executor`: Configured execution placement using Docker or SSH. Each item gets an independent workspace and private tmux holder there. Docker provisions an owned container; SSH allocates only a claim directory on an existing host. Pi, conversations, runtime ownership, and user-facing tmux remain on the Wi host. No worker daemon or uploaded Wi binary is required.
+- `executor profile`: Named Docker image/network or SSH host/root settings under `[executors.<name>]`. Claims pin these settings at first provisioning.
 - `repository-home claim`: An exclusive logical claim on the repository's primary checkout. Releasing or deleting the item relinquishes the claim but does not modify or delete that checkout.
 - `lifecycle`: The durable work-item state: `backlog`, `working`, `waiting`, or `archived`. Lifecycle does not by itself describe whether a workspace, runtime, or terminal currently exists.
 - `deep work`: A durable item classification subject to configured active-capacity policy. It is not a label.
@@ -72,7 +73,10 @@
 - `internal/agentdriver/`: driver process host and clients; bundled driver implementations live in child packages such as `internal/agentdriver/pi/`.
 - `internal/git/`, `internal/tmux/`, `internal/direnv/`, `internal/process/`: external-system adapters.
 - `docs/internal/remote-agent-placement.md`: local-first deployment, hosted-workstation access, remote workspace tools, and future availability boundaries.
-- `docs/internal/remote-execution.md`: agreed per-item box design that replaces the transitional SSH executor and worker daemon; read it and `HANDOFF.md` before changing remote execution code.
+- `internal/executor/`: shared Docker/SSH environment interface, transports, embedded operation scripts, jobs, and Git bundle helpers.
+- `internal/workspacetool/`: per-runtime streaming bridge for executor tools.
+- `internal/app/executor*.go`, `internal/app/integration_executor.go`: executor orchestration and integration.
+- `docs/internal/remote-execution.md`: current Docker/SSH executor design and limits.
 
 ## Architectural constraints
 

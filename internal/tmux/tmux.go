@@ -13,10 +13,11 @@ import (
 )
 
 type SessionSpec struct {
-	Name  string
-	CWD   string
-	Env   map[string]string
-	Scrub []string
+	ShellCommand []string
+	Name         string
+	CWD          string
+	Env          map[string]string
+	Scrub        []string
 }
 
 type LaunchSpec struct {
@@ -132,52 +133,18 @@ func (c Client) EnsureSession(ctx context.Context, spec SessionSpec) (bool, erro
 	if err := c.applySessionEnvironment(ctx, spec.Name, spec.Env, spec.Scrub); err != nil {
 		return true, err
 	}
-	if _, err := c.run(ctx, []string{"new-window", "-t", spec.Name + ":", "-n", "shell", "-c", spec.CWD}, nil); err != nil {
+	shellArgs := []string{"new-window", "-t", spec.Name + ":", "-n", "shell", "-c", spec.CWD}
+	if len(spec.ShellCommand) > 0 {
+		command, err := ShellCommand(spec.ShellCommand)
+		if err != nil {
+			return true, err
+		}
+		shellArgs = append(shellArgs, command)
+	}
+	if _, err := c.run(ctx, shellArgs, nil); err != nil {
 		return true, err
 	}
 	if _, err := c.run(ctx, []string{"select-window", "-t", spec.Name + ":agent"}, nil); err != nil {
-		return true, err
-	}
-	return true, nil
-}
-
-// EnsureCommandSession creates a one-window session whose first pane runs command.
-// Existing sessions are reused without restarting their pane.
-func (c Client) EnsureCommandSession(ctx context.Context, spec SessionSpec, windowName string, command []string) (bool, error) {
-	if strings.TrimSpace(spec.Name) == "" {
-		return false, fmt.Errorf("tmux session name is required")
-	}
-	if strings.TrimSpace(spec.CWD) == "" {
-		return false, fmt.Errorf("tmux session working directory is required")
-	}
-	if len(command) == 0 {
-		return false, fmt.Errorf("command is required")
-	}
-	exists, err := c.HasSession(ctx, spec.Name)
-	if err != nil {
-		return false, err
-	}
-	if exists {
-		if err := c.applySessionEnvironment(ctx, spec.Name, spec.Env, spec.Scrub); err != nil {
-			return false, err
-		}
-		return false, nil
-	}
-	if strings.TrimSpace(windowName) == "" {
-		windowName = "agent"
-	}
-	shellCommand, err := ShellCommand(command)
-	if err != nil {
-		return false, err
-	}
-	cmdEnv := mergeEnv(envWithoutKeys(os.Environ(), scrubSet(spec.Scrub)), spec.Env)
-	if _, err := c.run(ctx, []string{"new-session", "-d", "-s", spec.Name, "-c", spec.CWD, "-n", windowName, "sleep 2147483647"}, cmdEnv); err != nil {
-		return false, err
-	}
-	if err := c.applySessionEnvironment(ctx, spec.Name, spec.Env, spec.Scrub); err != nil {
-		return true, err
-	}
-	if _, err := c.run(ctx, []string{"respawn-pane", "-k", "-c", spec.CWD, "-t", spec.Name + ":" + windowName, shellCommand}, nil); err != nil {
 		return true, err
 	}
 	return true, nil
@@ -241,62 +208,6 @@ func (c Client) showEnvironment(ctx context.Context, args ...string) (map[string
 		env[key] = value
 	}
 	return env, nil
-}
-
-func (c Client) EnsureGatewaySession(ctx context.Context, spec SessionSpec, agentCommand, shellCommand []string) (bool, error) {
-	created, err := c.EnsureCommandSession(ctx, spec, "agent", agentCommand)
-	if err != nil {
-		return false, err
-	}
-	defaultCommand, err := ShellCommand(shellCommand)
-	if err != nil {
-		return false, err
-	}
-	if err := c.setSessionOption(ctx, spec.Name, "default-command", defaultCommand); err != nil {
-		return false, err
-	}
-	for _, window := range []struct {
-		name    string
-		command []string
-	}{{"agent", agentCommand}, {"shell", shellCommand}} {
-		if _, err := c.ensureWindowCommand(ctx, LaunchSpec{SessionName: spec.Name, WindowName: window.name, CWD: spec.CWD, Command: window.command, Env: spec.Env, Scrub: spec.Scrub}); err != nil {
-			return false, err
-		}
-	}
-	return created, nil
-}
-
-func (c Client) ensureWindowCommand(ctx context.Context, spec LaunchSpec) (bool, error) {
-	name := strings.TrimSpace(spec.WindowName)
-	if name == "" {
-		return false, fmt.Errorf("window name is required")
-	}
-	exists, err := c.windowExists(ctx, spec.SessionName, name)
-	if err != nil {
-		return false, err
-	}
-	if exists {
-		return false, nil
-	}
-	if len(spec.Env) > 0 {
-		if err := c.applySessionEnvironment(ctx, spec.SessionName, spec.Env, spec.Scrub); err != nil {
-			return false, err
-		}
-	}
-	command, err := ShellCommand(spec.Command)
-	if err != nil {
-		return false, err
-	}
-	_, err = c.run(ctx, []string{"new-window", "-d", "-t", spec.SessionName + ":", "-n", name, "-c", spec.CWD, command}, nil)
-	return err == nil, err
-}
-
-func (c Client) setSessionOption(ctx context.Context, session, name, value string) error {
-	if strings.TrimSpace(session) == "" || strings.TrimSpace(name) == "" {
-		return fmt.Errorf("tmux session and option names are required")
-	}
-	_, err := c.run(ctx, []string{"set-option", "-t", session, name, value}, nil)
-	return err
 }
 
 func (c Client) LaunchCommand(ctx context.Context, spec LaunchSpec) error {

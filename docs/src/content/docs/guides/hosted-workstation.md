@@ -81,19 +81,11 @@ A repository-home workspace refers to the primary checkout on the Wi host. In a 
 
 Work created from uncommitted laptop files does not appear on the server automatically. Commit and push it, copy it deliberately, or wait for a future bundle-upload workflow.
 
-## Optional remote workers
+## Executors
 
-Remote executors keep Pi, conversations, tmux, and the coordinator on the Wi host while placing selected managed workspaces on worker machines:
+A server can also run each item's tools and shell in a separate Docker container. Pi, conversations, and the coordinator stay on the server. The executor has an independent Git clone and private tmux server for jobs and shells.
 
-```text
-server Pi
-  -> claim-fenced remote tools
-     -> worker managed workspace
-```
-
-This lets one workstation use larger build machines, alternate operating systems, cloud development sandboxes, or several workers. The user-facing Pi TUI remains in server tmux.
-
-Every operation is fenced with the current workspace claim. Remote tools preserve Pi's independent Bash-call semantics rather than injecting commands into a persistent shell. See [Remote executors](../remote-executors/) for setup and current limits.
+See [Use executors](../executors/) for image requirements, setup, and recovery. SSH profiles place the same item workspace and jobs on an existing worker account. Wi owns only its per-item directories, not that machine.
 
 ## Web access
 

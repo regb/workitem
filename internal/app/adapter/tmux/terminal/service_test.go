@@ -53,7 +53,7 @@ func (fakeStore) AppendEvent(context.Context, string, model.Event) error { retur
 
 func TestEnsureForManifestAppliesEnvironmentBeforeSessionCreation(t *testing.T) {
 	path := "/checkout"
-	manifest := model.Manifest{ID: "item-1", Repository: model.Repository{RootAtCreation: "/repo"}, Checkout: model.Checkout{Claim: &model.WorkspaceClaim{ID: "test-claim", Executor: model.ExecutorLocal, Path: path}}}
+	manifest := model.Manifest{ID: "item-1", Repository: model.Repository{RootAtCreation: "/repo"}, Checkout: model.Checkout{Claim: &model.WorkspaceClaim{ID: "test-claim", ExecutorProfile: "", Path: path}}}
 	workspace := func(context.Context, contract.ResolveOptions, model.Manifest, bool) (model.Manifest, []string, error) {
 		return manifest, nil, nil
 	}

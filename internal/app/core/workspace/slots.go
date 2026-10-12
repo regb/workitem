@@ -86,7 +86,7 @@ func (s *Service) finishSlotAssignment(ctx context.Context, m model.Manifest, pa
 			warnings = append(warnings, "revoked prior direnv trust for reused slot; runtime startup will request approval again")
 		}
 	}
-	if _, err := m.Checkout.AssignNewClaim(m.Checkout.Specification.Executor, repositoryKey(m.Repository), filepath.Base(path), path); err != nil {
+	if _, err := m.Checkout.AssignNewClaim(m.Checkout.Specification.ExecutorProfile, repositoryKey(m.Repository), filepath.Base(path), path); err != nil {
 		return slotAssignment{}, err
 	}
 	return slotAssignment{Manifest: m, Source: source, Warnings: warnings}, nil

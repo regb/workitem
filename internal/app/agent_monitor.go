@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	agentcore "github.com/regb/workitem/internal/app/core/primaryagent"
@@ -28,21 +27,12 @@ func (a *App) AgentStatus(ctx context.Context, opts AgentStatusOptions) (AgentSt
 	if err != nil {
 		return AgentStatusResult{}, err
 	}
-	if manifest.Checkout.Specification.Executor == "" || manifest.Checkout.Specification.Executor == model.ExecutorLocal {
+	if manifest.Checkout.Specification.ExecutorProfile == "" {
 		return result, nil
 	}
-	client, err := a.executorClient(manifest.Checkout.Specification.Executor)
-	if err != nil {
-		return AgentStatusResult{}, err
-	}
-	workspace, workspaceErr := client.WorkspaceStatus(ctx, manifest.ID)
+	status, workspaceErr := a.WorkspaceStatus(ctx, ResolveOptions{Selector: manifest.ID})
 	if workspaceErr != nil {
 		result.Warnings = append(result.Warnings, "could not inspect remote workspace: "+workspaceErr.Error())
-		return result, nil
-	}
-	var status WorkspaceStatusResult
-	if err := json.Unmarshal(workspace.StatusJSON, &status); err != nil {
-		result.Warnings = append(result.Warnings, "could not decode remote workspace status: "+err.Error())
 		return result, nil
 	}
 	state, reason := "clean", "remote checkout is clean"

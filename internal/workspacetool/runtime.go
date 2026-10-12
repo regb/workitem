@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -20,6 +21,38 @@ func RunRuntime(ctx context.Context, args []string, stdin io.Reader, stdout, std
 	remoteCWD := strings.TrimSpace(os.Getenv(CWDEnvironment))
 	if socket == "" || target == "" || remoteCWD == "" {
 		return 1, fmt.Errorf("remote workspace runtime environment is incomplete")
+	}
+	if len(args) > 1 && args[0] == "job" {
+		request := Request{Operation: args[1]}
+		switch args[1] {
+		case "run":
+			if len(args) != 6 {
+				return 2, fmt.Errorf("usage: job run <id> <timeout-ms> <cwd> <command>")
+			}
+			request.JobID = args[2]
+			var err error
+			request.TimeoutMS, err = strconv.ParseInt(args[3], 10, 64)
+			if err != nil {
+				return 2, err
+			}
+			request.CWD = args[4]
+			request.Command = []string{args[5]}
+		case "cancel":
+			if len(args) != 3 {
+				return 2, fmt.Errorf("usage: job cancel <id>")
+			}
+			request.JobID = args[2]
+		default:
+			return 2, fmt.Errorf("unknown job operation")
+		}
+		response, err := ExchangeStream(ctx, socket, request, func(r Response) error {
+			if _, err := stdout.Write(r.Stdout); err != nil {
+				return err
+			}
+			_, err := stderr.Write(r.Stderr)
+			return err
+		})
+		return response.ExitCode, err
 	}
 	if len(args) < 3 || args[0] != "container" {
 		return 2, fmt.Errorf("usage: wi internal-workspace-runtime container inspect|exec ...")

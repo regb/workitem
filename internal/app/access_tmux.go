@@ -12,10 +12,6 @@ import (
 	tmuxpkg "github.com/regb/workitem/internal/tmux"
 )
 
-type commandSessionTmux interface {
-	EnsureCommandSession(context.Context, tmuxpkg.SessionSpec, string, []string) (bool, error)
-}
-
 type copyModeTmux interface {
 	CopyMode(context.Context, string) error
 }
@@ -38,27 +34,6 @@ func (a *App) launchAgentInTmuxWithEnvironment(ctx context.Context, m model.Mani
 	}
 	cwd := agentcore.HostExecutionCWD(m, session, a.Store.ItemDir(m.ID))
 	window := "agent-" + strings.ToLower(model.ShortID(session.ID))
-	if a.SinglePaneTUITerminal {
-		runtime, err := a.prepareAgentRuntime(ctx, m, session, agent.ModeTUI)
-		if err != nil {
-			return warnings, err
-		}
-		command := []string{self, "agent", "exec", "--item", m.ID, "--conversation", session.ID, "--runtime", runtime.ID, "--mode", string(agent.ModeTUI)}
-		host, ok := a.Tmux.(commandSessionTmux)
-		if !ok {
-			return warnings, fmt.Errorf("tmux terminal adapter cannot create a persistent TUI session")
-		}
-		created, launchErr := host.EnsureCommandSession(ctx, spec, "agent", command)
-		if launchErr == nil && !created {
-			launchErr = a.Tmux.LaunchCommand(ctx, tmuxpkg.LaunchSpec{SessionName: m.TerminalSessionName(), CWD: cwd, Command: command, Env: spec.Env, Scrub: spec.Scrub, ReuseAgentWindow: true})
-		}
-		if launchErr != nil {
-			runtime.State, runtime.UpdatedAt = model.AgentRuntimeProblem, a.now()
-			_ = a.Store.SaveAgentRuntime(ctx, m.ID, runtime)
-			return warnings, launchErr
-		}
-		return append(warnings, a.recordPrimaryTerminalRuntime(ctx, m, "agent")...), nil
-	}
 	if _, err := a.Tmux.EnsureSession(ctx, spec); err != nil {
 		return warnings, err
 	}
@@ -105,6 +80,23 @@ func (a *App) EnterTerminalCopyMode(ctx context.Context, opts ResolveOptions, at
 	target := strings.TrimSpace(attachmentID)
 	if target == "" {
 		target = manifest.TerminalSessionName() + ":agent"
+	}
+	if manifest.Checkout.Specification.Kind == model.WorkspaceKindExecutor {
+		pane, err := a.Tmux.PaneInfo(ctx, target)
+		if err != nil {
+			return result, err
+		}
+		if pane.WindowName == "shell" {
+			client, err := a.executorClient(manifest)
+			if err != nil {
+				return result, err
+			}
+			if err := client.CopyMode(ctx); err != nil {
+				return result, err
+			}
+			result.Changed = true
+			return result, nil
+		}
 	}
 	if err := copier.CopyMode(ctx, target); err != nil {
 		return result, err

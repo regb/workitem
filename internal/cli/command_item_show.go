@@ -51,12 +51,20 @@ func runShow(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	}
 	fmt.Fprintf(cfg.Stdout, "Created from commit: %s\n", m.Repository.CreatedFromCommit)
 	fmt.Fprintf(cfg.Stdout, "Workspace kind: %s\n", m.Checkout.Specification.Kind)
-	fmt.Fprintf(cfg.Stdout, "Selected executor: %s\n", m.Checkout.Specification.Executor)
+	if m.Checkout.Specification.ExecutorProfile != "" {
+		fmt.Fprintf(cfg.Stdout, "Executor profile: %s\n", m.Checkout.Specification.ExecutorProfile)
+	}
 	fmt.Fprintf(cfg.Stdout, "Checkout: %s\n", m.Checkout.Presence())
 	fmt.Fprintf(cfg.Stdout, "Branch: %s\n", m.Checkout.Specification.Branch)
 	if m.Checkout.Claim != nil {
 		fmt.Fprintf(cfg.Stdout, "Workspace claim: %s\n", m.Checkout.Claim.ID)
-		fmt.Fprintf(cfg.Stdout, "Claim executor: %s\n", m.Checkout.Claim.Executor)
+		if b := m.Checkout.Claim.Executor; b != nil {
+			if b.Driver == "ssh" {
+				fmt.Fprintf(cfg.Stdout, "Executor: %s (SSH host %s, ready %t, releasing %t)\n", b.Name, b.Host, b.Ready, b.Releasing)
+			} else {
+				fmt.Fprintf(cfg.Stdout, "Executor: %s (image %s, ready %t, releasing %t)\n", b.Name, b.Image, b.Ready, b.Releasing)
+			}
+		}
 		if m.Checkout.Claim.Slot != "" {
 			fmt.Fprintf(cfg.Stdout, "Slot: %s\n", m.Checkout.Claim.Slot)
 		}

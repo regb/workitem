@@ -1,0 +1,5 @@
+FROM alpine:3.22
+RUN apk add --no-cache bash git tmux file ripgrep coreutils openssh && \
+    adduser -D wi && passwd -d wi && mkdir -p /run/sshd
+# Test keys are generated and copied into this disposable fixture per test.
+CMD ["/usr/sbin/sshd", "-D", "-e", "-f", "/keys/sshd_config"]

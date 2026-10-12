@@ -60,7 +60,7 @@ type NewOptions struct {
 	Env             map[string]string
 	PrepareOnly     bool
 	Agent           string
-	Executor        string
+	ExecutorProfile string
 }
 
 type NewResult struct {
@@ -225,14 +225,14 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 	if err != nil {
 		return NewResult{}, err
 	}
-	executor := strings.TrimSpace(opts.Executor)
-	if executor == "" {
-		executor = model.ExecutorLocal
+	profile := strings.TrimSpace(opts.ExecutorProfile)
+	checkout := model.NewCheckout(model.WorkspaceKindManagedSlot, profile, model.ItemBranchName(slug, id))
+	if profile != "" {
+		checkout.Specification.Kind = model.WorkspaceKindExecutor
 	}
-	checkout := model.NewCheckout(model.WorkspaceKindManagedSlot, executor, model.ItemBranchName(slug, id))
 	if opts.Home {
-		checkout = model.NewCheckout(model.WorkspaceKindRepositoryHome, model.ExecutorLocal, defaultBranch)
-		if _, claimErr := checkout.AssignNewClaim(model.ExecutorLocal, model.RepositoryKey(repo.Repository), "", home.Path); claimErr != nil {
+		checkout = model.NewCheckout(model.WorkspaceKindRepositoryHome, "", defaultBranch)
+		if _, claimErr := checkout.AssignNewClaim("", model.RepositoryKey(repo.Repository), "", home.Path); claimErr != nil {
 			return NewResult{}, claimErr
 		}
 	} else {
@@ -250,7 +250,7 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 	if m.Agent == "" {
 		m.Agent = "default"
 	}
-	createEvent := model.NewEvent(now, "work_item.created", "user", map[string]any{"title": title, "slug": slug, "workspace_kind": checkout.Specification.Kind, "executor": checkout.Specification.Executor})
+	createEvent := model.NewEvent(now, "work_item.created", "user", map[string]any{"title": title, "slug": slug, "workspace_kind": checkout.Specification.Kind, "executor_profile": checkout.Specification.ExecutorProfile})
 	if opts.PrepareOnly {
 		return NewResult{Manifest: m, ItemDir: s.store.ItemDir(id), Warnings: warnings, Description: opts.Description, CreateEvent: createEvent}, nil
 	}

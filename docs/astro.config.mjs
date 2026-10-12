@@ -43,7 +43,7 @@ export default defineConfig({
             { label: 'Review agent work', slug: 'guides/review-and-follow-up' },
             { label: 'Use tmux', slug: 'guides/tmux' },
             { label: 'Run wi on a server', slug: 'guides/hosted-workstation' },
-            { label: 'Use remote executors', slug: 'guides/remote-executors' },
+            { label: 'Use executors', slug: 'guides/executors' },
             { label: 'Merge completed work', slug: 'guides/merging' },
           ],
         },

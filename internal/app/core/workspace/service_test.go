@@ -67,7 +67,7 @@ func TestRelocateRepositoryPreservesCreationProvenance(t *testing.T) {
 			RemoteURL:         "git@example.com:acme/repo.git",
 			CreatedFromCommit: "abc",
 		},
-		Checkout: model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, "wi/item-1"),
+		Checkout: model.NewCheckout(model.WorkspaceKindManagedSlot, "", "wi/item-1"),
 	}
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }
 	st := &recordingStore{}
@@ -89,7 +89,7 @@ func TestRelocateRepositoryPreservesCreationProvenance(t *testing.T) {
 
 func TestForceReleaseMissingRepositoryHomeRelinquishesClaim(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "moved-repository")
-	manifest := model.Manifest{ID: "item-1", Checkout: model.Checkout{Specification: model.CheckoutSpecification{Kind: model.WorkspaceKindRepositoryHome, Executor: model.ExecutorLocal, Branch: "main"}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: missing}}}
+	manifest := model.Manifest{ID: "item-1", Checkout: model.Checkout{Specification: model.CheckoutSpecification{Kind: model.WorkspaceKindRepositoryHome, ExecutorProfile: "", Branch: "main"}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, ExecutorProfile: "", Path: missing}}}
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }
 	st := &recordingStore{}
 	result, err := New(st, fakeGit{}, nil, nil, resolve, nil, time.Now).Release(context.Background(), contract.ResolveOptions{}, true)
@@ -108,7 +108,7 @@ func TestForceReleaseMissingRepositoryHomeRelinquishesClaim(t *testing.T) {
 }
 
 func TestRelocateRepositoryRejectsDifferentOrigin(t *testing.T) {
-	manifest := model.Manifest{ID: "item-1", Repository: model.Repository{RootAtCreation: "/old/repo", RemoteURL: "git@example.com:acme/repo.git", CreatedFromCommit: "abc"}, Checkout: model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, "wi/item-1")}
+	manifest := model.Manifest{ID: "item-1", Repository: model.Repository{RootAtCreation: "/old/repo", RemoteURL: "git@example.com:acme/repo.git", CreatedFromCommit: "abc"}, Checkout: model.NewCheckout(model.WorkspaceKindManagedSlot, "", "wi/item-1")}
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }
 	git := fakeGit{repository: model.RepositoryInfo{Repository: model.Repository{RootAtCreation: "/other/repo", RemoteURL: "git@example.com:other/repo.git"}}}
 	if _, err := New(&recordingStore{}, git, nil, nil, resolve, nil, time.Now).RelocateRepository(context.Background(), contract.ResolveOptions{}, "/other/repo"); err == nil || !strings.Contains(err.Error(), "does not match recorded origin") {
@@ -117,7 +117,7 @@ func TestRelocateRepositoryRejectsDifferentOrigin(t *testing.T) {
 }
 
 func TestSlotAssignmentAdvancesClaimGeneration(t *testing.T) {
-	manifest := model.Manifest{ID: "item-1", Repository: model.Repository{GitCommonDir: "/repo/.git"}, Checkout: model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, "wi/item-1")}
+	manifest := model.Manifest{ID: "item-1", Repository: model.Repository{GitCommonDir: "/repo/.git"}, Checkout: model.NewCheckout(model.WorkspaceKindManagedSlot, "", "wi/item-1")}
 	manifest.Checkout.ClaimGeneration = 3
 	result, err := New(nil, fakeGit{}, nil, nil, nil, nil, nil).finishSlotAssignment(context.Background(), manifest, "/slots/slot-0004", "wi/item-1", "test", nil, false)
 	if err != nil {
@@ -139,7 +139,7 @@ func TestReusedSlotRevokesExistingDirenvTrust(t *testing.T) {
 
 func TestStatusReportsAbsentCheckout(t *testing.T) {
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1", State: model.StateBacklog, Checkout: model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, "wi/item-1")}, nil
+		return model.Manifest{ID: "item-1", State: model.StateBacklog, Checkout: model.NewCheckout(model.WorkspaceKindManagedSlot, "", "wi/item-1")}, nil
 	}
 	res, err := New(nil, fakeGit{}, nil, nil, resolve, nil, nil).Status(context.Background(), contract.ResolveOptions{})
 	if err != nil || len(res.Warnings) != 1 || res.Warnings[0] != "checkout is absent" || res.Git.ExpectedBranch != "wi/item-1" {
@@ -150,7 +150,7 @@ func TestStatusReportsAbsentCheckout(t *testing.T) {
 func TestStatusReportsUnavailableCheckout(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing")
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1", State: model.StateWorking, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Branch: "wi/item-1"}, Claim: &model.WorkspaceClaim{ID: "test-claim", Executor: model.ExecutorLocal, Path: path}}}, nil
+		return model.Manifest{ID: "item-1", State: model.StateWorking, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Branch: "wi/item-1"}, Claim: &model.WorkspaceClaim{ID: "test-claim", ExecutorProfile: "", Path: path}}}, nil
 	}
 	res, err := New(nil, fakeGit{}, nil, nil, resolve, nil, nil).Status(context.Background(), contract.ResolveOptions{})
 	if err != nil || len(res.Warnings) != 1 || res.Git.CurrentHead != "" {
@@ -162,7 +162,7 @@ func TestStatusInspectsPresentCheckout(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Clean(dir)
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1", State: model.StateWorking, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Branch: "wi/item-1"}, Claim: &model.WorkspaceClaim{ID: "test-claim", Executor: model.ExecutorLocal, Path: path}}}, nil
+		return model.Manifest{ID: "item-1", State: model.StateWorking, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Branch: "wi/item-1"}, Claim: &model.WorkspaceClaim{ID: "test-claim", ExecutorProfile: "", Path: path}}}, nil
 	}
 	res, err := New(nil, fakeGit{}, nil, nil, resolve, nil, nil).Status(context.Background(), contract.ResolveOptions{})
 	if err != nil || !res.Git.BranchMatches || !res.Git.Dirty || res.Git.CurrentHead != "abc" {

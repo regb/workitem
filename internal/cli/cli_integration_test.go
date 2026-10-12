@@ -15,8 +15,8 @@ import (
 	pidriver "github.com/regb/workitem/internal/agentdriver/pi"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/cli"
-	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/executor"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
@@ -279,7 +279,7 @@ func TestNewJSONOutputStability(t *testing.T) {
 
 func TestNewSelectsConfiguredExecutorWithoutMaterializing(t *testing.T) {
 	stdout, stderr, application := configuredApp(t)
-	application.ExecutorsConfig = map[string]config.ExecutorConfig{"macbook": {Destination: "macbook"}}
+	application.ExecutorsConfig = map[string]executor.Profile{"macbook": {Driver: "docker", Image: "wi-executor-test"}}
 	code := cli.Run(context.Background(), []string{"--json", "new", "--executor", "macbook", "Remote item"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application})
 	if code != cli.ExitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
@@ -290,8 +290,21 @@ func TestNewSelectsConfiguredExecutorWithoutMaterializing(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
 		t.Fatal(err)
 	}
-	if result.Manifest.Checkout.Specification.Executor != "macbook" || result.Manifest.Checkout.Present() {
+	if result.Manifest.Checkout.Specification.ExecutorProfile != "macbook" || result.Manifest.Checkout.Present() || result.Manifest.Checkout.Specification.Kind != model.WorkspaceKindExecutor {
 		t.Fatalf("checkout=%+v", result.Manifest.Checkout)
+	}
+	if !strings.Contains(stdout.String(), `"executor_profile"`) || strings.Contains(stdout.String(), `"box_profile"`) {
+		t.Fatalf("JSON uses obsolete terminology: %s", stdout.String())
+	}
+}
+
+func TestCreationRejectsRetiredBoxFlag(t *testing.T) {
+	for _, args := range [][]string{{"new", "--box", "dev", "Task"}, {"start", "--new", "--box", "dev", "Task"}} {
+		stdout, stderr, application := configuredApp(t)
+		code := cli.Run(context.Background(), args, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application})
+		if code == cli.ExitOK || !strings.Contains(stderr.String(), "flag provided but not defined") {
+			t.Fatalf("retired flag accepted: code=%d stderr=%s", code, stderr.String())
+		}
 	}
 }
 
@@ -740,11 +753,11 @@ func TestListOmitsStateAndMarksRepositoryHome(t *testing.T) {
 	}
 }
 
-func TestListUsesProjectionWithoutContactingRemoteExecutor(t *testing.T) {
+func TestListUsesProjectionWithoutContactingExecutor(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	st := store.New(t.TempDir())
-	manifest := model.NewManifest(testutil.ID(t, 57), "remote", "Remote", nil, false, testutil.Time(), model.Repository{RootAtCreation: t.TempDir(), CreatedFromCommit: strings.Repeat("a", 40)}, model.NewCheckout(model.WorkspaceKindManagedSlot, "unconfigured", "wi/remote"))
+	manifest := model.NewManifest(testutil.ID(t, 57), "remote", "Remote", nil, false, testutil.Time(), model.Repository{RootAtCreation: t.TempDir(), CreatedFromCommit: strings.Repeat("a", 40)}, model.NewCheckout(model.WorkspaceKindExecutor, "unconfigured", "wi/remote"))
 	application := app.New(st, &fakeGit{})
 	bindTestCoordinator(t, application, st)
 	if err := application.Store.CreateItem(context.Background(), manifest); err != nil {
@@ -758,7 +771,7 @@ func TestListUsesProjectionWithoutContactingRemoteExecutor(t *testing.T) {
 		t.Fatalf("exit=%d stderr=%s", code, stderr.String())
 	}
 	if strings.Contains(stdout.String()+stderr.String(), "executor") {
-		t.Fatalf("list contacted remote executor instead of using its projection:\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
+		t.Fatalf("list contacted an executor instead of using its projection:\nstdout=%s\nstderr=%s", stdout.String(), stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "remote") {
 		t.Fatalf("list output missing remote item:\n%s", stdout.String())

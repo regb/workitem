@@ -47,7 +47,6 @@ func (a *App) createConversation(ctx context.Context, m model.Manifest) (createC
 	if err != nil {
 		return createConversationResult{}, err
 	}
-	conversation.Executor = model.ExecutorLocal
 	return a.primaryAgentService().CreateConversation(ctx, m, conversation)
 }
 
@@ -159,7 +158,6 @@ func (a *App) ensureConversationCheckout(ctx context.Context, m model.Manifest) 
 	if err != nil {
 		return model.Manifest{}, model.Conversation{}, nil, err
 	}
-	forked.Executor = model.ExecutorLocal
 	targetPath, err := a.primaryAgentService().AbsPath(m.ID, forked.NativeLocator())
 	if err != nil {
 		return model.Manifest{}, model.Conversation{}, nil, err
@@ -205,7 +203,7 @@ func (a *App) validateConversationCheckout(m model.Manifest, conversation model.
 }
 
 func (a *App) conversationHostCWD(m model.Manifest) string {
-	if claim := m.Checkout.Claim; claim != nil && claim.Executor != "" && claim.Executor != model.ExecutorLocal {
+	if claim := m.Checkout.Claim; claim != nil && claim.ExecutorProfile != "" {
 		return a.Store.ItemDir(m.ID)
 	}
 	if m.Checkout.Claim != nil {

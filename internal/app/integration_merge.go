@@ -71,24 +71,8 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (MergeResult
 	if m.State != model.StateWorking && m.State != model.StateWaiting {
 		return res, fmt.Errorf("work item %s is %s; merge requires a working or waiting item", m.ID, m.State)
 	}
-	if m.Checkout.Specification.Executor != "" && m.Checkout.Specification.Executor != model.ExecutorLocal {
-		released, err := a.ReleaseWorkItemWorkspace(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}, false)
-		if err != nil {
-			return res, fmt.Errorf("return remote workspace before merge: %w", err)
-		}
-		m = released.Manifest
-		previousExecutor := m.Checkout.Specification.Executor
-		m.Checkout.Specification.Executor = model.ExecutorLocal
-		m.UpdatedAt = a.now()
-		if err := a.Store.SaveManifest(ctx, m); err != nil {
-			return res, err
-		}
-		_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "checkout.executor_returned", "wi", map[string]any{"previous_executor": previousExecutor, "executor": model.ExecutorLocal}))
-		workspace, err := a.EnsureWorkItemWorkspace(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env})
-		if err != nil {
-			return res, fmt.Errorf("materialize returned workspace before merge: %w", err)
-		}
-		m = workspace.Manifest
+	if m.Checkout.Specification.Kind == model.WorkspaceKindExecutor {
+		return a.mergeExecutor(ctx, m, opts)
 	}
 	if !m.Checkout.Present() || m.Checkout.Claim == nil || strings.TrimSpace(m.Checkout.Claim.Path) == "" {
 		return res, fmt.Errorf("work item %s has no checkout; start it before merging", m.ID)

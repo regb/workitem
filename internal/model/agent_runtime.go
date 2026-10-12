@@ -29,7 +29,6 @@ type AgentRuntime struct {
 	Mode                     string              `json:"mode"`
 	State                    string              `json:"state"`
 	ConversationID           string              `json:"conversation_id"`
-	Executor                 string              `json:"executor,omitempty"`
 	WorkspaceClaimID         string              `json:"workspace_claim_id,omitempty"`
 	WorkspaceClaimGeneration uint64              `json:"workspace_claim_generation,omitempty"`
 	Capabilities             RuntimeCapabilities `json:"capabilities"`

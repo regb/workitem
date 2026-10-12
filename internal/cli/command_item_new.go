@@ -18,13 +18,13 @@ import (
 func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("new", cfg.Stderr)
 	var labels repeatFlag
-	var descFile, prompt, slug, base, repoPath, agentMode, agentName, executorName string
+	var descFile, prompt, slug, base, repoPath, agentMode, agentName, executorProfile string
 	var deep, home, noDefaultLabels bool
 	fs.StringVar(&descFile, "desc-file", "", "read work-item description from file")
 	fs.StringVar(&prompt, "prompt", "", "use this description and start an agent immediately without attaching")
 	fs.StringVar(&agentMode, "agent-mode", "tui", "with --prompt, runtime mode: tui or headless")
 	fs.StringVar(&agentName, "agent", "default", "configured agent definition")
-	fs.StringVar(&executorName, "executor", "local", "managed-slot executor")
+	fs.StringVar(&executorProfile, "executor", "", "Docker or SSH executor profile")
 	fs.StringVar(&slug, "slug", "", "explicit active slug for the new work item")
 	fs.Var(&labels, "label", "label to add (repeatable)")
 	fs.BoolVar(&noDefaultLabels, "no-default-labels", false, "do not inherit user or repository default labels")
@@ -54,7 +54,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	if agentModeSet && !promptSet {
 		return usageErr{errors.New("--agent-mode requires --prompt")}
 	}
-	if cfg.ControlAccess == coordinator.AccessAgent || cfg.ControlAccess == coordinator.AccessExecutor {
+	if cfg.ControlAccess == coordinator.AccessAgent {
 		endpoint := cfg.ControlAccess
 		if promptSet {
 			return fmt.Errorf("%s endpoint may create backlog items only; --prompt is not allowed", endpoint)
@@ -62,8 +62,8 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 		if home {
 			return fmt.Errorf("%s endpoint may create managed-slot items only; --home is not allowed", endpoint)
 		}
-		if cfg.ControlAccess == coordinator.AccessExecutor && strings.TrimSpace(repoPath) != "" {
-			return errors.New("executor endpoint creates work in the current authoritative repository; --repo is not allowed")
+		if executorProfile != "" {
+			return errors.New("agent endpoint cannot create executor items")
 		}
 	}
 	description := strings.TrimSpace(prompt)
@@ -86,7 +86,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	}
 	opts := app.NewWorkItemOptions{
 		Title: title, Slug: slug, Description: description, Labels: labels,
-		NoDefaultLabels: noDefaultLabels, DeepWork: deep, Base: base, Home: home, CWD: newCWD, Env: cfg.Env, Agent: agentName, Executor: executorName,
+		NoDefaultLabels: noDefaultLabels, DeepWork: deep, Base: base, Home: home, CWD: newCWD, Env: cfg.Env, Agent: agentName, ExecutorProfile: executorProfile,
 	}
 	if promptSet {
 		mode, err := agent.ParseMode(agentMode)
@@ -161,7 +161,9 @@ func printNewWorkItemResult(cfg Config, res app.NewWorkItemResult) {
 	fmt.Fprintf(cfg.Stdout, "created from commit: %s\n", res.Manifest.Repository.CreatedFromCommit)
 	fmt.Fprintf(cfg.Stdout, "branch: %s\n", res.Manifest.Checkout.Specification.Branch)
 	fmt.Fprintf(cfg.Stdout, "workspace kind: %s\n", res.Manifest.Checkout.Specification.Kind)
-	fmt.Fprintf(cfg.Stdout, "executor: %s\n", res.Manifest.Checkout.Specification.Executor)
+	if res.Manifest.Checkout.Specification.ExecutorProfile != "" {
+		fmt.Fprintf(cfg.Stdout, "executor profile: %s\n", res.Manifest.Checkout.Specification.ExecutorProfile)
+	}
 	fmt.Fprintf(cfg.Stdout, "checkout: %s\n", res.Manifest.Checkout.Presence())
 	if res.Manifest.Checkout.Claim != nil {
 		fmt.Fprintf(cfg.Stdout, "checkout path: %s\n", res.Manifest.Checkout.Claim.Path)

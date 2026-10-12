@@ -23,17 +23,11 @@ wi workspace release add-pagination
 
 Release refuses while an active runtime or terminal depends on the checkout.
 
-The checkout specification records desired state: kind, selected executor, and branch. Materialization creates a separate workspace claim containing a claim ID, monotonic generation, actual executor, repository key, slot, and path. The checkout retains the latest generation after release. A later ensure creates the next generation on the same selected executor.
+## Executors
 
-Executor selection is mutable only before the first materialization. Releasing a claim does not make placement editable again. Agent runtime and terminal records carry the claim ID and generation that created them, so a stale process cannot resume against a replacement claim. A future workspace move must transfer committed Git state and fence the old claim before activating the replacement; Pi and its conversation remain on the Wi host.
+`wi new --executor dev "Build the parser"` records an executor checkout specification. Ensure creates an independent Git clone in a Docker container or dedicated SSH directory, not a reusable managed slot. Pi stays on the host while coding tools and the shell run in the executor. Shelve retains dirty files; release exports commits and removes the owned container or remote claim directory.
 
-A managed slot may select a configured executor. The source context and item remain on the coordinator, while Git objects, checkout materialization, runtime, and optional terminal run on the worker.
-
-```bash
-wi new --executor macbook "Check macOS behavior"
-```
-
-The slot identity is scoped by executor and repository. Remote release imports committed branch history before relinquishing the worker claim. See [Remote executors](../guides/remote-executors/) for configuration and current limits.
+See [Use executors](../../guides/executors/) for configuration and recovery.
 
 ## Relocated repositories
 
@@ -53,7 +47,7 @@ Some work must happen in the repository's primary checkout on its local default 
 wi new --home "Update release metadata"
 ```
 
-Repository-home work is local-only. A repository-home item borrows that checkout. `wi` validates that it exists, is on the local default branch, and has no other active home claim. It does not switch, reset, clean, or remove the directory.
+A repository-home item borrows that checkout. `wi` validates that it exists, is on the local default branch, and has no other active home claim. It does not switch, reset, clean, or remove the directory.
 
 Only one active item can claim a repository home at a time.
 

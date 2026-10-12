@@ -165,7 +165,7 @@ func TestNewHomeWorkItemRejectsExistingClaim(t *testing.T) {
 	root := t.TempDir()
 	now := testutil.Time()
 	path := root
-	existing := model.NewManifest(testutil.ID(t, 13), "existing", "Existing", nil, false, now, model.Repository{RootAtCreation: root, GitCommonDir: filepath.Join(root, ".git")}, model.Checkout{Specification: model.CheckoutSpecification{Kind: model.WorkspaceKindRepositoryHome, Executor: model.ExecutorLocal, Branch: "main"}, Claim: &model.WorkspaceClaim{ID: "test-claim", Executor: model.ExecutorLocal, Path: path}})
+	existing := model.NewManifest(testutil.ID(t, 13), "existing", "Existing", nil, false, now, model.Repository{RootAtCreation: root, GitCommonDir: filepath.Join(root, ".git")}, model.Checkout{Specification: model.CheckoutSpecification{Kind: model.WorkspaceKindRepositoryHome, ExecutorProfile: "", Branch: "main"}, Claim: &model.WorkspaceClaim{ID: "test-claim", ExecutorProfile: "", Path: path}})
 	if err := st.CreateItem(context.Background(), existing); err != nil {
 		t.Fatal(err)
 	}

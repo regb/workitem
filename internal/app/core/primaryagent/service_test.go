@@ -40,13 +40,13 @@ func (s *runtimeStore) AppendEvent(context.Context, string, model.Event) error {
 func TestPrepareKeepsRuntimeLocalAndBindsRemoteWorkspaceClaim(t *testing.T) {
 	st := &runtimeStore{itemDir: t.TempDir()}
 	service := New(st, process(false), nil, nil, nil, nil, func() time.Time { return testutil.Time() }, nil)
-	manifest := model.Manifest{ID: testutil.ID(t, 1), Checkout: model.Checkout{Specification: model.CheckoutSpecification{Executor: "worker"}, ClaimGeneration: 4, Claim: &model.WorkspaceClaim{ID: "claim-4", Generation: 4, Executor: "worker", Path: "/workspace"}}}
+	manifest := model.Manifest{ID: testutil.ID(t, 1), Checkout: model.Checkout{Specification: model.CheckoutSpecification{ExecutorProfile: "worker"}, ClaimGeneration: 4, Claim: &model.WorkspaceClaim{ID: "claim-4", Generation: 4, ExecutorProfile: "worker", Path: "/workspace"}}}
 	conversation := model.Conversation{ID: testutil.ID(t, 2)}
 	runtime, err := service.Prepare(context.Background(), manifest, conversation, agent.ModeHeadless)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if runtime.Executor != model.ExecutorLocal || runtime.WorkspaceClaimID != "claim-4" || runtime.WorkspaceClaimGeneration != 4 {
+	if runtime.WorkspaceClaimID != "claim-4" || runtime.WorkspaceClaimGeneration != 4 {
 		t.Fatalf("runtime=%+v", runtime)
 	}
 }

@@ -75,15 +75,6 @@ func (a *App) DeleteWorkItems(ctx context.Context, opts DeleteWorkItemsOptions) 
 	}
 	result := DeleteWorkItemsResult{DeletedIDs: []string{}, Warnings: []string{}}
 	for _, manifest := range items {
-		if manifest.Checkout.Specification.Executor != "" && manifest.Checkout.Specification.Executor != model.ExecutorLocal {
-			client, err := a.executorClient(manifest.Checkout.Specification.Executor)
-			if err != nil {
-				return result, err
-			}
-			if err := client.DeleteItem(ctx, manifest.ID); err != nil {
-				return result, fmt.Errorf("delete executor replica for work item %s: %w", manifest.ID, err)
-			}
-		}
 		if err := a.Store.RemoveItem(manifest.ID); err != nil {
 			return result, fmt.Errorf("delete work item %s: %w", manifest.ID, err)
 		}

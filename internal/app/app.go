@@ -21,6 +21,7 @@ import (
 	viewapp "github.com/regb/workitem/internal/app/view"
 	"github.com/regb/workitem/internal/config"
 	direnvpkg "github.com/regb/workitem/internal/direnv"
+	"github.com/regb/workitem/internal/executor"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
@@ -123,9 +124,7 @@ type App struct {
 	Clock                          Clock
 	NewID                          func() (string, error)
 	SelfPath                       string
-	SinglePaneTUITerminal          bool
 	DaemonSocketPath               string
-	ExecutorDaemonSocketPath       string
 	AgentRuntimeStateRoot          string
 	AgentRuntimeSocketRoot         string
 	AgentRuntimeReadyTimeout       time.Duration
@@ -140,8 +139,8 @@ type App struct {
 	DirenvConfig                   config.DirenvConfig
 	AgentsConfig                   map[string]config.AgentDefinitionConfig
 	DriversConfig                  map[string]config.DriverDefinitionConfig
-	ExecutorsConfig                map[string]config.ExecutorConfig
-	ExecutorClients                map[string]ExecutorClient
+	ExecutorsConfig                map[string]executor.Profile
+	ExecutorTransport              executor.Transport
 	MasterID                       string
 	Home                           string
 	Environment                    map[string]string
@@ -155,7 +154,7 @@ type App struct {
 
 func New(st Store, git Git) *App {
 	cfg := config.Default()
-	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DirenvConfig: cfg.Direnv, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, ExecutorsConfig: cfg.Executors, ExecutorClients: map[string]ExecutorClient{}, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
+	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DirenvConfig: cfg.Direnv, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, ExecutorsConfig: cfg.Executors, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
 	return a
 }
 
@@ -220,10 +219,21 @@ func (a *App) attentionService() *attentioncore.Service {
 }
 func (a *App) viewService() *viewapp.Service { return viewapp.New(a.Store) }
 func (a *App) terminalService() *terminaladapter.Service {
-	return terminaladapter.New(a.Store, a.Tmux, a.ResolveItem, a.ensureWorkspaceCheckout, func(runtime *model.AgentRuntime) (bool, string) {
+	service := terminaladapter.New(a.Store, a.Tmux, a.ResolveItem, a.ensureWorkspaceCheckout, func(runtime *model.AgentRuntime) (bool, string) {
 		ownership := a.primaryAgentService().ObserveOwnership(runtime)
 		return ownership.ProcessAlive, ownership.Mode
 	}, a.now)
+	service.ShellCommand = func(m model.Manifest) []string {
+		if m.Checkout.Specification.Kind != model.WorkspaceKindExecutor {
+			return nil
+		}
+		self := a.SelfPath
+		if self == "" {
+			self = "wi"
+		}
+		return []string{self, "internal-executor-attach", m.ID}
+	}
+	return service
 }
 func (a *App) tmuxPorcelainService() *tmuxporcelain.Service {
 	return tmuxporcelain.New(a.ResolveItem)

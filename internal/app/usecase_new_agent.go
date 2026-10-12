@@ -75,26 +75,6 @@ func (a *App) waitForAgentRuntimeReady(ctx context.Context, itemID string, runti
 	if interval <= 0 {
 		interval = defaultAgentRuntimeReadyInterval
 	}
-	if runtime.Executor != "" && runtime.Executor != model.ExecutorLocal {
-		deadline := time.Now().Add(timeout)
-		for {
-			status, err := a.AgentRuntimeStatus(ctx, ResolveOptions{Selector: itemID})
-			if err == nil && status.Runtime != nil && status.Runtime.Capabilities.Prompt {
-				return nil
-			}
-			if timeout < 0 || !time.Now().Before(deadline) {
-				if err != nil {
-					return err
-				}
-				return fmt.Errorf("agent runtime %s is not ready for prompt control on executor %s", runtime.ID, runtime.Executor)
-			}
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case <-time.After(interval):
-			}
-		}
-	}
 	socketPath := a.runtimeControlSocketPath(itemID, runtime)
 	if socketPath == "" {
 		return fmt.Errorf("agent runtime %s has no control socket", runtime.ID)
