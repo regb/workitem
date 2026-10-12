@@ -16,6 +16,7 @@ const itemID = "01K00000000000000000000000"
 
 type fakeBackend struct {
 	sent     Message
+	shelved  int
 	archived int
 	current  string
 	projects []string
@@ -26,6 +27,9 @@ type fakeBackend struct {
 
 func (b *fakeBackend) Projects(context.Context) ([]Project, error) {
 	return []Project{{ID: "project-a", Name: "repo", Root: "/tmp/repo"}}, nil
+}
+func (b *fakeBackend) Agents(context.Context) ([]AgentProfile, error) {
+	return []AgentProfile{{Name: "default", Label: "Pi · Deep"}, {Name: "claude-opus", Label: "Claude · Opus"}}, nil
 }
 func (b *fakeBackend) Create(_ context.Context, create Create) Outcome {
 	b.created++
@@ -57,6 +61,10 @@ func (b *fakeBackend) Content(context.Context, string) (driverprotocol.Content, 
 func (b *fakeBackend) Send(_ context.Context, _ string, m Message) Outcome {
 	b.sent = m
 	return Outcome{Result: "submitted"}
+}
+func (b *fakeBackend) Shelve(context.Context, string) Outcome {
+	b.shelved++
+	return Outcome{Result: "shelved"}
 }
 func (b *fakeBackend) Archive(context.Context, string) Outcome {
 	b.archived++
@@ -113,6 +121,36 @@ func TestSecurityBoundary(t *testing.T) {
 		t.Fatal("unauthorized mutation reached backend")
 	}
 }
+func TestTrustedHTTPSAccessURL(t *testing.T) {
+	b := &fakeBackend{}
+	s, err := NewWithAccessURL(b, "127.0.0.1:1234", "https://macbook.example.ts.net:8448")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.URL(); !strings.HasPrefix(got, "https://macbook.example.ts.net:8448/#token=") {
+		t.Fatalf("launch URL = %q", got)
+	}
+	r := httptest.NewRequest("POST", "https://macbook.example.ts.net:8448/api/items/"+itemID+"/archive", strings.NewReader(`{}`))
+	r.Header.Set("Authorization", "Bearer "+s.token)
+	r.Header.Set("Origin", "https://macbook.example.ts.net:8448")
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	s.ServeHTTP(w, r)
+	if w.Code != 200 || b.archived != 1 {
+		t.Fatalf("trusted proxy request: status=%d body=%s", w.Code, w.Body.String())
+	}
+	for _, bad := range []string{
+		"http://macbook.example.ts.net:8448",
+		"https://user@example.ts.net",
+		"https://example.ts.net/path",
+		"https://example.ts.net?token=bad",
+	} {
+		if _, err := NewWithAccessURL(b, "127.0.0.1:1234", bad); err == nil {
+			t.Fatalf("accepted unsafe access URL %q", bad)
+		}
+	}
+}
+
 func TestNavigationDeliveryAndArchivePartialOutcome(t *testing.T) {
 	b := &fakeBackend{partial: true}
 	s, _ := New(b, "127.0.0.1:1234")
@@ -122,9 +160,21 @@ func TestNavigationDeliveryAndArchivePartialOutcome(t *testing.T) {
 	if w := request(s, "GET", "/api/items/"+itemID+"/chat", ""); w.Code != 200 || !strings.Contains(w.Body.String(), `\u003cscript`) || !strings.Contains(w.Body.String(), `\u003cb\u003eTicket description`) {
 		t.Fatalf("history response %s", w.Body.String())
 	}
-	body := `{"text":"hello","delivery":"follow_up","runtime_id":"owner"}`
-	if w := request(s, "POST", "/api/items/"+itemID+"/messages", body); w.Code != 200 || b.sent.RuntimeID != "owner" || b.sent.Delivery != "follow_up" {
+	body := `{"text":"hello","images":[{"mime_type":"image/png","data":"iVBORw0KGgo="}],"delivery":"follow_up","runtime_id":"owner"}`
+	if w := request(s, "POST", "/api/items/"+itemID+"/messages", body); w.Code != 200 || b.sent.RuntimeID != "owner" || b.sent.Delivery != "follow_up" || len(b.sent.Images) != 1 {
 		t.Fatalf("send %d %+v", w.Code, b.sent)
+	}
+	for _, bad := range []string{
+		`{"text":"","images":[],"delivery":"prompt","runtime_id":"owner"}`,
+		`{"text":"image","images":[{"mime_type":"image/svg+xml","data":"PHN2Zz4="}],"delivery":"prompt","runtime_id":"owner"}`,
+		`{"text":"image","images":[{"mime_type":"image/png","data":"not-base64"}],"delivery":"prompt","runtime_id":"owner"}`,
+	} {
+		if w := request(s, "POST", "/api/items/"+itemID+"/messages", bad); w.Code != 409 {
+			t.Fatalf("bad image message accepted: %s", bad)
+		}
+	}
+	if w := request(s, "POST", "/api/items/"+itemID+"/shelve", `{}`); w.Code != 200 || b.shelved != 1 {
+		t.Fatalf("shelve status=%d calls=%d", w.Code, b.shelved)
 	}
 	for _, body := range []string{`{"force":true}`, `{} {}`, `{"force":false}`} {
 		if w := request(s, "POST", "/api/items/"+itemID+"/archive", body); w.Code != 409 {
@@ -153,6 +203,9 @@ func TestCreateValidationAndRetainedOutcome(t *testing.T) {
 	if w := request(s, "GET", "/api/projects", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "project-a") {
 		t.Fatalf("project catalog: %s", w.Body.String())
 	}
+	if w := request(s, "GET", "/api/agents", ""); w.Code != 200 || !strings.Contains(w.Body.String(), "claude-opus") || strings.Contains(w.Body.String(), "config") {
+		t.Fatalf("agent catalog: %s", w.Body.String())
+	}
 	for _, body := range []string{
 		`{}`, `{"title":"Task","prompt":"Request"}`, `{"project_id":"project-a","title":" ","prompt":"Request"}`,
 		`{"project_id":"project-a","title":"Task","prompt":" "}`, `{"project_id":"project-a","title":"Task","prompt":"Request","repo_path":"/etc"}`,
@@ -164,9 +217,9 @@ func TestCreateValidationAndRetainedOutcome(t *testing.T) {
 			t.Fatalf("invalid creation accepted: %s", w.Body.String())
 		}
 	}
-	w := request(s, "POST", "/api/items", `{"project_id":"project-a","prompt":" Initial request "}`)
+	w := request(s, "POST", "/api/items", `{"project_id":"project-a","agent":"claude-opus","prompt":" Initial request "}`)
 	var out Creation
-	if w.Code != 202 || b.created != 1 || b.create.Prompt != "Initial request" || json.Unmarshal(w.Body.Bytes(), &out) != nil || out.ID != itemID || out.State != "queued" {
+	if w.Code != 202 || b.created != 1 || b.create.Agent != "claude-opus" || b.create.Prompt != "Initial request" || json.Unmarshal(w.Body.Bytes(), &out) != nil || out.ID != itemID || out.State != "queued" {
 		t.Fatalf("creation receipt lost: %s", w.Body.String())
 	}
 	s.Close() // Wait for the background partial outcome before inspecting it.
@@ -207,6 +260,7 @@ func TestStreamReconnectUsesReplacementSnapshots(t *testing.T) {
 	httpServer := httptest.NewServer(s)
 	defer httpServer.Close()
 	s.host = strings.TrimPrefix(httpServer.URL, "http://")
+	s.origin = httpServer.URL
 	for i := 0; i < 2; i++ {
 		ctx, cancel := context.WithCancel(context.Background())
 		req, _ := http.NewRequestWithContext(ctx, "GET", httpServer.URL+"/api/items/"+itemID+"/stream", nil)
@@ -228,6 +282,15 @@ func TestStreamReconnectUsesReplacementSnapshots(t *testing.T) {
 }
 func TestEmbeddedAssetsAndBodyBounds(t *testing.T) {
 	s, _ := New(&fakeBackend{}, "127.0.0.1:1234")
+	navigation := httptest.NewRequest("GET", "http://"+s.host+"/", nil)
+	navigation.Header.Set("Sec-Fetch-Site", "cross-site")
+	navigation.Header.Set("Sec-Fetch-Mode", "navigate")
+	navigation.Header.Set("Sec-Fetch-Dest", "document")
+	navigationResponse := httptest.NewRecorder()
+	s.ServeHTTP(navigationResponse, navigation)
+	if navigationResponse.Code != 200 {
+		t.Fatalf("cross-site top-level navigation status=%d", navigationResponse.Code)
+	}
 	for _, path := range []string{"/", "/app.js", "/style.css"} {
 		w := request(s, "GET", path, "")
 		if w.Code != 200 || w.Body.Len() == 0 || w.Header().Get("Content-Security-Policy") == "" {

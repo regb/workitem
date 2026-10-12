@@ -5,7 +5,7 @@ description: Separate agent definitions, drivers, durable conversations, and rep
 
 Each work item selects one agent definition and has at most one durable primary conversation. Only one runtime may own that conversation at a time.
 
-An **agent definition** is the configured agent selected by a user, such as `default` or `web-search`. A **driver** integrates an agent family with wi. Multiple definitions may use the same driver with different settings. The implicit `default` definition uses the standard Pi driver when no configuration overrides it.
+An **agent definition**, or agent profile, is the flat configured agent selected by a user, such as `default`, `pi-deep`, or `claude-opus`. A **driver** integrates an agent family with wi. Multiple profiles may use the same driver with different models, thinking levels, extensions, and other settings. The implicit `default` profile uses the standard Pi driver when no configuration overrides it.
 
 ```bash
 wi new --agent web-search --title "Research upstream behavior"

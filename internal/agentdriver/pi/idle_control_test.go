@@ -51,14 +51,21 @@ func TestIdleGuardReservesPromptBeforeAgentStart(t *testing.T) {
 }
 func TestIdlePromptUsesNativeRejectionInsteadOfSteering(t *testing.T) {
 	transport, r := idleTestTransport(t)
-	if err := transport.sendCommand(idleTestCommand("first", agent.CommandPrompt)); err != nil {
+	command := idleTestCommand("first", agent.CommandPrompt)
+	command.Images = []agent.ImageContent{{MIMEType: "image/png", Data: "aW1hZ2U="}}
+	if err := transport.sendCommand(command); err != nil {
 		t.Fatal(err)
 	}
 	var native map[string]any
 	if err := json.NewDecoder(r).Decode(&native); err != nil {
 		t.Fatal(err)
 	}
-	if native["type"] != "prompt" || native["message"] != "work" || native["streamingBehavior"] != nil {
+	images, _ := native["images"].([]any)
+	if len(images) != 1 {
+		t.Fatalf("native command %+v", native)
+	}
+	image, _ := images[0].(map[string]any)
+	if native["type"] != "prompt" || native["message"] != "work" || native["streamingBehavior"] != nil || image["mimeType"] != "image/png" {
 		t.Fatalf("native command %+v", native)
 	}
 }

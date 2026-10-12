@@ -142,6 +142,12 @@ func runNativeRPC(ctx context.Context, path string, args, env []string, spec Exe
 	defer stdin.Close()
 	var processExit error
 	processExited := false
+	waitingForReady := []agent.ControlSocketRequest{}
+	defer func() {
+		for _, request := range waitingForReady {
+			request.Respond(fmt.Errorf("RPC runtime stopped before becoming ready"))
+		}
+	}()
 
 	for {
 		// Consume output already written before process exit. A guarded shutdown
@@ -171,21 +177,39 @@ func runNativeRPC(ctx context.Context, path string, args, env []string, spec Exe
 			if err := transport.handleOutput(line); err != nil {
 				return err
 			}
+			if transport.ready && len(waitingForReady) > 0 {
+				for _, request := range waitingForReady {
+					transport.handleControlRequest(request)
+				}
+				waitingForReady = nil
+			}
 		case request, ok := <-control.Requests():
 			if !ok {
 				continue
 			}
-			if !transport.ready || transport.stopping || transport.shutdownPending {
-				request.Respond(fmt.Errorf("RPC runtime is not accepting commands"))
+			if !transport.ready && !transport.stopping && !transport.shutdownPending {
+				if len(waitingForReady) >= 32 {
+					request.Respond(fmt.Errorf("RPC runtime startup queue is full"))
+				} else {
+					waitingForReady = append(waitingForReady, request)
+				}
 				continue
 			}
-			err := transport.sendCommand(request.Command)
-			if err == nil && request.Command.RequireIdle && request.Command.Type == agent.CommandShutdown {
-				transport.responses[request.Command.ID] = request.Respond
-			} else {
-				request.Respond(err)
-			}
+			transport.handleControlRequest(request)
 		}
+	}
+}
+
+func (t *nativeRPCTransport) handleControlRequest(request agent.ControlSocketRequest) {
+	if !t.ready || t.stopping || t.shutdownPending {
+		request.Respond(fmt.Errorf("RPC runtime is not accepting commands"))
+		return
+	}
+	err := t.sendCommand(request.Command)
+	if err == nil && request.Command.RequireIdle && request.Command.Type == agent.CommandShutdown {
+		t.responses[request.Command.ID] = request.Respond
+	} else {
+		request.Respond(err)
 	}
 }
 
@@ -331,9 +355,29 @@ func (t *nativeRPCTransport) emit(event agent.RuntimeEvent) error {
 		event.Timestamp = time.Now().UTC()
 	}
 	t.ensureRuntimeEventID(&event)
-	t.content.Update(event.Type, event.Text, event.ToolName)
+	input, output := eventDataText(event.Data, "args"), eventDataText(event.Data, "partial_result")
+	if event.Type == agent.EventToolCompleted {
+		output = eventDataText(event.Data, "result")
+	}
+	failed, _ := event.Data["is_error"].(bool)
+	t.content.UpdateTool(event.Type, event.Text, event.ToolCallID, event.ToolName, input, output, failed || event.Error != "")
 	t.emitLiveConfirmed(event)
 	return nil
+}
+
+func eventDataText(data map[string]any, key string) string {
+	value, ok := data[key]
+	if !ok {
+		return ""
+	}
+	if text, ok := value.(string); ok {
+		return text
+	}
+	encoded, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 func (t *nativeRPCTransport) emitLiveConfirmed(event agent.RuntimeEvent) {
@@ -449,6 +493,13 @@ func (t *nativeRPCTransport) sendCommand(command agent.ControlCommand) error {
 		return t.stdin.Close()
 	}
 	native := map[string]any{"id": command.ID, "type": command.Type}
+	if len(command.Images) > 0 {
+		images := make([]map[string]string, 0, len(command.Images))
+		for _, image := range command.Images {
+			images = append(images, map[string]string{"type": "image", "data": image.Data, "mimeType": image.MIMEType})
+		}
+		native["images"] = images
+	}
 	switch command.Type {
 	case agent.CommandPrompt, agent.CommandSteer:
 		// Core send defaults to after-turn delivery. Native Pi models that as a

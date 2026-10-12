@@ -24,10 +24,13 @@ type helpDoc struct {
 var helpDocs = map[string]helpDoc{
 	"web": {
 		Summary:     "Serve a local work list and primary-agent chat",
-		Usage:       []string{"wi web [--port PORT]"},
-		Description: []string{"Prints a private loopback access URL. Existing chat never starts or replaces an owner. New saves and starts headless work in the background. Archive runs safety checks without force. Stopping the server leaves primary agents running."},
-		Options:     []helpOption{{Flag: "--port PORT", Text: "Bind 127.0.0.1 on this port; default chooses an available port"}},
-		SeeAlso:     []string{"list", "new", "repo", "archive"},
+		Usage:       []string{"wi web [--port PORT] [--access-url HTTPS_ORIGIN]"},
+		Description: []string{"Prints a private access URL while always binding the server to loopback. Existing chat never starts or replaces an owner. New saves and starts headless work in the background. Archive runs safety checks without force. Stopping the server leaves primary agents running."},
+		Options: []helpOption{
+			{Flag: "--port PORT", Text: "Bind 127.0.0.1 on this port; default chooses an available port"},
+			{Flag: "--access-url HTTPS_ORIGIN", Text: "Trust this exact browser-facing origin when a private HTTPS reverse proxy forwards to the loopback port"},
+		},
+		SeeAlso: []string{"list", "new", "repo", "archive"},
 	},
 	"repo": {
 		Summary:     "Manage named Wi-owned repositories",

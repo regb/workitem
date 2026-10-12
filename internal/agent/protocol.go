@@ -18,6 +18,7 @@ const (
 )
 
 type ControlCommand = driverprotocol.ControlCommand
+type ImageContent = driverprotocol.ImageContent
 
 const (
 	EventRuntimeReady     = driverprotocol.EventRuntimeReady

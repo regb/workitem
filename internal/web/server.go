@@ -6,11 +6,13 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"embed"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -26,6 +28,10 @@ type Project struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
 	Root string `json:"root"`
+}
+type AgentProfile struct {
+	Name  string `json:"name"`
+	Label string `json:"label"`
 }
 type ListItem struct {
 	app.WorkListItem
@@ -53,12 +59,14 @@ type Chat struct {
 }
 type Create struct {
 	ProjectID string `json:"project_id"`
+	Agent     string `json:"agent,omitempty"`
 	Prompt    string `json:"prompt"`
 }
 type Message struct {
-	Text      string `json:"text"`
-	Delivery  string `json:"delivery"`
-	RuntimeID string `json:"runtime_id"`
+	Text      string                        `json:"text"`
+	Images    []driverprotocol.ImageContent `json:"images,omitempty"`
+	Delivery  string                        `json:"delivery"`
+	RuntimeID string                        `json:"runtime_id"`
 }
 type Outcome struct {
 	CreationUncertain bool            `json:"creation_uncertain,omitempty"`
@@ -69,6 +77,7 @@ type Outcome struct {
 }
 type Backend interface {
 	Projects(context.Context) ([]Project, error)
+	Agents(context.Context) ([]AgentProfile, error)
 	Create(context.Context, Create) Outcome
 	StartCreated(context.Context, string) Outcome
 	List(context.Context) (List, error)
@@ -76,40 +85,57 @@ type Backend interface {
 	Chat(context.Context, string) (Chat, error)
 	Content(context.Context, string) (driverprotocol.Content, error)
 	Send(context.Context, string, Message) Outcome
+	Shelve(context.Context, string) Outcome
 	Archive(context.Context, string) Outcome
 }
 type Server struct {
-	backend     Backend
-	host, token string
-	streams     chan struct{}
-	requests    chan struct{}
-	background  *backgroundStarts
+	backend    Backend
+	host       string
+	origin     string
+	token      string
+	streams    chan struct{}
+	requests   chan struct{}
+	background *backgroundStarts
 }
 
 func New(backend Backend, host string) (*Server, error) {
+	return newServer(backend, "http://"+host, false)
+}
+
+// NewWithAccessURL keeps the listener local while allowing a trusted reverse
+// proxy to provide the browser-facing HTTPS origin.
+func NewWithAccessURL(backend Backend, _ string, accessURL string) (*Server, error) {
+	return newServer(backend, accessURL, true)
+}
+
+func newServer(backend Backend, accessURL string, requireHTTPS bool) (*Server, error) {
+	parsed, err := url.Parse(accessURL)
+	validScheme := parsed.Scheme == "http" || parsed.Scheme == "https"
+	if requireHTTPS {
+		validScheme = parsed.Scheme == "https"
+	}
+	if err != nil || !validScheme || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || (parsed.Path != "" && parsed.Path != "/") {
+		return nil, fmt.Errorf("access URL must be an HTTPS origin without credentials, path, query, or fragment")
+	}
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return nil, err
 	}
-	return &Server{backend: backend, host: host, token: hex.EncodeToString(b), streams: make(chan struct{}, 16), requests: make(chan struct{}, 16), background: newBackgroundStarts(backend)}, nil
+	return &Server{backend: backend, host: parsed.Host, origin: parsed.Scheme + "://" + parsed.Host, token: hex.EncodeToString(b), streams: make(chan struct{}, 16), requests: make(chan struct{}, 16), background: newBackgroundStarts(backend)}, nil
 }
 func (s *Server) Close()      { s.background.close() }
-func (s *Server) URL() string { return "http://" + s.host + "/#token=" + s.token }
+func (s *Server) URL() string { return s.origin + "/#token=" + s.token }
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; img-src data: https:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 	if r.Host != s.host {
 		http.Error(w, "invalid Host", 403)
 		return
 	}
-	if origin := r.Header.Get("Origin"); origin != "" && origin != "http://"+s.host {
+	if origin := r.Header.Get("Origin"); origin != "" && origin != s.origin {
 		http.Error(w, "cross-origin request refused", 403)
-		return
-	}
-	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
-		http.Error(w, "cross-site request refused", 403)
 		return
 	}
 	if !strings.HasPrefix(r.URL.Path, "/api/") {
@@ -135,6 +161,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(data)
 		return
 	}
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		http.Error(w, "cross-site request refused", 403)
+		return
+	}
 	auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	if subtle.ConstantTimeCompare([]byte(auth), []byte(s.token)) != 1 {
 		http.Error(w, "open the launch URL printed by wi web", 401)
@@ -157,7 +187,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", 405)
 		return
 	}
-	if r.Method == "POST" && (r.Header.Get("Origin") != "http://"+s.host || r.Header.Get("Content-Type") != "application/json") {
+	if r.Method == "POST" && (r.Header.Get("Origin") != s.origin || r.Header.Get("Content-Type") != "application/json") {
 		http.Error(w, "same-origin JSON required", 403)
 		return
 	}
@@ -170,6 +200,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.reply(w, value, err)
 		return
 	}
+	if r.Method == "GET" && r.URL.Path == "/api/agents" {
+		value, err := s.backend.Agents(r.Context())
+		s.reply(w, value, err)
+		return
+	}
 	if r.Method == "POST" && r.URL.Path == "/api/items" {
 		var create Create
 		if err := decode(w, r, &create); err != nil {
@@ -177,8 +212,9 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		create.Prompt = strings.TrimSpace(create.Prompt)
-		if create.ProjectID == "" || len(create.ProjectID) > 128 || create.Prompt == "" || len(create.Prompt) > 64<<10 {
-			s.reply(w, nil, fmt.Errorf("project and prompt (up to 64 KiB) required"))
+		create.Agent = strings.TrimSpace(create.Agent)
+		if create.ProjectID == "" || len(create.ProjectID) > 128 || len(create.Agent) > 128 || create.Prompt == "" || len(create.Prompt) > 64<<10 {
+			s.reply(w, nil, fmt.Errorf("project, configured agent, and prompt (up to 64 KiB) required"))
 			return
 		}
 		// Reserve capacity before committing an item. A receipt means its prompt
@@ -241,15 +277,22 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.stream(w, r, id)
 	case r.Method == "POST" && action == "messages":
 		var message Message
-		if err := decode(w, r, &message); err != nil {
+		if err := decodeLimit(w, r, &message, 12<<20); err != nil {
 			s.reply(w, nil, err)
 			return
 		}
-		if len(message.Text) > 64<<10 || strings.TrimSpace(message.Text) == "" || message.RuntimeID == "" || (message.Delivery != "prompt" && message.Delivery != "follow_up") {
-			s.reply(w, nil, fmt.Errorf("message, runtime owner, and prompt/follow_up delivery required"))
+		if err := validateMessage(message); err != nil {
+			s.reply(w, nil, err)
 			return
 		}
 		s.outcome(w, s.backend.Send(r.Context(), id, message))
+	case r.Method == "POST" && action == "shelve":
+		var empty struct{}
+		if err := decode(w, r, &empty); err != nil {
+			s.reply(w, nil, err)
+			return
+		}
+		s.outcome(w, s.backend.Shelve(r.Context(), id))
 	case r.Method == "POST" && action == "archive":
 		var empty struct{}
 		if err := decode(w, r, &empty); err != nil {
@@ -261,8 +304,35 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}
 }
+func validateMessage(message Message) error {
+	if len(message.Text) > 64<<10 || (strings.TrimSpace(message.Text) == "" && len(message.Images) == 0) || message.RuntimeID == "" || (message.Delivery != "prompt" && message.Delivery != "follow_up") {
+		return fmt.Errorf("message or image, runtime owner, and prompt/follow_up delivery required")
+	}
+	if len(message.Images) > 4 {
+		return fmt.Errorf("at most four images are allowed")
+	}
+	allowed := map[string]bool{"image/jpeg": true, "image/png": true, "image/gif": true, "image/webp": true}
+	total := 0
+	for _, image := range message.Images {
+		if !allowed[image.MIMEType] {
+			return fmt.Errorf("unsupported image type %q", image.MIMEType)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(image.Data)
+		if err != nil {
+			return fmt.Errorf("invalid image data")
+		}
+		total += len(decoded)
+		if total > 8<<20 {
+			return fmt.Errorf("images exceed 8 MiB total")
+		}
+	}
+	return nil
+}
 func decode(w http.ResponseWriter, r *http.Request, out any) error {
-	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, 128<<10))
+	return decodeLimit(w, r, out, 128<<10)
+}
+func decodeLimit(w http.ResponseWriter, r *http.Request, out any, limit int64) error {
+	d := json.NewDecoder(http.MaxBytesReader(w, r.Body, limit))
 	d.DisallowUnknownFields()
 	if err := d.Decode(out); err != nil {
 		return err

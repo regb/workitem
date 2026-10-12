@@ -13,6 +13,17 @@ import (
 	"github.com/regb/workitem/skills"
 )
 
+func TestValidThinkingLevel(t *testing.T) {
+	for _, level := range []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"} {
+		if !validThinkingLevel(level) {
+			t.Fatalf("rejected %q", level)
+		}
+	}
+	if validThinkingLevel("extreme") || validThinkingLevel("") {
+		t.Fatal("accepted invalid thinking level")
+	}
+}
+
 func TestDriverLaunchesConfiguredPiWithTemporarySkill(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
@@ -66,7 +77,7 @@ done
 	}
 	t.Setenv("PI_CODING_AGENT_DIR", profileDir)
 	t.Setenv("PI_CODING_AGENT_SESSION_DIR", filepath.Join(dir, "wrong-sessions"))
-	config, _ := json.Marshal(Config{Executable: backend, Extensions: []string{"/tools/web-search.ts"}})
+	config, _ := json.Marshal(Config{Executable: backend, Extensions: []string{"/tools/web-search.ts"}, Model: "openai-codex/gpt-test", Thinking: "high"})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ready := make(chan error, 1)
@@ -87,7 +98,7 @@ done
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(args), "/tools/web-search.ts") || !strings.Contains(string(args), "--session") {
+	if !strings.Contains(string(args), "/tools/web-search.ts") || !strings.Contains(string(args), "--session") || !strings.Contains(string(args), "openai-codex/gpt-test") || !strings.Contains(string(args), "high") {
 		t.Fatalf("args=%s", args)
 	}
 	lines := strings.Split(strings.TrimSpace(string(args)), "\n")

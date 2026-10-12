@@ -11,8 +11,27 @@ type History struct {
 }
 
 type HistoryMessage struct {
-	ID        string `json:"id"`
-	Role      string `json:"role"`
-	Text      string `json:"text"`
-	Timestamp string `json:"timestamp,omitempty"`
+	ID        string         `json:"id"`
+	Role      string         `json:"role"`
+	Text      string         `json:"text"`
+	Timestamp string         `json:"timestamp,omitempty"`
+	Tools     []HistoryTool  `json:"tools,omitempty"`
+	Images    []HistoryImage `json:"images,omitempty"`
+}
+
+// HistoryTool joins a native tool call and its eventual result so clients can
+// render one disclosure that changes from running to completed.
+type HistoryTool struct {
+	ID     string         `json:"id,omitempty"`
+	Name   string         `json:"name"`
+	Input  string         `json:"input,omitempty"`
+	Output string         `json:"output,omitempty"`
+	Status string         `json:"status"`
+	Images []HistoryImage `json:"images,omitempty"`
+}
+
+type HistoryImage struct {
+	MIMEType string `json:"mime_type"`
+	Data     string `json:"data"`
+	Alt      string `json:"alt,omitempty"`
 }

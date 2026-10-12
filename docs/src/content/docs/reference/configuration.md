@@ -101,7 +101,25 @@ Repository configuration cannot grant execution trust. This prevents a checked-i
 
 Every item records an agent definition name. `default` is selected when `wi new` does not receive `--agent`; without configuration it uses the packaged `pi` driver.
 
-`[agents.<name>]` selects a registered driver. The nested `config` table belongs to that driver and is validated by it. The Pi driver accepts `executable` and `extensions`. `[drivers.<name>.defaults]` provides settings shared by every agent using that driver; agent configuration overrides those defaults.
+`[agents.<name>]` defines a flat selectable agent profile and selects a registered driver. An optional `label` is safe presentation metadata used by clients such as the web new-item form. The nested `config` table belongs to that driver and is validated by it. The Pi driver accepts `executable`, `extensions`, `model`, and `thinking`; thinking may be `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. `[drivers.<name>.defaults]` provides settings shared by every agent using that driver; agent configuration overrides those defaults.
+
+```toml
+[agents.pi-fast]
+driver = "pi"
+label = "Pi · Fast"
+[agents.pi-fast.config]
+model = "openai-codex/gpt-5.4"
+thinking = "low"
+
+[agents.pi-deep]
+driver = "pi"
+label = "Pi · Deep"
+[agents.pi-deep.config]
+model = "openai-codex/gpt-5.4"
+thinking = "xhigh"
+```
+
+Items retain the selected profile name. Runtime startup resolves the profile and passes its model and thinking configuration through the selected driver.
 
 ```bash
 wi new --agent web-search --title "Research upstream behavior"

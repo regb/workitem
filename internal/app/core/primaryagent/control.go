@@ -20,6 +20,7 @@ type ControlOptions struct {
 	contract.ResolveOptions
 	CommandType       string
 	Message           string
+	Images            []agent.ImageContent
 	Actor             string
 	RequestID         string
 	ExpectedRuntimeID string
@@ -55,6 +56,9 @@ func (s *Service) Control(ctx context.Context, opts ControlOptions) (ControlResu
 	if opts.RequireIdle && !runtime.Capabilities.IdleGuard {
 		return ControlResult{}, fmt.Errorf("agent driver does not support idle-only control")
 	}
+	if len(opts.Images) > 0 && !runtime.Capabilities.ImageInput {
+		return ControlResult{}, fmt.Errorf("agent driver does not support image input")
+	}
 	// Stopping a stale owner must remain possible, but it cannot accept new work.
 	if commandType != agent.CommandAbort && commandType != agent.CommandShutdown && runtime.WorkspaceClaimID != "" {
 		claim := m.Checkout.Claim
@@ -64,12 +68,12 @@ func (s *Service) Control(ctx context.Context, opts ControlOptions) (ControlResu
 	}
 	switch commandType {
 	case agent.CommandPrompt, agent.CommandSteer, agent.CommandFollowUp:
-		if strings.TrimSpace(opts.Message) == "" {
-			return ControlResult{}, fmt.Errorf("agent control %s requires a message", commandType)
+		if strings.TrimSpace(opts.Message) == "" && len(opts.Images) == 0 {
+			return ControlResult{}, fmt.Errorf("agent control %s requires a message or image", commandType)
 		}
 	case agent.CommandAbort, agent.CommandShutdown:
-		if strings.TrimSpace(opts.Message) != "" {
-			return ControlResult{}, fmt.Errorf("agent control %s does not accept a message", commandType)
+		if strings.TrimSpace(opts.Message) != "" || len(opts.Images) != 0 {
+			return ControlResult{}, fmt.Errorf("agent control %s does not accept message content", commandType)
 		}
 	default:
 		return ControlResult{}, fmt.Errorf("unsupported agent control command %q", commandType)
@@ -85,7 +89,7 @@ func (s *Service) Control(ctx context.Context, opts ControlOptions) (ControlResu
 	if actor == "" {
 		actor = "operator"
 	}
-	command := agent.ControlCommand{ID: commandID, RequestID: strings.TrimSpace(opts.RequestID), Type: commandType, Actor: actor, Message: strings.TrimSpace(opts.Message), CreatedAt: s.now(), RequireIdle: opts.RequireIdle}
+	command := agent.ControlCommand{ID: commandID, RequestID: strings.TrimSpace(opts.RequestID), Type: commandType, Actor: actor, Message: strings.TrimSpace(opts.Message), Images: opts.Images, CreatedAt: s.now(), RequireIdle: opts.RequireIdle}
 	if err := s.SubmitControl(ctx, m.ID, *runtime, command); err != nil {
 		return ControlResult{}, err
 	}

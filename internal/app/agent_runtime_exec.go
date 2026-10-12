@@ -80,7 +80,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 			if runtime == nil || runtime.ID != spec.RuntimeID {
 				return fmt.Errorf("agent runtime ownership changed during driver startup")
 			}
-			runtime.Capabilities = model.RuntimeCapabilities{LiveContent: ready.Capabilities.LiveContent, IdleGuard: ready.Capabilities.IdleGuard, NativeTUI: ready.Capabilities.NativeTUI, Headless: ready.Capabilities.Headless, Streaming: ready.Capabilities.Streaming, Prompt: ready.Capabilities.Prompt, Steering: ready.Capabilities.Steering, FollowUp: ready.Capabilities.FollowUp, Cancel: ready.Capabilities.Cancel, Monitor: ready.Capabilities.Monitor}
+			runtime.Capabilities = model.RuntimeCapabilities{LiveContent: ready.Capabilities.LiveContent, IdleGuard: ready.Capabilities.IdleGuard, ImageInput: ready.Capabilities.ImageInput, NativeTUI: ready.Capabilities.NativeTUI, Headless: ready.Capabilities.Headless, Streaming: ready.Capabilities.Streaming, Prompt: ready.Capabilities.Prompt, Steering: ready.Capabilities.Steering, FollowUp: ready.Capabilities.FollowUp, Cancel: ready.Capabilities.Cancel, Monitor: ready.Capabilities.Monitor}
 			runtime.UpdatedAt = a.now()
 			return a.Store.SaveAgentRuntime(ctx, spec.WorkItemID, *runtime)
 		})

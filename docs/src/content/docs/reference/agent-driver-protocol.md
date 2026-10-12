@@ -28,7 +28,7 @@ The runtime mode is independent of the process protocol:
 - `tui` asks the driver to run its interactive backend. `wi` composes that runtime with tmux.
 - `headless` asks the same driver process to run its backend headlessly. The driver translates control commands into backend-specific requests and translates backend events into wi runtime events. Headless mode does not create or inspect tmux resources.
 
-Both modes use the same conversation identity, runtime ownership checks, control socket, and event protocol. Optional `live_content` and `idle_guard` capabilities describe content snapshots and idle-only controls. An absent capability means unsupported; do not restart an existing owner implicitly to obtain it. A headless driver may wrap any non-interactive backend interface; the backend itself does not need to implement RPC. The driver advertises `prompt`, `steering`, `follow_up`, `cancel`, and `streaming` separately and rejects commands it cannot translate.
+Both modes use the same conversation identity, runtime ownership checks, control socket, and event protocol. Optional `live_content`, `idle_guard`, and `image_input` capabilities describe content snapshots, idle-only controls, and image-bearing prompts. An absent capability means unsupported; do not restart an existing owner implicitly to obtain it. A headless driver may wrap any non-interactive backend interface; the backend itself does not need to implement RPC. The driver advertises `prompt`, `steering`, `follow_up`, `cancel`, and `streaming` separately and rejects commands it cannot translate.
 
 ## Bundled skills
 
@@ -61,7 +61,7 @@ Pi title requests use a temporary working directory and non-persisted print mode
 
 ## Runtime controls and events
 
-The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. Host-side application control resolves daemon-owned state, verifies current runtime ownership and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. A driver must reject unsupported controls rather than simulate TUI keystrokes.
+The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. Host-side application control resolves daemon-owned state, verifies current runtime ownership and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. Prompt-like commands may carry generic base64 `images` with MIME types only when the driver advertises `image_input`; each driver translates that payload to its native API. A driver must reject unsupported controls rather than simulate TUI keystrokes.
 
 `require_idle: true` is an additive precondition, usable only when `idle_guard` is advertised. It includes work already submitted but not yet reflected in activity events. Refusal must not queue, steer, abort, or shut down the runtime. Duplicate accepted command IDs must not submit work twice. An acknowledgement is transport handoff, not completion or native prompt acceptance; command events provide later confirmation.
 

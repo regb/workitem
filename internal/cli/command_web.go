@@ -24,12 +24,17 @@ import (
 func runWeb(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("web", cfg.Stderr)
 	var port int
+	var accessURL string
 	fs.IntVar(&port, "port", 0, "loopback port (default: choose an available port)")
+	fs.StringVar(&accessURL, "access-url", "", "browser-facing HTTPS origin for a trusted reverse proxy")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
 	}
 	if fs.NArg() != 0 || port < 0 || port > 65535 || jsonOut {
-		return usageErr{fmt.Errorf("usage: wi web [--port PORT]")}
+		return usageErr{fmt.Errorf("usage: wi web [--port PORT] [--access-url HTTPS_ORIGIN]")}
+	}
+	if accessURL != "" && !strings.HasPrefix(accessURL, "https://") {
+		return usageErr{fmt.Errorf("--access-url requires an https:// origin")}
 	}
 	if cfg.Coordinator == nil || cfg.ControlAccess != coordinator.AccessOperator {
 		return fmt.Errorf("wi web requires the local operator daemon endpoint")
@@ -47,7 +52,12 @@ func runWeb(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 		}
 	}
 	cfg.Env = env
-	handler, err := webaccess.New(webBackend{cfg}, listener.Addr().String())
+	var handler *webaccess.Server
+	if accessURL == "" {
+		handler, err = webaccess.New(webBackend{cfg}, listener.Addr().String())
+	} else {
+		handler, err = webaccess.NewWithAccessURL(webBackend{cfg}, listener.Addr().String(), accessURL)
+	}
 	if err != nil {
 		return err
 	}
@@ -129,6 +139,27 @@ func (b webBackend) Projects(ctx context.Context) ([]webaccess.Project, error) {
 	return webProjects(repositories), nil
 }
 
+func (b webBackend) Agents(context.Context) ([]webaccess.AgentProfile, error) {
+	profiles := make([]webaccess.AgentProfile, 0, len(b.cfg.App.AgentsConfig))
+	for name, definition := range b.cfg.App.AgentsConfig {
+		label := strings.TrimSpace(definition.Label)
+		if label == "" {
+			label = name
+		}
+		profiles = append(profiles, webaccess.AgentProfile{Name: name, Label: label})
+	}
+	sort.Slice(profiles, func(i, j int) bool {
+		if (profiles[i].Name == "default") != (profiles[j].Name == "default") {
+			return profiles[i].Name == "default"
+		}
+		if profiles[i].Label != profiles[j].Label {
+			return profiles[i].Label < profiles[j].Label
+		}
+		return profiles[i].Name < profiles[j].Name
+	})
+	return profiles, nil
+}
+
 func (b webBackend) Create(ctx context.Context, request webaccess.Create) webaccess.Outcome {
 	projects, err := b.Projects(ctx)
 	if err != nil {
@@ -142,8 +173,12 @@ func (b webBackend) Create(ctx context.Context, request webaccess.Create) webacc
 	if err := b.cfg.Coordinator.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: project.ID}, &source); err != nil {
 		return webaccess.Outcome{Error: err.Error()}
 	}
+	agentName := strings.TrimSpace(request.Agent)
+	if agentName == "" {
+		agentName = "default"
+	}
 	result, err := createCoordinatorWorkItem(ctx, b.cfg, app.NewWorkItemOptions{
-		Title: "New conversation", Description: request.Prompt, CWD: b.cfg.CWD, Env: b.cfg.Env, Agent: "default", RepositoryLabels: source.Labels,
+		Title: "New conversation", Description: request.Prompt, CWD: b.cfg.CWD, Env: b.cfg.Env, Agent: agentName, RepositoryLabels: source.Labels,
 		Repository: &model.Repository{ID: source.Repository.ID, Name: source.Repository.Name, IntegrationBranch: source.Repository.IntegrationBranch, RootAtCreation: source.GitDir, GitCommonDir: source.GitDir, RemoteURL: source.Repository.OriginURL, CreatedFromCommit: source.Commit},
 	})
 	out := webaccess.Outcome{Warnings: result.Warnings}
@@ -434,19 +469,74 @@ func (b webBackend) Send(ctx context.Context, id string, message webaccess.Messa
 	if m.State == "archived" {
 		return webaccess.Outcome{Error: "Archived conversations are read-only."}
 	}
-	if message.Delivery == "prompt" {
-		content, contentErr := b.cfg.App.AgentContent(ctx, b.resolve(id))
-		if contentErr != nil || !content.IdleGuard {
-			return webaccess.Outcome{Error: "Idle-only send needs an updated driver advertising idle_guard. Use explicit follow-up with this owner, or restart it explicitly after settling."}
-		}
+	content, contentErr := b.cfg.App.AgentContent(ctx, b.resolve(id))
+	if message.Delivery == "prompt" && (contentErr != nil || !content.IdleGuard) {
+		return webaccess.Outcome{Error: "The agent is not idle. Queue this message explicitly, or wait for the current turn to finish."}
 	}
-	result, err := b.cfg.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: b.resolve(id), CommandType: message.Delivery, Message: message.Text, Actor: "operator", ExpectedRuntimeID: message.RuntimeID, RequireIdle: message.Delivery == "prompt"})
+	if message.Delivery == "follow_up" && contentErr == nil && content.IdleGuard {
+		return webaccess.Outcome{Error: "The agent is idle. Use Send now so the message starts a turn instead of waiting in an empty follow-up queue."}
+	}
+	result, err := b.cfg.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: b.resolve(id), CommandType: message.Delivery, Message: message.Text, Images: message.Images, Actor: "operator", ExpectedRuntimeID: message.RuntimeID, RequireIdle: message.Delivery == "prompt"})
 	out := webaccess.Outcome{Result: result}
 	if err != nil {
 		out.Error = err.Error()
 	}
 	return out
 }
+func (b webBackend) Shelve(ctx context.Context, id string) webaccess.Outcome {
+	resolve := b.resolve(id)
+	m, err := b.cfg.App.ResolveItem(ctx, resolve)
+	if err != nil {
+		return webaccess.Outcome{Error: err.Error()}
+	}
+	if m.State != model.StateWorking && m.State != model.StateWaiting {
+		return webaccess.Outcome{Error: "Only working or waiting tickets can be shelved."}
+	}
+	warnings := []string{}
+	owner, err := b.cfg.App.AgentRuntimeStatus(ctx, resolve)
+	if err != nil {
+		return webaccess.Outcome{Error: err.Error()}
+	}
+	if owner.Online {
+		content, contentErr := b.cfg.App.AgentContent(ctx, resolve)
+		if contentErr != nil || !content.IdleGuard {
+			return webaccess.Outcome{Error: "The agent is still working. Wait for the current turn to settle before shelving."}
+		}
+		stopped, stopErr := b.cfg.App.StopAgentRuntime(ctx, resolve, false)
+		warnings = append(warnings, stopped.Warnings...)
+		if stopErr != nil {
+			return webaccess.Outcome{Error: stopErr.Error(), Warnings: warnings, Observed: &m}
+		}
+		deadline := time.Now().Add(8 * time.Second)
+		for {
+			status, statusErr := b.cfg.App.AgentRuntimeStatus(ctx, resolve)
+			if statusErr != nil {
+				return webaccess.Outcome{Error: statusErr.Error(), Warnings: warnings, Observed: &m}
+			}
+			if !status.Online {
+				break
+			}
+			if !time.Now().Before(deadline) {
+				return webaccess.Outcome{Error: "Agent runtime did not stop before shelving.", Warnings: warnings, Observed: &m}
+			}
+			select {
+			case <-ctx.Done():
+				return webaccess.Outcome{Error: ctx.Err().Error(), Warnings: warnings, Observed: &m}
+			case <-time.After(50 * time.Millisecond):
+			}
+		}
+	}
+	result, err := b.cfg.App.Shelve(ctx, resolve, false)
+	warnings = append(warnings, result.Warnings...)
+	out := webaccess.Outcome{Result: result, Warnings: warnings}
+	if err != nil {
+		out.Error = err.Error()
+	} else {
+		out.Observed = &result.Manifest
+	}
+	return out
+}
+
 func (b webBackend) Archive(ctx context.Context, id string) webaccess.Outcome {
 	owner, err := b.cfg.App.AgentRuntimeStatus(ctx, b.resolve(id))
 	if err != nil {

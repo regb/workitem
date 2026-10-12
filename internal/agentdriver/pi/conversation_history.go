@@ -88,53 +88,87 @@ func ReadHistory(ctx context.Context, path, leaf string) (driverprotocol.History
 		branch = append(branch, e)
 		id = e.Parent
 	}
+	for i, j := 0, len(branch)-1; i < j; i, j = i+1, j-1 {
+		branch[i], branch[j] = branch[j], branch[i]
+	}
+	type toolLocation struct{ message, tool int }
+	toolLocations := map[string]toolLocation{}
 	total := 0
-	for i := 0; i < len(branch); i++ {
-		e := branch[i]
+	imageTotal := 0
+	for _, e := range branch {
 		role, _ := e.Message["role"].(string)
+		if e.Type == "message" && role == "toolResult" {
+			id, _ := e.Message["toolCallId"].(string)
+			name, _ := e.Message["toolName"].(string)
+			failed, _ := e.Message["isError"].(bool)
+			status := "completed"
+			if failed {
+				status = "failed"
+			}
+			output, _, images := historyContent(e.Message["content"])
+			output = boundedHistoryText(output, &result.Truncated)
+			images = boundedHistoryImages(images, &imageTotal, &result.Truncated)
+			if total+len(output) > 1<<20 || len(result.Messages) >= 200 {
+				result.Truncated = true
+				break
+			}
+			if location, ok := toolLocations[id]; ok {
+				tool := &result.Messages[location.message].Tools[location.tool]
+				tool.Output = output
+				tool.Images = images
+				tool.Status = status
+				total += len(output)
+				continue
+			}
+			result.Messages = append(result.Messages, driverprotocol.HistoryMessage{ID: e.ID, Role: "assistant", Timestamp: e.Timestamp, Tools: []driverprotocol.HistoryTool{{ID: id, Name: name, Output: output, Status: status, Images: images}}})
+			total += len(output)
+			continue
+		}
 		text := ""
+		tools := []driverprotocol.HistoryTool{}
+		images := []driverprotocol.HistoryImage{}
 		switch e.Type {
 		case "message":
 			if role == "system" {
 				continue
 			}
-			text = historyText(e.Message["content"])
-			if role == "toolResult" {
-				name, _ := e.Message["toolName"].(string)
-				text = name + "\n" + text
-			}
+			text, tools, images = historyContent(e.Message["content"])
 		case "compaction", "branch_summary":
 			role = "summary"
 			text = e.Summary
 		default:
 			continue
 		}
-		if len(text) > 16<<10 {
-			end := 16 << 10
-			for end > 0 && !utf8.RuneStart(text[end]) {
-				end--
-			}
-			text = text[:end] + "\n[message truncated]"
-			result.Truncated = true
+		text = boundedHistoryText(text, &result.Truncated)
+		images = boundedHistoryImages(images, &imageTotal, &result.Truncated)
+		for i := range tools {
+			tools[i].Input = boundedHistoryText(tools[i].Input, &result.Truncated)
+			total += len(tools[i].Input)
 		}
 		if len(result.Messages) >= 200 || total+len(text) > 1<<20 {
 			result.Truncated = true
 			break
 		}
 		total += len(text)
-		result.Messages = append(result.Messages, driverprotocol.HistoryMessage{ID: e.ID, Role: role, Text: text, Timestamp: e.Timestamp})
-	}
-	for i, j := 0, len(result.Messages)-1; i < j; i, j = i+1, j-1 {
-		result.Messages[i], result.Messages[j] = result.Messages[j], result.Messages[i]
+		messageIndex := len(result.Messages)
+		result.Messages = append(result.Messages, driverprotocol.HistoryMessage{ID: e.ID, Role: role, Text: text, Timestamp: e.Timestamp, Tools: tools, Images: images})
+		for toolIndex, tool := range tools {
+			if tool.ID != "" {
+				toolLocations[tool.ID] = toolLocation{message: messageIndex, tool: toolIndex}
+			}
+		}
 	}
 	return result, nil
 }
-func historyText(content any) string {
+
+func historyContent(content any) (string, []driverprotocol.HistoryTool, []driverprotocol.HistoryImage) {
 	if s, ok := content.(string); ok {
-		return s
+		return s, nil, nil
 	}
 	blocks, _ := content.([]any)
 	parts := []string{}
+	tools := []driverprotocol.HistoryTool{}
+	images := []driverprotocol.HistoryImage{}
 	for _, raw := range blocks {
 		b, _ := raw.(map[string]any)
 		typ, _ := b["type"].(string)
@@ -143,13 +177,51 @@ func historyText(content any) string {
 			s, _ := b["text"].(string)
 			parts = append(parts, s)
 		case "toolCall":
+			id, _ := b["id"].(string)
 			name, _ := b["name"].(string)
-			parts = append(parts, "[tool call: "+name+"]")
+			input := []byte(nil)
+			if arguments, ok := b["arguments"]; ok {
+				input, _ = json.MarshalIndent(arguments, "", "  ")
+			}
+			tools = append(tools, driverprotocol.HistoryTool{ID: id, Name: name, Input: string(input), Status: "running"})
+		case "image":
+			data, _ := b["data"].(string)
+			mimeType, _ := b["mimeType"].(string)
+			if data != "" && strings.HasPrefix(mimeType, "image/") {
+				images = append(images, driverprotocol.HistoryImage{MIMEType: mimeType, Data: data, Alt: "Attached image"})
+			}
 		case "thinking":
-			parts = append(parts, "[thinking omitted]")
+			// Deliberation is private and intentionally absent from history.
 		default:
-			parts = append(parts, "["+typ+" content omitted]")
+			if typ != "" {
+				parts = append(parts, "["+typ+" content omitted]")
+			}
 		}
 	}
-	return strings.Join(parts, "\n")
+	return strings.Join(parts, "\n"), tools, images
+}
+
+func boundedHistoryImages(images []driverprotocol.HistoryImage, total *int, truncated *bool) []driverprotocol.HistoryImage {
+	kept := make([]driverprotocol.HistoryImage, 0, len(images))
+	for _, image := range images {
+		if len(image.Data) > 12<<20 || *total+len(image.Data) > 12<<20 {
+			*truncated = true
+			continue
+		}
+		*total += len(image.Data)
+		kept = append(kept, image)
+	}
+	return kept
+}
+
+func boundedHistoryText(text string, truncated *bool) string {
+	if len(text) <= 16<<10 {
+		return text
+	}
+	end := 16 << 10
+	for end > 0 && !utf8.RuneStart(text[end]) {
+		end--
+	}
+	*truncated = true
+	return text[:end] + "\n[content truncated]"
 }

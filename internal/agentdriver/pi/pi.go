@@ -59,6 +59,8 @@ type ExecSpec struct {
 	EventSocketPath   string
 	Extensions        []string
 	Skills            []string
+	Model             string
+	Thinking          string
 }
 
 func New(path string) Client {
@@ -136,6 +138,12 @@ func (c Client) ExecMode(ctx context.Context, spec ExecSpec) error {
 	args, err := runtime.Args(strings.TrimSpace(spec.SessionPath), strings.TrimSpace(bridgePath))
 	if err != nil {
 		return err
+	}
+	if model := strings.TrimSpace(spec.Model); model != "" {
+		args = append([]string{"--model", model}, args...)
+	}
+	if thinking := strings.TrimSpace(spec.Thinking); thinking != "" {
+		args = append([]string{"--thinking", thinking}, args...)
 	}
 	for _, extension := range spec.Extensions {
 		if extension = strings.TrimSpace(extension); extension != "" {

@@ -25,16 +25,24 @@ const MaxContentTextBytes = 256 << 10
 // must be read from conversation.history. Readers replace, rather than append,
 // snapshots, so reconnecting cannot duplicate deltas.
 type Content struct {
-	ProtocolVersion int    `json:"protocol_version"`
-	RuntimeID       string `json:"runtime_id"`
-	WorkItemID      string `json:"work_item_id"`
-	Sequence        uint64 `json:"sequence"`
-	IdleGuard       bool   `json:"idle_guard"`
-	Text            string `json:"text"`
-	Truncated       bool   `json:"truncated,omitempty"`
-	Activity        string `json:"activity"`
-	LeafID          string `json:"leaf_id,omitempty"`
-	Error           string `json:"error,omitempty"`
+	ProtocolVersion int          `json:"protocol_version"`
+	RuntimeID       string       `json:"runtime_id"`
+	WorkItemID      string       `json:"work_item_id"`
+	Sequence        uint64       `json:"sequence"`
+	IdleGuard       bool         `json:"idle_guard"`
+	Text            string       `json:"text"`
+	Truncated       bool         `json:"truncated,omitempty"`
+	Activity        string       `json:"activity"`
+	LeafID          string       `json:"leaf_id,omitempty"`
+	Error           string       `json:"error,omitempty"`
+	Tool            *ContentTool `json:"tool,omitempty"`
+}
+type ContentTool struct {
+	ID     string `json:"id,omitempty"`
+	Name   string `json:"name"`
+	Status string `json:"status"`
+	Input  string `json:"input,omitempty"`
+	Output string `json:"output,omitempty"`
 }
 type ContentRequest struct {
 	ProtocolVersion int    `json:"protocol_version"`
@@ -124,6 +132,9 @@ func (s *ContentServer) serve(conn net.Conn) {
 	_ = json.NewEncoder(conn).Encode(value)
 }
 func (s *ContentServer) Update(eventType, text, tool string) {
+	s.UpdateTool(eventType, text, "", tool, "", "", false)
+}
+func (s *ContentServer) UpdateTool(eventType, text, toolID, toolName, input, output string, failed bool) {
 	if s == nil {
 		return
 	}
@@ -133,6 +144,7 @@ func (s *ContentServer) Update(eventType, text, tool string) {
 	switch eventType {
 	case "message.started":
 		s.value.Text = ""
+		s.value.Tool = nil
 		s.value.Truncated = false
 		s.value.Activity = "Assistant responding"
 	case EventMessageDelta:
@@ -154,11 +166,39 @@ func (s *ContentServer) Update(eventType, text, tool string) {
 		s.value.Truncated = false
 		s.value.Activity = "Message saved"
 	case EventToolStarted:
-		s.value.Activity = "Tool: " + tool
+		s.value.Tool = &ContentTool{ID: toolID, Name: toolName, Status: "running", Input: boundedContentField(input)}
+		s.value.Activity = "Tool running: " + toolName
+	case EventToolUpdated:
+		if s.value.Tool == nil || s.value.Tool.ID != toolID {
+			s.value.Tool = &ContentTool{ID: toolID, Name: toolName, Status: "running"}
+		}
+		s.value.Tool.Output = boundedContentField(output)
+		s.value.Activity = "Tool running: " + toolName
+	case EventToolCompleted:
+		status := "completed"
+		if failed {
+			status = "failed"
+		}
+		if s.value.Tool == nil || s.value.Tool.ID != toolID {
+			s.value.Tool = &ContentTool{ID: toolID, Name: toolName}
+		}
+		s.value.Tool.Status = status
+		s.value.Tool.Output = boundedContentField(output)
+		s.value.Activity = "Tool " + status + ": " + toolName
 	case EventAgentSettled:
 		s.value.Text = ""
 		s.value.Truncated = false
 		s.value.Activity = "Idle"
 	}
+}
+func boundedContentField(value string) string {
+	if len(value) <= 64<<10 {
+		return value
+	}
+	end := 64 << 10
+	for end > 0 && !utf8.RuneStart(value[end]) {
+		end--
+	}
+	return value[:end] + "\n[content truncated]"
 }
 func (s *ContentServer) Close() error { err := s.listener.Close(); <-s.done; return err }

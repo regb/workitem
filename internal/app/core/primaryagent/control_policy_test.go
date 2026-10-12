@@ -57,4 +57,9 @@ func TestArchivedOwnerRefusesMessagesButAllowsEmergencyControls(t *testing.T) {
 	if _, err := service.Control(context.Background(), opts); err == nil || !strings.Contains(err.Error(), "idle-only") {
 		t.Fatalf("unnegotiated idle-only control %v", err)
 	}
+	opts.RequireIdle = false
+	opts.Images = []agent.ImageContent{{MIMEType: "image/png", Data: "aW1hZ2U="}}
+	if _, err := service.Control(context.Background(), opts); err == nil || !strings.Contains(err.Error(), "image input") {
+		t.Fatalf("unnegotiated image input %v", err)
+	}
 }

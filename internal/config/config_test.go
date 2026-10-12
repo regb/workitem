@@ -40,7 +40,7 @@ func TestLoadRejectsRelativeDirenvAutoTrustRepository(t *testing.T) {
 
 func TestLoadAgentDefinitionsAndDriverDefaults(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	writeFile(t, path, "[drivers.pi.defaults]\nexecutable = \"/opt/pi/bin/pi\"\n\n[agents.web-search]\ndriver = \"pi\"\n\n[agents.web-search.config]\nextensions = [\"/opt/pi/web-search.ts\"]\n")
+	writeFile(t, path, "[drivers.pi.defaults]\nexecutable = \"/opt/pi/bin/pi\"\n\n[agents.web-search]\ndriver = \"pi\"\nlabel = \"Pi · Web search\"\n\n[agents.web-search.config]\nextensions = [\"/opt/pi/web-search.ts\"]\nmodel = \"openai-codex/gpt-test\"\nthinking = \"high\"\n")
 	cfg, warnings, err := config.Load(path)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func TestLoadAgentDefinitionsAndDriverDefaults(t *testing.T) {
 	if len(warnings) != 0 {
 		t.Fatalf("warnings=%v", warnings)
 	}
-	if cfg.Agents["default"].Driver != "pi" || cfg.Agents["web-search"].Driver != "pi" {
+	if cfg.Agents["default"].Driver != "pi" || cfg.Agents["web-search"].Driver != "pi" || cfg.Agents["web-search"].Label != "Pi · Web search" {
 		t.Fatalf("agents=%+v", cfg.Agents)
 	}
 	if cfg.Drivers["pi"].Defaults["executable"] != "/opt/pi/bin/pi" {
@@ -57,6 +57,9 @@ func TestLoadAgentDefinitionsAndDriverDefaults(t *testing.T) {
 	extensions, ok := cfg.Agents["web-search"].Config["extensions"].([]string)
 	if !ok || len(extensions) != 1 || extensions[0] != "/opt/pi/web-search.ts" {
 		t.Fatalf("extensions=%#v", cfg.Agents["web-search"].Config["extensions"])
+	}
+	if cfg.Agents["web-search"].Config["model"] != "openai-codex/gpt-test" || cfg.Agents["web-search"].Config["thinking"] != "high" {
+		t.Fatalf("model config=%#v", cfg.Agents["web-search"].Config)
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
 	viewapp "github.com/regb/workitem/internal/app/view"
+	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
@@ -65,6 +66,7 @@ func TestWebCreationRetainsItemWhenStartupFails(t *testing.T) {
 	t.Cleanup(func() { server.Close(); <-done })
 	client := &coordinator.Client{SocketPath: socket}
 	application := app.New(native, gitpkg.New("git"))
+	application.AgentsConfig["review"] = config.AgentDefinitionConfig{Driver: "pi", Label: "Pi Review"}
 	BindCoordinatorApp(application, native, client)
 	cfg := Config{App: application, Coordinator: client, Env: map[string]string{}, CWD: repo, Stdout: io.Discard, Stderr: io.Discard, RequireOwnedRepository: true}
 	if err := runRepository(ctx, []string{"add", "fixture", "--from", repo}, cfg, false); err != nil {
@@ -83,12 +85,16 @@ func TestWebCreationRetainsItemWhenStartupFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	backend := webBackend{cfg}
+	profiles, err := backend.Agents(ctx)
+	if err != nil || len(profiles) != 2 || profiles[0].Name != "default" || profiles[1].Name != "review" || profiles[1].Label != "Pi Review" {
+		t.Fatalf("agent profiles=%+v err=%v", profiles, err)
+	}
 	if out := backend.Create(ctx, webaccess.Create{ProjectID: "/etc", Prompt: "Do not run"}); out.Error == "" || out.Observed != nil || out.CreationUncertain {
 		t.Fatalf("unknown project reached creation: %+v", out)
 	}
 	// No conversation backend is configured. Startup deliberately fails after
 	// daemon-owned creation and the lifecycle transition have committed.
-	accepted := backend.Create(ctx, webaccess.Create{ProjectID: model.RepositoryKey(seed.Manifest.Repository), Prompt: "Self-contained initial request"})
+	accepted := backend.Create(ctx, webaccess.Create{ProjectID: model.RepositoryKey(seed.Manifest.Repository), Agent: "review", Prompt: "Self-contained initial request"})
 	if accepted.Error != "" || accepted.Observed == nil || accepted.Observed.State != model.StateWorking {
 		t.Fatalf("creation not durable before startup: %+v", accepted)
 	}
@@ -97,8 +103,12 @@ func TestWebCreationRetainsItemWhenStartupFails(t *testing.T) {
 		t.Fatalf("lost durable partial outcome: %+v", out)
 	}
 	shown, err := application.ShowWorkItem(ctx, app.ResolveOptions{Selector: out.Observed.ID})
-	if err != nil || shown.Description != "Self-contained initial request" || shown.Manifest.Repository.GitCommonDir != seed.Manifest.Repository.GitCommonDir {
+	if err != nil || shown.Description != "Self-contained initial request" || shown.Manifest.Agent != "review" || shown.Manifest.Repository.GitCommonDir != seed.Manifest.Repository.GitCommonDir {
 		t.Fatalf("created ticket: %+v, %v", shown, err)
+	}
+	shelved := backend.Shelve(ctx, shown.Manifest.ID)
+	if shelved.Error != "" || shelved.Observed == nil || shelved.Observed.State != model.StateBacklog {
+		t.Fatalf("web shelve: %+v", shelved)
 	}
 	// A queued intent must not restore a conversation archived before startup.
 	interrupted := backend.Create(ctx, webaccess.Create{ProjectID: model.RepositoryKey(seed.Manifest.Repository), Prompt: "Do not restore an archived conversation"})

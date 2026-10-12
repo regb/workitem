@@ -37,6 +37,7 @@ type AgentConfig struct {
 
 type AgentDefinitionConfig struct {
 	Driver string         `json:"driver"`
+	Label  string         `json:"label,omitempty"`
 	Config map[string]any `json:"config,omitempty"`
 }
 
@@ -213,6 +214,9 @@ func Validate(cfg Config) error {
 		if strings.TrimSpace(name) == "" || strings.TrimSpace(definition.Driver) == "" {
 			return fmt.Errorf("agent definitions require a name and driver")
 		}
+		if len([]rune(definition.Label)) > 80 {
+			return fmt.Errorf("agent %q label is too long", name)
+		}
 		if _, ok := cfg.Drivers[definition.Driver]; !ok {
 			return fmt.Errorf("agent %q selects unconfigured driver %q", name, definition.Driver)
 		}
@@ -234,8 +238,13 @@ func parseAgentDriverSetting(cfg *Config, section, key, value string) (bool, err
 	case "agents":
 		name := strings.TrimSpace(parts[1])
 		definition := cfg.Agents[name]
-		if len(parts) == 2 && key == "driver" {
-			definition.Driver = parseStringValue(value)
+		if len(parts) == 2 && (key == "driver" || key == "label") {
+			parsed := parseStringValue(value)
+			if key == "driver" {
+				definition.Driver = parsed
+			} else {
+				definition.Label = parsed
+			}
 			if definition.Config == nil {
 				definition.Config = map[string]any{}
 			}
