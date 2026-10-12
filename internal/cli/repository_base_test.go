@@ -43,6 +43,10 @@ func TestRepositoryBaseCapturesCurrentWorktreeCommit(t *testing.T) {
 	if err := os.Mkdir(nested, 0700); err != nil {
 		t.Fatal(err)
 	}
+	canonicalNested, err := filepath.EvalSymlinks(nested)
+	if err != nil {
+		t.Fatal(err)
+	}
 	common := t.TempDir()
 	current := model.Manifest{Repository: model.Repository{ID: "repo"}, Checkout: model.Checkout{Claim: &model.WorkspaceClaim{Path: root}}}
 	selected := coordinator.RepositorySourceResult{Repository: model.OwnedRepository{ID: "repo", Name: "project"}, GitDir: common}
@@ -53,7 +57,7 @@ func TestRepositoryBaseCapturesCurrentWorktreeCommit(t *testing.T) {
 		if base == "-" {
 			want = "@{-1}"
 		}
-		if err != nil || got != "captured-commit" || g.path != nested || g.revision != want || g.calls != 1 {
+		if err != nil || got != "captured-commit" || g.path != canonicalNested || g.revision != want || g.calls != 1 {
 			t.Errorf("%s -> %s, %v, %+v", base, got, err, g)
 		}
 	}
