@@ -22,17 +22,22 @@ type Exchange func(context.Context, driverprotocol.Request) (driverprotocol.Resp
 
 type Suite struct {
 	Driver   string
+	Config   json.RawMessage
 	Exchange Exchange
 }
 
-// Run checks protocol identity, conversation creation, and rejection of an
+// Run checks config validation, protocol identity, conversation creation, and rejection of an
 // unknown operation. Driver packages can add backend-specific cases beside it.
 func Run(t TestingT, suite Suite) {
 	t.Helper()
 	if strings.TrimSpace(suite.Driver) == "" || suite.Exchange == nil {
 		t.Fatalf("driver name and exchange function are required")
 	}
-	create := driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: suite.Driver, Operation: driverprotocol.OperationConversationCreate, Conversation: &driverprotocol.ConversationRequest{ID: "01TESTDRIVERCONVERSATION0000"}}
+	validated, err := suite.Exchange(context.Background(), driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: suite.Driver, Operation: driverprotocol.OperationConfigValidate, Config: suite.Config})
+	if err != nil || validated.ProtocolVersion != driverprotocol.Version || validated.ConfigValidation == nil || !validated.ConfigValidation.Valid {
+		t.Fatalf("invalid config.validate response: %+v err=%v", validated, err)
+	}
+	create := driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: suite.Driver, Config: suite.Config, Operation: driverprotocol.OperationConversationCreate, Conversation: &driverprotocol.ConversationRequest{ID: "01TESTDRIVERCONVERSATION0000"}}
 	response, err := suite.Exchange(context.Background(), create)
 	if err != nil {
 		t.Fatalf("create conversation: %v", err)

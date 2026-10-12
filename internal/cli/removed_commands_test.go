@@ -12,6 +12,9 @@ import (
 
 func TestRemovedCreationAndRelocationCommands(t *testing.T) {
 	for _, args := range [][]string{
+		{"title", "Rejected"},
+		{"label", "backend"},
+		{"deep"},
 		{"start", "--new", "Rejected"},
 		{"start", "--new", "--home", "Rejected"},
 		{"start", "--home", "existing"},
@@ -58,6 +61,13 @@ func TestRemovedCreationAndRelocationCommands(t *testing.T) {
 }
 
 func TestHelpDoesNotAdvertiseRemovedCommands(t *testing.T) {
+	for _, name := range []string{"title", "label", "deep"} {
+		stdout, stderr, application := configuredApp(t)
+		cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}
+		if code := cli.Run(context.Background(), []string{"help", name}, cfg); code != cli.ExitUsage {
+			t.Fatalf("removed help topic %s code=%d stdout=%s", name, code, stdout)
+		}
+	}
 	for _, args := range [][]string{{"start", "--help"}, {"new", "--help"}, {"workspace", "--help"}, {"workspace", "release", "--help"}} {
 		stdout, stderr, application := configuredApp(t)
 		cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}

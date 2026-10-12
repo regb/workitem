@@ -48,6 +48,7 @@ type LaunchRequest struct {
 type Capabilities struct {
 	LiveContent   bool `json:"live_content,omitempty"`
 	IdleGuard     bool `json:"idle_guard,omitempty"`
+	ImageInput    bool `json:"image_input,omitempty"`
 	BundledSkills bool `json:"bundled_skills,omitempty"`
 	NativeTUI     bool `json:"native_tui"`
 	Headless      bool `json:"headless"`

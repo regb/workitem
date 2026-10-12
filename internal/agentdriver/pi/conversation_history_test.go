@@ -37,6 +37,38 @@ func TestHistorySelectsBranchAndIgnoresIncompleteAppend(t *testing.T) {
 		t.Fatal("missing leaf accepted")
 	}
 }
+func TestHistoryJoinsToolCallAndResult(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "native.jsonl")
+	data := `{"type":"session","version":3,"id":"session"}
+{"type":"message","id":"user","parentId":null,"message":{"role":"user","content":[{"type":"text","text":"inspect"},{"type":"image","mimeType":"image/png","data":"iVBORw0KGgo="}]}}
+{"type":"message","id":"call","parentId":"user","message":{"role":"assistant","content":[{"type":"text","text":"I'll check."},{"type":"toolCall","id":"tool-1","name":"bash","arguments":{"command":"ls"}}]}}
+{"type":"message","id":"result","parentId":"call","message":{"role":"toolResult","toolCallId":"tool-1","toolName":"bash","content":[{"type":"text","text":"README.md"}]}}
+{"type":"message","id":"answer","parentId":"result","message":{"role":"assistant","content":[{"type":"text","text":"The repo has a README."}]}}
+`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := ReadHistory(context.Background(), path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 3 {
+		t.Fatalf("messages = %+v", result.Messages)
+	}
+	if len(result.Messages[0].Images) != 1 || result.Messages[0].Images[0].MIMEType != "image/png" {
+		t.Fatalf("images = %+v", result.Messages[0].Images)
+	}
+	tool := result.Messages[1].Tools
+	if len(tool) != 1 || tool[0].Name != "bash" || tool[0].Status != "completed" || tool[0].Output != "README.md" || !strings.Contains(tool[0].Input, `"ls"`) {
+		t.Fatalf("tool = %+v", tool)
+	}
+	for _, message := range result.Messages {
+		if message.Role == "toolResult" {
+			t.Fatalf("tool result rendered as a second message: %+v", message)
+		}
+	}
+}
+
 func TestHistoryRejectsMalformedAndCyclicInput(t *testing.T) {
 	for _, data := range []string{"not json\n", `{"type":"message","id":"cycle","parentId":"cycle"}` + "\n", `{"type":"message","message":{"role":"user","content":"legacy"}}` + "\n"} {
 		path := filepath.Join(t.TempDir(), "native.jsonl")

@@ -1,50 +1,27 @@
-`wi` is a CLI for managing work items and associated coding agents.
+`wi` is a CLI for short-lived development tasks, built on Git, Pi, and tmux.
 
-## Important concepts:
+## Task scope
 
-- Wi keeps a list of repositories, explicitly registered, and manages work items within each project.
-- A work item is the canonical durable aggregate: identity, description, lifecycle, labels, deep-work classification, checkout specification, conversation identity, and append-only history.
-- Items are materialized in re-usable worktrees where the work can be performed and eventually merged back.
-- An item can have multiple runtime attached to it to actually manage access to the workspace, currently support both tmux for TUI style and a web interface.
-- Wi runs as a deamon on the system that manages the state in a private sqlite db.
+Each work item should have one bounded objective and a clear completion condition. Review, integrate where appropriate, and archive it when done. File unrelated work as a new item rather than turning an item or its conversation into a permanent project workspace.
 
-## Glossary
+Short-lived work has a durable record: restarting an agent, releasing a worktree, or archiving the item does not erase its description, conversation, or history.
 
-- `work item`: The stable durable aggregate. It owns identity, description, lifecycle, labels, conversation history. It may exist without a materialized workspace, live runtime, or terminal.
-- `source context`: The registered repository ID and immutable `created_from_commit` recorded at creation. Repository names, integration policy, origin, and derived operational paths are resolved from the registry, not copied into item records.
-- `checkout specification`: Durable materialization instructions, including checkout kind and implementation branch. The nullable claim separately owns the assigned path, identity, and generation. The immutable created-from commit belongs to source context, not checkout state.
-- `checkout kind`: The workspace policy. Items use `managed-slot`, a reusable Wi-owned worktree slot. Offline migration tooling recognizes historical `repository-home` records.
-- `workspace`: The logical Git checkout claim and its materialization for one item. A workspace is not a directory alone, a tmux session, or a coding-agent process.
-- `materialization`: Creation or attachment of external resources described by durable state, such as assigning a managed slot and checking out the persistent implementation branch.
-- `worktree`: A concrete Git working tree observed by wi. Managed worktrees may remain as warm reusable slot directories after an item releases its workspace claim.
-- `managed slot`: A wi-owned reusable worktree location. Slots are claimed by items, reset and validated before reuse, and retained to preserve build caches.
-- `registered repository`: A stable ID, unique mutable name, integration branch, optional sanitized origin, and independent bare store under the data root. Names can change without moving resources. External onboarding checkouts are not operational dependencies.
-- `lifecycle`: The durable work-item state: `backlog`, `working`, `waiting`, or `archived`. Lifecycle does not by itself describe whether a workspace, runtime, or terminal currently exists.
-- `deep work`: A durable item classification subject to configured active-capacity policy. It is not a label.
-- `primary conversation`: The item's durable driver-owned conversation identity and native history. It is created when agent work first starts and survives runtime restarts. An item has at most one primary conversation.
-- `runtime`: One live or recorded coding-agent process instance that owns the primary conversation for a period. Successive runtimes may resume the same conversation; a runtime is not the conversation itself.
-- `runtime owner`: The sole runtime currently authorized to write the primary conversation and affect runtime-activity projections. Ownership includes runtime ID and verified process identity; events from superseded runtime IDs are rejected.
-- `runtime mode`: `tui` runs a driver's interactive interface and is composed with tmux. `headless` runs headlessly and must not depend on tmux.
-- `runtime activity`: Compact semantic facts reported by the current runtime, such as ready, turn started, tool started, and settled. Activity drives busy/idle observation but does not contain unrestricted prompts, responses, deltas, tool arguments, paths, or errors.
-- `agent status`: The derived `busy|idle|problem` observation for the primary agent. It is separate from lifecycle and worktree status.
-- `worktree status`: The derived `absent|clean|changed|problem` observation for the checkout. It is separate from agent status.
-- `terminal`: Optional access metadata for an interactive runtime, currently a wi-owned tmux session and panes. Terminal identity is rebuildable and is not durable conversation or runtime identity.
-- `access mechanism`: How a user enters or observes work, currently local tmux attachment or switching. Access code may enter an already selected resource but must not become work-item, conversation, or runtime identity.
-- `attention`: Policy that selects and ranks actionable working items from lifecycle, activity, defer facts, agent status, and worktree status. Attention does not choose or invoke an access mechanism.
-- `NEEDS ATTENTION`: A view bucket for working items whose primary agent is idle and whose agent/worktree observations do not report a problem. It is derived, not a lifecycle state.
-- `projection`: A daemon-maintained read model derived from canonical commands, events, native content, or external observations. Projections live in `wi.db`; some external-resource projections are rebuildable.
-- `observation`: A timestamped statement about an external resource such as a process, agent conversation, worktree, or tmux session. Observations can become stale and must not silently replace durable intent.
-- `event`: A compact append-only domain or runtime fact with stable identity and ordering. Events in `wi.db` exclude unrestricted native content.
-- `coordinator daemon`: The sole structured-state writer and projection owner for one data root. It validates commands, commits events and projections, coordinates native writes, and ingests compact runtime events.
-- `data root`: The canonical per-installation durable root, normally `$XDG_DATA_HOME/wi`. Each distinct absolute data root has its own `wi.db`, daemon, and deterministic runtime socket namespace.
-- `operator endpoint`: The user-only daemon Unix socket with the full local API. Normal CLI commands and host-side driver bridges use it.
-- `agent endpoint`: The separately mountable restricted daemon Unix socket for sandboxed tools. It permits health/minimal creation reads and safe absent managed-slot backlog creation, but rejects lifecycle, workspace, runtime, terminal, delete, and shutdown control.
-- `runtime control socket`: A driver-owned per-runtime Unix socket used for direct prompt, steer, follow-up, abort, and shutdown commands. It speaks the public driver protocol and is not canonical state.
-- `runtime event socket`: A host-owned per-runtime Unix socket that accepts compact public driver events. The runtime host validates identity and relays accepted events through the private daemon API.
-- `native content`: Canonical filesystem content intentionally kept out of `wi.db`, currently descriptions and driver-owned native conversations.
-- `adapter`: Code that talks to an external system such as Git, coding-agent drivers, tmux, direnv, Unix processes, or the filesystem. Adapters implement narrow contracts and do not own domain policy.
-- `use case`: Cross-cutting application orchestration such as start, resume, switch, shelve, archive, delete, merge, or shutdown. Use cases compose core policy and adapters; lower layers do not invoke them.
-- `partial outcome`: A deliberately retained successful durable step followed by a later failure, for example an item created before workspace startup fails. wi reports the retained result instead of rolling it back or deleting it implicitly.
+## Core model
+
+- A work item owns a stable ID, title, description, lifecycle, labels, deep-work classification, repository reference, checkout specification, and primary conversation identity.
+- Repositories are explicitly registered independent bare Git stores. Items retain the repository ID and immutable created-from commit. External onboarding checkouts are not operational dependencies.
+- IDs and branch specifications are immutable. Active slugs stay fixed until archive clears them; restore allocates a new slug without renaming the branch. Titles and descriptions remain editable without implicit prompts.
+- Drivers validate merged profile config through stateless `config.validate` before new runtime startup. Plain backlog capture is driver-independent; existing owners are not reconfigured.
+- Lifecycle is `backlog|working|waiting|archived`. Deep work is a capacity-controlled classification, not a label.
+- A workspace is a generation-fenced checkout claim. Managed slots are reusable wi-owned worktrees; release preserves the branch and warm slot. A workspace is not an agent process or terminal.
+- Each item has at most one durable primary conversation and one active runtime owner. Successive runtimes may resume the conversation; drivers own its native format and content.
+- TUI runtimes use tmux. Headless runtimes must remain tmux-independent. Terminal metadata is rebuildable access information, not item or conversation identity.
+- Agent status `busy|idle|problem` and worktree status `absent|clean|changed|problem` are separate observations. Attention ranks actionable working items; it does not choose an access mechanism.
+- One coordinator daemon per data root owns structured writes, revisions, compact append-only events, and projections in the private bbolt `wi.db`. Descriptions and native conversations remain canonical filesystem content outside that database.
+- Observations can become stale and must not replace durable intent. Runtime and terminal caches are rebuildable. Logs live under XDG state; sockets under XDG runtime.
+- The operator endpoint exposes the local API. The restricted agent endpoint allows safe backlog creation but rejects lifecycle, workspace, runtime, terminal, delete, and shutdown control.
+- Driver-owned runtime control sockets accept prompt, steer, follow-up, abort, and shutdown commands. Host-owned event sockets validate owner identity and relay compact semantic facts, never unrestricted native content.
+- A partial outcome retains a successful durable step when a later resource operation fails. Report it rather than silently rolling it back.
 
 ## Code map
 

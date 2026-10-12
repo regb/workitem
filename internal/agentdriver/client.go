@@ -39,6 +39,24 @@ func (c Client) request(ctx context.Context, operation, agent string, config jso
 	return *response.Conversation, nil
 }
 
+// ValidateConfig fails closed for drivers that do not implement config.validate.
+func (c Client) ValidateConfig(ctx context.Context, agent string, config json.RawMessage) error {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	env := c.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	response, err := RunOperation(ctx, c.Path, c.Args, driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: c.Driver, Operation: driverprotocol.OperationConfigValidate, Agent: agent, Config: config}, env)
+	if err != nil {
+		return err
+	}
+	if response.ConfigValidation == nil || !response.ConfigValidation.Valid {
+		return fmt.Errorf("driver %q did not acknowledge config.validate; update the driver", c.Driver)
+	}
+	return nil
+}
+
 func (c Client) ConversationCapabilities(ctx context.Context) (driverprotocol.ConversationCapabilities, error) {
 	response, err := c.request(ctx, driverprotocol.OperationConversationCapabilities, "", nil, driverprotocol.ConversationRequest{})
 	if err != nil {

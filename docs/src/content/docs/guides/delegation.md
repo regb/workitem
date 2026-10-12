@@ -1,82 +1,53 @@
 ---
 title: Delegate work
-description: Create self-contained tasks and send prompts to agents.
+description: Hand off a bounded task without relying on the current conversation.
 ---
 
-Delegation works best when the receiving agent does not need the conversation that produced the task. These examples assume current Wi item context; outside an item, select a [registered repository](../../concepts/repositories/) with `--repo NAME`.
+A useful handoff states the problem, evidence, constraints, and completion criteria. Keep it small enough to review as one result. These examples assume current item context; outside an item, add a registered `--repo NAME`.
 
-## Create and start in one command
+## Create and delegate
 
 ```bash
-wi new \
-  --desc-file audit.md \
-  --start --agent-mode headless \
-  --title "Audit dependency updates"
+wi new --desc-file audit.md --start --agent-mode headless \
+  --title "Check dependency license changes"
 ```
 
-This command:
+Wi stores the description, activates the item, materializes a workspace, starts an unattached runtime, and sends the configured startup message asking the agent to read `wi show`.
 
-1. stores `audit.md` as the item description
-2. moves the item to `working`
-3. materializes its managed workspace
-4. starts an unattached runtime
-5. sends the configured startup message to the agent, asking it to read `wi show` and work on the task
+Omit `--agent-mode headless` for an unattached TUI you can enter with `wi switch`. `--prompt TEXT` overrides only the startup message, not the description. Resume never sends it again.
 
-Use `--prompt TEXT` with `--start` to override the startup message without changing the description. Resume never sends this message again.
-
-TUI is the default mode when `--agent-mode` is omitted. The command starts the normal tmux runtime but does not switch or attach your current terminal.
-
-## Write a stronger handoff
-
-For a substantial task, use a file:
+## Capture now, start later
 
 ```bash
 wi new --desc-file handoff.md --title "Fix stale runtime ownership"
-```
-
-A useful handoff contains:
-
-- why the work matters
-- exact observed behavior or reproduction commands
-- relevant files and constraints
-- a concrete next step
-- observable completion criteria
-
-Add `--start` to that creation command to send the configured initial message immediately. For backlog work already filed, enter its TUI:
-
-```bash
 wi start fix-stale-runtime-ownership
 ```
 
-Existing-item `wi start` only opens the runtime; it sends no message. Ask the agent to read `wi show` yourself, or use runtime control.
+Existing-item `start` opens the runtime without sending a prompt. Ask the agent to read `wi show` in the TUI, or send that instruction through runtime control.
 
 ## Prompt-only questions
 
-A description is optional. For a one-off question, supply an explicit title and startup prompt:
+Descriptions are optional for a one-off question:
 
 ```bash
 wi new --title "Investigate token refresh hangs" --start \
   --prompt "Why does token refresh sometimes hang?"
 ```
 
-The prompt goes to the primary conversation unchanged; no description is derived from it. Wi always requires `--title` and derives only the slug. The [tmux popup](../tmux/#create-from-a-prompt-popup) is an external harness that can generate a title with a separate ephemeral Pi call before invoking Wi.
+The prompt goes to the conversation; no description or title is inferred from it. The optional [tmux popup](../tmux/#create-from-a-prompt-popup) generates a title externally before invoking Wi.
 
-## Send follow-up work
+## Corrections and separate follow-ups
 
 ```bash
 wi agent control send --follow-up --item fix-stale-runtime-ownership \
   "Also test PID reuse and report the focused test command."
-```
-
-Use `--file` for a multiline message. Delivery and task completion are different events. Monitor the runtime or enter its TUI to inspect the result:
-
-```bash
 wi agent monitor --item fix-stale-runtime-ownership --limit 50
-wi switch fix-stale-runtime-ownership
 ```
 
-## Keep authority narrow
+`--follow-up` waits for the current run to settle; `--file` accepts multiline feedback. Delivery confirms handoff, not completion.
 
-An agent sandbox can receive `WI_AGENT_DAEMON_SOCKET`, which points to a restricted daemon endpoint. That endpoint permits safe managed-slot backlog creation but rejects lifecycle, workspace, runtime, terminal, deletion, shutdown, and `--start` operations.
+Keep corrections within the original objective in this item. File independent discoveries as new backlog items, then finish and archive the original rather than growing it indefinitely.
 
-This lets an agent file follow-up work without granting control over the user's active environment.
+## Agent authority
+
+A sandbox can use `WI_AGENT_DAEMON_SOCKET` to file safe managed-slot backlog work. That restricted endpoint rejects lifecycle, workspace, runtime, terminal, deletion, shutdown, and `--start` operations.

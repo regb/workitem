@@ -33,7 +33,9 @@ func runMerge(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 	if jsonOut {
 		return writeJSON(cfg.Stdout, res)
 	}
-	fmt.Fprintf(cfg.Stdout, "rebased %s onto %s\n", res.SourceBranch, res.TargetBranch)
+	if res.Rebased {
+		fmt.Fprintf(cfg.Stdout, "rebased %s onto %s\n", res.SourceBranch, res.TargetBranch)
+	}
 	fmt.Fprintf(cfg.Stdout, "merged %s into %s @ %s\n", res.SourceBranch, res.TargetBranch, shortDisplaySHA(res.SourceNewSHA))
 	if res.TargetSynced {
 		fmt.Fprintf(cfg.Stdout, "synced target worktree: %s\n", res.TargetWorktreePath)

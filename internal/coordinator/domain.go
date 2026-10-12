@@ -24,23 +24,25 @@ const (
 	CommandDeepWorkSet  = "item.deep_work.set"
 	CommandStateSet     = "item.state.set"
 	CommandTitleSet     = "item.title.set"
+	CommandEdit         = "item.edit"
 )
 
 type ManifestCommand struct {
-	ID               string    `json:"id"`
-	ProtocolVersion  int       `json:"protocol_version"`
-	Type             string    `json:"type"`
-	ItemID           string    `json:"item_id"`
-	ExpectedRevision *uint64   `json:"expected_revision"`
-	Actor            string    `json:"actor"`
-	Labels           []string  `json:"labels,omitempty"`
-	DeepWork         *bool     `json:"deep_work,omitempty"`
-	TargetState      string    `json:"target_state,omitempty"`
-	Title            string    `json:"title,omitempty"`
-	EventType        string    `json:"event_type,omitempty"`
-	Force            bool      `json:"force,omitempty"`
-	MaxActive        int       `json:"max_active,omitempty"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID               string        `json:"id"`
+	ProtocolVersion  int           `json:"protocol_version"`
+	Type             string        `json:"type"`
+	ItemID           string        `json:"item_id"`
+	ExpectedRevision *uint64       `json:"expected_revision"`
+	Actor            string        `json:"actor"`
+	Labels           []string      `json:"labels,omitempty"`
+	DeepWork         *bool         `json:"deep_work,omitempty"`
+	TargetState      string        `json:"target_state,omitempty"`
+	Title            string        `json:"title,omitempty"`
+	Edit             *MetadataEdit `json:"edit,omitempty"`
+	EventType        string        `json:"event_type,omitempty"`
+	Force            bool          `json:"force,omitempty"`
+	MaxActive        int           `json:"max_active,omitempty"`
+	CreatedAt        time.Time     `json:"created_at"`
 }
 
 type CanonicalManifest struct {
@@ -102,10 +104,12 @@ type domainCommandOutcome struct {
 }
 
 type pendingNativeWrite struct {
-	CommandID string         `json:"command_id"`
-	Sequence  uint64         `json:"sequence"`
-	Operation string         `json:"operation,omitempty"`
-	Manifest  model.Manifest `json:"manifest"`
+	CommandID                 string         `json:"command_id"`
+	Sequence                  uint64         `json:"sequence"`
+	Operation                 string         `json:"operation,omitempty"`
+	Manifest                  model.Manifest `json:"manifest"`
+	DescriptionDigest         string         `json:"description_digest,omitempty"`
+	PreviousDescriptionDigest string         `json:"previous_description_digest,omitempty"`
 }
 
 func (d *Database) CanonicalManifest(itemID string) (CanonicalManifest, error) {
@@ -256,6 +260,16 @@ func (d *Database) executeManifestCommand(command ManifestCommand, queueOptions 
 			result.Manifest = manifest
 			result.Revision = revision
 		}
+		if command.Type == CommandEdit && command.Edit != nil && command.Edit.DescriptionDigest != "" && command.Edit.DescriptionDigest != command.Edit.PreviousDescriptionDigest {
+			write := pendingNativeWrite{CommandID: command.ID, Operation: "edit-description", Manifest: manifest, DescriptionDigest: command.Edit.DescriptionDigest, PreviousDescriptionDigest: command.Edit.PreviousDescriptionDigest}
+			encoded, err := json.Marshal(write)
+			if err != nil {
+				return err
+			}
+			if err := tx.Bucket(bucketPendingWrites).Put([]byte(command.ID), encoded); err != nil {
+				return err
+			}
+		}
 		if queueOptions != nil {
 			queue, err = actionabilityQueueFromTransaction(tx, *queueOptions)
 			if err != nil {
@@ -297,6 +311,28 @@ func applyManifestCommand(command ManifestCommand, manifest *model.Manifest, all
 		pending = append(pending, commandEvent{Type: eventType, Payload: payload})
 	}
 	switch command.Type {
+	case CommandEdit:
+		fields, err := applyMetadataEdit(command.Edit, manifest)
+		if err != nil {
+			return nil, false, err
+		}
+		if len(fields) == 0 {
+			return pending, false, nil
+		}
+		data := map[string]any{"fields": fields}
+		for _, field := range fields {
+			switch field {
+			case "title":
+				data[field] = manifest.Title
+			case "labels":
+				data[field] = manifest.Labels
+			case "deep_work":
+				data[field] = manifest.DeepWork
+			case "description":
+				data["description_digest"] = command.Edit.DescriptionDigest
+			}
+		}
+		appendEvent("work_item.edited", data)
 	case CommandTitleSet:
 		title := strings.TrimSpace(command.Title)
 		if title == "" || len(title) > 512 || !utf8.ValidString(title) || strings.IndexFunc(title, unicode.IsControl) >= 0 {

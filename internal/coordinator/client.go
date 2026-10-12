@@ -158,6 +158,12 @@ func (c *Client) RuntimeEvents(ctx context.Context, request RuntimeEventsRequest
 	return result, err
 }
 
+func (c *Client) EditItem(ctx context.Context, request EditItemRequest) (ManifestCommandResult, error) {
+	var result ManifestCommandResult
+	err := c.Call(ctx, MethodEditItem, request, &result)
+	return result, err
+}
+
 func (c *Client) ItemEvents(ctx context.Context, itemID string) ([]model.Event, error) {
 	var result ItemEventsResult
 	err := c.Call(ctx, MethodItemEvents, ItemRequest{ItemID: itemID}, &result)

@@ -7,67 +7,11 @@ Run `wi help <command>` or `wi <command> --help` for complete options, safety no
 
 ## Common recipes
 
-`wi new` requires `--title TEXT` and accepts no positional title. The slug is derived from that title unless `--slug` is supplied. Description and prompt content never supply a title.
+Each item is one bounded task. `wi new` requires `--title TEXT` or `--untitled`. The latter uses an editable `Untitled task` title and an ID-derived slug. `--slug` overrides the default in either case. Outside a current item, select a registered `--repo NAME`.
 
-First [register a repository](../../concepts/repositories/). These recipes assume current Wi item context; outside an item, add `--repo NAME`.
+`new --start` creates and delegates; existing-item `start` opens a runtime without submitting a message. `resume` never sends a prompt. See the [Quick start](../../getting-started/quick-start/), [Delegation](../../guides/delegation/), and [Review workflow](../../guides/review-and-follow-up/) for examples.
 
-Capture detailed backlog work:
-
-```bash
-wi new --desc-file task.md --label backend --title "Fix token refresh"
-```
-
-Create and delegate a headless task:
-
-```bash
-wi new --desc-file audit.md --start --agent-mode headless --title "Audit dependencies"
-```
-
-Select a named agent definition at creation:
-
-```bash
-wi new --agent web-search --desc-file task.md --start --prompt "Read wi show and research upstream reports." --title "Investigate rendering"
-```
-
-Start existing backlog work interactively:
-
-```bash
-wi start active-slug
-```
-
-`start` accepts a slug or unambiguous slug substring. It does not submit the stored description as a prompt.
-
-Inspect and enter active work:
-
-```bash
-wi list
-wi show auth
-wi switch auth
-```
-
-Send a follow-up:
-
-```bash
-wi agent control send --follow-up --item auth \
-  "Fix the review findings and rerun tests."
-```
-
-Pause or remove work from the active set:
-
-```bash
-wi state set waiting auth
-wi resume auth
-wi shelve auth
-```
-
-Integrate and archive verified work:
-
-```bash
-wi merge --item auth main
-wi archive auth
-```
-
-See [Troubleshooting](../troubleshooting/) when a protected cleanup or runtime operation refuses to proceed.
+Finish and archive items rather than continually expanding them. Merge, archive, and push are separate decisions.
 
 ## Repositories
 
@@ -84,10 +28,31 @@ See [Troubleshooting](../troubleshooting/) when a protected cleanup or runtime o
 | --- | --- |
 | `wi new` | Create backlog work or create and delegate with `--start`; `--prompt` overrides only the startup message |
 | `wi show` | Read metadata and the durable description |
+| `wi edit` | Edit title, description, labels, and deep work together; open an editor when no edit flags are supplied |
 | `wi events` | Read append-only item history |
 | `wi state show\|set` | Inspect or mutate lifecycle only |
-| `wi label` | List, add, or remove labels |
-| `wi deep` | Set or clear deep-work classification |
+
+`wi edit` defaults to the current item. Select another with `--item SELECTOR` or a positional selector; use IDs for archived items.
+
+```bash
+wi edit --title "Clarified objective"
+wi edit --desc-file task.md
+wi edit --label backend --remove-label blocked
+wi edit --deep
+wi edit --no-deep
+wi edit --item auth --title "Fix refresh" --label urgent
+wi edit --item auth
+```
+
+With no edit flags, Wi opens a private title-and-description draft using `$VISUAL`, then `$EDITOR`, then `vi`. Keep the first line `Title: <text>`, a blank line, then the description. Editor commands may include arguments. A nonzero editor exit or invalid document changes nothing and retains the private draft for recovery.
+
+Titles are non-empty single-line UTF-8, at most 512 bytes. Descriptions are UTF-8, at most 4 MiB; an empty file clears the description. Labels may be repeated but cannot be both added and removed in one edit. `--deep` and `--no-deep` are mutually exclusive.
+
+All requested metadata changes are validated and committed together. Wi refuses stale item revisions or description digests instead of overwriting concurrent edits. Description bytes stay on disk, staged for durable recovery; the database contains only hashes. If native materialization fails after commit, Wi explicitly reports the retained edit and pending description rather than claiming rollback. Do not discard the staged file: reconcile the canonical description with either its expected old content or the committed staged content, then the daemon can finish recovery. Unrelated items remain usable.
+
+Editing does not change lifecycle, slug, branch, checkout, conversation, or runtime, and sends no prompt. Use `wi show` to read metadata and description. JSON returns `work_item_id`, `changed`, `title`, `labels`, `deep_work`, `description_changed`, and `manifest`. No-op edits report `changed: false` without adding an event.
+
+The former title, label, and deep metadata commands have been removed; there are no aliases. Lifecycle and workflow verbs remain separate.
 
 ## Workspaces
 
@@ -132,18 +97,11 @@ See [Troubleshooting](../troubleshooting/) when a protected cleanup or runtime o
 | `wi resume` | Reactivate waiting work |
 | `wi shelve` | Clean up safely and return work to backlog |
 | `wi archive` | Clean up safely and retain inactive history |
-| `wi delete` | Permanently remove cleaned archived case files |
+| `wi delete` | Permanently remove cleaned archived task records |
 | `wi shutdown` | Stop runtimes, terminals, and the daemon |
-| `wi merge` | Rebase and fast-forward a local target branch |
+| `wi merge` | Fast-forward a local target branch, rebasing when needed |
 
-`wi archive` retains the item. To restore one, use its archived ID:
-
-```bash
-wi list --archived --ids
-wi state set backlog --item <item-id>
-```
-
-The state change assigns a fresh active slug but does not recreate workspace or agent resources. Use `wi show --item <item-id>` to read the fresh slug, then run `wi start <active-slug>` when you are ready to resume work.
+`wi archive` retains the completed record. For unfinished work archived by mistake, see [restoration](../../concepts/lifecycle/#composed-workflow-commands). File a new objective as a new item.
 
 ## Daemon and diagnostics
 

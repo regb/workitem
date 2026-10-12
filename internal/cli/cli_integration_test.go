@@ -25,6 +25,10 @@ import (
 
 type fakeConversationBackend struct{}
 
+func (fakeConversationBackend) ValidateConfig(context.Context, string, json.RawMessage) error {
+	return nil
+}
+
 func (fakeConversationBackend) NewConversation(_ context.Context, id, _ string, _ json.RawMessage) (model.Conversation, error) {
 	return pidriver.New("pi").NewConversation(id), nil
 }
@@ -577,14 +581,14 @@ func TestNewDeepFlagSetsBuiltInDeepWork(t *testing.T) {
 	}
 }
 
-func TestDeepCommandSetsAndClearsBuiltInDeepWork(t *testing.T) {
+func TestEditSetsAndClearsBuiltInDeepWork(t *testing.T) {
 	stdout, stderr, application := configuredApp(t)
 	newRes, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Deep Command", CWD: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{"WI_ID": newRes.Manifest.ID}, App: application}
-	code := cli.Run(context.Background(), []string{"--json", "deep"}, cfg)
+	code := cli.Run(context.Background(), []string{"--json", "edit", "--deep"}, cfg)
 	if code != cli.ExitOK {
 		t.Fatalf("deep exit code = %d stderr=%s", code, stderr.String())
 	}
@@ -606,7 +610,7 @@ func TestDeepCommandSetsAndClearsBuiltInDeepWork(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	code = cli.Run(context.Background(), []string{"--json", "deep", "--clear"}, cfg)
+	code = cli.Run(context.Background(), []string{"--json", "edit", "--no-deep"}, cfg)
 	if code != cli.ExitOK {
 		t.Fatalf("deep --clear exit code = %d stderr=%s", code, stderr.String())
 	}
@@ -790,7 +794,7 @@ func TestAgentStatusWithoutCurrentItemShowsOverview(t *testing.T) {
 	}
 }
 
-func TestLabelShorthandWithItemFlagAddsLabels(t *testing.T) {
+func TestEditWithItemFlagAddsLabels(t *testing.T) {
 	stdout, stderr, application := configuredApp(t)
 	first, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Current Item", CWD: t.TempDir()})
 	if err != nil {
@@ -800,7 +804,7 @@ func TestLabelShorthandWithItemFlagAddsLabels(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	code := cli.Run(context.Background(), []string{"label", "--item", "target", "networking"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{"WI_ID": first.Manifest.ID}, App: application})
+	code := cli.Run(context.Background(), []string{"edit", "--item", "target", "--label", "networking"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{"WI_ID": first.Manifest.ID}, App: application})
 	if code != cli.ExitOK {
 		t.Fatalf("label exit code = %d stderr=%s", code, stderr.String())
 	}
@@ -820,20 +824,20 @@ func TestLabelShorthandWithItemFlagAddsLabels(t *testing.T) {
 	}
 }
 
-func TestLabelRemoveFlagAndListDefault(t *testing.T) {
+func TestEditRemovesLabelsAndShowReadsThem(t *testing.T) {
 	stdout, stderr, application := configuredApp(t)
 	res, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Current Item", CWD: t.TempDir(), Labels: []string{"networking", "backend"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{"WI_ID": res.Manifest.ID}, App: application}
-	code := cli.Run(context.Background(), []string{"label", "--remove", "backend"}, cfg)
+	code := cli.Run(context.Background(), []string{"edit", "--remove-label", "backend"}, cfg)
 	if code != cli.ExitOK {
 		t.Fatalf("label remove exit code = %d stderr=%s", code, stderr.String())
 	}
 	stdout.Reset()
 	stderr.Reset()
-	code = cli.Run(context.Background(), []string{"label"}, cfg)
+	code = cli.Run(context.Background(), []string{"show"}, cfg)
 	if code != cli.ExitOK {
 		t.Fatalf("label list exit code = %d stderr=%s", code, stderr.String())
 	}
@@ -888,8 +892,28 @@ func TestMergeJSON(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
 	}
-	if got.WorkItemID != created.Manifest.ID || got.TargetBranch != "main" || !got.TargetAdvanced || !got.TargetSynced || got.SourceNewSHA == "" {
+	if got.WorkItemID != created.Manifest.ID || got.TargetBranch != "main" || !got.TargetAdvanced || !got.TargetSynced || got.SourceNewSHA == "" || got.Rebased || got.SourceOldSHA != got.SourceNewSHA {
 		t.Fatalf("merge result = %+v", got)
+	}
+	stdout.Reset()
+	code = cli.Run(context.Background(), []string{"merge", "--item", created.Manifest.ID, "main"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: source, Env: map[string]string{}, App: application})
+	if code != cli.ExitOK || strings.Contains(stdout.String(), "rebased ") {
+		t.Fatalf("fast-forward text code=%d output=%s stderr=%s", code, stdout, stderr)
+	}
+	if err := os.WriteFile(filepath.Join(source, "second.txt"), []byte("second\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runCLIGit(t, source, "add", "second.txt")
+	runCLIGit(t, source, "commit", "-m", "second feature")
+	if err := os.WriteFile(filepath.Join(repo, "target.txt"), []byte("target\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runCLIGit(t, repo, "add", "target.txt")
+	runCLIGit(t, repo, "commit", "-m", "advance target")
+	stdout.Reset()
+	code = cli.Run(context.Background(), []string{"merge", "--item", created.Manifest.ID, "main"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: source, Env: map[string]string{}, App: application})
+	if code != cli.ExitOK || !strings.Contains(stdout.String(), "rebased ") {
+		t.Fatalf("rebase text code=%d output=%s stderr=%s", code, stdout, stderr)
 	}
 }
 
@@ -1001,14 +1025,14 @@ func TestDeleteArchivedRequiresConfirmationAndSupportsBulk(t *testing.T) {
 	}
 }
 
-func TestDeepAcceptsPositionalItem(t *testing.T) {
+func TestEditAcceptsPositionalItem(t *testing.T) {
 	stdout, stderr, application := configuredApp(t)
 	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Positional Deep", CWD: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}
 	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}
-	if code := cli.Run(context.Background(), []string{"--json", "deep", created.Manifest.ID}, cfg); code != cli.ExitOK {
+	if code := cli.Run(context.Background(), []string{"--json", "edit", "--deep", created.Manifest.ID}, cfg); code != cli.ExitOK {
 		t.Fatalf("deep code=%d stderr=%s", code, stderr.String())
 	}
 	var got app.DeepWorkResult

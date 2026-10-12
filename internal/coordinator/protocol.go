@@ -16,7 +16,7 @@ import (
 
 const (
 	ProtocolVersion  = 3
-	MaxRequestBytes  = 1 << 20
+	MaxRequestBytes  = 32 << 20
 	MaxResponseBytes = 8 << 20
 )
 
@@ -37,6 +37,7 @@ const (
 	MethodAgentObservation   = "agent_observation"
 	MethodCanonicalManifest  = "canonical_manifest"
 	MethodManifestCommand    = "manifest_command"
+	MethodEditItem           = "edit_item"
 	MethodManifestQueue      = "manifest_command_queue"
 	MethodCreateItem         = "create_item"
 	MethodStoreCommand       = "store_command"

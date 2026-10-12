@@ -1,77 +1,55 @@
 ---
 title: Work items
-description: Understand the durable record at the center of wi.
+description: One bounded task, with a durable record after completion.
 ---
 
-A work item is the durable record for one development task. It is more than a branch, worktree, process, or terminal session.
+A work item is a short-lived development task with one objective and a clear completion condition. Fix a defect, add a bounded feature, or answer a specific investigation question. Avoid items such as "Maintain the API" that have no natural end.
 
-A work item owns:
+Review the result, integrate it where appropriate, and archive the item. File unrelated discoveries as new tasks rather than continually expanding the original scope.
 
-- a stable ID and active slug
-- a title and self-contained description
-- lifecycle state
-- labels and deep-work classification
-- repository and checkout specification
-- one selected agent definition and one durable primary conversation
-- append-only event history
+## What remains durable
 
-Workspaces, agent processes, and tmux sessions can disappear and be rebuilt. The work item remains the identity that ties them together.
+The item owns its ID, title, description, lifecycle, labels, repository reference, checkout specification, selected agent profile, conversation identity, and append-only history. Worktrees, agent processes, and terminals can disappear without erasing that record.
 
-## Creation does not imply execution
+Durability protects interruptions and preserves completed work; it does not mean keeping an item active indefinitely.
+
+## Capture and execution
 
 ```bash
 wi new --desc-file task.md --title "Investigate cache invalidation"
 ```
 
-`--title` is required; positional titles are rejected. A missing slug is derived from that title. Wi never infers a title from a slug, description, or prompt. Creation selects a [registered repository](../repositories/) implicitly from the current item, or explicitly with `--repo NAME`.
+Supply `--title` or explicitly use `--untitled`. The latter creates an editable `Untitled task` title and derives a slug such as `item-933sga1r` from the last eight characters of the item ID. The flags are mutually exclusive. `--slug` overrides either default; generated slug collisions receive numeric suffixes. Wi never infers a title or slug from a description or prompt.
 
-Ordinary creation records backlog work only. This separation makes capturing an idea cheap and safe. It also preserves a deliberate partial result if later startup fails.
+`--untitled` is only a creation option, not a durable classification. Later title edits leave the active slug and branch unchanged. Restore follows the normal current-title allocation policy. Creation selects a [registered repository](../repositories/) from the current item or an explicit `--repo NAME`.
 
-To create and delegate in one command:
-
-```bash
-wi new --desc-file task.md --start \
-  --title "Investigate cache race"
-```
-
-This stores the file as the description, changes the item to `working`, starts an unattached runtime, and sends the configured startup message through the selected agent driver. Descriptions are durable specifications; prompts are conversation messages. Resume never sends a message. See [Delegate work](../../guides/delegation/) for overrides and prompt-only questions.
+Ordinary creation records backlog work without allocating a checkout or agent. Add `--start` to activate the item and send the configured startup message. `--prompt` overrides only that message, not the description. Existing-item `start` and `resume` send no prompt. See [Delegate work](../../guides/delegation/).
 
 ## Descriptions are handoffs
 
-A good description states the problem, relevant evidence, constraints, and what counts as done. Do not rely on the shell history or the conversation in which the item was created.
+Include the problem, relevant evidence, constraints, and an observable definition of done. The recipient should not need the conversation that produced the task.
 
 ```bash
 wi show cache-race
 ```
 
-`show` returns the durable metadata and hydrated description. Agents can use the same command to recover their task context.
+`show` returns metadata and the description.
 
 ## IDs and slugs
 
-The ID is permanent. The slug is a convenient alias while an item is active.
+The ID is permanent; the active slug is a human-readable selector. Selectors can also use a unique ID prefix or an unambiguous active-item keyword. `wi start` specifically requires an active slug or slug substring.
 
-Selectors may use:
+The slug is fixed at creation while the item remains active, including before its first checkout. Archiving clears it. Restoring to backlog allocates a fresh slug while retaining the ID and history.
 
-- a full ID or unique ID prefix
-- an active slug
-- an unambiguous keyword from an active item's slug, title, description, or labels
-
-Archiving clears the active slug. Restoring an archived item to backlog allocates a fresh slug while retaining its ID and history.
+The implementation branch specification is fixed at creation and survives archive/restore; a new active slug does not rename the branch. Title and description remain editable in every lifecycle state. Use `wi edit --title "New title"` for the current item or `wi edit --item SELECTOR --title "New title"` for another. `wi edit` with no edit flags opens title and description in an editor. Select archived items by ID. Updating them does not change the slug or branch, alter native conversation history, or automatically send a prompt. Auxiliary title suggestions update presentation only.
 
 ## Labels and deep work
 
-Labels organize work:
-
 ```bash
-wi label --item cache-race backend reliability
+wi edit --item cache-race --label backend --label reliability
 wi list --label +backend --label -blocked
+wi edit --item cache-race --deep
+wi edit --item cache-race --no-deep
 ```
 
-Deep work is a separate built-in property with capacity limits:
-
-```bash
-wi deep --item cache-race
-wi deep --clear --item cache-race
-```
-
-A label named `deep-work` does not change deep-work capacity.
+Labels organize tasks. Deep work is a separate classification subject to active-capacity limits; a label named `deep-work` does not enable it.

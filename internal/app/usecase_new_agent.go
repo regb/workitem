@@ -45,6 +45,9 @@ func (a *App) NewAgentWorkItem(ctx context.Context, opts NewWorkItemOptions, mod
 	if !mode.Valid() {
 		return NewAgentWorkItemResult{}, fmt.Errorf("invalid agent runtime mode %q", mode)
 	}
+	if err := a.ValidateAgentConfig(ctx, opts.Agent); err != nil {
+		return NewAgentWorkItemResult{}, err
+	}
 	created, err := a.NewWorkItem(ctx, opts)
 	if err != nil {
 		return NewAgentWorkItemResult{}, err

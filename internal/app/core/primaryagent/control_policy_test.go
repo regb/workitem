@@ -57,4 +57,22 @@ func TestArchivedOwnerRefusesMessagesButAllowsEmergencyControls(t *testing.T) {
 	if _, err := service.Control(context.Background(), opts); err == nil || !strings.Contains(err.Error(), "idle-only") {
 		t.Fatalf("unnegotiated idle-only control %v", err)
 	}
+	opts.RequireIdle = false
+	opts.Images = []agent.ImageContent{{MIMEType: "image/png", Data: "aW1hZ2U="}}
+	if _, err := service.Control(context.Background(), opts); err == nil || !strings.Contains(err.Error(), "image input") {
+		t.Fatalf("unnegotiated image input %v", err)
+	}
+	runtime.Capabilities.ImageInput = true
+	opts.Images[0].Data = "invalid"
+	if _, err := service.Control(context.Background(), opts); err == nil || !strings.Contains(err.Error(), "base64") {
+		t.Fatalf("invalid image reached runtime: %v", err)
+	}
+	opts.Images[0].Data = "aW1hZ2U="
+	opts.Message = ""
+	if _, err := service.Control(context.Background(), opts); err != nil {
+		t.Fatal("image-only control refused:", err)
+	}
+	if actual := <-seen; actual != agent.CommandPrompt {
+		t.Fatalf("command=%s", actual)
+	}
 }

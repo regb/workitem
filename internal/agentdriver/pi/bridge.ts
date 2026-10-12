@@ -7,6 +7,8 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 const protocolVersion = 1;
 const contentVersion = 1;
 const maxContentBytes = 256 * 1024;
+const maxControlCommandBytes = 12 * 1024 * 1024;
+const maxControlImageBytes = 8 * 1024 * 1024;
 
 interface ControlCommand {
   protocol_version: number;
@@ -17,8 +19,26 @@ interface ControlCommand {
   type: "prompt" | "steer" | "follow_up" | "abort" | "shutdown";
   actor?: string;
   message?: string;
+  images?: Array<{ mime_type: string; data: string }>;
   created_at: string;
   require_idle?: boolean;
+}
+
+function validateControlContent(command: ControlCommand) {
+  if (command.message !== undefined && (typeof command.message !== "string" || Buffer.byteLength(command.message) > 64 * 1024)) throw new Error("control message must be at most 64 KiB");
+  if (command.images !== undefined && !Array.isArray(command.images)) throw new Error("invalid control images");
+  const images = command.images ?? [];
+  if (images.length > 4) throw new Error("at most four control images are allowed");
+  if (images.length && !["prompt", "steer", "follow_up"].includes(command.type)) throw new Error("control command does not accept images");
+  let total = 0;
+  for (const image of images) {
+    if (!image || !["image/jpeg", "image/png", "image/gif", "image/webp"].includes(image.mime_type)) throw new Error("unsupported control image type");
+    if (typeof image.data !== "string" || !image.data.length || image.data.length > 4 * Math.ceil(maxControlImageBytes / 3) || !/^[A-Za-z0-9+/]*={0,2}$/.test(image.data)) throw new Error("invalid control image base64 data");
+    const decoded = Buffer.from(image.data, "base64");
+    if (decoded.toString("base64") !== image.data) throw new Error("invalid control image base64 data");
+    total += decoded.length;
+    if (total > maxControlImageBytes) throw new Error("control images exceed 8 MiB total");
+  }
 }
 
 function textFromContent(content: unknown): string {
@@ -233,6 +253,7 @@ export default function wiBridge(pi: ExtensionAPI) {
     if (command.work_item_id !== workItemId) throw new Error(`control command targets work item ${command.work_item_id || "<missing>"}, expected ${workItemId}`);
     if (!command.id) throw new Error("control command id is required");
     if (handled.has(command.id)) return;
+    validateControlContent(command);
     if (command.require_idle && (submittedWork || !context?.isIdle() || context.hasPendingMessages())) throw new Error("agent became busy; operation refused without interrupting the turn");
     handled.add(command.id);
     try {
@@ -240,13 +261,17 @@ export default function wiBridge(pi: ExtensionAPI) {
         case "prompt":
         case "steer":
         case "follow_up": {
-          if (!command.message?.trim()) throw new Error("runtime control message is empty");
+          if (!command.message?.trim() && !command.images?.length) throw new Error("runtime control message is empty");
+          const content = command.images?.length
+            ? [...(command.message?.trim() ? [{ type: "text" as const, text: command.message }] : []),
+                ...command.images.map(image => ({ type: "image" as const, mimeType: image.mime_type, data: image.data }))]
+            : command.message!;
           submittedWork = true;
           if (context?.isIdle()) {
-            pi.sendUserMessage(command.message);
+            pi.sendUserMessage(content);
           } else {
             const deliverAs = command.type === "follow_up" ? "followUp" : "steer";
-            pi.sendUserMessage(command.message, { deliverAs });
+            pi.sendUserMessage(content, { deliverAs });
           }
           accept(command);
           break;
@@ -303,16 +328,20 @@ export default function wiBridge(pi: ExtensionAPI) {
     try { unlinkSync(controlSocketPath); } catch { /* absent or stale socket cleanup failed; listen reports real errors */ }
     controlServer = createServer((socket) => {
       let buffered = "";
+      let bufferedBytes = 0;
       socket.setTimeout(2000, () => socket.destroy());
       socket.on("error", () => socket.destroy());
       socket.setEncoding("utf8");
       socket.on("data", (chunk) => {
         buffered += chunk;
-        if (Buffer.byteLength(buffered) > 1 << 20) { socket.destroy(); return; }
+        bufferedBytes += Buffer.byteLength(chunk);
+        if (bufferedBytes > maxControlCommandBytes + 1) { socket.destroy(); return; }
+        if (!chunk.includes("\n")) return;
         const newline = buffered.indexOf("\n");
-        if (newline < 0) return;
         const raw = buffered.slice(0, newline).trim();
+        if (Buffer.byteLength(raw) > maxControlCommandBytes) { socket.destroy(); return; }
         buffered = "";
+        bufferedBytes = 0;
         void (async () => {
           try {
             const error = await execute(JSON.parse(raw) as ControlCommand);

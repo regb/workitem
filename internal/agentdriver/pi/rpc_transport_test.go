@@ -90,6 +90,7 @@ set -euo pipefail
 while IFS= read -r line; do
   case "$line" in
     *wi-runtime-ready*)
+      sleep 0.2
       printf '%s\n' '{"id":"wi-runtime-ready","type":"response","command":"get_commands","success":true,"data":{"commands":[{"name":"wi-control-idle"}]}}'
       ;;
     *command-prompt*)
@@ -121,14 +122,24 @@ done
 			ControlSocketPath: controlPath, EventSocketPath: eventPath, LogPath: filepath.Join(dir, "runtime.log"),
 		})
 	}()
-	waitForDaemonRuntimeEvent(t, daemonClient, itemID, agent.EventRuntimeReady)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := os.Stat(controlPath); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("control socket was not created")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := agent.SubmitControlSocket(ctx, controlPath, agent.ControlCommand{ProtocolVersion: agent.RuntimeProtocolVersion, ID: "command-prompt", RuntimeID: runtimeID, WorkItemID: itemID, RequestID: "request-1", Type: agent.CommandPrompt, Message: "[wi request request-1]\nprivate prompt", CreatedAt: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
+	waitForDaemonRuntimeEvent(t, daemonClient, itemID, agent.EventRuntimeReady)
 	contentSeen := false
-	deadline := time.Now().Add(3 * time.Second)
+	deadline = time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		value, readErr := driverprotocol.ReadContent(ctx, driverprotocol.ContentSocketPath(controlPath), runtimeID, itemID)
 		if readErr == nil && value.Text == "live private text" {

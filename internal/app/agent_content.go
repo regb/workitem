@@ -15,6 +15,14 @@ type historyBackend interface {
 // ConversationHistory reads the canonical primary conversation through its
 // driver. Reading neither materializes a checkout nor starts a runtime.
 func (a *App) ConversationHistory(ctx context.Context, opts ResolveOptions, leaf string) (driverprotocol.History, error) {
+	return a.conversationHistory(ctx, opts, leaf, "")
+}
+
+// ConversationHistoryPage reads an older page pinned to the selected native branch.
+func (a *App) ConversationHistoryPage(ctx context.Context, opts ResolveOptions, leaf, before string) (driverprotocol.History, error) {
+	return a.conversationHistory(ctx, opts, leaf, before)
+}
+func (a *App) conversationHistory(ctx context.Context, opts ResolveOptions, leaf, before string) (driverprotocol.History, error) {
 	m, err := a.ResolveItem(ctx, opts)
 	if err != nil {
 		return driverprotocol.History{}, err
@@ -30,6 +38,15 @@ func (a *App) ConversationHistory(ctx context.Context, opts ResolveOptions, leaf
 	path, err := a.primaryAgentService().AbsPath(m.ID, filepath.FromSlash(c.NativeLocator()))
 	if err != nil {
 		return driverprotocol.History{}, err
+	}
+	if before != "" {
+		pager, ok := backend.(interface {
+			HistoryPage(context.Context, string, string, string) (driverprotocol.History, error)
+		})
+		if !ok {
+			return driverprotocol.History{}, fmt.Errorf("driver %q does not provide history paging", c.Driver)
+		}
+		return pager.HistoryPage(ctx, path, leaf, before)
 	}
 	return backend.History(ctx, path, leaf)
 }

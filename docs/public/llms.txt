@@ -1,12 +1,12 @@
 # wi
 
-> Durable local work items for AI-assisted development.
+> Short-lived development tasks with durable local records. Give each item one bounded objective, review the result, and archive it; file independent follow-ups separately.
 
 ## Start here
 
 - [Overview](https://regb.github.io/workitem/): What wi is and the basic workflow.
 - [Quick start](https://regb.github.io/workitem/getting-started/quick-start/): Create, start, merge, and archive an item.
-- [Work items](https://regb.github.io/workitem/concepts/work-items/): The durable record at the center of wi.
+- [Work items](https://regb.github.io/workitem/concepts/work-items/): Task scope, completion criteria, and retained history.
 - [Lifecycle](https://regb.github.io/workitem/concepts/lifecycle/): Backlog, working, waiting, and archived.
 
 ## Concepts
@@ -22,7 +22,7 @@
 - [Delegate work](https://regb.github.io/workitem/guides/delegation/): Descriptions, startup messages, and unattached TUI or headless agents.
 - [Review agent work](https://regb.github.io/workitem/guides/review-and-follow-up/): Inspect changes and send corrections.
 - [Use tmux](https://regb.github.io/workitem/guides/tmux/): Navigation bindings and prompt-only creation popup.
-- [Merge completed work](https://regb.github.io/workitem/guides/merging/): Rebase and fast-forward a local target.
+- [Merge completed work](https://regb.github.io/workitem/guides/merging/): Fast-forward a local target, rebasing when needed.
 
 ## Reference
 

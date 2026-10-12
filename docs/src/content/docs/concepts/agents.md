@@ -1,41 +1,20 @@
 ---
 title: Agents and conversations
-description: Separate agent definitions, drivers, durable conversations, and replaceable runtimes.
+description: Agent profiles, driver-owned conversations, and exclusive runtimes.
 ---
 
-Each work item selects one agent definition and has at most one durable primary conversation. Only one runtime may own that conversation at a time.
+An item selects an agent profile, such as `default` or `pi-deep`. Profiles choose a driver and its configuration; several profiles can use the same driver. The implicit `default` uses Pi. See [Configuration](../../reference/configuration/#coding-agents-and-drivers).
 
-An **agent definition** is the configured agent selected by a user, such as `default` or `web-search`. A **driver** integrates an agent family with wi. Multiple definitions may use the same driver with different settings. The implicit `default` definition uses the standard Pi driver when no configuration overrides it.
+Each item has at most one primary conversation and one active runtime owner. A runtime can stop and later resume that conversation. The conversation belongs to one bounded task, not an ongoing project chat: archive the item when its objective is settled.
 
-```bash
-wi new --agent web-search --title "Research upstream behavior"
-wi new --title "Investigate rendering" --agent web-search --start
-```
+## TUI and headless modes
 
-Creation requires a [registered repository](../repositories/); outside a current item, add `--repo NAME`. Startup messages are separate from durable task descriptions; see [Delegate work](../../guides/delegation/).
-
-The conversation is part of the item's history. The runtime is a replaceable driver and backend process that opens and controls it. Stopping a runtime does not discard the conversation.
-
-## Built-in Wi skill
-
-Wi includes the skill bundled with its host binary in every new runtime's launch request. The backend driver exports it as a temporary resource. Before TUI or headless startup, the Pi driver writes a private skill directory and passes its absolute path with `--skill`. No separate skill checkout or Pi configuration entry is required, and a read-only or symlinked global skills directory is fine.
-
-The temporary files stay available while the backend runs and are cleaned up when the driver returns. Wi does not modify your global skills or settings. Remove old manually configured copies yourself to avoid duplicate `wi` names; Pi's normal collision rules still apply.
-
-Rebuilding Wi packages the current skill source. Installing the executable alone does not change an already running agent; the next runtime startup exports the bundled version. Normal backend skill loading still applies, and resume never sends an extra prompt to force it. See the [driver protocol](../../reference/agent-driver-protocol/#bundled-skills) for optional driver support.
-
-## TUI mode
-
-TUI mode is the default:
+TUI is the default and runs the driver's interactive backend in tmux:
 
 ```bash
 wi start item-slug
 wi switch item-slug
 ```
-
-A driver advertising native TUI support runs its backend inside a wi-owned tmux session. You can leave and re-enter the session while the conversation continues to belong to the item. The standard Pi driver runs native interactive Pi this way.
-
-## Headless mode
 
 Headless mode does not use tmux:
 
@@ -43,42 +22,30 @@ Headless mode does not use tmux:
 wi start --agent-mode headless item-slug
 ```
 
-A driver must advertise headless support to use this mode. Stop the current runtime before switching modes:
+These modes are alternatives. To change modes, stop the current owner, wait for it to report offline, then start the other mode:
 
 ```bash
 wi agent runtime stop item-slug
 wi agent runtime status item-slug
-wi switch item-slug
 ```
 
-Wait until status reports that the runtime is offline before starting the other mode.
+Drivers must advertise the requested mode. Force cleanup affects only verified Wi-owned processes.
 
-## Runtime observation and control
+## Observation and input
 
 ```bash
-wi agent runtime status item-slug
 wi agent status item-slug
+wi agent runtime status item-slug
 wi agent monitor --limit 50 item-slug
-wi agent control abort --item item-slug
-wi agent runtime stop item-slug
-```
-
-Agent status reflects whether the current runtime appears busy, idle, or in need of inspection. It does not depend on how the prompt was submitted.
-
-## Send input
-
-Send a message to the active runtime:
-
-```bash
 wi agent control send --item item-slug "Run the focused tests and explain failures."
 ```
 
-While the agent is busy, the default steering message runs after the current assistant turn and tool calls. Use `--follow-up` when the message must wait for the current run to settle. Use `--file` or `--stdin` for longer input.
+Status reports activity, not task completion. While busy, the default message uses steering semantics; `--follow-up` waits for the run to settle. Use `--file` or `--stdin` for longer messages. Delivery acknowledges handoff, not completion. Unsupported controls are rejected, never simulated with TUI keystrokes.
 
-Control delivery confirms only that the active driver accepted the message. Use `wi agent monitor`, or enter the TUI, to inspect the result. Drivers advertise which controls they support and must reject unsupported operations rather than emulate TUI keystrokes.
+Task descriptions and startup messages are separate. See [Delegate work](../../guides/delegation/) and [Review agent work](../../guides/review-and-follow-up/).
 
-## One runtime at a time
+## Bundled Wi skill
 
-TUI and headless runtimes cannot own the same conversation simultaneously. Stop the active runtime before starting another mode.
+The Pi driver exports the skill embedded in the Wi executable to a private temporary directory and passes it explicitly with `--skill`. It cleans up after the runtime exits and never modifies global skills or settings. No separate skill installation is needed; remove old manual copies to avoid duplicate names.
 
-Force cleanup stops a process only after `wi` verifies that it still belongs to the item. A stale runtime record will not cause an unrelated process to be stopped.
+An already running agent keeps its existing skill and runtime code. Installing a new Wi build affects later runtimes, not existing owners. See the [driver protocol](../../reference/agent-driver-protocol/#bundled-skills).

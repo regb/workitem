@@ -47,6 +47,9 @@ func runStart(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 }
 
 func coordinatorStartWorkItem(ctx context.Context, cfg Config, selector string, force, attach bool, mode agent.Mode, eventType string) (app.StartResult, error) {
+	if err := cfg.App.ValidateItemAgentConfig(ctx, app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env}); err != nil {
+		return app.StartResult{}, err
+	}
 	transition, err := coordinatorStateTransition(ctx, cfg, selector, model.StateWorking, eventType, force)
 	if err != nil {
 		return app.StartResult{}, err

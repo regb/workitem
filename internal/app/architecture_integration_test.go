@@ -36,6 +36,10 @@ func newTestApp(st *store.Store, git app.Git) *app.App {
 
 type fakeConversationBackend struct{}
 
+func (fakeConversationBackend) ValidateConfig(context.Context, string, json.RawMessage) error {
+	return nil
+}
+
 func (fakeConversationBackend) NewConversation(_ context.Context, id, _ string, _ json.RawMessage) (model.Conversation, error) {
 	return piadapter.New("pi").NewConversation(id), nil
 }
@@ -277,6 +281,8 @@ type fakePi struct {
 	controlPath string
 	eventPath   string
 }
+
+func (f *fakePi) ValidateConfig(context.Context, string, json.RawMessage) error { return nil }
 
 func (f *fakePi) NewConversation(_ context.Context, id, _ string, _ json.RawMessage) (model.Conversation, error) {
 	return piadapter.New("pi").NewConversation(id), nil

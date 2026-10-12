@@ -89,7 +89,7 @@ var helpDocs = map[string]helpDoc{
 	},
 	"new": {
 		Summary: "Create a durable work item",
-		Usage:   []string{"wi new --title <text> [options]"},
+		Usage:   []string{"wi new --title <text> [options]", "wi new --untitled [options]"},
 		Description: []string{
 			"Normally creates a work item in backlog. Durable metadata and DESCRIPTION.md are written immediately; no terminal session, conversation, runtime, or composed use case is started. Items begin with an absent managed-slot checkout. Select a registered repository with --repo NAME, or inherit the current item’s repository. Without --base, the immutable starting commit comes from the registered integration branch; no fetch occurs and there is no fallback to HEAD.",
 			"With --start, the item moves to working and an unattached agent receives the global agent.startup_message through runtime control. --prompt overrides that message and requires --start; it never changes DESCRIPTION.md. --desc-file remains the durable task description. TUI mode is the default: it creates the normal tmux runtime for later entry but does not switch or attach the caller. Use --agent-mode headless for an explicitly headless runtime. If startup or delivery fails, the command reports the durable partial outcome instead of deleting the item.",
@@ -97,7 +97,8 @@ var helpDocs = map[string]helpDoc{
 			"A sandbox may set WI_AGENT_DAEMON_SOCKET to the daemon's separately mounted agent endpoint. That endpoint permits only absent managed-slot backlog creation; --start is rejected. Worktree-relative bases require item and repository context available through the endpoint.",
 		},
 		Options: []helpOption{
-			{"--title <text>", "Required explicit title. Derive the slug unless --slug is supplied; no title inference."},
+			{"--title <text>", "Explicit title; required unless --untitled is supplied. Derive the slug unless --slug is supplied; no title inference."},
+			{"--untitled", "Use the editable title Untitled task and an item-<ID suffix> slug unless --slug is supplied. Cannot be combined with --title."},
 			{"--desc-file <path>", "Read DESCRIPTION.md content from a file."},
 			{"--start", "Start an unattached agent and send the configured startup message."},
 			{"--prompt <text>", "With --start, override the startup message without changing the description."},
@@ -118,6 +119,7 @@ var helpDocs = map[string]helpDoc{
 			`wi new --deep --repo api --title "Redesign authentication"`,
 			`wi new --base=@ --title "Build on this task"`,
 			`wi new --base=^ --title "Independent task"`,
+			`wi new --untitled --repo api`,
 		},
 	},
 	"list": {
@@ -148,6 +150,24 @@ var helpDocs = map[string]helpDoc{
 			`WI_LIST_LABELS="+personal,-jira" wi list`,
 			`WI_LIST_LABELS="!,+personal" wi list --json`,
 		},
+	},
+	"edit": {
+		Summary: "Edit work item metadata together",
+		Usage:   []string{"wi edit [--item <selector>] [options] [item]"},
+		Description: []string{
+			"Edits title, description, labels, and deep-work classification in one validated request. With no edit flags, opens title and description in VISUAL, EDITOR, or vi. Defaults to the current item; archived items can be selected by ID. State, slug, branch, checkout, conversation, and runtime remain unchanged; no prompt is sent.",
+			"The editor uses a private draft with a Title: line, a blank line, then description text. Concurrent item or description changes refuse the edit rather than overwriting them; failed drafts are retained. Description content stays on disk and is staged for crash recovery. A post-commit filesystem failure reports the retained edit and pending description instead of claiming rollback.",
+		},
+		Options: []helpOption{
+			{"--item <selector>", "Select an item; defaults to the current item."},
+			{"--title <text>", "Replace the non-empty, single-line UTF-8 title; at most 512 bytes."},
+			{"--desc-file <path>", "Replace the UTF-8 description from a file; at most 4 MiB. An empty file clears it."},
+			{"--label <label>", "Add a label; repeatable."},
+			{"--remove-label <label>", "Remove a label; repeatable. Cannot also add the same label."},
+			{"--deep", "Mark as deep work."},
+			{"--no-deep", "Clear deep work; cannot be combined with --deep."},
+		},
+		Examples: []string{`wi edit --title "Clarified objective"`, `wi edit --item auth --desc-file task.md --label backend`, `wi edit --no-deep auth`, `wi edit auth`},
 	},
 	"show": {
 		Summary:     "Show durable task context and metadata",
@@ -222,10 +242,10 @@ var helpDocs = map[string]helpDoc{
 		Examples:    []string{`wi events`, `wi events --item auth`, `wi --json events auth`},
 	},
 	"merge": {
-		Summary: "Rebase and fast-forward a local target branch",
+		Summary: "Fast-forward a local target branch, rebasing when needed",
 		Usage:   []string{"wi merge [--item <selector>] [--target <branch>] [target]"},
 		Description: []string{
-			"Merges the current working/waiting item without switching checkouts: requires a completely clean source checkout, rebases its persisted implementation branch onto the target, atomically fast-forwards the local target ref, and synchronizes any worktree where the target is checked out.",
+			"Merges the current working/waiting item without switching checkouts: requires a completely clean source checkout, rebases its persisted implementation branch only if it does not already contain the target, atomically fast-forwards the local target ref, and synchronizes any worktree where the target is checked out.",
 			"The target defaults to the registered repository's integration branch. No fetch, commit, squash, branch deletion, workspace cleanup, shelve, or archive is performed.",
 			"If rebase, target advancement, or target-worktree synchronization fails, wi aborts/rolls back and restores the pre-merge source and target commits. Dirty target files are allowed only when they do not overlap incoming paths.",
 		},
@@ -357,29 +377,6 @@ var helpDocs = map[string]helpDoc{
 		},
 		Examples: []string{`wi archive add-api-retries`, `wi state set backlog --item 01KZ39T`},
 	},
-	"label": {
-		Summary: "List, add, or remove item labels",
-		Usage: []string{
-			"wi label [--item <selector>]",
-			"wi label [--item <selector>] <label>...",
-			"wi label --remove [--item <selector>] <label>...",
-		},
-		Description: []string{"With no labels, lists labels. Otherwise adds normalized labels, or removes them with --remove. Labels are lowercase organizational metadata; deep work is separate."},
-		Options: []helpOption{
-			{"--item <selector>", "Select an item explicitly."},
-			{"--remove", "Remove the supplied labels instead of adding them."},
-		},
-		Examples: []string{`wi label backend auth`, `wi label --remove --item auth blocked`, `wi label --item auth`},
-	},
-	"deep": {
-		Summary:     "Set or clear deep-work classification",
-		Usage:       []string{"wi deep [--item <selector>] [--clear] [item]"},
-		Description: []string{"Marks an item as deep work, or clears it. Working/waiting deep items consume configured active capacity."},
-		Options: []helpOption{
-			{"--item <selector>", "Select an item explicitly."},
-			{"--clear", "Clear deep-work classification."},
-		},
-	},
 	"agent": {
 		Summary:     "Inspect, run, monitor, and communicate with the primary agent",
 		Usage:       []string{"wi agent <status|control|runtime|monitor> [options]"},
@@ -477,13 +474,13 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Resume waiting work"}, {"shelve", "Return active work to backlog"}, {"archive", "Archive completed work"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
-	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"label", "List, add, or remove labels"}, {"deep", "Set or clear deep-work classification"}, {"events", "Show item history"}, {"attention", "Inspect or defer attention"}})
+	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"attention", "Inspect or defer attention"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Agent and checkout:")
 	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Administration:")
-	printCommandRows(w, [][2]string{{"merge", "Rebase and fast-forward a target branch"}, {"delete", "Delete archived work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
+	printCommandRows(w, [][2]string{{"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete archived work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "States:")
 	fmt.Fprintln(w, "  backlog | working | waiting | archived")

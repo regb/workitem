@@ -1,6 +1,6 @@
 ---
 title: Merge completed work
-description: Rebase an item branch and fast-forward a local target safely.
+description: Fast-forward a local target, rebasing only when needed.
 ---
 
 `wi merge` integrates one clean working or waiting item into an existing local branch.
@@ -12,9 +12,11 @@ wi merge --item auth main
 The operation:
 
 1. requires a completely clean source checkout
-2. rebases the persisted implementation branch onto the target
+2. keeps the implementation branch unchanged if it already contains the target; otherwise rebases it onto the target
 3. fast-forwards the local target reference
 4. synchronizes a checked-out non-integration target when safe
+
+When the target is already an ancestor, Wi preserves all commit IDs and merge history, including subtree merges. Otherwise it uses a plain rebase, which can flatten merge history and require manual resolution.
 
 It does not fetch, commit, squash, push, delete the source branch, release the workspace, or archive the item.
 
@@ -43,4 +45,4 @@ Inspect the result and use normal Git commands to push if required. Then archive
 wi archive auth
 ```
 
-Keeping integration and lifecycle separate avoids silently discarding a useful case file or cleaning up a task before you have verified the merged result.
+Verify the integration before archiving. The task record remains available; file further objectives as new items.

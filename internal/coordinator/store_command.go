@@ -169,6 +169,12 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		if previous.Repository.ID != "" && (previous.Repository.ID != normalized.Repository.ID || previous.Repository.CreatedFromCommit != normalized.Repository.CreatedFromCommit) {
 			return "", nil, errors.New("repository identity and created-from commit are immutable")
 		}
+		if previous.Checkout.Specification.Branch != normalized.Checkout.Specification.Branch {
+			return "", nil, errors.New("implementation branch specification is immutable")
+		}
+		if previous.State != model.StateArchived && normalized.State != model.StateArchived && previous.Slug != normalized.Slug {
+			return "", nil, errors.New("active slug is immutable; archive and restore to allocate a new slug")
+		}
 		if normalized.ID != command.ItemID {
 			return "", nil, errors.New("manifest item id mismatch")
 		}

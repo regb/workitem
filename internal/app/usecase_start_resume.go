@@ -26,6 +26,9 @@ func (a *App) StartWorkItemInMode(ctx context.Context, opts ResolveOptions, forc
 	if !mode.Valid() {
 		return StartResult{}, fmt.Errorf("invalid agent runtime mode %q", mode)
 	}
+	if err := a.ValidateItemAgentConfig(ctx, opts); err != nil {
+		return StartResult{}, err
+	}
 	transition, err := a.transitionState(ctx, opts, model.StateWorking, "work_item.started", force)
 	if err != nil {
 		return StartResult{}, err
@@ -52,6 +55,9 @@ func (a *App) ResumeWorkItemInMode(ctx context.Context, opts ResolveOptions, att
 	}
 	if m.State == model.StateBacklog {
 		return StartResult{}, fmt.Errorf("cannot resume backlog item; run `wi start` first")
+	}
+	if err := a.ValidateItemAgentConfig(ctx, opts); err != nil {
+		return StartResult{}, err
 	}
 	transition, err := a.transitionState(ctx, opts, model.StateWorking, "work_item.resumed", false)
 	if err != nil {

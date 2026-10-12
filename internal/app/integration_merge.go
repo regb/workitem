@@ -137,39 +137,49 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (MergeResult
 		}
 	}
 
+	canFastForward, err := mg.IsAncestor(ctx, repoRoot, res.TargetOldSHA, res.SourceOldSHA)
+	if err != nil {
+		return res, fmt.Errorf("check target ancestry: %w", err)
+	}
+
 	tx := &mergeTransaction{Result: res}
 	a.appendMergeEvent(ctx, m.ID, "merge.started", mergeEventData(tx.Result, "", ""), &tx.Result)
-	if err := mg.Rebase(ctx, res.SourcePath, target); err != nil {
-		abortErr := mg.RebaseAbort(ctx, res.SourcePath)
-		head, headErr := mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
-		if abortErr != nil {
-			tx.Result.Warnings = append(tx.Result.Warnings, "automatic rebase abort failed: "+abortErr.Error())
+	if canFastForward {
+		// Preserve existing merge/subtree history when no rebase is needed.
+		tx.Result.SourceNewSHA = res.SourceOldSHA
+	} else {
+		if err := mg.Rebase(ctx, res.SourcePath, target); err != nil {
+			abortErr := mg.RebaseAbort(ctx, res.SourcePath)
+			head, headErr := mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
+			if abortErr != nil {
+				tx.Result.Warnings = append(tx.Result.Warnings, "automatic rebase abort failed: "+abortErr.Error())
+			}
+			headRestored := headErr == nil && head == res.SourceOldSHA
+			if !headRestored {
+				tx.Result.Warnings = append(tx.Result.Warnings, fmt.Sprintf("automatic abort did not verify source HEAD %s; inspect %s manually", shortSHA(res.SourceOldSHA), res.SourcePath))
+			}
+			message := fmt.Sprintf("rebase of %s onto %s failed and was aborted; no merge was performed. Run `git -C %s rebase %s` manually, resolve conflicts, then retry `wi merge`", res.SourceBranch, target, res.SourcePath, target)
+			if abortErr != nil {
+				message = fmt.Sprintf("rebase of %s onto %s failed and automatic abort also failed; inspect %s manually", res.SourceBranch, target, res.SourcePath)
+			} else if !headRestored {
+				message += fmt.Sprintf(". WARNING: source HEAD was not verified at %s; inspect it manually", shortSHA(res.SourceOldSHA))
+			}
+			a.appendMergeEvent(ctx, m.ID, "merge.failed", mergeEventData(tx.Result, "rebase", err.Error()), &tx.Result)
+			tx.Result.RolledBack = abortErr == nil && headRestored
+			rollbackData := mergeEventData(tx.Result, "rebase", err.Error())
+			if abortErr != nil {
+				rollbackData["rollback_errors"] = []string{abortErr.Error()}
+			}
+			a.appendMergeEvent(ctx, m.ID, "merge.rolled_back", rollbackData, &tx.Result)
+			return tx.Result, errors.New(message + "\nGit reported: " + err.Error())
 		}
-		headRestored := headErr == nil && head == res.SourceOldSHA
-		if !headRestored {
-			tx.Result.Warnings = append(tx.Result.Warnings, fmt.Sprintf("automatic abort did not verify source HEAD %s; inspect %s manually", shortSHA(res.SourceOldSHA), res.SourcePath))
+		tx.Result.Rebased = true
+		tx.Result.SourceNewSHA, err = mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
+		if err != nil {
+			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "resolve_rebased_head", err)
 		}
-		message := fmt.Sprintf("rebase of %s onto %s failed and was aborted; no merge was performed. Run `git -C %s rebase %s` manually, resolve conflicts, then retry `wi merge`", res.SourceBranch, target, res.SourcePath, target)
-		if abortErr != nil {
-			message = fmt.Sprintf("rebase of %s onto %s failed and automatic abort also failed; inspect %s manually", res.SourceBranch, target, res.SourcePath)
-		} else if !headRestored {
-			message += fmt.Sprintf(". WARNING: source HEAD was not verified at %s; inspect it manually", shortSHA(res.SourceOldSHA))
-		}
-		a.appendMergeEvent(ctx, m.ID, "merge.failed", mergeEventData(tx.Result, "rebase", err.Error()), &tx.Result)
-		tx.Result.RolledBack = abortErr == nil && headRestored
-		rollbackData := mergeEventData(tx.Result, "rebase", err.Error())
-		if abortErr != nil {
-			rollbackData["rollback_errors"] = []string{abortErr.Error()}
-		}
-		a.appendMergeEvent(ctx, m.ID, "merge.rolled_back", rollbackData, &tx.Result)
-		return tx.Result, errors.New(message)
+		a.appendMergeEvent(ctx, m.ID, "merge.rebased", mergeEventData(tx.Result, "", ""), &tx.Result)
 	}
-	tx.Result.Rebased = true
-	tx.Result.SourceNewSHA, err = mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
-	if err != nil {
-		return a.failMergeWithRollback(ctx, m.ID, mg, tx, "resolve_rebased_head", err)
-	}
-	a.appendMergeEvent(ctx, m.ID, "merge.rebased", mergeEventData(tx.Result, "", ""), &tx.Result)
 	ancestor, err := mg.IsAncestor(ctx, repoRoot, res.TargetOldSHA, tx.Result.SourceNewSHA)
 	if err != nil {
 		return a.failMergeWithRollback(ctx, m.ID, mg, tx, "fast_forward_check", err)

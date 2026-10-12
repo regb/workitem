@@ -30,7 +30,7 @@ func TestSchemaSkewCannotStopOrMutateDaemon(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, schema := range []uint64{0, SchemaVersion - 1, SchemaVersion + 1} {
-		for _, method := range []string{MethodShutdown, MethodCreateItem, MethodManifestCommand, MethodStoreCommand} {
+		for _, method := range []string{MethodShutdown, MethodCreateItem, MethodManifestCommand, MethodEditItem, MethodStoreCommand} {
 			conn, err := net.DialTimeout("unix", socket, time.Second)
 			if err != nil {
 				t.Fatal(err)

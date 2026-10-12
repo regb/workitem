@@ -1,32 +1,22 @@
 ---
 title: Philosophy
-description: Why wi treats AI-assisted development as durable case work.
+description: Short-lived tasks, durable records, and explicit local control.
 ---
 
-Most agent workflows begin with a terminal, a checkout, and a conversation. Those are useful tools, but they are poor identities for work. Processes stop. tmux sessions disappear. Worktrees get reused. A task often outlives all three.
+Wi organizes development around small tasks, not permanent agent sessions or project-sized workspaces. Each item should have a bounded objective and a clear completion condition. Review the result and archive the item; file a different objective as new work.
 
-`wi` makes the work item the durable center instead.
+## Durable does not mean ongoing
 
-## Work should survive its current interface
+Processes stop, terminals disappear, and worktrees are reused. A task's description, branch, conversation, and history should survive those interruptions. Archiving keeps that record without keeping the task active.
 
-A description, branch, conversation, and history should still make sense after a restart or after replacing the process that created them. Tmux and Pi are current access methods, not the definition of the task.
+## Capture is separate from execution
 
-## Capture and execution are different decisions
+Filing backlog work does not launch an agent or allocate a checkout. Starting is explicit. If creation succeeds but startup fails, the captured task remains.
 
-Recording backlog work should not launch an agent or allocate a checkout. Starting work is an explicit transition with resource consequences.
+## Keep intent and observations separate
 
-This also makes failure less destructive. If creation succeeds but runtime startup fails, the task remains captured rather than disappearing because the final step failed.
+Lifecycle records human intent. Agent status records activity. Worktree status records Git condition. An idle agent is not proof that a task is correct or complete.
 
-## State should say one thing
+## Local control
 
-Lifecycle records human intent. Agent status records process activity. Worktree status records checkout condition. Combining them into a single status creates contradictions such as an item becoming "done" merely because an agent stopped.
-
-`wi` keeps these facts separate while showing them together when you inspect an item.
-
-## Local control matters
-
-Source code, prompts, conversations, and credentials stay on the user's machine unless the chosen agent or Git workflow sends them elsewhere. `wi` does not require a hosted control service.
-
-## Agents are participants, not owners
-
-An agent can work on an item, file a constrained follow-up, and add to its history. The durable item still belongs to the user's workflow. Cleanup, lifecycle changes, and destructive operations remain explicit.
+Wi has no required hosted control service. Data stays local unless the chosen agent or Git workflow sends it elsewhere. Agents can act on tasks and file constrained follow-ups; cleanup and destructive operations remain under explicit user control.

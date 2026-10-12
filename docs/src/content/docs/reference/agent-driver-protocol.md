@@ -28,7 +28,19 @@ The runtime mode is independent of the process protocol:
 - `tui` asks the driver to run its interactive backend. `wi` composes that runtime with tmux.
 - `headless` asks the same driver process to run its backend headlessly. The driver translates control commands into backend-specific requests and translates backend events into wi runtime events. Headless mode does not create or inspect tmux resources.
 
-Both modes use the same conversation identity, runtime ownership checks, control socket, and event protocol. Optional `live_content` and `idle_guard` capabilities describe content snapshots and idle-only controls. An absent capability means unsupported; do not restart an existing owner implicitly to obtain it. A headless driver may wrap any non-interactive backend interface; the backend itself does not need to implement RPC. The driver advertises `prompt`, `steering`, `follow_up`, `cancel`, and `streaming` separately and rejects commands it cannot translate.
+Both modes use the same conversation identity, runtime ownership checks, control socket, and event protocol. Optional `live_content`, `idle_guard`, and `image_input` capabilities describe content snapshots, idle-only controls, and image-bearing prompts. An absent capability means unsupported; do not restart an existing owner implicitly to obtain it. A headless driver may wrap any non-interactive backend interface; the backend itself does not need to implement RPC. The driver advertises `prompt`, `steering`, `follow_up`, `cancel`, and `streaming` separately and rejects commands it cannot translate.
+
+Pi's headless transport queues up to 32 control requests while waiting for native readiness. Requests beyond that limit are rejected. Requests still waiting when the runtime exits or is canceled are rejected rather than silently dropped.
+
+## Driver configuration
+
+Wi merges driver defaults with agent-profile overrides and sends the result as opaque JSON. Each driver owns its required fields, defaults, and value validation. Reject invalid configuration through the request's error response; do not claim launch readiness when required settings are missing.
+
+`config.validate` is a stateless process request carrying the profile name and merged `config`, without a conversation or runtime. Success must include `config_validation: {"valid": true}` in the response; rejection uses `error`. Drivers own mandatory fields and must implement this operation for new startup requests. There is no generic configuration schema.
+
+Wi checks configuration before `new --start` creates an item, before `start`/`resume` changes lifecycle when a new owner is needed, and before runtime creation allocates resources. Plain backlog capture and workspace-only operations remain driver-independent. Access to an existing owner does not revalidate future launch settings or restart it.
+
+Validation must not launch a coding backend, create native content, allocate resources, or make a model request. Clients fail closed on rejection, missing acknowledgement, or unsupported operations, with a bounded request deadline. Validation is not a guarantee of later executable, authentication, network, or model availability; drivers must also validate launch requests. Error messages should identify missing fields without revealing secret values.
 
 ## Bundled skills
 
@@ -42,10 +54,10 @@ These are rebuildable runtime resources, not work-item state. Descriptions, nati
 
 ## Conversation operations
 
-Drivers also handle short-lived process requests:
+Drivers also handle these short-lived conversation requests:
 
-- `conversation.capabilities` returns optional `history` and `title` support without starting a backend or creating a conversation.
-- `conversation.history` returns a bounded chronological branch view with stable native entry IDs, roles, text, timestamps, leaf identity, and a truncation flag. The host resolves the canonical locator; access clients must not choose native paths. An optional `leaf_id` selects an existing branch.
+- `conversation.capabilities` returns optional `history`, `history_paging`, and `title` support without starting a backend or creating a conversation.
+- `conversation.history` returns a bounded chronological branch view with stable native entry IDs, roles, text, timestamps, leaf identity, and a truncation flag. The host resolves the canonical locator; access clients must not choose native paths. An optional `leaf_id` selects an existing branch. Drivers advertising `history_paging` accept an exclusive native `before_id` cursor on that branch. Responses include `has_more` and the next `before_id`, empty at the beginning. Pin `leaf_id` when requesting older pages. Folded tool results expose `native_ids` aliases on their call message. `native_entry_ids` lists the page's raw entry IDs chronologically so clients can distinguish messages before and after a folded result.
 - `conversation.title` suggests a title from a bounded `prompt`. It never acquires, edits, or creates a primary conversation. Persisting a title is a separate daemon command and does not rename the slug or implementation branch.
 - `conversation.create` returns the driver's locator and native format for a new conversation ID.
 - `conversation.cwd` reads the checkout recorded by a native conversation.
@@ -55,13 +67,17 @@ Drivers also handle short-lived process requests:
 
 `wi` starts the configured driver command for these operations. Driver-specific parsers and filesystem rules do not run in generic application or coordinator packages.
 
-The Pi history reader snapshots the file size before reading, ignores an incomplete final append, and follows parent IDs on one branch. Malformed records, missing parents, cycles, and unsupported legacy records fail explicitly. It returns the latest 200 display entries, limits individual text to 16 KiB and total text to 1 MiB, and refuses files over 64 MiB. Truncation preserves UTF-8. Thinking and unsupported rich content have placeholders. This is a bounded view, not a complete transcript export or paging API. A live TUI snapshot can supply its in-memory leaf; `"-"` means an empty branch.
+The Pi history reader snapshots the file size before reading, ignores an incomplete final append, and follows parent IDs on one branch. Malformed records, missing parents, cycles, and unsupported legacy records fail explicitly. It defaults to the latest page of up to 200 native entries, limits individual text/tool fields to 16 KiB, total text to 1 MiB, and image data to 12 MiB. Thinking content is omitted. There is no conversation-size limit; older entries are available through paging. Truncation preserves UTF-8. Oversized fields have a truncation flag. The reader indexes native IDs and offsets rather than retaining all transcript bodies, but each operation still scans the file. A live TUI snapshot can supply its in-memory leaf; `"-"` means an empty branch.
 
 Pi title requests use a temporary working directory and non-persisted print mode with tools, extensions, skills, project instructions, and approval disabled. They retain the configured authentication/profile context but remove runtime identity and control variables. Cancellation terminates the short-lived driver process group, not a primary runtime.
 
 ## Runtime controls and events
 
-The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. Host-side application control resolves daemon-owned state, verifies current runtime ownership and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. A driver must reject unsupported controls rather than simulate TUI keystrokes.
+The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. Host-side application control resolves daemon-owned state, verifies current runtime ownership and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. Prompt-like commands may carry generic base64 `images` with MIME types only when the driver advertises `image_input`; each driver translates that payload to its native API. A driver must reject unsupported controls rather than simulate TUI keystrokes.
+
+Control messages are limited to 64 KiB of UTF-8 text and four images totaling at most 8 MiB decoded. Images require nonempty canonical base64 and JPEG, PNG, GIF, or WebP MIME types. Control sockets accept up to 12 MiB of serialized JSON to accommodate base64 and escaping; event sockets retain their 1 MiB limit. Both the host and bundled Pi drivers validate image content before handing it off.
+
+`idle_guard` describes support for guarded operations, not the owner's current activity or readiness.
 
 `require_idle: true` is an additive precondition, usable only when `idle_guard` is advertised. It includes work already submitted but not yet reflected in activity events. Refusal must not queue, steer, abort, or shut down the runtime. Duplicate accepted command IDs must not submit work twice. An acknowledgement is transport handoff, not completion or native prompt acceptance; command events provide later confirmation.
 
@@ -75,7 +91,7 @@ Content uses independent protocol version 1. It is optional, read-only, and ephe
 
 Each connection sends a newline-delimited `ContentRequest` with content protocol version, runtime ID, and work-item ID, and receives one `Content` snapshot. Both request and response identities must match the verified owner. The host rechecks ownership after reading. Sockets are user-only, reads have bounded deadlines, and slow consumers must not block turns.
 
-A snapshot contains sequence, current assistant text, activity, optional leaf identity, and truncation information. Text is capped at 256 KiB, preserving UTF-8. Consumers replace snapshots rather than concatenate them. Completion clears streaming text; final messages come from native history. Content and unrestricted errors must never enter retained daemon events.
+A snapshot contains sequence, current assistant text, activity, optional leaf identity, and truncation information. Text is capped at 256 KiB, preserving UTF-8. An optional tool snapshot carries its ID, name, running/completed/failed status, and input/output previews limited to 64 KiB each. Pi currently publishes structured tool snapshots in headless mode. Consumers replace snapshots rather than concatenate them. Completion clears streaming text; final messages come from native history. Content and unrestricted errors must never enter retained daemon events.
 
 These snapshots do not provide lossless replay or a history watermark. Consumers must refresh history after completion, reconnect, or branch/owner changes. Sequence numbers are scoped to one runtime. Opening a content or history view never starts a runtime or changes its mode.
 

@@ -245,6 +245,14 @@ func RemoveStagedDescription(database *Database, commandID string) {
 }
 
 func CleanupOrphanedStages(database *Database) error {
+	pending, err := database.PendingNativeWrites()
+	if err != nil {
+		return err
+	}
+	retained := map[string]bool{}
+	for _, write := range pending {
+		retained[filepath.Base(descriptionStagePath(database, write.CommandID))] = true
+	}
 	directory := filepath.Join(filepath.Dir(database.path), ".coordinator-pending")
 	entries, err := os.ReadDir(directory)
 	if os.IsNotExist(err) {
@@ -254,7 +262,7 @@ func CleanupOrphanedStages(database *Database) error {
 		return err
 	}
 	for _, entry := range entries {
-		if entry.Type().IsRegular() {
+		if entry.Type().IsRegular() && !retained[entry.Name()] {
 			if err := os.Remove(filepath.Join(directory, entry.Name())); err != nil && !os.IsNotExist(err) {
 				return err
 			}

@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	OperationConfigValidate           = "config.validate"
 	OperationLaunch                   = "launch"
 	OperationConversationCreate       = "conversation.create"
 	OperationConversationCWD          = "conversation.cwd"
@@ -28,14 +29,22 @@ type Request struct {
 }
 
 type Response struct {
-	ProtocolVersion int                   `json:"protocol_version"`
-	Ready           *Ready                `json:"ready,omitempty"`
-	Conversation    *ConversationResponse `json:"conversation,omitempty"`
-	Error           string                `json:"error,omitempty"`
+	ProtocolVersion  int                     `json:"protocol_version"`
+	Ready            *Ready                  `json:"ready,omitempty"`
+	Conversation     *ConversationResponse   `json:"conversation,omitempty"`
+	ConfigValidation *ConfigValidationResult `json:"config_validation,omitempty"`
+	Error            string                  `json:"error,omitempty"`
+}
+
+// ConfigValidationResult acknowledges validation of the merged driver config.
+// Validation is stateless: it must not launch a backend or create native content.
+type ConfigValidationResult struct {
+	Valid bool `json:"valid"`
 }
 
 type ConversationRequest struct {
 	Prompt       string       `json:"prompt,omitempty"`
+	BeforeID     string       `json:"before_id,omitempty"`
 	LeafID       string       `json:"leaf_id,omitempty"`
 	ID           string       `json:"id,omitempty"`
 	Conversation Conversation `json:"conversation,omitempty"`
@@ -54,8 +63,9 @@ type ConversationRequest struct {
 // ConversationCapabilities describes optional stateless operations. It can be
 // queried without creating a conversation or launching the backend agent.
 type ConversationCapabilities struct {
-	History bool `json:"history"`
-	Title   bool `json:"title"`
+	HistoryPaging bool `json:"history_paging,omitempty"`
+	History       bool `json:"history"`
+	Title         bool `json:"title"`
 }
 
 type ConversationResponse struct {

@@ -246,10 +246,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = runDelete(ctx, args[1:], cfg, jsonOut)
 	case "shutdown":
 		err = runShutdown(ctx, args[1:], cfg, jsonOut)
-	case "label":
-		err = runLabel(ctx, args[1:], cfg, jsonOut)
-	case "deep":
-		err = runDeep(ctx, args[1:], cfg, jsonOut)
+	case "edit":
+		err = runEdit(ctx, args[1:], cfg, jsonOut)
 	case "agent":
 		err = runAgent(ctx, args[1:], cfg, jsonOut)
 	default:

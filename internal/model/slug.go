@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	UntitledTitle        = "Untitled task"
 	MaxSlugLength        = 60
 	BranchIDSuffixLength = 8
 )
@@ -52,7 +53,15 @@ func NormalizeSlugSelector(value string) (string, bool) {
 // allocated when an item is created. The slug is descriptive while the final
 // ID characters preserve uniqueness when active slugs are eventually reused.
 func ItemBranchName(slug, id string) string {
-	slug = Slugify(slug)
+	return "wi/" + Slugify(slug) + "-" + itemIDSuffix(id)
+}
+
+// IDDerivedSlug gives unnamed items a selector without another random identity.
+func IDDerivedSlug(id string) string {
+	return "item-" + itemIDSuffix(id)
+}
+
+func itemIDSuffix(id string) string {
 	suffix := strings.ToLower(strings.TrimSpace(id))
 	if len(suffix) > BranchIDSuffixLength {
 		suffix = suffix[len(suffix)-BranchIDSuffixLength:]
@@ -60,7 +69,7 @@ func ItemBranchName(slug, id string) string {
 	if suffix == "" {
 		suffix = "item"
 	}
-	return "wi/" + slug + "-" + suffix
+	return suffix
 }
 
 // TerminalSessionName returns the predictable default terminal session name.

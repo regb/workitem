@@ -50,4 +50,14 @@ func TestContentSnapshotsAreBoundedReadOnlyAndOwnerScoped(t *testing.T) {
 	if err != nil || value.Text != "" {
 		t.Fatalf("final transcript duplicated %+v %v", value, err)
 	}
+	server.UpdateTool(EventToolStarted, "", "tool-1", "bash", `{"command":"pwd"}`, "", false)
+	value, err = ReadContent(context.Background(), path, "runtime", "item")
+	if err != nil || value.Tool == nil || value.Tool.Status != "running" || !strings.Contains(value.Tool.Input, "pwd") {
+		t.Fatalf("running tool snapshot %+v %v", value, err)
+	}
+	server.UpdateTool(EventToolCompleted, "", "tool-1", "bash", "", "/tmp", false)
+	value, err = ReadContent(context.Background(), path, "runtime", "item")
+	if err != nil || value.Tool == nil || value.Tool.Status != "completed" || value.Tool.Output != "/tmp" {
+		t.Fatalf("completed tool snapshot %+v %v", value, err)
+	}
 }

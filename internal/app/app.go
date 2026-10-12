@@ -60,6 +60,7 @@ type ProcessInspector interface {
 }
 
 type ConversationBackend interface {
+	ValidateConfig(ctx context.Context, agent string, config json.RawMessage) error
 	NewConversation(ctx context.Context, id, agent string, config json.RawMessage) (model.Conversation, error)
 	ConversationCWD(ctx context.Context, path string) (string, error)
 	ForkConversation(ctx context.Context, sourcePath, targetPath, targetCWD string) error

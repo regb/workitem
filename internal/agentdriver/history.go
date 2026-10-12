@@ -8,7 +8,10 @@ import (
 )
 
 func (c Client) History(ctx context.Context, path, leaf string) (driverprotocol.History, error) {
-	res, err := c.request(ctx, driverprotocol.OperationConversationHistory, "", nil, driverprotocol.ConversationRequest{Path: path, LeafID: leaf})
+	return c.HistoryPage(ctx, path, leaf, "")
+}
+func (c Client) HistoryPage(ctx context.Context, path, leaf, before string) (driverprotocol.History, error) {
+	res, err := c.request(ctx, driverprotocol.OperationConversationHistory, "", nil, driverprotocol.ConversationRequest{Path: path, LeafID: leaf, BeforeID: before})
 	if err != nil {
 		return driverprotocol.History{}, err
 	}

@@ -15,6 +15,7 @@ const (
 type RuntimeCapabilities struct {
 	LiveContent bool `json:"live_content,omitempty"`
 	IdleGuard   bool `json:"idle_guard,omitempty"`
+	ImageInput  bool `json:"image_input,omitempty"`
 	NativeTUI   bool `json:"native_tui"`
 	Headless    bool `json:"headless"`
 	Streaming   bool `json:"streaming"`

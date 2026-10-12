@@ -92,16 +92,28 @@ func (s *ControlServer) accept() {
 				continue
 			}
 		}
-		s.handlers.Add(1)
 		s.mu.Lock()
-		s.connections[conn] = struct{}{}
+		// Accept may finish after Close has already swept the connections.
+		select {
+		case <-s.done:
+			s.mu.Unlock()
+			_ = conn.Close()
+			return
+		default:
+			s.connections[conn] = struct{}{}
+		}
 		s.mu.Unlock()
+		s.handlers.Add(1)
 		go func() {
 			defer s.handlers.Done()
 			defer func() { s.mu.Lock(); delete(s.connections, conn); s.mu.Unlock(); _ = conn.Close() }()
 			var command ControlCommand
-			if err := decodeLine(conn, &command); err != nil {
+			if err := decodeLine(conn, &command, MaxControlCommandBytes); err != nil {
 				_ = json.NewEncoder(conn).Encode(ControlResponse{Error: "invalid control command: " + err.Error()})
+				return
+			}
+			if err := command.ValidateContent(); err != nil {
+				_ = json.NewEncoder(conn).Encode(ControlResponse{Error: err.Error()})
 				return
 			}
 			reply := make(chan socketReply, 1)
@@ -133,6 +145,16 @@ func (s *ControlServer) closeConnections() {
 }
 
 func SubmitControl(ctx context.Context, path string, command ControlCommand) error {
+	if err := command.ValidateContent(); err != nil {
+		return err
+	}
+	encoded, err := json.Marshal(command)
+	if err != nil {
+		return err
+	}
+	if len(encoded) > MaxControlCommandBytes {
+		return fmt.Errorf("control command exceeds 12 MiB")
+	}
 	var response ControlResponse
 	if err := exchangeRuntimeSocket(ctx, path, command, &response); err != nil {
 		return err
@@ -219,15 +241,23 @@ func (s *EventServer) accept() {
 				continue
 			}
 		}
-		s.handlers.Add(1)
 		s.mu.Lock()
-		s.connections[conn] = struct{}{}
+		// Accept may finish after Close has already swept the connections.
+		select {
+		case <-s.done:
+			s.mu.Unlock()
+			_ = conn.Close()
+			return
+		default:
+			s.connections[conn] = struct{}{}
+		}
 		s.mu.Unlock()
+		s.handlers.Add(1)
 		go func() {
 			defer s.handlers.Done()
 			defer func() { s.mu.Lock(); delete(s.connections, conn); s.mu.Unlock(); _ = conn.Close() }()
 			var event RuntimeEvent
-			if err := decodeLine(conn, &event); err != nil {
+			if err := decodeLine(conn, &event, 1<<20); err != nil {
 				_ = json.NewEncoder(conn).Encode(EventResponse{Error: "invalid runtime event: " + err.Error()})
 				return
 			}
@@ -311,14 +341,17 @@ func exchangeRuntimeSocket(ctx context.Context, path string, request, response a
 	return json.NewDecoder(conn).Decode(response)
 }
 
-func decodeLine(conn net.Conn, target any) error {
+func decodeLine(conn net.Conn, target any, limit int) error {
 	scanner := bufio.NewScanner(conn)
-	scanner.Buffer(make([]byte, 4096), 1024*1024)
+	scanner.Buffer(make([]byte, 4096), limit+2)
 	if !scanner.Scan() {
 		if err := scanner.Err(); err != nil {
 			return err
 		}
 		return errors.New("empty request")
+	}
+	if len(scanner.Bytes()) > limit {
+		return fmt.Errorf("socket request exceeds %d bytes", limit)
 	}
 	return json.Unmarshal(scanner.Bytes(), target)
 }

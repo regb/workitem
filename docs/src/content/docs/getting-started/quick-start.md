@@ -3,6 +3,8 @@ title: Quick start
 description: Create a work item, give its agent a task, and complete the work.
 ---
 
+Pick one small task with an observable definition of done. This walkthrough implements and verifies API retries, then archives the completed task.
+
 First [register a repository](../../concepts/repositories/):
 
 ```bash
@@ -98,12 +100,14 @@ wi resume add-api-retries             # return waiting work to working
 wi shelve add-api-retries             # clean up and return it to backlog
 ```
 
-When the checkout is clean and the branch is ready:
+Once the task meets its completion criteria, intended changes are committed, and the checkout is clean:
 
 ```bash
 wi merge --item add-api-retries main
 wi archive add-api-retries
 ```
+
+File unrelated discoveries as separate items; do not keep adding objectives to the completed retries task.
 
 Read [Lifecycle](../../concepts/lifecycle/) before using primitive state changes for cleanup. `wi state set` changes durable state only. `shelve` and `archive` coordinate cleanup.
 

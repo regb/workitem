@@ -27,13 +27,22 @@ func MaterializeNativeWrites(ctx context.Context, database *Database, native *st
 				return err
 			}
 			RemoveStagedDescription(database, write.CommandID)
+		case "edit-description":
+			if err := materializeDescriptionEdit(database, native, write); err != nil {
+				// Keep the staged intent and let unrelated items remain usable.
+				fmt.Fprintf(os.Stderr, "wi: pending description edit %s: %v\n", write.CommandID, err)
+				continue
+			}
+			RemoveStagedDescription(database, write.CommandID)
 		case StoreItemDelete:
 			if err := native.RemoveItem(write.Manifest.ID); err != nil {
 				return err
 			}
 			RemoveStagedStoreMutation(database, write.CommandID)
-		default:
+		case "":
 			RemoveStagedStoreMutation(database, write.CommandID)
+		default:
+			return fmt.Errorf("unsupported pending native write operation %q; retain its staged content", write.Operation)
 		}
 		if err := database.ClearPendingNativeWrite(write.CommandID); err != nil {
 			return err

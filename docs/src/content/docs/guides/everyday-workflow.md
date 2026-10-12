@@ -1,43 +1,22 @@
 ---
 title: Everyday workflow
-description: Move work from capture through review without losing context.
+description: Capture a bounded task, review its result, and archive it.
 ---
 
-This guide assumes a [registered repository](../../concepts/repositories/) and current Wi item context. Outside an item, add `--repo NAME` when creating work.
+Choose one objective you can finish and review. These examples assume a [registered repository](../../concepts/repositories/) and current item context; outside an item, add `--repo NAME` when creating work.
 
-## Capture work first
-
-Create backlog items as soon as the task is clear enough to hand off:
+## Capture and start
 
 ```bash
 wi new --label backend --desc-file task.md --title "Harden token refresh"
-```
-
-The description should survive independently of your current terminal and chat history.
-
-Use `--deep` when the item should consume configured deep-work capacity:
-
-```bash
-wi new --deep --desc-file design.md --title "Redesign token storage"
-```
-
-## Start deliberately
-
-```bash
 wi start harden-token-refresh
 ```
 
-Starting changes backlog to working, checks capacity, materializes the workspace, and starts the selected runtime. The default TUI mode enters tmux. Use `--agent-mode headless` for a headless run.
+Describe enough context and completion criteria for someone else to act independently. Use `--deep` for tasks that consume configured deep-work capacity.
 
-For a small task where the title is enough context, create and start it in one command:
+`start` activates backlog work, materializes its checkout, and enters the default TUI. It does not send a message. For immediate delegation, use `new --start`; see [Delegate work](../delegation/).
 
-```bash
-wi new --title "Fix typo" --start
-```
-
-`--start` creates an unattached TUI and sends the configured startup message. Enter it with `wi switch fix-typo`. Existing-item `wi start` opens a runtime without sending a message; `wi resume` never sends one.
-
-## Supervise active work
+## Supervise
 
 ```bash
 wi list
@@ -45,42 +24,27 @@ wi switch harden-token-refresh
 wi next
 ```
 
-Use `wi show` to recover durable context and `wi events` to inspect what happened. Agent and worktree observations are separate columns in `wi list`.
+`show` reads task context; `events` reads its history. Agent and worktree status are separate observations, not proof that the task is complete.
 
-## Handle pauses honestly
-
-If work is blocked but still active:
+## Pause
 
 ```bash
-wi state set waiting harden-token-refresh
-wi resume harden-token-refresh
+wi state set waiting harden-token-refresh  # blocked on an external answer
+wi resume harden-token-refresh             # return to working
+wi shelve harden-token-refresh             # return to backlog and release safe resources
 ```
 
-If you want it out of the active working set:
+Shelving retains the branch, description, and conversation. Primitive `state set` changes lifecycle only; see [Lifecycle](../../concepts/lifecycle/).
+
+## Review and finish
+
+[Inspect the diff and run relevant tests](../review-and-follow-up/). Keep corrections to this objective in the same item; file unrelated work separately.
+
+Once intended changes are committed and the checkout is clean:
 
 ```bash
-wi shelve harden-token-refresh
-```
-
-Shelving returns the item to backlog and releases resources where safe. It does not erase the branch, description, or conversation.
-
-## Review the result
-
-An idle agent is waiting for input, not automatically finished. Inspect the reported checkout with normal Git tools, run the relevant tests yourself, and send corrections through the same work item. See [Review agent work](../review-and-follow-up/) for the complete loop.
-
-## Integrate and retain history
-
-When the checkout is clean and the result is ready:
-
-```bash
-wi merge --item harden-token-refresh main
+wi merge --item harden-token-refresh
 wi archive harden-token-refresh
 ```
 
-Merge and archive are separate. Integration does not imply that the case file should disappear, and archive does not silently merge code.
-
-Delete only when you intend to remove the complete archived record:
-
-```bash
-wi delete --yes --item ITEM_ID
-```
+Merge defaults to the registered integration branch and does not push or archive. Archive retains the completed task record. Delete only when you intend to permanently remove that archived record.

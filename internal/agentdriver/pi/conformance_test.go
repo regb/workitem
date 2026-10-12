@@ -70,6 +70,12 @@ done
 
 func TestDriverConformance(t *testing.T) {
 	drivertest.Run(t, drivertest.Suite{Driver: "pi", Exchange: func(ctx context.Context, request driverprotocol.Request) (driverprotocol.Response, error) {
+		if request.Operation == driverprotocol.OperationConfigValidate {
+			if _, err := parseConfig(request.Config); err != nil {
+				return drivertest.ErrorResponse(err), err
+			}
+			return driverprotocol.Response{ProtocolVersion: driverprotocol.Version, ConfigValidation: &driverprotocol.ConfigValidationResult{Valid: true}}, nil
+		}
 		result, err := handleConversationOperation(ctx, request)
 		if err != nil {
 			return drivertest.ErrorResponse(err), err

@@ -81,8 +81,6 @@ WI_LIST_LABELS="!,+personal" wi list --json
 
 `attention.priority` selects the ranking strategy used by `wi list`, `wi attention queue`, `wi switch`, and `wi next`. The current strategy is `recent-request`. Unknown names are rejected so a misspelled strategy cannot silently change queue behavior.
 
-More strategies can be added without changing the configuration shape.
-
 ## Direnv trust
 
 Interactive runtime startup asks before allowing an untrusted `.envrc`. The user configuration can automatically trust absolute paths for repositories you control.
@@ -101,12 +99,29 @@ Repository configuration cannot grant execution trust. This prevents a checked-i
 
 Every item records an agent definition name. `default` is selected when `wi new` does not receive `--agent`; without configuration it uses the packaged `pi` driver.
 
-`[agents.<name>]` selects a registered driver. The nested `config` table belongs to that driver and is validated by it. The Pi driver accepts `executable` and `extensions`. `[drivers.<name>.defaults]` provides settings shared by every agent using that driver; agent configuration overrides those defaults.
+`[agents.<name>]` defines a flat selectable agent profile and selects a registered driver. An optional `label` provides display text; clients should fall back to the profile name when it is blank. The nested `config` belongs to the driver, which can require fields and reject missing or invalid values. Wi passes this table as opaque JSON and checks it through the driver's stateless `config.validate` operation before starting a new owner. There is no generic required-field schema. Invalid configuration fails before startup creates resources; `new --start` also validates before creating the item. Plain backlog capture does not require a driver process, and existing owners are not reconfigured.
 
-```bash
-wi new --agent web-search --title "Research upstream behavior"
-wi new --title "Investigate rendering" --agent web-search --start
+Pi accepts optional `executable`, `extensions`, `model`, and `thinking`. The executable defaults to `pi`; omitted model/thinking settings leave the choice to Pi. Explicit thinking values must be `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. `[drivers.<name>.defaults]` provides settings shared by every agent using that driver; agent configuration overrides those defaults.
+
+```toml
+[agents.pi-fast]
+driver = "pi"
+label = "Pi · Fast"
+[agents.pi-fast.config]
+model = "openai-codex/gpt-5.4"
+thinking = "low"
+
+[agents.pi-deep]
+driver = "pi"
+label = "Pi · Deep"
+[agents.pi-deep.config]
+model = "openai-codex/gpt-5.4"
+thinking = "xhigh"
 ```
+
+Items retain the selected profile name. Runtime startup resolves the profile and passes its model and thinking configuration through the selected driver.
+
+Select a profile with `wi new --agent NAME`.
 
 External driver programs use wi's versioned bootstrap protocol. The standard Pi driver runs as the separate `wi internal-driver pi` process from the installed `wi` binary, so it is always present and has the same build version. A configured `drivers.<name>.command` selects a trusted external driver executable; repository configuration cannot register drivers or agent definitions.
 

@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/regb/workitem/internal/model"
 )
 
 func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
@@ -109,6 +111,27 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 	}
 
 	runWiE2E(t, binary, repository, env, "repo", "add", "test", "--from", repository)
+	// Validate through the real bundled driver process, with neither Pi nor
+	// tmux on PATH. Invalid settings must fail before any item is created.
+	configDir := filepath.Join(configHome, "wi")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte("[agents.invalid]\ndriver = \"pi\"\n[agents.invalid.config]\nthinking = \"extreme\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	emptyList := string(runWiE2E(t, binary, repository, env, "list", "--ids"))
+	for _, mode := range []string{"tui", "headless"} {
+		invalid := exec.Command(binary, "new", "--repo", "test", "--title", "Invalid startup", "--agent", "invalid", "--start", "--agent-mode", mode)
+		invalid.Dir, invalid.Env = repository, env
+		output, err := invalid.CombinedOutput()
+		if err == nil || !strings.Contains(string(output), "invalid Pi thinking level") || strings.Contains(string(output), "created work item") {
+			t.Fatalf("preflight mode=%s err=%v output=%s", mode, err, output)
+		}
+		if list := string(runWiE2E(t, binary, repository, env, "list", "--ids")); list != emptyList {
+			t.Fatalf("preflight changed the work list: %s", list)
+		}
+	}
 	createdJSON := runWiE2E(t, binary, repository, env, "new", "--repo", "test", "--json", "--title", "State and attention E2E")
 	var created struct {
 		WorkItemID string `json:"work_item_id"`
@@ -131,17 +154,29 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 	operatorAsAgentEnv := append(append([]string{}, env...), "WI_AGENT_DAEMON_SOCKET="+daemonStatus.SocketPath)
 	assertWiE2EFails(t, binary, repository, operatorAsAgentEnv, "list")
 	agentEnv := append(append([]string{}, env...), "WI_AGENT_DAEMON_SOCKET="+daemonStatus.AgentSocketPath)
-	agentCreatedJSON := runWiE2E(t, binary, repository, agentEnv, "new", "--repo", "test", "--json", "--title", "Agent filed backlog item")
+	agentCreatedJSON := runWiE2E(t, binary, repository, agentEnv, "new", "--repo", "test", "--json", "--untitled")
 	var agentCreated struct {
-		WorkItemID string `json:"work_item_id"`
-		State      string `json:"state"`
+		WorkItemID string         `json:"work_item_id"`
+		State      string         `json:"state"`
+		Manifest   model.Manifest `json:"manifest"`
 	}
 	decodeE2EJSON(t, agentCreatedJSON, &agentCreated)
-	if agentCreated.WorkItemID == "" || agentCreated.State != "backlog" {
+	if agentCreated.WorkItemID == "" || agentCreated.State != "backlog" || agentCreated.Manifest.Title != model.UntitledTitle || agentCreated.Manifest.Slug != model.IDDerivedSlug(agentCreated.WorkItemID) || agentCreated.Manifest.Checkout.Specification.Branch != model.ItemBranchName(agentCreated.Manifest.Slug, agentCreated.WorkItemID) || agentCreated.Manifest.Checkout.Claim != nil || agentCreated.Manifest.PrimaryConversation != nil {
 		t.Fatalf("agent new result = %+v", agentCreated)
 	}
+	assertWiE2EFails(t, binary, repository, agentEnv, "edit", "--item", agentCreated.WorkItemID, "--title", "Forbidden edit")
+	titledJSON := runWiE2E(t, binary, repository, env, "edit", "--item", agentCreated.WorkItemID, "--title", "Clarified backlog objective", "--json")
+	var titled struct {
+		Title    string         `json:"title"`
+		Changed  bool           `json:"changed"`
+		Manifest model.Manifest `json:"manifest"`
+	}
+	decodeE2EJSON(t, titledJSON, &titled)
+	if !titled.Changed || titled.Title != "Clarified backlog objective" || titled.Manifest.Slug != agentCreated.Manifest.Slug || titled.Manifest.Checkout.Specification.Branch != agentCreated.Manifest.Checkout.Specification.Branch || titled.Manifest.PrimaryConversation != nil || titled.Manifest.Checkout.Claim != nil {
+		t.Fatalf("title edit changed identity or allocated resources: %+v", titled)
+	}
 	assertWiE2EFails(t, binary, repository, agentEnv, "state", "set", "working", "--item", agentCreated.WorkItemID)
-	assertWiE2EFails(t, binary, repository, agentEnv, "new", "--start", "--title", "Agent cannot start work")
+	assertWiE2EFails(t, binary, repository, agentEnv, "new", "--start", "--untitled")
 	assertE2EState(t, binary, repository, env, agentCreated.WorkItemID, "backlog")
 
 	assertE2EState(t, binary, repository, env, created.WorkItemID, "backlog")

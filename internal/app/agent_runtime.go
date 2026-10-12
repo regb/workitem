@@ -56,11 +56,16 @@ func (a *App) ensureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	if m.State == model.StateArchived {
 		return EnsureAgentRuntimeResult{}, fmt.Errorf("work item %s is archived; set it to backlog before ensuring an agent runtime", m.ID)
 	}
-	m, warnings, err := a.ensureWorkspaceCheckout(ctx, opts, m, true)
+	existing, err := a.Store.LoadAgentRuntime(m.ID)
 	if err != nil {
 		return EnsureAgentRuntimeResult{}, err
 	}
-	existing, err := a.Store.LoadAgentRuntime(m.ID)
+	if !a.primaryAgentService().ObserveOwnership(existing).ProcessAlive {
+		if err := a.ValidateAgentConfig(ctx, m.Agent); err != nil {
+			return EnsureAgentRuntimeResult{}, err
+		}
+	}
+	m, warnings, err := a.ensureWorkspaceCheckout(ctx, opts, m, true)
 	if err != nil {
 		return EnsureAgentRuntimeResult{}, err
 	}

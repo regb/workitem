@@ -193,7 +193,7 @@ func TestMergeWorkItemAbortsConflictingRebase(t *testing.T) {
 	targetOld := mergeGitOutput(t, repo, "rev-parse", "main")
 
 	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, Target: "main", CWD: source})
-	if err == nil || !strings.Contains(err.Error(), "failed and was aborted") || !res.RolledBack {
+	if err == nil || !strings.Contains(err.Error(), "failed and was aborted") || !strings.Contains(err.Error(), "CONFLICT") || !res.RolledBack {
 		t.Fatalf("result=%+v error=%v", res, err)
 	}
 	if got := mergeGitOutput(t, source, "rev-parse", "HEAD"); got != sourceOld {

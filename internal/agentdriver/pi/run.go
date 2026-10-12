@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
@@ -17,6 +19,8 @@ import (
 type Config struct {
 	Executable string   `json:"executable,omitempty"`
 	Extensions []string `json:"extensions,omitempty"`
+	Model      string   `json:"model,omitempty"`
+	Thinking   string   `json:"thinking,omitempty"`
 }
 
 func Run(ctx context.Context) error {
@@ -31,6 +35,12 @@ func Run(ctx context.Context) error {
 	}
 	if request.ProtocolVersion != driverprotocol.Version || request.Driver != "pi" {
 		return respondError(fmt.Errorf("incompatible Pi driver request"))
+	}
+	if request.Operation == driverprotocol.OperationConfigValidate {
+		if _, err := parseConfig(request.Config); err != nil {
+			return respondError(fmt.Errorf("invalid Pi configuration: %w", err))
+		}
+		return reply(driverprotocol.Response{ProtocolVersion: driverprotocol.Version, ConfigValidation: &driverprotocol.ConfigValidationResult{Valid: true}})
 	}
 	if request.Operation != driverprotocol.OperationLaunch {
 		result, err := handleConversationOperation(ctx, request)
@@ -49,13 +59,25 @@ func Run(ctx context.Context) error {
 
 func parseConfig(raw json.RawMessage) (Config, error) {
 	var config Config
-	if len(raw) == 0 {
-		return config, nil
+	if len(raw) > 0 {
+		decoder := json.NewDecoder(bytes.NewReader(raw))
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&config); err != nil {
+			return Config{}, err
+		}
+		var extra any
+		if decoder.Decode(&extra) != io.EOF {
+			return Config{}, fmt.Errorf("one configuration object required")
+		}
 	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&config); err != nil {
-		return Config{}, err
+	config.Executable = strings.TrimSpace(config.Executable)
+	if config.Executable == "" {
+		config.Executable = "pi"
+	}
+	config.Model = strings.TrimSpace(config.Model)
+	config.Thinking = strings.TrimSpace(config.Thinking)
+	if config.Thinking != "" && !validThinkingLevel(config.Thinking) {
+		return Config{}, fmt.Errorf("invalid Pi thinking level %q", config.Thinking)
 	}
 	return config, nil
 }
@@ -65,9 +87,6 @@ func launch(ctx context.Context, request driverprotocol.LaunchRequest, reply fun
 	if err != nil {
 		_ = reply(driverprotocol.Ready{ProtocolVersion: driverprotocol.Version, Error: "invalid Pi configuration: " + err.Error()})
 		return err
-	}
-	if config.Executable == "" {
-		config.Executable = "pi"
 	}
 	resolved, err := exec.LookPath(config.Executable)
 	if err != nil {
@@ -87,7 +106,7 @@ func launch(ctx context.Context, request driverprotocol.LaunchRequest, reply fun
 	}
 	defer cleanup()
 	capabilities := agent.CapabilitiesForMode(mode)
-	if err := reply(driverprotocol.Ready{ProtocolVersion: driverprotocol.Version, BackendPath: resolved, Capabilities: driverprotocol.Capabilities{LiveContent: true, IdleGuard: true, BundledSkills: true, NativeTUI: capabilities.NativeTUI, Headless: capabilities.Headless, Streaming: capabilities.Streaming, Prompt: true, Steering: capabilities.Steering, FollowUp: capabilities.FollowUp, Cancel: capabilities.Cancel, Monitor: capabilities.Monitor}}); err != nil {
+	if err := reply(driverprotocol.Ready{ProtocolVersion: driverprotocol.Version, BackendPath: resolved, Capabilities: driverprotocol.Capabilities{LiveContent: true, IdleGuard: true, ImageInput: true, BundledSkills: true, NativeTUI: capabilities.NativeTUI, Headless: capabilities.Headless, Streaming: capabilities.Streaming, Prompt: true, Steering: capabilities.Steering, FollowUp: capabilities.FollowUp, Cancel: capabilities.Cancel, Monitor: capabilities.Monitor}}); err != nil {
 		return err
 	}
 	environment := request.Environment
@@ -96,5 +115,14 @@ func launch(ctx context.Context, request driverprotocol.LaunchRequest, reply fun
 	}
 	environment["PI_CODING_AGENT_SESSION_DIR"] = filepath.Dir(request.Conversation.Locator)
 	client := New(resolved)
-	return client.ExecMode(ctx, ExecSpec{SessionPath: request.Conversation.Locator, Mode: mode, CWD: request.Runtime.CWD, LogPath: request.Runtime.LogPath, WorkItemID: request.Runtime.WorkItemID, RuntimeID: request.Runtime.ID, ControlSocketPath: request.Runtime.ControlSocketPath, EventSocketPath: request.Runtime.EventSocketPath, Env: environment, Extensions: config.Extensions, Skills: skillPaths})
+	return client.ExecMode(ctx, ExecSpec{SessionPath: request.Conversation.Locator, Mode: mode, CWD: request.Runtime.CWD, LogPath: request.Runtime.LogPath, WorkItemID: request.Runtime.WorkItemID, RuntimeID: request.Runtime.ID, ControlSocketPath: request.Runtime.ControlSocketPath, EventSocketPath: request.Runtime.EventSocketPath, Env: environment, Extensions: config.Extensions, Skills: skillPaths, Model: config.Model, Thinking: config.Thinking})
+}
+
+func validThinkingLevel(value string) bool {
+	switch value {
+	case "off", "minimal", "low", "medium", "high", "xhigh", "max":
+		return true
+	default:
+		return false
+	}
 }

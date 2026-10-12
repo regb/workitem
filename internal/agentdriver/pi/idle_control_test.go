@@ -1,11 +1,13 @@
 package pi
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/regb/workitem/internal/agent"
 )
@@ -51,17 +53,75 @@ func TestIdleGuardReservesPromptBeforeAgentStart(t *testing.T) {
 }
 func TestIdlePromptUsesNativeRejectionInsteadOfSteering(t *testing.T) {
 	transport, r := idleTestTransport(t)
-	if err := transport.sendCommand(idleTestCommand("first", agent.CommandPrompt)); err != nil {
+	command := idleTestCommand("first", agent.CommandPrompt)
+	command.Images = []agent.ImageContent{{MIMEType: "image/png", Data: "aW1hZ2U="}}
+	if err := transport.sendCommand(command); err != nil {
 		t.Fatal(err)
 	}
 	var native map[string]any
 	if err := json.NewDecoder(r).Decode(&native); err != nil {
 		t.Fatal(err)
 	}
-	if native["type"] != "prompt" || native["message"] != "work" || native["streamingBehavior"] != nil {
+	images, _ := native["images"].([]any)
+	if len(images) != 1 {
+		t.Fatalf("native command %+v", native)
+	}
+	image, _ := images[0].(map[string]any)
+	if native["type"] != "prompt" || native["message"] != "work" || native["streamingBehavior"] != nil || image["mimeType"] != "image/png" {
 		t.Fatalf("native command %+v", native)
 	}
 }
+func TestNativeRPCImageOnlyControlsAtLimit(t *testing.T) {
+	for _, typ := range []string{agent.CommandPrompt, agent.CommandFollowUp} {
+		t.Run(typ, func(t *testing.T) {
+			transport, r := idleTestTransport(t)
+			if err := r.SetReadDeadline(time.Now().Add(10 * time.Second)); err != nil {
+				t.Fatal(err)
+			}
+			command := idleTestCommand("image", typ)
+			command.Message = ""
+			command.RequireIdle = typ == agent.CommandPrompt
+			data := base64.StdEncoding.EncodeToString(make([]byte, 8<<20))
+			command.Images = []agent.ImageContent{{MIMEType: "image/png", Data: data}}
+			done := make(chan error, 1)
+			go func() { done <- transport.sendCommand(command) }()
+			var native struct {
+				Type    string `json:"type"`
+				Message string `json:"message"`
+				Images  []struct {
+					Type     string `json:"type"`
+					MIMEType string `json:"mimeType"`
+					Data     string `json:"data"`
+				} `json:"images"`
+			}
+			if err := json.NewDecoder(r).Decode(&native); err != nil {
+				t.Fatal(err)
+			}
+			if err := <-done; err != nil {
+				t.Fatal(err)
+			}
+			if native.Type != typ || native.Message != "" || len(native.Images) != 1 || native.Images[0].Type != "image" || native.Images[0].MIMEType != "image/png" || native.Images[0].Data != data {
+				t.Fatal("native image payload changed")
+			}
+		})
+	}
+}
+
+func TestNativeRPCRejectsInvalidImagesBeforeReservingWork(t *testing.T) {
+	transport, _ := idleTestTransport(t)
+	command := idleTestCommand("invalid-image", agent.CommandPrompt)
+	command.Images = []agent.ImageContent{{MIMEType: "image/png", Data: "invalid"}}
+	if err := transport.sendCommand(command); err == nil {
+		t.Fatal("invalid image accepted")
+	}
+	if len(transport.work) != 0 || len(transport.pending) != 0 || transport.handled[command.ID] {
+		t.Fatal("invalid image changed command state")
+	}
+	if err := transport.sendCommand(idleTestCommand("next", agent.CommandPrompt)); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIdleGuardReleasesHandledAndSettledWork(t *testing.T) {
 	for _, records := range [][]string{
 		{`{"type":"response","id":"first","success":true,"data":{"disposition":"handled"}}`},

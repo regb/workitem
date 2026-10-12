@@ -34,8 +34,6 @@ func createCoordinatorWorkItem(ctx context.Context, cfg Config, opts app.NewWork
 
 type coordinatorManifestCommandOptions struct {
 	commandType string
-	labels      []string
-	deepWork    *bool
 	targetState string
 	eventType   string
 	force       bool
@@ -63,7 +61,7 @@ func executeCoordinatorManifestCommand(ctx context.Context, cfg Config, selector
 		if err != nil {
 			return coordinator.CanonicalManifest{}, coordinator.ManifestCommandResult{}, err
 		}
-		command := coordinator.ManifestCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Type: options.commandType, ItemID: manifest.ID, ExpectedRevision: &canonical.Revision, Actor: "user", Labels: append([]string(nil), options.labels...), DeepWork: options.deepWork, TargetState: options.targetState, EventType: options.eventType, Force: options.force, MaxActive: options.maxActive, CreatedAt: time.Now().UTC()}
+		command := coordinator.ManifestCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Type: options.commandType, ItemID: manifest.ID, ExpectedRevision: &canonical.Revision, Actor: "user", TargetState: options.targetState, EventType: options.eventType, Force: options.force, MaxActive: options.maxActive, CreatedAt: time.Now().UTC()}
 		requestCtx, cancel = context.WithTimeout(ctx, 5*time.Second)
 		result, err := cfg.Coordinator.ExecuteManifestCommand(requestCtx, command)
 		cancel()

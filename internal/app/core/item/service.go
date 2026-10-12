@@ -50,6 +50,7 @@ type NewOptions struct {
 	Repository       *model.Repository
 	RepositoryLabels []string
 	Title            string
+	Untitled         bool
 	Slug             string
 	Description      string
 	Labels           []string
@@ -127,8 +128,13 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 		return NewResult{}, fmt.Errorf("item service is not fully configured")
 	}
 	title := strings.TrimSpace(opts.Title)
-	if title == "" {
-		return NewResult{}, fmt.Errorf("title is required")
+	if opts.Untitled {
+		if title != "" {
+			return NewResult{}, fmt.Errorf("title and untitled are mutually exclusive")
+		}
+		title = model.UntitledTitle
+	} else if title == "" {
+		return NewResult{}, fmt.Errorf("title is required; use untitled for an ID-derived slug")
 	}
 	cwd := opts.CWD
 	var err error
@@ -194,7 +200,11 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 	if err != nil {
 		return NewResult{}, err
 	}
-	slug, err := s.chooseSlug(opts.Slug, title)
+	slugBase := title
+	if opts.Untitled {
+		slugBase = model.IDDerivedSlug(id)
+	}
+	slug, err := s.chooseSlug(opts.Slug, slugBase)
 	if err != nil {
 		return NewResult{}, err
 	}

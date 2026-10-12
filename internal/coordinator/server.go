@@ -658,10 +658,28 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			return
 		}
 		result = queueResult
+	case MethodEditItem:
+		var editRequest EditItemRequest
+		if err := json.Unmarshal(request.Payload, &editRequest); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		s.domainMu.Lock()
+		editResult, err := s.editItem(editRequest)
+		s.domainMu.Unlock()
+		if err != nil {
+			s.writeError(conn, request.ID, "command_error", err.Error())
+			return
+		}
+		result = editResult
 	case MethodManifestCommand:
 		var command ManifestCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
 			s.writeError(conn, request.ID, "invalid_request", "decode manifest command: "+err.Error())
+			return
+		}
+		if command.Type == CommandEdit && command.Edit != nil && command.Edit.DescriptionDigest != "" {
+			s.writeError(conn, request.ID, "invalid_request", "description edits require edit_item")
 			return
 		}
 		s.domainMu.Lock()

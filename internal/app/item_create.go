@@ -12,6 +12,7 @@ type NewWorkItemOptions struct {
 	Repository       *model.Repository
 	RepositoryLabels []string
 	Title            string
+	Untitled         bool
 	Slug             string
 	Description      string
 	Labels           []string
@@ -45,7 +46,7 @@ func (a *App) PrepareNewWorkItem(ctx context.Context, opts NewWorkItemOptions) (
 		return PreparedNewWorkItem{}, err
 	}
 	res, err := a.itemService().NewWorkItem(ctx, itemcore.NewOptions{
-		Title: opts.Title, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
+		Title: opts.Title, Untitled: opts.Untitled, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
 		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
 		DeepWork: opts.DeepWork, Base: opts.Base,
 		CWD: opts.CWD, Env: opts.Env, PrepareOnly: true, Repository: opts.Repository, RepositoryLabels: opts.RepositoryLabels,
@@ -67,7 +68,7 @@ func (a *App) NewWorkItem(ctx context.Context, opts NewWorkItemOptions) (NewWork
 		return NewWorkItemResult{}, err
 	}
 	res, err := a.itemService().NewWorkItem(ctx, itemcore.NewOptions{
-		Title: opts.Title, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
+		Title: opts.Title, Untitled: opts.Untitled, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
 		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
 		DeepWork: opts.DeepWork, Base: opts.Base,
 		CWD: opts.CWD, Env: opts.Env, Repository: opts.Repository, RepositoryLabels: opts.RepositoryLabels,

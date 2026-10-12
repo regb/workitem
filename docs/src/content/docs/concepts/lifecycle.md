@@ -3,7 +3,7 @@ title: Lifecycle
 description: Use backlog, working, waiting, and archived states deliberately.
 ---
 
-Every item has one durable lifecycle state.
+A bounded task moves through one lifecycle state at a time. Archive it once its objective is settled; keep unrelated follow-ups in new items.
 
 | State | Meaning |
 | --- | --- |
@@ -44,7 +44,7 @@ Most day-to-day transitions should use the safer composed commands:
 - `wi archive` shuts down and releases clean resources before archiving.
 - `wi delete` permanently removes an already archived, fully cleaned item.
 
-To restore an archived item, find its ID and move it to backlog:
+If the original objective is still unfinished, restore the archived item by ID. Use a new item for a different objective:
 
 ```bash
 wi list --archived --ids

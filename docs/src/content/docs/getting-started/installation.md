@@ -60,14 +60,14 @@ scripts/install-local
 wi version
 ```
 
-If a command reports that the installed binary and running daemon do not match, stop the old daemon and retry:
+For a build mismatch within the same supported database schema, stop the old daemon and retry:
 
 ```bash
 wi daemon stop
 wi daemon doctor
 ```
 
-The next ordinary command starts the installed version.
+The next ordinary command starts the installed version. A schema mismatch requires a matching build and, when applicable, an explicit offline migration. Do not install an older build or force replacement of a newer writer; see [Data and diagnostics](../../reference/data-and-diagnostics/).
 
 ## Uninstall
 

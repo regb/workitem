@@ -19,8 +19,9 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	fs := newFlagSet("new", cfg.Stderr)
 	var labels repeatFlag
 	var title, descFile, prompt, slug, base, repoPath, agentMode, agentName string
-	var deep, noDefaultLabels, start bool
-	fs.StringVar(&title, "title", "", "required work-item title; slug is derived unless --slug is supplied")
+	var deep, noDefaultLabels, start, untitled bool
+	fs.StringVar(&title, "title", "", "work-item title; required unless --untitled is supplied")
+	fs.BoolVar(&untitled, "untitled", false, "use an editable placeholder title and an ID-derived slug")
 	fs.StringVar(&descFile, "desc-file", "", "read work-item description from file")
 	fs.BoolVar(&start, "start", false, "start an agent immediately without attaching and send the startup message")
 	fs.StringVar(&prompt, "prompt", "", "with --start, override the startup message without changing the description")
@@ -36,21 +37,26 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 		return usageErr{err}
 	}
 	if fs.NArg() != 0 {
-		return usageErr{errors.New("wi new does not accept positional arguments; use --title TEXT")}
+		return usageErr{errors.New("wi new does not accept positional arguments; use --title TEXT or --untitled")}
 	}
 	title = strings.TrimSpace(title)
-	if title == "" {
-		return usageErr{errors.New("wi new requires a non-empty --title")}
-	}
-	promptSet, agentModeSet := false, false
+	promptSet, agentModeSet, titleSet := false, false, false
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
+		case "title":
+			titleSet = true
 		case "prompt":
 			promptSet = true
 		case "agent-mode":
 			agentModeSet = true
 		}
 	})
+	if untitled && titleSet {
+		return usageErr{errors.New("--untitled and --title are mutually exclusive")}
+	}
+	if !untitled && title == "" {
+		return usageErr{errors.New("wi new requires a non-empty --title or --untitled")}
+	}
 	if promptSet && !start {
 		return usageErr{errors.New("--prompt requires --start")}
 	}
@@ -81,7 +87,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 		}
 	}
 	opts := app.NewWorkItemOptions{
-		Title: title, Slug: slug, Description: description, Labels: labels,
+		Title: title, Untitled: untitled, Slug: slug, Description: description, Labels: labels,
 		NoDefaultLabels: noDefaultLabels, DeepWork: deep, Base: base, CWD: newCWD, Env: cfg.Env, Agent: agentName,
 	}
 	if cfg.RequireOwnedRepository {
@@ -144,6 +150,9 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 }
 
 func runCoordinatorNewAgent(ctx context.Context, cfg Config, opts app.NewWorkItemOptions, mode agent.Mode, message string) (app.NewAgentWorkItemResult, error) {
+	if err := cfg.App.ValidateAgentConfig(ctx, opts.Agent); err != nil {
+		return app.NewAgentWorkItemResult{}, err
+	}
 	created, err := createCoordinatorWorkItem(ctx, cfg, opts)
 	if err != nil {
 		return app.NewAgentWorkItemResult{}, err
