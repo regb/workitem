@@ -214,6 +214,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = runRepository(ctx, args[1:], cfg, jsonOut)
 	case "new":
 		err = runNew(ctx, args[1:], cfg, jsonOut)
+	case "web":
+		err = runWeb(ctx, args[1:], cfg, jsonOut)
 	case "list":
 		err = runList(ctx, args[1:], cfg, jsonOut)
 	case "show":

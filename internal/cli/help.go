@@ -22,6 +22,16 @@ type helpDoc struct {
 }
 
 var helpDocs = map[string]helpDoc{
+	"web": {
+		Summary:     "Serve a local work list and primary-agent chat",
+		Usage:       []string{"wi web [--port PORT] [--access-url HTTPS_ORIGIN]"},
+		Description: []string{"Prints a private access URL while always binding the server to loopback. Existing chat never starts or replaces an owner. New saves and starts headless work in the background. Archive runs safety checks without force. Stopping the server leaves primary agents running."},
+		Options: []helpOption{
+			{Flag: "--port PORT", Text: "Bind 127.0.0.1 on this port; default chooses an available port"},
+			{Flag: "--access-url HTTPS_ORIGIN", Text: "Trust this exact browser-facing origin when a private HTTPS reverse proxy forwards to the loopback port"},
+		},
+		SeeAlso: []string{"list", "new", "repo", "archive"},
+	},
 	"repo": {
 		Summary:     "Manage named Wi-owned repositories",
 		Usage:       []string{"wi repo <add|list|show|rename|archive|restore>"},
@@ -489,7 +499,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  wi help [command [subcommand]]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Work:")
-	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Resume waiting work"}, {"shelve", "Return active work to backlog"}, {"archive", "Archive completed work"}})
+	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"web", "Open local browser access"}, {"show", "Show an item"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Resume waiting work"}, {"shelve", "Return active work to backlog"}, {"archive", "Archive completed work"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
 	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"attention", "Inspect or defer attention"}})
