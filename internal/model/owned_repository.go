@@ -17,6 +17,7 @@ type OwnedRepository struct {
 	IntegrationBranch string    `json:"integration_branch"`
 	OriginURL         string    `json:"origin_url,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
+	Archived          bool      `json:"archived,omitempty"`
 }
 
 // BareImportOptions is the narrow adapter contract for independent onboarding.

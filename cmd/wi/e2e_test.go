@@ -296,6 +296,119 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(cacheHome, "wi", "daemon.log")); !os.IsNotExist(err) {
 		t.Fatalf("daemon log leaked into cache: %v", err)
 	}
+	exerciseRepositoryArchiveE2E(t, binary, repository, env, created.WorkItemID)
+}
+
+func exerciseRepositoryArchiveE2E(t *testing.T, binary, repository string, env []string, itemID string) {
+	t.Helper()
+	runWiE2E(t, binary, repository, env, "workspace", "ensure", "--item", itemID, "--json")
+	var shown struct {
+		Manifest model.Manifest `json:"manifest"`
+	}
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "show", itemID, "--json"), &shown)
+	worktree := shown.Manifest.Checkout.Claim.Path
+	tracked := filepath.Join(worktree, "archive-safety.txt")
+	if err := os.WriteFile(tracked, []byte("unique local commit\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runGitE2E(t, worktree, "add", "archive-safety.txt")
+	runGitE2E(t, worktree, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "unique unpushed work")
+	if err := os.WriteFile(tracked, []byte("dirty tracked content\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	untracked := filepath.Join(worktree, "untracked.txt")
+	if err := os.WriteFile(untracked, []byte("retain this\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	gitOutput := func(dir string, args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+		return string(out)
+	}
+	head := gitOutput(worktree, "rev-parse", "HEAD")
+	refs := gitOutput(worktree, "for-each-ref", "--format=%(refname) %(objectname)")
+	status := gitOutput(worktree, "status", "--porcelain")
+	beforeItems := string(runWiE2E(t, binary, repository, env, "list", "--all", "--ids"))
+	var result struct {
+		Repository model.OwnedRepository `json:"repository"`
+		Changed    bool                  `json:"changed"`
+	}
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "archive", "test", "--json"), &result)
+	if !result.Changed || !result.Repository.Archived {
+		t.Fatalf("archive=%+v", result)
+	}
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "archive", "test", "--json"), &result)
+	if result.Changed {
+		t.Fatal("repeated archive changed state")
+	}
+	assertLists := func() {
+		t.Helper()
+		var repos []model.OwnedRepository
+		decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "list", "--json"), &repos)
+		for _, repo := range repos {
+			if repo.Name == "test" {
+				t.Fatal("archived repository visible by default")
+			}
+		}
+		decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "list", "--all", "--json"), &repos)
+		found := false
+		for _, repo := range repos {
+			if repo.Name == "test" && repo.Archived {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatal("archived repository missing from --all")
+		}
+		if text := string(runWiE2E(t, binary, repository, env, "repo", "list", "--all")); !strings.Contains(text, "archived") {
+			t.Fatalf("unmarked archive: %s", text)
+		}
+	}
+	assertLists()
+	runWiE2E(t, binary, repository, env, "repo", "show", "test")
+	for _, mode := range []string{"tui", "headless"} {
+		assertWiE2EFails(t, binary, repository, env, "new", "--repo", "test", "--untitled", "--start", "--agent-mode", mode)
+	}
+	assertWiE2EFails(t, binary, repository, env, "new", "--repo", "test", "--untitled")
+	inherited := append(append([]string{}, env...), "WI_ID="+itemID)
+	assertWiE2EFails(t, binary, worktree, inherited, "new", "--untitled")
+	assertWiE2EFails(t, binary, repository, env, "repo", "add", "test", "--from", repository)
+	assertWiE2EFails(t, binary, repository, env, "repo", "remove", "test")
+	assertWiE2EFails(t, binary, repository, env, "repo", "delete", "test")
+	if items := string(runWiE2E(t, binary, repository, env, "list", "--all", "--ids")); items != beforeItems {
+		t.Fatalf("archive/rejected creation changed items: %s", items)
+	}
+	// Existing items can still be edited and their claims ensured while archived.
+	runWiE2E(t, binary, repository, env, "edit", "--item", itemID, "--label", "still-usable")
+	runWiE2E(t, binary, repository, env, "workspace", "ensure", "--item", itemID)
+	if got := gitOutput(worktree, "rev-parse", "HEAD"); got != head {
+		t.Fatal("archive moved unpushed tip")
+	}
+	if got := gitOutput(worktree, "for-each-ref", "--format=%(refname) %(objectname)"); got != refs {
+		t.Fatal("archive changed refs")
+	}
+	if got := gitOutput(worktree, "status", "--porcelain"); got != status {
+		t.Fatal("archive changed dirty worktree")
+	}
+	for path, want := range map[string]string{tracked: "dirty tracked content\n", untracked: "retain this\n"} {
+		data, err := os.ReadFile(path)
+		if err != nil || string(data) != want {
+			t.Fatalf("lost %s: %v", path, err)
+		}
+	}
+	stopE2EDaemon(t, binary, repository, env)
+	assertLists()
+	result.Repository = model.OwnedRepository{}
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "restore", "test", "--json"), &result)
+	if !result.Changed || result.Repository.Archived {
+		t.Fatalf("restore=%+v", result)
+	}
+	runWiE2E(t, binary, repository, env, "new", "--repo", "test", "--untitled")
 }
 
 func repositoryRoot(t *testing.T) string {

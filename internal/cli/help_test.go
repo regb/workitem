@@ -38,6 +38,7 @@ func TestArchiveHelpExplainsRestoration(t *testing.T) {
 func TestAllPublicHelpTopicsAreDocumented(t *testing.T) {
 	topics := []string{
 		"version", "new", "list", "show", "events", "start", "switch", "next", "resume", "merge", "shelve", "archive", "delete", "shutdown", "edit",
+		"repo", "repo list", "repo rename", "repo archive", "repo restore",
 		"state", "state show", "state set",
 		"attention", "attention activity", "attention defer", "attention queue",
 		"workspace", "workspace status", "workspace ensure", "workspace release",

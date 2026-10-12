@@ -212,6 +212,12 @@ func (c *Client) ExecuteManifestCommandWithQueue(ctx context.Context, request Ma
 	return result, err
 }
 
+func (c *Client) SetRepositoryArchived(ctx context.Context, command SetRepositoryArchivedCommand) (SetRepositoryArchivedResult, error) {
+	var result SetRepositoryArchivedResult
+	err := c.Call(ctx, MethodSetRepositoryArchived, command, &result)
+	return result, err
+}
+
 func (c *Client) ListRepositories(ctx context.Context) ([]model.OwnedRepository, error) {
 	var result []model.OwnedRepository
 	err := c.Call(ctx, MethodListRepositories, struct{}{}, &result)

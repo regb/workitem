@@ -89,7 +89,26 @@ func TestRepositoryRegistrationThroughOperatorEndpoint(t *testing.T) {
 	if _, err := client.RepositorySource(ctx, "repo", ""); err == nil {
 		t.Fatal("old name still resolves")
 	}
+	archive := archiveTestCommand("endpoint", false, true)
+	archived, err := client.SetRepositoryArchived(ctx, archive)
+	if err != nil || !archived.Repository.Archived {
+		t.Fatalf("archive=%+v err=%v", archived, err)
+	}
+	archivedSource, err := client.RepositorySource(ctx, "renamed", "")
+	if err != nil || !archivedSource.Repository.Archived || archivedSource.Commit != sourceResult.Commit {
+		t.Fatalf("archived source=%+v err=%v", archivedSource, err)
+	}
 	agent := &Client{SocketPath: agentSocket}
+	if _, err := agent.SetRepositoryArchived(ctx, archive); err == nil {
+		t.Fatal("agent archived repository")
+	}
+	restore := archiveTestCommand("restore endpoint", true, false)
+	if _, err := agent.SetRepositoryArchived(ctx, restore); err == nil {
+		t.Fatal("agent restored repository")
+	}
+	if result, err := client.SetRepositoryArchived(ctx, restore); err != nil || result.Repository.Archived {
+		t.Fatalf("restore=%+v err=%v", result, err)
+	}
 	if _, err := agent.RenameRepository(ctx, rename); err == nil {
 		t.Fatal("agent renamed repository")
 	}

@@ -1,6 +1,6 @@
 ---
 title: Repositories
-description: Register independent Git stores, select task bases, and rename repositories.
+description: Register independent Git stores, select task bases, and rename or archive repositories.
 ---
 
 A registered repository is a named, Wi-owned bare Git store. Work items reference its stable ID and an immutable created-from commit. Their managed worktrees share that store, not your original checkout.
@@ -23,7 +23,7 @@ wi repo add project --from https://github.com/example/project.git --branch main
 
 The integration policy is stored in the registry; it is not rediscovered when creating or merging items. There is currently no command to change it. The bare store has no permanent integration checkout.
 
-Normal `wi repo list` output shows the name and integration branch. `--json` retains the stable ID and other registry metadata; `repo show` also prints the ID and Git store path.
+Normal `wi repo list` output shows active repositories by name and integration branch. `wi repo list --all` includes archived repositories, marked `archived`. `--json` retains the stable ID and other registry metadata; `repo show` also prints the ID and Git store path.
 
 ## Select the repository for new work
 
@@ -66,6 +66,22 @@ wi repo show platform
 ```
 
 Names are unique, flat human-facing selectors. Rename changes only the name: IDs, stores, branches, item references, claims, and conversations stay unchanged. The old name stops resolving. Renaming to the current name is a no-op; conflicts and invalid names fail.
+
+## Archive without deleting Git data
+
+```bash
+wi repo archive project
+wi repo list --all
+wi repo restore project
+```
+
+Archiving hides a repository from the default list and rejects new items, whether selected with `--repo` or inherited from the current item. The name remains reserved. Use `repo show` to inspect it or `repo list --all --json` to see its `archived: true` metadata.
+
+Existing items remain usable, including their normal workspace, agent, and merge operations. Archiving does not stop running agents or change item lifecycle, claims, conversations, or descriptions. It preserves the Git store, implementation branches, unpushed commits, dirty and untracked files, and the original external checkout. No push or cleanliness check is needed because nothing is deleted.
+
+Restore makes the same repository available for new items again. It does not materialize a workspace or runtime. Repeated archive or restore requests are no-ops when already in the requested state. Both commands also accept a stable repository ID. Wi records `repository.archived` and `repository.restored` events.
+
+There is no repository deletion command.
 
 ## Fetch, merge, and push
 

@@ -16,10 +16,15 @@ Wi manages short-lived development tasks in registered Git repositories. Each it
 
 ```bash
 wi repo list
+wi repo list --all
+wi repo archive NAME
+wi repo restore NAME
 wi repo add NAME --from GIT_CHECKOUT_PATH --branch INTEGRATION_BRANCH
 ```
 
 Repositories must be registered explicitly. Onboarding imports committed state into an independent bare store without modifying or depending on the source checkout. Repository selection defaults to the current item's repository; outside an item, pass `--repo NAME`.
+
+Only archive or restore a repository when explicitly asked. Archiving hides it from the default list and blocks new items, including inherited selection. It preserves its reserved name, Git data, dirty worktrees, and existing items and does not stop agents. Restore allows new items again. There is no repository deletion command; do not delete Git stores or worktrees manually.
 
 ## File a task
 

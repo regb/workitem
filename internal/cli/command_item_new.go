@@ -106,6 +106,9 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 		if err := cfg.Coordinator.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: selector, MetadataOnly: true}, &metadata); err != nil {
 			return err
 		}
+		if metadata.Repository.Archived {
+			return fmt.Errorf("repository %q is archived; restore it with wi repo restore %s before creating new items", metadata.Repository.Name, metadata.Repository.Name)
+		}
 		revision, err := resolveRepositoryBase(ctx, base, cfg.CWD, current, metadata, cfg.App.Git)
 		if err != nil {
 			return err

@@ -24,9 +24,27 @@ type helpDoc struct {
 var helpDocs = map[string]helpDoc{
 	"repo": {
 		Summary:     "Manage named Wi-owned repositories",
-		Usage:       []string{"wi repo <add|list|show|rename>"},
+		Usage:       []string{"wi repo <add|list|show|rename|archive|restore>"},
 		Description: []string{"Repository names are unique human-facing selectors. Stable repository IDs determine Git store paths and item references."},
-		SeeAlso:     []string{"repo rename"},
+		SeeAlso:     []string{"repo list", "repo rename", "repo archive", "repo restore"},
+	},
+	"repo list": {
+		Summary:     "List registered repositories",
+		Usage:       []string{"wi repo list [--all]"},
+		Description: []string{"Lists active repository names and integration branches. --all includes archived repositories marked archived. JSON includes registry metadata, with archived: true on archived entries."},
+		Options:     []helpOption{{"--all", "Include archived repositories."}},
+	},
+	"repo archive": {
+		Summary:     "Hide a repository and stop new item creation",
+		Usage:       []string{"wi repo archive NAME"},
+		Description: []string{"Records repository.archived and hides it from the default repository list. New items are rejected, including when inheriting the repository from the current item. The name remains reserved. Existing items and running agents remain usable and untouched. Git stores, branches, unpushed commits, dirty worktrees, and external checkouts are preserved; no cleanliness or push checks are needed. Repeating archive is a no-op. IDs may also be used as selectors. There is no repository deletion command."},
+		SeeAlso:     []string{"repo restore", "repo list"},
+	},
+	"repo restore": {
+		Summary:     "Make an archived repository available again",
+		Usage:       []string{"wi repo restore NAME"},
+		Description: []string{"Records repository.restored and allows new items again without materializing a workspace or runtime. Repeating restore on an active repository is a no-op. IDs may also be used as selectors."},
+		SeeAlso:     []string{"repo archive"},
 	},
 	"repo rename": {
 		Summary:     "Rename a registered repository",

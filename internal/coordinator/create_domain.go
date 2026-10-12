@@ -107,7 +107,7 @@ func (d *Database) executeCreateItemCommand(command CreateItemCommand, actor str
 			result.Duplicate = true
 			return nil
 		}
-		if err := validateRepositoryReference(tx, normalized); err != nil {
+		if err := validateCreationRepositoryReference(tx, normalized); err != nil {
 			return err
 		}
 		projection, err := tx.Bucket(bucketProjections).CreateBucketIfNotExists([]byte(ManifestProjection))

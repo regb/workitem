@@ -707,6 +707,20 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			return
 		}
 		result = renamed
+	case MethodSetRepositoryArchived:
+		var command SetRepositoryArchivedCommand
+		if err := json.Unmarshal(request.Payload, &command); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		s.domainMu.Lock()
+		value, err := s.database.SetRepositoryArchived(command)
+		s.domainMu.Unlock()
+		if err != nil {
+			s.writeError(conn, request.ID, "repository_error", err.Error())
+			return
+		}
+		result = value
 	case MethodListRepositories:
 		repositories, err := s.database.ListRepositories()
 		if err != nil {

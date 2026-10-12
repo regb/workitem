@@ -18,9 +18,11 @@ Finish and archive items rather than continually expanding them. Merge, archive,
 | Command | Purpose |
 | --- | --- |
 | `wi repo add NAME --from SOURCE [--branch BRANCH]` | Import an independent bare store and register its integration branch |
-| `wi repo list` | List names and integration branches; JSON includes IDs |
+| `wi repo list [--all]` | List active names and integration branches; `--all` includes archived repositories |
 | `wi repo show NAME` | Read registry metadata, store path, and integration commit |
 | `wi repo rename OLD NEW` | Change a unique name without moving resources |
+| `wi repo archive NAME` | Hide a repository and block new items, preserving all Git data and existing work |
+| `wi repo restore NAME` | Make an archived repository available for new items again |
 
 ## Durable items
 

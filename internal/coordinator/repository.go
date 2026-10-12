@@ -31,6 +31,8 @@ type repositoryCommandOutcome struct {
 	Result  RegisterRepositoryResult  `json:"repository_result"`
 }
 
+// ListRepositories returns the complete registry, including archived records,
+// so names remain reserved and existing item references continue to resolve.
 func (d *Database) ListRepositories() ([]model.OwnedRepository, error) {
 	raw, err := d.ListProjection(RepositoryProjection)
 	if err != nil {
@@ -59,6 +61,9 @@ func (d *Database) RegisterRepository(command RegisterRepositoryCommand) (Regist
 	r, err := model.NormalizeOwnedRepository(command.Repository)
 	if err != nil {
 		return RegisterRepositoryResult{}, err
+	}
+	if r.Archived {
+		return RegisterRepositoryResult{}, fmt.Errorf("new repositories must be active")
 	}
 	command.Repository = r
 	if err := model.ValidateRepositorySource(command.Source); err != nil {
