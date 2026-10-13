@@ -2046,6 +2046,9 @@ func TestAgentExecHoldsLockAndRunsPiWithExplicitRootConversationLocator(t *testi
 	var driverEnv []string
 	application.RunAgentDriver = func(_ context.Context, _ string, _ []string, request driverprotocol.LaunchRequest, environment []string, onReady func(driverprotocol.Ready) error) error {
 		driverEnv = append([]string(nil), environment...)
+		if request.ProjectTrusted {
+			t.Fatal("legacy repository received automatic project approval")
+		}
 		if len(request.Skills) != 1 || request.Skills[0].Name != "wi" || len(request.Skills[0].Files) == 0 {
 			t.Fatal("runtime request omitted the bundled wi skill")
 		}

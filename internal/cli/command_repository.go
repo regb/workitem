@@ -235,6 +235,7 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 			return writeJSON(cfg.Stdout, result)
 		}
 		fmt.Fprintf(cfg.Stdout, "added repository %s (%s)\nGit store: %s\nIntegration branch: %s\n", record.Name, record.ID, path, branch)
+		fmt.Fprintln(cfg.Stdout, "Project-local agent resources are approved in its managed worktrees; .envrc approval remains separate.")
 		return nil
 	default:
 		return usageErr{fmt.Errorf("usage: wi repo add|list|show|rename|archive|restore")}

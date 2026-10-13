@@ -24,7 +24,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	fs.BoolVar(&untitled, "untitled", false, "use an editable placeholder title and an ID-derived slug")
 	fs.StringVar(&descFile, "desc-file", "", "read work-item description from file")
 	fs.BoolVar(&start, "start", false, "start an agent immediately without attaching and send the startup message")
-	fs.StringVar(&prompt, "prompt", "", "with --start, override the startup message without changing the description")
+	fs.StringVar(&prompt, "prompt", "", "start an agent and send this message without changing the description")
 	fs.StringVar(&agentMode, "agent-mode", "tui", "with --start, runtime mode: tui or headless")
 	fs.StringVar(&agentName, "agent", "default", "configured agent definition")
 	fs.StringVar(&slug, "slug", "", "explicit active slug for the new work item")
@@ -40,9 +40,11 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 		return usageErr{errors.New("wi new does not accept positional arguments; use --title TEXT or --untitled")}
 	}
 	title = strings.TrimSpace(title)
-	promptSet, agentModeSet, titleSet := false, false, false
+	promptSet, agentModeSet, titleSet, startSet := false, false, false, false
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
+		case "start":
+			startSet = true
 		case "title":
 			titleSet = true
 		case "prompt":
@@ -57,8 +59,11 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	if !untitled && title == "" {
 		return usageErr{errors.New("wi new requires a non-empty --title or --untitled")}
 	}
-	if promptSet && !start {
-		return usageErr{errors.New("--prompt requires --start")}
+	if promptSet {
+		if startSet && !start {
+			return usageErr{errors.New("--prompt conflicts with --start=false")}
+		}
+		start = true
 	}
 	if agentModeSet && !start {
 		return usageErr{errors.New("--agent-mode requires --start")}
@@ -174,7 +179,7 @@ func runCoordinatorNewAgent(ctx context.Context, cfg Config, opts app.NewWorkIte
 	if err := cfg.App.WaitForAgentRuntimeReady(ctx, created.Manifest.ID, started.Workspace.AgentRuntime); err != nil {
 		return result, fmt.Errorf("created and started work item %s (%s), but could not submit its prompt: %w", created.Manifest.Slug, created.Manifest.ID, err)
 	}
-	controlled, err := cfg.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: resolve, CommandType: agent.CommandPrompt, Message: message, Actor: "operator"})
+	controlled, err := cfg.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: resolve, CommandType: agent.CommandPrompt, Message: message, Actor: "operator", ExpectedRuntimeID: started.Workspace.AgentRuntime.ID})
 	result.Control = controlled
 	if err != nil {
 		return result, fmt.Errorf("created and started work item %s (%s), but could not submit its prompt: %w", created.Manifest.Slug, created.Manifest.ID, err)

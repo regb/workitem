@@ -26,6 +26,7 @@ func TestNewStartKeepsDescriptionIndependentOnPartialFailure(t *testing.T) {
 		{name: "default", description: "Acceptance criteria: regression covered.\n"},
 		{name: "override", description: "Acceptance criteria: regression covered.\n", prompt: "Start with a failing test."},
 		{name: "message without description", prompt: "Start with a failing test."},
+		{name: "implicit start", prompt: "Start with a failing test."},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			stdout, stderr, application := configuredApp(t)
@@ -33,7 +34,10 @@ func TestNewStartKeepsDescriptionIndependentOnPartialFailure(t *testing.T) {
 			application.SelfPath = "/usr/local/bin/wi"
 			application.AgentRuntimeLauncher = failedStartupLauncher{}
 			cwd := t.TempDir()
-			args := []string{"new", "--start", "--agent-mode", "headless"}
+			args := []string{"new", "--agent-mode", "headless"}
+			if tt.name != "implicit start" {
+				args = append(args, "--start")
+			}
 			if tt.description != "" {
 				file := filepath.Join(cwd, "task.md")
 				if err := os.WriteFile(file, []byte(tt.description), 0600); err != nil {
@@ -58,6 +62,18 @@ func TestNewStartKeepsDescriptionIndependentOnPartialFailure(t *testing.T) {
 				t.Fatalf("description=%q error=%v", shown.Description, err)
 			}
 		})
+	}
+}
+
+func TestAgentEndpointRejectsImplicitPromptStartBeforeCreation(t *testing.T) {
+	stdout, stderr, application := configuredApp(t)
+	code := cli.Run(context.Background(), []string{"new", "--prompt", "Run this task", "--title", "Restricted"}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application, ControlAccess: coordinator.AccessAgent})
+	if code != cli.ExitError || !strings.Contains(stderr.String(), "--start is not allowed") {
+		t.Fatalf("code=%d error=%s", code, stderr)
+	}
+	items, errs := application.Store.ListManifests()
+	if len(items) != 0 || len(errs) != 0 {
+		t.Fatalf("items=%v errors=%v", items, errs)
 	}
 }
 

@@ -61,6 +61,7 @@ type ExecSpec struct {
 	Skills            []string
 	Model             string
 	Thinking          string
+	ProjectTrusted    bool
 }
 
 func New(path string) Client {
@@ -155,6 +156,9 @@ func (c Client) ExecMode(ctx context.Context, spec ExecSpec) error {
 			return fmt.Errorf("Pi skill path must be absolute: %q", skill)
 		}
 		args = append(args, "--skill", skill)
+	}
+	if spec.ProjectTrusted {
+		args = append(args, "--approve")
 	}
 	path := c.Path
 	if path == "" {

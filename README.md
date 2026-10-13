@@ -67,7 +67,9 @@ wi new --title "Add API retries" --repo project --desc-file task.md --start
 wi switch add-api-retries
 ```
 
-`--title` is mandatory; Wi derives the slug unless `--slug` is supplied. Omit `--start` to file backlog work only. With `--start`, a configurable message asks the agent to read the description using `wi show`. `--prompt` overrides that message, never the description. Resume never sends a prompt.
+Supply `--title` or explicitly use `--untitled`; Wi derives the slug unless `--slug` is supplied. Omit both `--start` and `--prompt` to file backlog work only. With `--start`, a configurable message asks the agent to read the description using `wi show`. `--prompt` implies `--start` and supplies that message, never the description. Resume never sends a prompt.
+
+Registering a repository authorizes project-local agent resources in its verified managed worktrees. Pi receives per-launch project approval; direnv `.envrc` approval remains separate.
 
 Inside a Wi item, repository selection is implicit. Outside one, pass a registered `--repo NAME`. External source checkouts are onboarding inputs, not ongoing dependencies. See [Repositories](https://regb.github.io/workitem/concepts/repositories/) and the [Quick start](https://regb.github.io/workitem/getting-started/quick-start/).
 

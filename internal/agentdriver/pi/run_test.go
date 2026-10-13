@@ -82,7 +82,7 @@ done
 	defer cancel()
 	ready := make(chan error, 1)
 	go func() {
-		response, err := server.ServeOnce(ctx, driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: "pi", Agent: "web", Config: config, Skills: skills.Bundled(), Runtime: driverprotocol.Runtime{ID: "runtime", WorkItemID: "item", Mode: driverprotocol.ModeTUI, CWD: dir, ControlSocketPath: filepath.Join(dir, "control.sock")}, Conversation: driverprotocol.Conversation{ID: "session", Locator: filepath.Join(dir, "session.jsonl")}})
+		response, err := server.ServeOnce(ctx, driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: "pi", Agent: "web", Config: config, ProjectTrusted: true, Skills: skills.Bundled(), Runtime: driverprotocol.Runtime{ID: "runtime", WorkItemID: "item", Mode: driverprotocol.ModeTUI, CWD: dir, ControlSocketPath: filepath.Join(dir, "control.sock")}, Conversation: driverprotocol.Conversation{ID: "session", Locator: filepath.Join(dir, "session.jsonl")}})
 		if err == nil && !response.Capabilities.BundledSkills {
 			t.Error("missing bundled skill capability")
 		}
@@ -98,7 +98,7 @@ done
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(args), "/tools/web-search.ts") || !strings.Contains(string(args), "--session") || !strings.Contains(string(args), "openai-codex/gpt-test") || !strings.Contains(string(args), "high") {
+	if !strings.Contains(string(args), "--approve\n") || !strings.Contains(string(args), "/tools/web-search.ts") || !strings.Contains(string(args), "--session") || !strings.Contains(string(args), "openai-codex/gpt-test") || !strings.Contains(string(args), "high") {
 		t.Fatalf("args=%s", args)
 	}
 	lines := strings.Split(strings.TrimSpace(string(args)), "\n")

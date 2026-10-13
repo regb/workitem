@@ -22,7 +22,7 @@ wi repo restore NAME
 wi repo add NAME --from GIT_CHECKOUT_PATH --branch INTEGRATION_BRANCH
 ```
 
-Repositories must be registered explicitly. Onboarding imports committed state into an independent bare store without modifying or depending on the source checkout. Repository selection defaults to the current item's repository; outside an item, pass `--repo NAME`.
+Repositories must be registered explicitly. Onboarding imports committed state into an independent bare store without modifying or depending on the source checkout. Repository selection defaults to the current item's repository; outside an item, pass `--repo NAME`. Registration authorizes project-local agent resources in its verified managed worktrees. Pi receives per-launch approval, not a saved global trust decision; direnv `.envrc` approval remains separate.
 
 Only archive or restore a repository when explicitly asked. Archiving hides it from the default list and blocks new items, including inherited selection. It preserves its reserved name, Git data, dirty worktrees, and existing items and does not stop agents. Restore allows new items again. There is no repository deletion command; do not delete Git stores or worktrees manually.
 
@@ -38,7 +38,7 @@ Use a short recognizable title and a self-contained description with evidence, c
 
 Creation defaults to the registered integration commit. Use `--base=HEAD` to build on the current claimed worktree's commit; dirty files are not copied.
 
-When explicitly requested, `--start` activates the item and sends the configured startup message. `--prompt` overrides only that message, not the description. Existing-item `start` and `resume` send no prompt.
+When explicitly requested, `--start` activates the item and sends the configured startup message. `--prompt` implies `--start` and supplies that message, not the description. Use it only when agent startup is explicitly authorized. Existing-item `start` and `resume` send no prompt.
 
 File unrelated discoveries as separate tasks. Correcting the original objective can stay in the same item.
 

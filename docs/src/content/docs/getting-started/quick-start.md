@@ -58,7 +58,7 @@ wi new --title "Add API retries" --repo project \
   --desc-file /tmp/task.md --start --agent-mode headless
 ```
 
-This creates the item, moves it to `working`, starts a headless runtime, and asks the agent to read the task with `wi show`. Pass `--prompt TEXT` with `--start` to override that startup message; it does not change the description. Omit `--agent-mode headless` to start an unattached TUI runtime that you can enter later.
+This creates the item, moves it to `working`, starts a headless runtime, and asks the agent to read the task with `wi show`. Pass `--prompt TEXT` to start with your own message; it implies `--start` and it does not change the description. Omit `--agent-mode headless` to start an unattached TUI runtime that you can enter later.
 
 Watch the delegated item:
 

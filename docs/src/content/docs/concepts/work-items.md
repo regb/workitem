@@ -23,7 +23,7 @@ Supply `--title` or explicitly use `--untitled`. The latter creates an editable 
 
 `--untitled` is only a creation option, not a durable classification. Later title edits leave the active slug and branch unchanged. Restore follows the normal current-title allocation policy. Creation selects a [registered repository](../repositories/) from the current item or an explicit `--repo NAME`.
 
-Ordinary creation records backlog work without allocating a checkout or agent. Add `--start` to activate the item and send the configured startup message. `--prompt` overrides only that message, not the description. Existing-item `start` and `resume` send no prompt. See [Delegate work](../../guides/delegation/).
+Ordinary creation records backlog work without allocating a checkout or agent. Add `--start` to activate the item and send the configured startup message. `--prompt` implies `--start` and supplies only that message, not the description. Existing-item `start` and `resume` send no prompt. See [Delegate work](../../guides/delegation/).
 
 ## Descriptions are handoffs
 

@@ -23,6 +23,8 @@ The normative Go wire types are in `github.com/regb/workitem/agentdriver/protoco
 
 A `launch` request contains the agent name, merged driver configuration, runtime identity and mode, checkout directory, conversation locator, runtime control socket, and runtime event socket. The driver replies with capabilities and its resolved backend executable before starting the backend. Standard input, output, and error remain attached for TUI mode.
 
+The optional `launch.project_trusted` boolean authorizes project-local agent configuration and resources for this launch. An absent field means no host approval. The host sets it only after verifying the runtime directory is the current claimed managed slot of a registered repository and its Git common directory matches the owned store. Drivers may translate this authorization to their native project-resource approval mechanism. The bundled Pi driver passes `--approve` in both modes. This does not authorize direnv shell code, modify Pi's saved trust decisions, or grant blanket trust to a parent directory. Short-lived title and configuration operations do not receive this runtime authorization.
+
 The runtime mode is independent of the process protocol:
 
 - `tui` asks the driver to run its interactive backend. `wi` composes that runtime with tmux.

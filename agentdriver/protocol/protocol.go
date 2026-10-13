@@ -43,6 +43,9 @@ type LaunchRequest struct {
 	Config          json.RawMessage   `json:"config"`
 	Environment     map[string]string `json:"environment,omitempty"`
 	Skills          []Skill           `json:"skills,omitempty"`
+	// ProjectTrusted authorizes project-local agent resources for this launch.
+	// The host sets it only after verifying a registered repository worktree.
+	ProjectTrusted bool `json:"project_trusted,omitempty"`
 }
 
 type Capabilities struct {

@@ -62,7 +62,7 @@ func (a *App) NewAgentWorkItem(ctx context.Context, opts NewWorkItemOptions, mod
 	if err := a.waitForAgentRuntimeReady(ctx, created.Manifest.ID, started.Workspace.AgentRuntime); err != nil {
 		return result, fmt.Errorf("created and started work item %s (%s), but could not submit its prompt: %w", created.Manifest.Slug, created.Manifest.ID, err)
 	}
-	controlled, err := a.AgentControl(ctx, AgentControlOptions{ResolveOptions: resolve, CommandType: agent.CommandPrompt, Message: prompt, Actor: actor})
+	controlled, err := a.AgentControl(ctx, AgentControlOptions{ResolveOptions: resolve, CommandType: agent.CommandPrompt, Message: prompt, Actor: actor, ExpectedRuntimeID: started.Workspace.AgentRuntime.ID})
 	result.Control = controlled
 	if err != nil {
 		return result, fmt.Errorf("created and started work item %s (%s), but could not submit its prompt: %w", created.Manifest.Slug, created.Manifest.ID, err)
@@ -97,6 +97,9 @@ func (a *App) waitForAgentRuntimeReady(ctx context.Context, itemID string, runti
 		}
 		if current == nil {
 			return false, fmt.Errorf("agent runtime %s metadata disappeared", runtime.ID)
+		}
+		if current.ID != runtime.ID || current.WorkItemID != itemID {
+			return false, fmt.Errorf("agent runtime ownership changed before accepting the initial prompt")
 		}
 		if current.State == model.AgentRuntimeProblem || current.State == model.AgentRuntimeStopped {
 			return false, fmt.Errorf("agent runtime %s is %s before accepting the initial prompt", runtime.ID, current.State)

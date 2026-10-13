@@ -74,7 +74,7 @@ wi start --agent-mode headless item-slug
 
 `wi start` starts or enters a runtime but does not submit `DESCRIPTION.md` as a prompt. In the TUI, ask the agent to run `wi show` and act on the description.
 
-For creation and immediate delivery, use `wi new --title "Task" --desc-file task.md --start`. `--prompt` requires `--start` and overrides only the startup message. For an existing working item, use:
+For creation and immediate delivery, use `wi new --title "Task" --desc-file task.md --start`. `--prompt` implies `--start` and overrides only the startup message. Registered managed worktrees receive per-launch Pi project approval, while `.envrc` approval remains separate. A readiness timeout or refused prompt reports a retained partial outcome; it does not report successful delivery. For an existing working item, use:
 
 ```bash
 wi agent control send --item ITEM 'Read the task with wi show, implement it, and report the result.'

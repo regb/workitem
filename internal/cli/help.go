@@ -25,7 +25,7 @@ var helpDocs = map[string]helpDoc{
 	"repo": {
 		Summary:     "Manage named Wi-owned repositories",
 		Usage:       []string{"wi repo <add|list|show|rename|archive|restore>"},
-		Description: []string{"Repository names are unique human-facing selectors. Stable repository IDs determine Git store paths and item references."},
+		Description: []string{"Repository names are unique human-facing selectors. Stable repository IDs determine Git store paths and item references. Registering a repository authorizes project-local agent resources in its verified managed worktrees. Pi receives per-launch approval; direnv shell-code approval remains separate."},
 		SeeAlso:     []string{"repo list", "repo rename", "repo archive", "repo restore"},
 	},
 	"repo list": {
@@ -110,7 +110,7 @@ var helpDocs = map[string]helpDoc{
 		Usage:   []string{"wi new --title <text> [options]", "wi new --untitled [options]"},
 		Description: []string{
 			"Normally creates a work item in backlog. Durable metadata and DESCRIPTION.md are written immediately; no terminal session, conversation, runtime, or composed use case is started. Items begin with an absent managed-slot checkout. Select a registered repository with --repo NAME, or inherit the current item’s repository. Without --base, the immutable starting commit comes from the registered integration branch; no fetch occurs and there is no fallback to HEAD.",
-			"With --start, the item moves to working and an unattached agent receives the global agent.startup_message through runtime control. --prompt overrides that message and requires --start; it never changes DESCRIPTION.md. --desc-file remains the durable task description. TUI mode is the default: it creates the normal tmux runtime for later entry but does not switch or attach the caller. Use --agent-mode headless for an explicitly headless runtime. If startup or delivery fails, the command reports the durable partial outcome instead of deleting the item.",
+			"With --start, the item moves to working and an unattached agent receives the global agent.startup_message through runtime control. --prompt supplies that message and implies --start; it never changes DESCRIPTION.md. --desc-file remains the durable task description. TUI mode is the default: it creates the normal tmux runtime for later entry but does not switch or attach the caller. Use --agent-mode headless for an explicitly headless runtime. If startup or delivery fails, the command reports the durable partial outcome instead of deleting the item.",
 			"Use --desc-file for a backlog item's self-contained multiline description. Labels are repeatable and augment defaults from user config, <repository>/.config/wi.toml, and WI_ITEM_DEFAULT_LABELS; use --no-default-labels to opt out. Deep work is a built-in attribute, not a label.",
 			"A sandbox may set WI_AGENT_DAEMON_SOCKET to the daemon's separately mounted agent endpoint. That endpoint permits only absent managed-slot backlog creation; --start is rejected. Worktree-relative bases require item and repository context available through the endpoint.",
 		},
@@ -119,9 +119,9 @@ var helpDocs = map[string]helpDoc{
 			{"--untitled", "Use the editable title Untitled task and an item-<ID suffix> slug unless --slug is supplied. Cannot be combined with --title."},
 			{"--desc-file <path>", "Read DESCRIPTION.md content from a file."},
 			{"--start", "Start an unattached agent and send the configured startup message."},
-			{"--prompt <text>", "With --start, override the startup message without changing the description."},
+			{"--prompt <text>", "Start an agent and send this message without changing the description; implies --start."},
 			{"--agent <name>", "Select a configured agent definition; default is default."},
-			{"--agent-mode <mode>", "With --start, start tui (default) or headless."},
+			{"--agent-mode <mode>", "With --start or --prompt, start tui (default) or headless."},
 			{"--slug <slug>", "Set the initial active slug; must be unique."},
 			{"--label <label>", "Add a label after inherited defaults; repeatable."},
 			{"--no-default-labels", "Do not inherit user or repository default labels."},

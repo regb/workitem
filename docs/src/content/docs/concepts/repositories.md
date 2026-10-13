@@ -21,6 +21,8 @@ Local onboarding imports committed Git state into an independent store under `$D
 wi repo add project --from https://github.com/example/project.git --branch main
 ```
 
+Register only repositories whose project-local agent resources you trust. Registration authorizes those resources in verified managed worktrees, including executable Pi extensions, project settings, MCP servers, and package loading. The bundled Pi driver receives `--approve` for each such launch, without writing a global or parent-directory trust decision. Future commits and local changes in those worktrees are covered by this repository-level policy. Unregistered paths and worktrees belonging to another Git store are not automatically approved. Direnv `.envrc` approval remains separate.
+
 The integration policy is stored in the registry; it is not rediscovered when creating or merging items. There is currently no command to change it. The bare store has no permanent integration checkout.
 
 Normal `wi repo list` output shows active repositories by name and integration branch. `wi repo list --all` includes archived repositories, marked `archived`. `--json` retains the stable ID and other registry metadata; `repo show` also prints the ID and Git store path.

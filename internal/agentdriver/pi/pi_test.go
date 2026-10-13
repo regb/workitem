@@ -73,6 +73,27 @@ func TestExecCommandConstructionByMode(t *testing.T) {
 	}
 }
 
+func TestProjectApprovalIsExplicitAndPerLaunch(t *testing.T) {
+	for _, mode := range []agent.Mode{agent.ModeTUI, agent.ModeHeadless} {
+		for _, trusted := range []bool{false, true} {
+			runner := &recordingRunner{}
+			client := pi.Client{Path: "pi", Runner: runner}
+			if err := client.ExecMode(context.Background(), pi.ExecSpec{SessionPath: "/tmp/session.jsonl", BridgePath: "/tmp/bridge.ts", Mode: mode, ProjectTrusted: trusted}); err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, arg := range runner.args {
+				if arg == "--approve" {
+					found = true
+				}
+			}
+			if found != trusted {
+				t.Fatalf("mode=%s trusted=%v args=%v", mode, trusted, runner.args)
+			}
+		}
+	}
+}
+
 func envContains(env []string, kv string) bool {
 	for _, item := range env {
 		if item == kv {

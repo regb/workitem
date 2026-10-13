@@ -48,6 +48,10 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 		return fmt.Errorf("agent driver runner is not configured")
 	}
 	return a.primaryAgentService().Execute(ctx, itemID, conversationID, runtimeID, mode, func(ctx context.Context, spec agentcore.ExecutionSpec) error {
+		projectTrusted, err := a.agentProjectTrusted(ctx, spec.WorkItemID, spec.CWD)
+		if err != nil {
+			return fmt.Errorf("verify agent project trust: %w", err)
+		}
 		events, err := driverprotocol.ListenEvents(spec.EventSocketPath)
 		if err != nil {
 			return fmt.Errorf("listen for agent driver events: %w", err)
@@ -71,7 +75,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 		if manifest.PrimaryConversation != nil {
 			format = manifest.PrimaryConversation.Format
 		}
-		request := driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: definition.Driver, Agent: agentName, Config: configJSON, Skills: skills.Bundled(), Runtime: driverprotocol.Runtime{ID: spec.RuntimeID, WorkItemID: spec.WorkItemID, Mode: driverprotocol.Mode(spec.Mode), CWD: spec.CWD, ControlSocketPath: spec.ControlSocketPath, EventSocketPath: spec.EventSocketPath, LogPath: spec.LogPath}, Conversation: driverprotocol.Conversation{ID: conversationID, Locator: spec.ConversationLocator, Format: format}, Environment: environment}
+		request := driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: definition.Driver, Agent: agentName, Config: configJSON, Skills: skills.Bundled(), ProjectTrusted: projectTrusted, Runtime: driverprotocol.Runtime{ID: spec.RuntimeID, WorkItemID: spec.WorkItemID, Mode: driverprotocol.Mode(spec.Mode), CWD: spec.CWD, ControlSocketPath: spec.ControlSocketPath, EventSocketPath: spec.EventSocketPath, LogPath: spec.LogPath}, Conversation: driverprotocol.Conversation{ID: conversationID, Locator: spec.ConversationLocator, Format: format}, Environment: environment}
 		runErr := a.RunAgentDriver(ctx, driverPath, driverArgs, request, driverProcessEnvironment(os.Environ()), func(ready driverprotocol.Ready) error {
 			runtime, err := a.Store.LoadAgentRuntime(spec.WorkItemID)
 			if err != nil {

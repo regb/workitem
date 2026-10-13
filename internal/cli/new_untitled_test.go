@@ -72,7 +72,7 @@ func TestNewUntitledFlagRules(t *testing.T) {
 		{"new", "--untitled", "--title", ""},
 		{"new", "--untitled=false"},
 		{"new", "--untitled", "extra"},
-		{"new", "--untitled", "--prompt", "A question"},
+		{"new", "--untitled", "--prompt", "A question", "--start=false"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			stdout, stderr, a := configuredApp(t)

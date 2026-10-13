@@ -91,7 +91,7 @@ Repository configuration cannot grant execution trust. This prevents a checked-i
 
 ## Initial agent message
 
-`agent.startup_message` is the global message sent by `wi new --start`. It must be a non-empty quoted string. Escape newlines as `\n` within the string. `--prompt TEXT` overrides this message for that creation and requires `--start`. Neither message changes the durable description supplied through `--desc-file`.
+`agent.startup_message` is the global message sent by `wi new --start`. It must be a non-empty quoted string. Escape newlines as `\n` within the string. `--prompt TEXT` overrides this message for that creation and implies `--start`. It conflicts with an explicit `--start=false`. Neither message changes the durable description supplied through `--desc-file`.
 
 `wi resume` never sends a startup message. `wi start` for an existing item opens its runtime without submitting a message. Use `wi agent control send` to explicitly start a turn in an existing conversation.
 

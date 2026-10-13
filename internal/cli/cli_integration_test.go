@@ -481,7 +481,7 @@ func TestNewPromptValidation(t *testing.T) {
 		want string
 	}{
 		{name: "empty", args: []string{"new", "--start", "--prompt", "", "--title", "Prompted"}, want: "--prompt requires a non-empty message"},
-		{name: "prompt without start", args: []string{"new", "--prompt", "work now", "--title", "Prompted"}, want: "--prompt requires --start"},
+		{name: "prompt with disabled start", args: []string{"new", "--prompt", "work now", "--start=false", "--title", "Prompted"}, want: "--prompt conflicts with --start=false"},
 		{name: "mode without start", args: []string{"new", "--agent-mode", "headless", "--title", "Prompted"}, want: "--agent-mode requires --start"},
 		{name: "invalid mode", args: []string{"new", "--start", "--agent-mode", "batch", "--title", "Prompted"}, want: "expected tui or headless"},
 	} {

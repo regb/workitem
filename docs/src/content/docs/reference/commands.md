@@ -28,7 +28,7 @@ Finish and archive items rather than continually expanding them. Merge, archive,
 
 | Command | Purpose |
 | --- | --- |
-| `wi new` | Create backlog work or create and delegate with `--start`; `--prompt` overrides only the startup message |
+| `wi new` | Create backlog work or create and delegate with `--start`; `--prompt` starts an agent with that message, without changing the description |
 | `wi show` | Read metadata and the durable description |
 | `wi edit` | Edit title, description, labels, and deep work together; open an editor when no edit flags are supplied |
 | `wi events` | Read append-only item history |
