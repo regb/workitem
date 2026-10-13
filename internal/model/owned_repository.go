@@ -12,12 +12,12 @@ import (
 // OwnedRepository is a registered Git store. Its location is derived from its
 // identity and the data root, not from the checkout used to onboard it.
 type OwnedRepository struct {
-	ID                string    `json:"id"`
-	Name              string    `json:"name"`
-	IntegrationBranch string    `json:"integration_branch"`
-	OriginURL         string    `json:"origin_url,omitempty"`
-	CreatedAt         time.Time `json:"created_at"`
-	Archived          bool      `json:"archived,omitempty"`
+	ID                string              `json:"id"`
+	Name              string              `json:"name"`
+	IntegrationBranch string              `json:"integration_branch"`
+	Upstream          *RepositoryUpstream `json:"upstream,omitempty"`
+	CreatedAt         time.Time           `json:"created_at"`
+	Archived          bool                `json:"archived,omitempty"`
 }
 
 // BareImportOptions is the narrow adapter contract for independent onboarding.
@@ -41,39 +41,17 @@ func NormalizeOwnedRepository(r OwnedRepository) (OwnedRepository, error) {
 	if !ValidRepositoryName(r.Name) {
 		return r, fmt.Errorf("repository name must be 1–64 lowercase letters, digits, dots, underscores, or hyphens and start with a letter or digit")
 	}
-	branch := r.IntegrationBranch
-	for _, character := range branch {
-		if character <= ' ' || character == 127 {
-			return r, fmt.Errorf("invalid integration branch %q", branch)
-		}
-	}
-	if branch == "" || branch == "@" || strings.HasPrefix(branch, "-") || strings.HasPrefix(branch, "/") || strings.HasSuffix(branch, "/") || strings.Contains(branch, "..") || strings.Contains(branch, "//") || strings.Contains(branch, "@{") || strings.ContainsAny(branch, " ~^:?*[\\\t\r\n\x00") {
-		return r, fmt.Errorf("invalid integration branch %q", branch)
-	}
-	for _, part := range strings.Split(branch, "/") {
-		if strings.HasPrefix(part, ".") || strings.HasSuffix(part, ".") || strings.HasSuffix(part, ".lock") {
-			return r, fmt.Errorf("invalid integration branch %q", branch)
-		}
+	if err := ValidateRepositoryBranch(r.IntegrationBranch); err != nil {
+		return r, err
 	}
 	if r.CreatedAt.IsZero() {
 		return r, fmt.Errorf("repository created_at is required")
 	}
-	if strings.Contains(r.OriginURL, "://") {
-		parsed, err := url.Parse(r.OriginURL)
-		if err != nil {
+	if r.Upstream != nil {
+		if err := r.Upstream.Validate(); err != nil {
 			return r, err
 		}
-		if parsed.User != nil {
-			if _, password := parsed.User.Password(); password {
-				return r, fmt.Errorf("origin URL must not contain a password")
-			}
-		}
 	}
-	remote, err := SanitizeRemoteURL(r.OriginURL)
-	if err != nil {
-		return r, err
-	}
-	r.OriginURL = remote
 	r.CreatedAt = r.CreatedAt.UTC()
 	return r, nil
 }

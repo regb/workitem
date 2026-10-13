@@ -16,13 +16,23 @@ import (
 )
 
 func writeRepositoryList(output io.Writer, repos []model.OwnedRepository) error {
+	if len(repos) == 0 {
+		return nil
+	}
 	writer := tabwriter.NewWriter(output, 0, 0, 2, ' ', 0)
+	if _, err := fmt.Fprintln(writer, "NAME\tINTEGRATION\tSTATE\tUPSTREAM"); err != nil {
+		return err
+	}
 	for _, repo := range repos {
-		marker := ""
+		state := "active"
 		if repo.Archived {
-			marker = "\tarchived"
+			state = "archived"
 		}
-		if _, err := fmt.Fprintf(writer, "%s\t%s%s\n", repo.Name, repo.IntegrationBranch, marker); err != nil {
+		upstream := "local-only"
+		if repo.Upstream != nil {
+			upstream = repo.Upstream.String()
+		}
+		if _, err := fmt.Fprintf(writer, "%s\t%s\t%s\t%s\n", repo.Name, repo.IntegrationBranch, state, upstream); err != nil {
 			return err
 		}
 	}
@@ -34,9 +44,11 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 		return fmt.Errorf("repository commands require the coordinator")
 	}
 	if len(args) == 0 {
-		return usageErr{fmt.Errorf("usage: wi repo add|list|show|rename|archive|restore")}
+		return usageErr{fmt.Errorf("usage: wi repo add|list|show|rename|archive|restore|upstream|status|sync")}
 	}
 	switch args[0] {
+	case "upstream", "status", "sync":
+		return runRepositoryRemote(ctx, args, cfg, jsonOut)
 	case "list":
 		fs := newFlagSet("repo list", cfg.Stderr)
 		all := fs.Bool("all", false, "include archived repositories")
@@ -75,6 +87,11 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 			return writeJSON(cfg.Stdout, result)
 		}
 		fmt.Fprintf(cfg.Stdout, "%s\nID: %s\nGit store: %s\nIntegration branch: %s\nCommit: %s\n", result.Repository.Name, result.Repository.ID, result.GitDir, result.Repository.IntegrationBranch, result.Commit)
+		if result.Repository.Upstream != nil {
+			fmt.Fprintf(cfg.Stdout, "Upstream: %s\n", result.Repository.Upstream.String())
+		} else {
+			fmt.Fprintln(cfg.Stdout, "Upstream: none (local-only)")
+		}
 		if result.Repository.Archived {
 			fmt.Fprintln(cfg.Stdout, "Archived: yes")
 		}
@@ -154,7 +171,10 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 			args = append(append([]string{"add"}, args[2:]...), name)
 		}
 		fs := newFlagSet("repo add", cfg.Stderr)
-		var source, branch string
+		var source, branch, upstreamValue, upstreamBranch string
+		fs.StringVar(&upstreamValue, "upstream", "", "override the inferred integration upstream URL")
+		fs.StringVar(&upstreamBranch, "upstream-branch", "", "remote branch; defaults to the integration branch")
+		local := fs.Bool("local", false, "onboard without an upstream")
 		fs.StringVar(&source, "from", "", "local checkout or Git URL to import")
 		fs.StringVar(&branch, "branch", "", "integration branch; discovered for local sources")
 		if err := fs.Parse(args[1:]); err != nil {
@@ -164,6 +184,10 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 			return usageErr{fmt.Errorf("usage: wi repo add --from SOURCE [--branch BRANCH] NAME")}
 		}
 		name := fs.Arg(0)
+		if *local && (upstreamValue != "" || upstreamBranch != "") {
+			return usageErr{fmt.Errorf("--local conflicts with --upstream and --upstream-branch")}
+		}
+		var upstream *model.RepositoryUpstream
 		if !strings.Contains(source, ":") {
 			if !filepath.IsAbs(source) {
 				source = filepath.Join(cfg.CWD, source)
@@ -189,6 +213,35 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 				}
 			}
 		}
+		if !*local {
+			if upstreamValue != "" {
+				origin = upstreamValue
+			}
+			if origin != "" {
+				if !strings.Contains(origin, ":") && !filepath.IsAbs(origin) {
+					origin = filepath.Join(source, origin)
+				}
+				if upstreamBranch == "" {
+					upstreamBranch = branch
+					if upstreamValue == "" && !strings.Contains(source, ":") {
+						tracked, err := client.OriginTrackingBranch(ctx, source, branch)
+						if err != nil {
+							return err
+						}
+						if tracked != "" {
+							upstreamBranch = tracked
+						}
+					}
+				}
+				var err error
+				upstream, err = model.ParseRepositoryUpstream(origin, upstreamBranch)
+				if err != nil {
+					return usageErr{err}
+				}
+			} else if upstreamBranch != "" {
+				return usageErr{fmt.Errorf("--upstream-branch requires an inferred or explicit upstream URL")}
+			}
+		}
 		status, err := cfg.Coordinator.Status(ctx)
 		if err != nil {
 			return err
@@ -212,7 +265,7 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 			return err
 		}
 		now := time.Now().UTC()
-		record, err := model.NormalizeOwnedRepository(model.OwnedRepository{ID: id, Name: name, IntegrationBranch: branch, OriginURL: origin, CreatedAt: now})
+		record, err := model.NormalizeOwnedRepository(model.OwnedRepository{ID: id, Name: name, IntegrationBranch: branch, CreatedAt: now, Upstream: upstream})
 		if err != nil {
 			return err
 		}
@@ -220,14 +273,18 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 		if err != nil {
 			return err
 		}
-		if err := client.ImportBare(ctx, model.BareImportOptions{Source: source, Destination: path, IntegrationBranch: branch, OriginURL: record.OriginURL}); err != nil {
+		remoteURL := ""
+		if upstream != nil {
+			remoteURL = upstream.URL
+		}
+		if err := client.ImportBare(ctx, model.BareImportOptions{Source: source, Destination: path, IntegrationBranch: branch, OriginURL: remoteURL}); err != nil {
 			return err
 		}
 		commandID, err := model.NewID()
 		if err != nil {
 			return err
 		}
-		result, err := cfg.Coordinator.RegisterRepository(ctx, coordinator.RegisterRepositoryCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Repository: record, Source: source, CreatedAt: now})
+		result, err := cfg.Coordinator.RegisterRepository(ctx, coordinator.RegisterRepositoryCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Repository: record, CreatedAt: now})
 		if err != nil {
 			return fmt.Errorf("imported Git store retained at %s, but registration failed: %w", path, err)
 		}
@@ -235,9 +292,12 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 			return writeJSON(cfg.Stdout, result)
 		}
 		fmt.Fprintf(cfg.Stdout, "added repository %s (%s)\nGit store: %s\nIntegration branch: %s\n", record.Name, record.ID, path, branch)
+		if record.Upstream != nil {
+			fmt.Fprintf(cfg.Stdout, "Upstream: %s\n", record.Upstream.String())
+		}
 		fmt.Fprintln(cfg.Stdout, "Project-local agent resources are approved in its managed worktrees; .envrc approval remains separate.")
 		return nil
 	default:
-		return usageErr{fmt.Errorf("usage: wi repo add|list|show|rename|archive|restore")}
+		return usageErr{fmt.Errorf("usage: wi repo add|list|show|rename|archive|restore|upstream|status|sync")}
 	}
 }

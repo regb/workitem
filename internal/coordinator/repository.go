@@ -16,7 +16,6 @@ type RegisterRepositoryCommand struct {
 	ID              string                `json:"id"`
 	ProtocolVersion int                   `json:"protocol_version"`
 	Repository      model.OwnedRepository `json:"repository"`
-	Source          string                `json:"source"`
 	CreatedAt       time.Time             `json:"created_at"`
 }
 
@@ -66,10 +65,6 @@ func (d *Database) RegisterRepository(command RegisterRepositoryCommand) (Regist
 		return RegisterRepositoryResult{}, fmt.Errorf("new repositories must be active")
 	}
 	command.Repository = r
-	if err := model.ValidateRepositorySource(command.Source); err != nil {
-		return RegisterRepositoryResult{}, err
-	}
-	source := command.Source
 	var result RegisterRepositoryResult
 	err = d.db.Update(func(tx *bolt.Tx) error {
 		outcomes := tx.Bucket(bucketDomainCommands)
@@ -110,7 +105,7 @@ func (d *Database) RegisterRepository(command RegisterRepositoryCommand) (Regist
 			return err
 		}
 		sequence := decodeUint64(tx.Bucket(bucketMeta).Get(keyGlobalSequence)) + 1
-		payload, _ := json.Marshal(map[string]any{"repository_id": r.ID, "name": r.Name, "integration_branch": r.IntegrationBranch, "source": source})
+		payload, _ := json.Marshal(map[string]any{"repository_id": r.ID, "name": r.Name, "integration_branch": r.IntegrationBranch, "upstream": r.Upstream})
 		event := DomainEvent{Sequence: sequence, ID: domainEventID(command.ID, 0), Type: "repository.onboarded", Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload}
 		if tx.Bucket(bucketEventIDs).Get([]byte(event.ID)) != nil {
 			return fmt.Errorf("event identity %s already exists", event.ID)

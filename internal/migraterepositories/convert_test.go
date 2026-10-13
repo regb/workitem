@@ -17,7 +17,7 @@ func conversionFixture(t *testing.T) (string, Plan) {
 	before := model.NewManifest(testutil.ID(t, 1), "task", "Task", nil, false, testutil.Time(), model.Repository{RootAtCreation: "/external", GitCommonDir: "/external/.git", CreatedFromCommit: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, "wi/task"))
 	after := before
 	after.Repository = model.Repository{ID: testutil.ID(t, 2), CreatedFromCommit: before.Repository.CreatedFromCommit}
-	plan := Plan{CreatedAt: testutil.Time(), Repositories: []RepositoryPlan{{Record: model.OwnedRepository{ID: after.Repository.ID, Name: "repo", IntegrationBranch: "main", CreatedAt: testutil.Time()}, Source: "/external"}}, Items: []ItemPlan{{Before: before, After: after}}}
+	plan := Plan{CreatedAt: testutil.Time(), Repositories: []RepositoryPlan{{Record: migrationRepositoryRecord{OwnedRepository: model.OwnedRepository{ID: after.Repository.ID, Name: "repo", IntegrationBranch: "main", CreatedAt: testutil.Time()}, OriginURL: "git@example.com:legacy/repo.git"}, Source: "/external"}}, Items: []ItemPlan{{Before: before, After: after}}}
 	db, err := bolt.Open(path, 0600, nil)
 	if err != nil {
 		t.Fatal(err)

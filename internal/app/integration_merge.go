@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/lock"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -36,23 +39,25 @@ type MergeOptions struct {
 	Target   string
 	CWD      string
 	Env      map[string]string
+	Local    bool
 }
 
 type MergeResult struct {
-	WorkItemID              string   `json:"work_item_id"`
-	SourceBranch            string   `json:"source_branch"`
-	SourcePath              string   `json:"source_path"`
-	SourceOldSHA            string   `json:"source_old_sha"`
-	SourceNewSHA            string   `json:"source_new_sha,omitempty"`
-	TargetBranch            string   `json:"target_branch"`
-	TargetOldSHA            string   `json:"target_old_sha"`
-	TargetWorktreePath      string   `json:"target_worktree_path,omitempty"`
-	TargetManagedWorkItemID string   `json:"target_managed_work_item_id,omitempty"`
-	Rebased                 bool     `json:"rebased"`
-	TargetAdvanced          bool     `json:"target_advanced"`
-	TargetSynced            bool     `json:"target_synced"`
-	RolledBack              bool     `json:"rolled_back"`
-	Warnings                []string `json:"warnings"`
+	UpstreamSync            *coordinator.RepositorySyncResult `json:"upstream_sync,omitempty"`
+	WorkItemID              string                            `json:"work_item_id"`
+	SourceBranch            string                            `json:"source_branch"`
+	SourcePath              string                            `json:"source_path"`
+	SourceOldSHA            string                            `json:"source_old_sha"`
+	SourceNewSHA            string                            `json:"source_new_sha,omitempty"`
+	TargetBranch            string                            `json:"target_branch"`
+	TargetOldSHA            string                            `json:"target_old_sha"`
+	TargetWorktreePath      string                            `json:"target_worktree_path,omitempty"`
+	TargetManagedWorkItemID string                            `json:"target_managed_work_item_id,omitempty"`
+	Rebased                 bool                              `json:"rebased"`
+	TargetAdvanced          bool                              `json:"target_advanced"`
+	TargetSynced            bool                              `json:"target_synced"`
+	RolledBack              bool                              `json:"rolled_back"`
+	Warnings                []string                          `json:"warnings"`
 }
 
 type mergeTransaction struct {
@@ -60,10 +65,11 @@ type mergeTransaction struct {
 }
 
 func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (MergeResult, error) {
-	m, err := a.ResolveItem(ctx, ResolveOptions{Selector: opts.Selector, CWD: opts.CWD, Env: opts.Env})
+	m, operation, err := a.lockItemOperation(ctx, ResolveOptions{Selector: opts.Selector, CWD: opts.CWD, Env: opts.Env})
 	if err != nil {
 		return MergeResult{}, err
 	}
+	defer operation.Release()
 	res := MergeResult{WorkItemID: m.ID, SourceBranch: expectedCheckoutBranch(m), Warnings: []string{}}
 	if m.State != model.StateWorking && m.State != model.StateWaiting {
 		return res, fmt.Errorf("work item %s is %s; merge requires a working or waiting item", m.ID, m.State)
@@ -108,6 +114,61 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (MergeResult
 		return res, fmt.Errorf("target branch %s is the source branch", target)
 	}
 	res.TargetBranch = target
+	if m.Repository.ID != "" {
+		var source coordinator.RepositorySourceResult
+		client := &coordinator.Client{SocketPath: a.DaemonSocketPath}
+		if a.DaemonSocketPath != "" {
+			err = client.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: m.Repository.ID, MetadataOnly: true}, &source)
+			if err != nil {
+				return res, err
+			}
+			if source.PendingSync {
+				return res, fmt.Errorf("finish or abort pending repository reconciliation before merging")
+			}
+			if source.Repository.Upstream != nil && target == source.Repository.IntegrationBranch && !opts.Local {
+				synced, syncErr := client.SyncRepository(ctx, coordinator.RepositorySyncRequest{Selector: m.Repository.ID})
+				if syncErr != nil {
+					return res, fmt.Errorf("synchronize integration base before merge: %w", syncErr)
+				}
+				res.UpstreamSync = &synced
+			}
+		}
+		guard, lockErr := lock.Acquire(ctx, gitpkg.IntegrationLockPath(repoRoot))
+		if lockErr != nil {
+			return res, lockErr
+		}
+		defer guard.Release()
+		if a.DaemonSocketPath != "" {
+			var current coordinator.RepositorySourceResult
+			err = client.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: m.Repository.ID, MetadataOnly: true}, &current)
+			if err != nil {
+				return res, err
+			}
+			if current.PendingSync || !reflect.DeepEqual(current.Repository.Upstream, source.Repository.Upstream) {
+				return res, fmt.Errorf("repository synchronization policy changed; retry merge")
+			}
+			if res.UpstreamSync != nil {
+				sha, err := mg.ResolveBranchSHA(ctx, repoRoot, target)
+				if err != nil {
+					return res, err
+				}
+				if sha != res.UpstreamSync.LocalSHA {
+					return res, fmt.Errorf("integration branch moved after upstream synchronization; retry merge")
+				}
+			}
+		}
+		if err := mg.EnsureNoOperationInProgress(ctx, res.SourcePath, "merge"); err != nil {
+			return res, err
+		}
+		if branch, err := a.Git.CurrentBranch(ctx, res.SourcePath); err != nil {
+			return res, err
+		} else if branch != res.SourceBranch {
+			return res, fmt.Errorf("source branch changed during integration preflight; expected %s, found %s", res.SourceBranch, branch)
+		}
+		if err := mg.EnsureClean(ctx, res.SourcePath); err != nil {
+			return res, fmt.Errorf("source checkout changed during integration preflight: %w", err)
+		}
+	}
 	res.SourceOldSHA, err = mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
 	if err != nil {
 		return res, fmt.Errorf("resolve source HEAD: %w", err)

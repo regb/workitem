@@ -12,13 +12,14 @@ wi merge --item auth main
 The operation:
 
 1. requires a completely clean source checkout
-2. keeps the implementation branch unchanged if it already contains the target; otherwise rebases it onto the target
-3. fast-forwards the local target reference
-4. synchronizes a checked-out non-integration target when safe
+2. fetches and fast-forward-synchronizes a configured upstream when targeting the registered integration branch, unless `--local` is supplied
+3. keeps the implementation branch unchanged if it already contains the target; otherwise rebases it onto the target
+4. fast-forwards the local target reference
+5. synchronizes a checked-out non-integration target when safe
 
 When the target is already an ancestor, Wi preserves all commit IDs and merge history, including subtree merges. Otherwise it uses a plain rebase, which can flatten merge history and require manual resolution.
 
-It does not fetch, commit, squash, push, delete the source branch, release the workspace, or archive the item.
+Without an upstream, or with `--local`, integration remains local-only. It does not commit uncommitted work, squash, push, delete the source branch, release the workspace, or archive the item. Upstream divergence stops before the item is rebased; resolve it explicitly with `wi repo sync NAME --merge` or `--reset-to-upstream --yes`. See [Repositories](../../concepts/repositories/#fetch-merge-and-push) for synchronization and recovery.
 
 ## Choose the target
 
@@ -33,7 +34,7 @@ The target must already exist in the owned store. Wi refuses to advance the regi
 
 ## Failure and rollback
 
-If rebase, target advancement, or target-worktree synchronization fails, `wi` aborts or rolls back and restores the source and target commits from before the operation.
+If item rebase, target advancement, or target-worktree synchronization fails, `wi` aborts or rolls back that item integration. An earlier successful upstream synchronization is retained and reported, rather than rolling the integration branch back to a stale remote base. Its old tip remains under the reported recovery ref.
 
 For an explicitly selected non-integration target, dirty files in its worktree are allowed only when they do not overlap incoming paths. The source checkout must always be clean.
 

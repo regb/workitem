@@ -20,6 +20,16 @@ var objectIDPattern = regexp.MustCompile(`^(?:[0-9a-f]{40}|[0-9a-f]{64})$`)
 // ValidateOwnedBare checks the location used by the coordinator before it
 // registers a store. It rejects symlink roots and external object dependencies.
 func (c Client) ValidateOwnedBare(ctx context.Context, path, branch string) error {
+	return c.validateOwnedBare(ctx, path, branch, false)
+}
+
+// Observation and metadata edits do not advance an integration ref and may
+// inspect an integration branch even when it is checked out.
+func (c Client) ValidateOwnedBareObservation(ctx context.Context, path, branch string) error {
+	return c.validateOwnedBare(ctx, path, branch, true)
+}
+
+func (c Client) validateOwnedBare(ctx context.Context, path, branch string, allowCheckedOut bool) error {
 	info, err := os.Lstat(path)
 	if err != nil {
 		return err
@@ -88,7 +98,7 @@ func (c Client) ValidateOwnedBare(ctx context.Context, path, branch string) erro
 		return err
 	}
 	for _, worktree := range worktrees {
-		if !worktree.Bare && !worktree.Detached && worktree.Branch == branch {
+		if !allowCheckedOut && !worktree.Bare && !worktree.Detached && worktree.Branch == branch {
 			return fmt.Errorf("integration branch %s is checked out at %s", branch, worktree.Path)
 		}
 	}

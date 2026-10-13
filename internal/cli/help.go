@@ -24,14 +24,43 @@ type helpDoc struct {
 var helpDocs = map[string]helpDoc{
 	"repo": {
 		Summary:     "Manage named Wi-owned repositories",
-		Usage:       []string{"wi repo <add|list|show|rename|archive|restore>"},
+		Usage:       []string{"wi repo <add|list|show|rename|archive|restore|upstream|status|sync>"},
 		Description: []string{"Repository names are unique human-facing selectors. Stable repository IDs determine Git store paths and item references. Registering a repository authorizes project-local agent resources in its verified managed worktrees. Pi receives per-launch approval; direnv shell-code approval remains separate."},
 		SeeAlso:     []string{"repo list", "repo rename", "repo archive", "repo restore"},
+	},
+	"repo upstream": {
+		Summary:     "Configure an optional remote integration upstream",
+		Usage:       []string{"wi repo upstream NAME URL [--branch BRANCH]", "wi repo upstream NAME --clear"},
+		Description: []string{"Stores the upstream in the repository registry. No upstream means local-only operation. This command does not fetch, update branches, push, or modify the original checkout. The URL and remote branch are stored together; branch defaults to the integration branch. Finish or abort pending reconciliation before changing it."},
+		Options:     []helpOption{{"--branch BRANCH", "Remote branch; defaults to the integration branch."}, {"--clear", "Make the integration branch local-only."}},
+		SeeAlso:     []string{"repo status", "repo sync"},
+	},
+	"repo status": {
+		Summary:     "Inspect integration and cached upstream history",
+		Usage:       []string{"wi repo status NAME [--fetch]"},
+		Description: []string{"Reports untracked, unfetched, equal, ahead, behind, or diverged history, local-only commits, fetch time, and pending reconciliation. Without --fetch, remote observations are cached and may be stale. --fetch refreshes the upstream but never advances the integration branch."},
+		Options:     []helpOption{{"--fetch", "Refresh the upstream observation without integrating."}},
+	},
+	"repo sync": {
+		Summary:     "Synchronize the owned integration branch without pushing",
+		Usage:       []string{"wi repo sync NAME", "wi repo sync NAME --merge", "wi repo sync NAME --reset-to-upstream --yes", "wi repo sync NAME --continue", "wi repo sync NAME --abort"},
+		Description: []string{"Fetches the optional upstream and fast-forwards when behind; leaves an ahead branch alone and refuses divergence by default. --merge reconciles divergence in a dedicated detached checkout, preserving both histories. Resolve and stage conflicts there, then use --continue; --abort leaves integration unchanged and refuses to discard untracked files. --reset-to-upstream --yes replaces the integration tip with the fetched upstream after previewing and checking the exact tips, retaining the old tip under a recovery ref. Item branches and original checkouts remain unchanged. Active integrations, active Git operations, and checked-out integration branches are rejected. No automatic rebase or push is performed."},
+		Options:     []helpOption{{"--merge", "Explicitly merge divergent histories in a reconciliation checkout."}, {"--reset-to-upstream", "Replace the local integration tip, retaining a recovery ref."}, {"--yes", "Confirm --reset-to-upstream."}, {"--continue", "Finish pending synchronization after native conflict resolution."}, {"--abort", "Abort pending reconciliation, preserving unrelated files."}},
+	},
+	"repo add": {
+		Summary:     "Import an independent owned Git store",
+		Usage:       []string{"wi repo add NAME --from SOURCE [--branch BRANCH] [--local | --upstream URL] [--upstream-branch BRANCH]"},
+		Description: []string{"Creates an independent owned store without retaining the onboarding location or modifying the source checkout. URL onboarding sets upstream to that URL and the integration branch. Local onboarding uses its origin URL and origin tracking branch when configured, otherwise the integration branch name. Without an origin it stays local-only. --local disables inference; --upstream and --upstream-branch override the destination. No extra upstream fetch is performed during onboarding."},
+		Options:     []helpOption{{"--from SOURCE", "Local source checkout or credential-free Git URL."}, {"--branch BRANCH", "Integration branch; required for URL onboarding."}, {"--local", "Onboard without an upstream."}, {"--upstream URL", "Override the inferred integration destination."}, {"--upstream-branch BRANCH", "Override the remote branch name."}},
+	},
+	"repo show": {
+		Summary: "Show registered repository metadata", Usage: []string{"wi repo show NAME"},
+		Description: []string{"Shows the owned Git store, integration branch, optional upstream, and archive state. Use repo status for ahead/behind observations."},
 	},
 	"repo list": {
 		Summary:     "List registered repositories",
 		Usage:       []string{"wi repo list [--all]"},
-		Description: []string{"Lists active repository names and integration branches. --all includes archived repositories marked archived. JSON includes registry metadata, with archived: true on archived entries."},
+		Description: []string{"Lists active names, integration branches, state, and upstream URL/branch or local-only. --all includes archived repositories marked archived. JSON includes registry metadata, with archived: true on archived entries."},
 		Options:     []helpOption{{"--all", "Include archived repositories."}},
 	},
 	"repo archive": {
@@ -261,15 +290,16 @@ var helpDocs = map[string]helpDoc{
 	},
 	"merge": {
 		Summary: "Fast-forward a local target branch, rebasing when needed",
-		Usage:   []string{"wi merge [--item <selector>] [--target <branch>] [target]"},
+		Usage:   []string{"wi merge [--item <selector>] [--target <branch>] [--local] [target]"},
 		Description: []string{
 			"Merges the current working/waiting item without switching checkouts: requires a completely clean source checkout, rebases its persisted implementation branch only if it does not already contain the target, atomically fast-forwards the local target ref, and synchronizes any worktree where the target is checked out.",
-			"The target defaults to the registered repository's integration branch. No fetch, commit, squash, branch deletion, workspace cleanup, shelve, or archive is performed.",
-			"If rebase, target advancement, or target-worktree synchronization fails, wi aborts/rolls back and restores the pre-merge source and target commits. Dirty target files are allowed only when they do not overlap incoming paths.",
+			"The target defaults to the registered integration branch. With a configured upstream, wi fetches and fast-forward-synchronizes that base before integrating the item; divergence stops before rebasing. --local skips that remote preflight. Other explicitly selected target branches remain local-only. No push, squash, branch deletion, workspace cleanup, shelve, or archive is performed.",
+			"If item rebase, target advancement, or target-worktree synchronization fails, wi aborts/rolls back the item integration. An earlier successful upstream synchronization is deliberately retained and reported. Dirty non-integration target files are allowed only when they do not overlap incoming paths.",
 		},
 		Options: []helpOption{
 			{"--item <selector>", "Select the source work item explicitly."},
 			{"--target <branch>", "Select an existing local target branch instead of positional target."},
+			{"--local", "Skip upstream network access and base synchronization; pending reconciliation still blocks merging."},
 		},
 		Examples: []string{`wi merge`, `wi merge main`, `wi merge --item auth --target main`, `wi merge --target develop`, `wi --json merge main`},
 	},

@@ -17,10 +17,15 @@ Finish and archive items rather than continually expanding them. Merge, archive,
 
 | Command | Purpose |
 | --- | --- |
-| `wi repo add NAME --from SOURCE [--branch BRANCH]` | Import an independent bare store and register its integration branch |
-| `wi repo list [--all]` | List active names and integration branches; `--all` includes archived repositories |
+| `wi repo add NAME --from SOURCE [--branch BRANCH] [--local] [--upstream URL] [--upstream-branch BRANCH]` | Import an independent store, inferring integration upstream from a URL or local origin; `--local` disables inference |
+| `wi repo list [--all]` | List names, integration branches, state, and upstream destinations; `--all` includes archived repositories |
 | `wi repo show NAME` | Read registry metadata, store path, and integration commit |
 | `wi repo rename OLD NEW` | Change a unique name without moving resources |
+| `wi repo upstream NAME URL [--branch BRANCH]` | Configure an optional integration upstream; `--clear` restores local-only policy |
+| `wi repo status NAME [--fetch]` | Inspect cached ahead/behind history, optionally fetching without integrating |
+| `wi repo sync NAME` | Fetch and fast-forward integration, refusing divergence |
+| `wi repo sync NAME --merge` | Reconcile divergent histories in a dedicated checkout; finish with `--continue` or `--abort` |
+| `wi repo sync NAME --reset-to-upstream --yes` | Replace integration with upstream, checking exact tips and retaining a recovery ref |
 | `wi repo archive NAME` | Hide a repository and block new items, preserving all Git data and existing work |
 | `wi repo restore NAME` | Make an archived repository available for new items again |
 
@@ -101,7 +106,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi archive` | Clean up safely and retain inactive history |
 | `wi delete` | Permanently remove cleaned archived task records |
 | `wi shutdown` | Stop runtimes, terminals, and the daemon |
-| `wi merge` | Fast-forward a local target branch, rebasing when needed |
+| `wi merge [--local]` | Synchronize a configured upstream base, then integrate the item; `--local` skips remote preflight |
 
 `wi archive` retains the completed record. For unfinished work archived by mistake, see [restoration](../../concepts/lifecycle/#composed-workflow-commands). File a new objective as a new item.
 

@@ -63,6 +63,10 @@ Register a repository, then create and start work from a task description:
 
 ```bash
 wi repo add project --from /path/to/git/repository --branch main
+# Upstream is inferred from the checkout’s origin, if available.
+# Use --local during onboarding for local-only integration.
+wi repo status project --fetch
+wi repo sync project
 wi new --title "Add API retries" --repo project --desc-file task.md --start
 wi switch add-api-retries
 ```

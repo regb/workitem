@@ -123,7 +123,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 			return err
 		}
 		opts.RepositoryLabels = source.Labels
-		opts.Repository = &model.Repository{ID: source.Repository.ID, Name: source.Repository.Name, IntegrationBranch: source.Repository.IntegrationBranch, RootAtCreation: source.GitDir, GitCommonDir: source.GitDir, RemoteURL: source.Repository.OriginURL, CreatedFromCommit: source.Commit}
+		opts.Repository = &model.Repository{ID: source.Repository.ID, Name: source.Repository.Name, IntegrationBranch: source.Repository.IntegrationBranch, RootAtCreation: source.GitDir, GitCommonDir: source.GitDir, CreatedFromCommit: source.Commit}
 	}
 	if start {
 		res, err := runCoordinatorNewAgent(ctx, cfg, opts, mode, cfg.App.AgentStartupMessage(prompt))

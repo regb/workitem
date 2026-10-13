@@ -145,7 +145,7 @@ git status --short
 git branch --list main
 ```
 
-Commit intended source changes before merging. The registered integration branch must not be checked out in the owned store. For another explicit target, dirty paths in its worktree must not overlap incoming paths. `wi merge` does not fetch or create the target branch.
+Commit intended source changes before merging. The registered integration branch must not be checked out in the owned store. For another explicit target, dirty paths in its worktree must not overlap incoming paths. `wi merge` does not create the target branch. When targeting the registered integration branch with an upstream configured, it fetches and fast-forward-synchronizes the base first. Use `--local` for deliberate offline integration. If histories diverge, inspect `wi repo status NAME --fetch`, then choose `wi repo sync NAME --merge` or `--reset-to-upstream --yes`. Patch-equivalent commits can have identical trees but incompatible histories; rebasing only the item onto `origin/main` does not repair stale local integration history.
 
 ## Agent status reports a problem
 

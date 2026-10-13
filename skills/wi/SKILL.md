@@ -20,6 +20,9 @@ wi repo list --all
 wi repo archive NAME
 wi repo restore NAME
 wi repo add NAME --from GIT_CHECKOUT_PATH --branch INTEGRATION_BRANCH
+wi repo status NAME
+wi repo upstream NAME URL --branch BRANCH
+wi repo sync NAME
 ```
 
 Repositories must be registered explicitly. Onboarding imports committed state into an independent bare store without modifying or depending on the source checkout. Repository selection defaults to the current item's repository; outside an item, pass `--repo NAME`. Registration authorizes project-local agent resources in its verified managed worktrees. Pi receives per-launch approval, not a saved global trust decision; direnv `.envrc` approval remains separate.
@@ -52,7 +55,7 @@ wi list --json --all
 wi workspace status --json
 ```
 
-An idle agent is not proof of completion. Review the diff and relevant tests. Once intended changes are committed and the checkout is clean, an explicitly authorized `wi merge` integrates into the registered branch; it does not push or archive.
+An idle agent is not proof of completion. Review the diff and relevant tests. Once intended changes are committed and the checkout is clean, an explicitly authorized `wi merge` integrates into the registered branch; it synchronizes a configured upstream base first, but does not push or archive. `--local` deliberately skips that remote preflight. Upstreams are optional URL/branch pairs, inferred from a URL or local origin during new onboarding. --local on repo add disables inference; existing repositories are not retroactively changed. Divergence requires an explicitly authorized `wi repo sync NAME --merge` or `--reset-to-upstream --yes`; never reset integration history without authorization. Pending reconciliation uses a dedicated checkout and explicit `--continue`/`--abort`, not an item workspace. The restricted agent endpoint does not allow upstream changes, status fetching, or synchronization.
 
 Archive when the objective is settled and remaining work has separate follow-up items. Only do so on explicit user instruction. Archiving keeps the task record.
 

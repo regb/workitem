@@ -21,8 +21,14 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
+// Historical migration plans retain their source remote independently of the
+// current registry schema. It is never written into a new repository record.
+type migrationRepositoryRecord struct {
+	model.OwnedRepository
+	OriginURL string `json:"origin_url,omitempty"`
+}
 type RepositoryPlan struct {
-	Record model.OwnedRepository
+	Record migrationRepositoryRecord
 	Source string
 	Common string
 	Pins   []string
@@ -134,11 +140,11 @@ func prepare(root string, ms []model.Manifest) Plan {
 					name += "-" + strings.ToLower(id[len(id)-6:])
 				}
 				usedNames[name] = true
-				record, err := model.NormalizeOwnedRepository(model.OwnedRepository{ID: id, Name: name, IntegrationBranch: branch, OriginURL: info.Repository.RemoteURL, CreatedAt: p.CreatedAt})
+				record, err := model.NormalizeOwnedRepository(model.OwnedRepository{ID: id, Name: name, IntegrationBranch: branch, CreatedAt: p.CreatedAt})
 				must(err)
 				n = len(p.Repositories)
 				groups[common] = n
-				p.Repositories = append(p.Repositories, RepositoryPlan{Record: record, Source: path, Common: common})
+				p.Repositories = append(p.Repositories, RepositoryPlan{Record: migrationRepositoryRecord{OwnedRepository: record, OriginURL: info.Repository.RemoteURL}, Source: path, Common: common})
 			}
 			if aliases[n] == nil {
 				aliases[n] = map[string]bool{}
@@ -364,7 +370,7 @@ func convert(path string, p Plan) {
 			return err
 		}
 		for _, r := range p.Repositories {
-			b, _ := json.Marshal(r.Record)
+			b, _ := json.Marshal(r.Record.OwnedRepository)
 			if err := repositories.Put([]byte(r.Record.ID), b); err != nil {
 				return err
 			}

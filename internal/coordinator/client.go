@@ -218,6 +218,22 @@ func (c *Client) SetRepositoryArchived(ctx context.Context, command SetRepositor
 	return result, err
 }
 
+func (c *Client) SetRepositoryUpstream(ctx context.Context, command SetRepositoryUpstreamCommand) (SetRepositoryUpstreamResult, error) {
+	var result SetRepositoryUpstreamResult
+	err := c.Call(ctx, MethodSetRepositoryUpstream, command, &result)
+	return result, err
+}
+func (c *Client) RepositoryStatus(ctx context.Context, request RepositoryStatusRequest) (RepositoryStatusResult, error) {
+	var result RepositoryStatusResult
+	err := c.Call(ctx, MethodRepositoryStatus, request, &result)
+	return result, err
+}
+func (c *Client) SyncRepository(ctx context.Context, request RepositorySyncRequest) (RepositorySyncResult, error) {
+	var result RepositorySyncResult
+	err := c.Call(ctx, MethodRepositorySync, request, &result)
+	return result, err
+}
+
 func (c *Client) ListRepositories(ctx context.Context) ([]model.OwnedRepository, error) {
 	var result []model.OwnedRepository
 	err := c.Call(ctx, MethodListRepositories, struct{}{}, &result)

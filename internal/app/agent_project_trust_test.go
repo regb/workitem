@@ -58,7 +58,7 @@ func TestAgentProjectTrustRequiresVerifiedRegisteredManagedWorktree(t *testing.T
 			t.Cleanup(func() { client.Shutdown(context.Background()); <-done })
 			if mode != "unregistered" {
 				now := time.Now().UTC()
-				if _, err := client.RegisterRepository(ctx, coordinator.RegisterRepositoryCommand{ID: "register", ProtocolVersion: coordinator.ProtocolVersion, Repository: model.OwnedRepository{ID: repoID, Name: "project", IntegrationBranch: "main", CreatedAt: now}, Source: source, CreatedAt: now}); err != nil {
+				if _, err := client.RegisterRepository(ctx, coordinator.RegisterRepositoryCommand{ID: "register", ProtocolVersion: coordinator.ProtocolVersion, Repository: model.OwnedRepository{ID: repoID, Name: "project", IntegrationBranch: "main", CreatedAt: now}, CreatedAt: now}); err != nil {
 					t.Fatal(err)
 				}
 				if mode == "archived repository" {

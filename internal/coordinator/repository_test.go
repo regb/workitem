@@ -15,7 +15,7 @@ import (
 
 func repositoryTestCommand(id, name string) RegisterRepositoryCommand {
 	now := time.Now().UTC()
-	return RegisterRepositoryCommand{ID: "register:" + id, ProtocolVersion: ProtocolVersion, Repository: model.OwnedRepository{ID: id, Name: name, IntegrationBranch: "main", CreatedAt: now}, Source: "/original/source", CreatedAt: now}
+	return RegisterRepositoryCommand{ID: "register:" + id, ProtocolVersion: ProtocolVersion, Repository: model.OwnedRepository{ID: id, Name: name, IntegrationBranch: "main", CreatedAt: now}, CreatedAt: now}
 }
 
 func TestRepositoryRegistrationThroughOperatorEndpoint(t *testing.T) {
@@ -59,7 +59,6 @@ func TestRepositoryRegistrationThroughOperatorEndpoint(t *testing.T) {
 	if err := gitpkg.New("git").ImportBare(ctx, model.BareImportOptions{Source: source, Destination: path, IntegrationBranch: "main"}); err != nil {
 		t.Fatal(err)
 	}
-	command.Source = source
 	result, err := client.RegisterRepository(ctx, command)
 	if err != nil || result.Repository.ID != importTestID {
 		t.Fatalf("result=%+v error=%v", result, err)
@@ -139,7 +138,7 @@ func TestRepositoryRegistrationIsAtomicAndIdempotent(t *testing.T) {
 		t.Fatalf("duplicate=%+v error=%v", duplicate, err)
 	}
 	changed := command
-	changed.Source = "/different/source"
+	changed.Repository.Name = "different-name"
 	if _, err := db.RegisterRepository(changed); err == nil {
 		t.Fatal("accepted changed command input")
 	}
@@ -201,7 +200,9 @@ func TestMalformedRepositoryCommandsLeaveNoRecords(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	for _, change := range []func(*RegisterRepositoryCommand){func(c *RegisterRepositoryCommand) { c.Repository.ID = "../escape" }, func(c *RegisterRepositoryCommand) { c.Repository.Name = "../escape" }, func(c *RegisterRepositoryCommand) { c.Repository.IntegrationBranch = "main.lock" }, func(c *RegisterRepositoryCommand) { c.Source = "https://user:password@example.com/repo.git" }, func(c *RegisterRepositoryCommand) { c.ProtocolVersion++ }, func(c *RegisterRepositoryCommand) { c.CreatedAt = time.Time{} }} {
+	for _, change := range []func(*RegisterRepositoryCommand){func(c *RegisterRepositoryCommand) { c.Repository.ID = "../escape" }, func(c *RegisterRepositoryCommand) { c.Repository.Name = "../escape" }, func(c *RegisterRepositoryCommand) { c.Repository.IntegrationBranch = "main.lock" }, func(c *RegisterRepositoryCommand) {
+		c.Repository.Upstream = &model.RepositoryUpstream{URL: "https://user:password@example.com/repo.git", Branch: "main"}
+	}, func(c *RegisterRepositoryCommand) { c.ProtocolVersion++ }, func(c *RegisterRepositoryCommand) { c.CreatedAt = time.Time{} }} {
 		c := repositoryTestCommand(importTestID, "repo")
 		change(&c)
 		if _, err := db.RegisterRepository(c); err == nil {

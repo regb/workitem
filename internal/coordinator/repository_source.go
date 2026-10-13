@@ -21,10 +21,11 @@ type RepositorySourceRequest struct {
 	SkipLabels   bool   `json:"skip_labels,omitempty"`
 }
 type RepositorySourceResult struct {
-	Repository model.OwnedRepository `json:"repository"`
-	GitDir     string                `json:"git_dir,omitempty"`
-	Commit     string                `json:"commit"`
-	Labels     []string              `json:"labels"`
+	Repository  model.OwnedRepository `json:"repository"`
+	GitDir      string                `json:"git_dir,omitempty"`
+	Commit      string                `json:"commit"`
+	PendingSync bool                  `json:"pending_sync,omitempty"`
+	Labels      []string              `json:"labels"`
 }
 
 func (d *Database) resolveRepository(r *model.Repository) error {
@@ -52,7 +53,10 @@ func (d *Database) resolveRepository(r *model.Repository) error {
 	r.RootAtCreation = path
 	r.GitCommonDir = path
 	r.CurrentRoot = ""
-	r.RemoteURL = repo.OriginURL
+	r.RemoteURL = ""
+	if repo.Upstream != nil {
+		r.RemoteURL = repo.Upstream.URL
+	}
 	return nil
 }
 func (d *Database) RepositorySource(ctx context.Context, request RepositorySourceRequest) (RepositorySourceResult, error) {
@@ -68,8 +72,13 @@ func (d *Database) RepositorySource(ctx context.Context, request RepositorySourc
 		if err != nil {
 			return RepositorySourceResult{}, err
 		}
+		var pending RepositorySyncPlan
+		pendingSync, err := d.ReadProjection(repositorySyncProjection, r.ID, &pending)
+		if err != nil {
+			return RepositorySourceResult{}, err
+		}
 		if request.MetadataOnly {
-			return RepositorySourceResult{Repository: r, GitDir: path}, nil
+			return RepositorySourceResult{Repository: r, GitDir: path, PendingSync: pendingSync}, nil
 		}
 		rev := request.Revision
 		if _, relative := gitpkg.WorktreeRelativeRevision(rev); relative {
@@ -95,7 +104,7 @@ func (d *Database) RepositorySource(ctx context.Context, request RepositorySourc
 				labels = project.Item.Defaults.Labels
 			}
 		}
-		return RepositorySourceResult{Repository: r, GitDir: path, Commit: sha, Labels: labels}, nil
+		return RepositorySourceResult{Repository: r, GitDir: path, Commit: sha, Labels: labels, PendingSync: pendingSync}, nil
 	}
 	return RepositorySourceResult{}, fmt.Errorf("unknown repository %q; onboard it with wi repo add NAME --from SOURCE", request.Selector)
 }

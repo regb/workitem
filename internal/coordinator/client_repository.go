@@ -38,7 +38,10 @@ func (c *Client) resolveResponseRepositories(ctx context.Context, result any) er
 			r.IntegrationBranch = s.Repository.IntegrationBranch
 			r.RootAtCreation = s.GitDir
 			r.GitCommonDir = s.GitDir
-			r.RemoteURL = s.Repository.OriginURL
+			r.RemoteURL = ""
+			if s.Repository.Upstream != nil {
+				r.RemoteURL = s.Repository.Upstream.URL
+			}
 			return nil
 		}
 		switch v.Kind() {

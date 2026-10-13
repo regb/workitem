@@ -23,15 +23,16 @@ func TestRepositoryListAlignsColumns(t *testing.T) {
 		t.Fatalf("raw tabs in output: %q", output.String())
 	}
 	lines := strings.Split(strings.TrimSuffix(output.String(), "\n"), "\n")
-	if len(lines) != len(repos) {
+	if len(lines) != len(repos)+1 {
 		t.Fatalf("lines = %q", lines)
 	}
-	branchColumn := strings.Index(lines[0], repos[0].IntegrationBranch)
+	branchColumn := strings.Index(lines[0], "INTEGRATION")
+	lines = lines[1:]
 	for index, repo := range repos {
 		if strings.Index(lines[index], repo.IntegrationBranch) != branchColumn {
 			t.Fatalf("unaligned columns: %q", output.String())
 		}
-		if fields := strings.Fields(lines[index]); len(fields) != 2 || fields[0] != repo.Name || fields[1] != repo.IntegrationBranch {
+		if fields := strings.Fields(lines[index]); len(fields) != 4 || fields[0] != repo.Name || fields[1] != repo.IntegrationBranch || fields[2] != "active" || fields[3] != "local-only" {
 			t.Fatalf("row = %q", lines[index])
 		}
 	}

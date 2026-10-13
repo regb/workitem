@@ -693,6 +693,57 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			return
 		}
 		result = commandResult
+	case MethodRepositoryStatus, MethodRepositorySync:
+		operationCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		var value any
+		var operationErr error
+		if request.Method == MethodRepositoryStatus {
+			var query RepositoryStatusRequest
+			if err := json.Unmarshal(request.Payload, &query); err != nil {
+				s.writeError(conn, request.ID, "invalid_request", err.Error())
+				return
+			}
+			value, operationErr = s.repositoryStatus(operationCtx, query)
+		} else {
+			var command RepositorySyncRequest
+			if err := json.Unmarshal(request.Payload, &command); err != nil {
+				s.writeError(conn, request.ID, "invalid_request", err.Error())
+				return
+			}
+			value, operationErr = s.repositorySync(operationCtx, command)
+		}
+		if operationErr != nil {
+			s.writeError(conn, request.ID, "repository_error", operationErr.Error())
+			return
+		}
+		result = value
+	case MethodSetRepositoryUpstream:
+		var command SetRepositoryUpstreamCommand
+		if err := json.Unmarshal(request.Payload, &command); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		operationCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_, guard, err := s.repositoryAccess(operationCtx, command.RepositoryID, false)
+		if err == nil {
+			defer guard.Release()
+			if command.Upstream != nil {
+				err = command.Upstream.Validate()
+			}
+		}
+		var value SetRepositoryUpstreamResult
+		if err == nil {
+			s.domainMu.Lock()
+			value, err = s.database.SetRepositoryUpstream(command)
+			s.domainMu.Unlock()
+		}
+		if err != nil {
+			s.writeError(conn, request.ID, "repository_error", err.Error())
+			return
+		}
+		result = value
 	case MethodRenameRepository:
 		var command RenameRepositoryCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
@@ -741,7 +792,7 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		}
 		if access == AccessAgent {
 			value.GitDir = ""
-			value.Repository.OriginURL = ""
+			value.Repository.Upstream = nil
 		}
 		result = value
 	case MethodRegisterRepository:
