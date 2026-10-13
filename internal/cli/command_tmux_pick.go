@@ -3,14 +3,18 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/rivo/uniseg"
 
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
@@ -98,12 +102,33 @@ func pickerCandidates(res app.WorkListResult, agents map[string]string, currentI
 
 func selectWithFZF(ctx context.Context, cfg Config, candidates []pickerCandidate, noPreview bool) (pickerCandidate, bool, error) {
 	byID := make(map[string]pickerCandidate, len(candidates))
-	itemWidth, repositoryWidth := pickerColumnWidths(candidates)
+	snapshot := pickerSnapshot(candidates)
+	dir, err := os.MkdirTemp("", "wi-picker-")
+	if err != nil {
+		return pickerCandidate{}, false, err
+	}
+	defer os.RemoveAll(dir)
+	path := filepath.Join(dir, "snapshot.json")
+	data, err := json.Marshal(snapshot)
+	if err != nil {
+		return pickerCandidate{}, false, err
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return pickerCandidate{}, false, err
+	}
 	var input strings.Builder
+	if err := snapshot.rows(&input, 78); err != nil {
+		return pickerCandidate{}, false, err
+	}
 	for _, candidate := range candidates {
 		byID[candidate.Item.ID] = candidate
-		fmt.Fprintf(&input, "%s\t%s\n", candidate.Item.ID, renderPickerCandidate(candidate, itemWidth, repositoryWidth))
 	}
+	self := "wi"
+	if cfg.App != nil && strings.TrimSpace(cfg.App.SelfPath) != "" {
+		self = cfg.App.SelfPath
+	}
+	render := shellQuotePicker(self) + " internal-picker-render " + shellQuotePicker(path) + " " + shellQuotePicker(self)
+	bindings := pickerBindings(candidates) + ",start:unbind(result)+transform(" + render + "),resize:transform(" + render + ")"
 
 	executable := strings.TrimSpace(cfg.Env["WI_FZF"])
 	if executable == "" {
@@ -111,26 +136,34 @@ func selectWithFZF(ctx context.Context, cfg Config, candidates []pickerCandidate
 	}
 	fzfArgs := []string{
 		"--ansi",
+		// A far-right match must not scroll each row by a different amount.
+		"--no-hscroll",
+		"--no-wrap",
 		"--delimiter=\t",
-		"--with-nth=2",
+		"--with-nth=2..",
+		"--nth=2..",
+		"--id-nth=1",
+		"--scrollbar=",
+		"--ellipsis=",
 		"--prompt=wi> ",
-		"--header=" + renderPickerHeader(itemWidth, repositoryWidth),
+		"--header=" + pickerDim + "FROZEN SNAPSHOT · reopen the picker to refresh" + pickerReset + "\n" + snapshot.header(78),
 		"--header-first",
 		"--height=100%",
 		"--layout=reverse",
 		"--cycle",
 		"--border=none",
+		"--padding=0",
+		"--margin=0",
 		"--pointer=▌",
-		"--bind=" + pickerBindings(candidates),
+		"--bind=" + bindings,
 	}
 	if !noPreview {
-		self := strings.TrimSpace(cfg.App.SelfPath)
-		if self == "" {
-			self = "wi"
-		}
 		fzfArgs = append(fzfArgs,
 			"--preview="+pickerPreviewCommand(self),
-			"--preview-window=right:55%:wrap",
+			// The threshold is preview width, not terminal width. At 40%,
+			// a preview narrower than 60 cells leaves too little list space.
+			"--preview-window=right:40%:border-rounded:wrap:<60(down:40%:border-rounded:wrap)",
+			"--bind=alt-p:toggle-preview+transform("+render+")",
 			"--preview-label= details + status ",
 		)
 	}
@@ -146,9 +179,9 @@ func selectWithFZF(ctx context.Context, cfg Config, candidates []pickerCandidate
 			return pickerCandidate{}, false, nil
 		}
 		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
-			return pickerCandidate{}, false, fmt.Errorf("fzf is required for interactive wi switch; install fzf or set WI_FZF to a compatible executable")
+			return pickerCandidate{}, false, fmt.Errorf("fzf 0.71+ is required for interactive wi switch; install fzf or set WI_FZF to a compatible executable")
 		}
-		return pickerCandidate{}, false, fmt.Errorf("run work-item picker: %w", err)
+		return pickerCandidate{}, false, fmt.Errorf("run work-item picker (requires fzf 0.71+): %w", err)
 	}
 	line := strings.TrimSpace(output.String())
 	id, _, _ := strings.Cut(line, "\t")
@@ -172,10 +205,10 @@ const (
 )
 
 func pickerBindings(candidates []pickerCandidate) string {
-	bindings := []string{"change:first"}
+	bindings := []string{"change:untrack-current+first+rebind(result)", "result:first+unbind(result)"}
 	for index, candidate := range candidates {
 		if candidate.Current {
-			bindings = append(bindings, fmt.Sprintf("load:pos(%d)", index+1))
+			bindings = append(bindings, fmt.Sprintf("load:pos(%d)+unbind(load)", index+1))
 			break
 		}
 	}
@@ -183,39 +216,21 @@ func pickerBindings(candidates []pickerCandidate) string {
 }
 
 func pickerColumnWidths(candidates []pickerCandidate) (int, int) {
-	itemWidth, repositoryWidth := len("ITEM"), len("REPOSITORY")
+	statusWidth, repositoryWidth := len("STATUS"), len("REPOSITORY")
 	for _, candidate := range candidates {
-		if width := len([]rune(pickerText(candidate.Item.Slug))); width > itemWidth {
-			itemWidth = width
-		}
-		if width := len([]rune(pickerText(candidate.Item.Repository))); width > repositoryWidth {
-			repositoryWidth = width
-		}
+		label, _ := pickerSectionStyle(candidate.Section)
+		statusWidth = max(statusWidth, uniseg.StringWidth(label))
+		repositoryWidth = max(repositoryWidth, uniseg.StringWidth(pickerText(candidate.Item.Repository)))
 	}
-	return max(18, min(itemWidth, 36)), max(18, min(repositoryWidth, 30))
+	return statusWidth, repositoryWidth
 }
 
-func renderPickerCandidate(candidate pickerCandidate, itemWidth, repositoryWidth int) string {
-	marker := "  "
-	if candidate.Current {
-		marker = pickerBold + pickerMagenta + "● " + pickerReset
-	}
-	title := pickerText(candidate.Item.Title)
-	if title == pickerText(candidate.Item.Slug) {
-		title = ""
-	}
-	return marker + pickerSectionBadge(candidate.Section) + "  " +
-		pickerBold + pickerCell(candidate.Item.Slug, itemWidth) + pickerReset + "  " +
-		pickerDim + pickerCell(candidate.Item.Repository, repositoryWidth) + pickerReset + "  " + title
+func pickerSectionBadge(section string, width int) string {
+	label, color := pickerSectionStyle(section)
+	return pickerBold + color + pickerDisplayCell(label, width) + pickerReset
 }
 
-func renderPickerHeader(itemWidth, repositoryWidth int) string {
-	return pickerDim + "  FROZEN SNAPSHOT · reopen the picker to refresh" + pickerReset + "\n" +
-		pickerBold + "  " + pickerCell("STATUS", 9) + "  " +
-		pickerCell("ITEM", itemWidth) + "  " + pickerCell("REPOSITORY", repositoryWidth) + "  TITLE" + pickerReset
-}
-
-func pickerSectionBadge(section string) string {
+func pickerSectionStyle(section string) (string, string) {
 	label, color := pickerText(section), pickerBlue
 	switch label {
 	case "NEEDS ATTENTION":
@@ -229,18 +244,7 @@ func pickerSectionBadge(section string) string {
 	case "BACKLOG":
 		label, color = "BACKLOG", pickerCyan
 	}
-	return pickerBold + color + pickerCell(label, 9) + pickerReset
-}
-
-func pickerCell(value string, width int) string {
-	runes := []rune(pickerText(value))
-	if len(runes) > width {
-		if width <= 1 {
-			return string(runes[:width])
-		}
-		runes = append(runes[:width-1], '…')
-	}
-	return string(runes) + strings.Repeat(" ", width-len(runes))
+	return label, color
 }
 
 func pickerText(value string) string {

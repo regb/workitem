@@ -13,7 +13,7 @@ Install these programs before building `wi`:
 - [Git](https://git-scm.com/)
 - [Pi](https://pi.dev)
 - [tmux](https://github.com/tmux/tmux) for interactive TUI mode
-- [fzf](https://github.com/junegunn/fzf) for the optional `wi switch` picker
+- [fzf](https://github.com/junegunn/fzf) 0.71+ for the optional `wi switch` picker
 
 Headless agents do not require tmux or fzf. Pi must be installed and configured for the model provider you intend to use. The Wi skill is embedded in the Wi executable. At runtime startup, the Pi driver exports a private temporary copy and passes it explicitly with `--skill`; do not add a separate copy to Pi configuration. Global skills and settings are not modified.
 

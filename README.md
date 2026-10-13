@@ -93,7 +93,7 @@ Use `wi help <command>` for current flags and safety rules.
 - Git
 - [Pi](https://pi.dev) for the default packaged agent driver
 - tmux for interactive TUI runtimes
-- fzf for the optional `wi switch` picker
+- fzf 0.71+ for the optional `wi switch` picker
 
 Headless runtimes do not require tmux or fzf.
 

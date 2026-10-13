@@ -49,25 +49,30 @@ func TestPickerBindingsSelectCurrentAndResetFilteredCursor(t *testing.T) {
 		{Item: app.WorkListItem{ID: "two"}, Current: true},
 		{Item: app.WorkListItem{ID: "three"}},
 	}
-	if got := pickerBindings(candidates); got != "change:first,load:pos(2)" {
+	if got := pickerBindings(candidates); got != "change:untrack-current+first+rebind(result),result:first+unbind(result),load:pos(2)+unbind(load)" {
 		t.Fatalf("bindings = %q", got)
 	}
-	if got := pickerBindings(candidates[:1]); got != "change:first" {
+	if got := pickerBindings(candidates[:1]); got != "change:untrack-current+first+rebind(result),result:first+unbind(result)" {
 		t.Fatalf("bindings without current item = %q", got)
 	}
 }
 
 func TestPickerRowsUseStyledFixedWidthColumns(t *testing.T) {
 	candidate := pickerCandidate{Section: "NEEDS ATTENTION", Current: true, Item: app.WorkListItem{Slug: "a-very-long-item-name", Repository: "owner/repository", Title: "Readable title"}}
-	row := renderPickerCandidate(candidate, 12, 18)
-	if !strings.Contains(row, pickerMagenta+"● ") || !strings.Contains(row, pickerYellow+"ATTENTION") || !strings.Contains(row, "a-very-long…") || !strings.Contains(row, pickerDim+"owner/repository") {
+	snapshot := pickerSnapshot([]pickerCandidate{candidate})
+	var output strings.Builder
+	if err := snapshot.rows(&output, 80); err != nil {
+		t.Fatal(err)
+	}
+	row := output.String()
+	if !strings.Contains(row, pickerMagenta+"● ") || !strings.Contains(row, pickerYellow+"ATTENTION") || !strings.Contains(row, pickerBold+"Readable title") || !strings.Contains(row, pickerDim+"owner/repository") {
 		t.Fatalf("styled row = %q", row)
 	}
-	if badge := pickerSectionBadge("BACKLOG"); !strings.Contains(badge, pickerCyan+"BACKLOG") {
+	if badge := pickerSectionBadge("BACKLOG", 9); !strings.Contains(badge, pickerCyan+"BACKLOG") {
 		t.Fatalf("backlog badge = %q", badge)
 	}
-	header := renderPickerHeader(12, 18)
-	if !strings.Contains(header, "FROZEN SNAPSHOT") || !strings.Contains(header, "STATUS") || !strings.Contains(header, "ITEM") || !strings.Contains(header, "REPOSITORY") {
+	header := snapshot.header(80)
+	if !strings.Contains(header, "STATUS") || !strings.Contains(header, "ITEM") || !strings.Contains(header, "REPOSITORY") {
 		t.Fatalf("header = %q", header)
 	}
 }

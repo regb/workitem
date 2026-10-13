@@ -48,6 +48,9 @@ type Config struct {
 
 func Main(ctx context.Context, args []string) int {
 	env := environMap(os.Environ())
+	if len(args) > 0 && args[0] == "internal-picker-render" {
+		return runPickerRender(args[1:], env, os.Stdout, os.Stderr)
+	}
 	if versionCommandRequested(args) {
 		return Run(ctx, args, Config{Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, Env: env})
 	}

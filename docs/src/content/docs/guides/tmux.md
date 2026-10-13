@@ -19,7 +19,7 @@ Without an item, `switch` opens an `fzf` picker:
 wi switch
 ```
 
-The picker shows working and waiting items first, followed by backlog items in a distinct color. It initially selects the current item when that item is present. Typing a filter moves the cursor to the first match. Selecting a waiting item resumes it; selecting a backlog item starts it. Either choice then enters the item's TUI.
+The picker shows working and waiting items first, followed by backlog items in a distinct color. It initially selects the current item when that item is present. Typing a filter moves the cursor to the first match. Rows show **status, title, repository**, in that order. Status and repository widths come from the longest values in the full candidate snapshot and stay stable while filtering. The title takes the remaining list-pane width and truncates at the end rather than wrapping. Resizing the terminal or toggling the preview recalculates the title width without refreshing candidates or changing the selected item. Full titles remain searchable even when truncated. The slug stays in the details preview; older items without a title use it as a fallback. The preview uses 40% of the width on wide terminals and moves below the list on narrower terminals, adapting when resized. Press `Alt-P` to hide or show it and give the list the full window. Selecting a waiting item resumes it; selecting a backlog item starts it. Either choice then enters the item's TUI.
 
 ## Navigate by attention
 
