@@ -49,7 +49,7 @@ func TestRepositoryBaseCapturesCurrentWorktreeCommit(t *testing.T) {
 	}
 	common := t.TempDir()
 	current := model.Manifest{Repository: model.Repository{ID: "repo"}, Checkout: model.Checkout{Claim: &model.WorkspaceClaim{Path: root}}}
-	selected := coordinator.RepositorySourceResult{Repository: model.OwnedRepository{ID: "repo", Name: "project"}, GitDir: common}
+	selected := coordinator.RepositorySourceResult{Repository: coordinator.RepositoryView{OwnedRepository: model.OwnedRepository{ID: "repo", Name: "project"}}, GitDir: common}
 	for _, base := range []string{"HEAD", "HEAD~1", "@", "@{-1}", "-", "ORIG_HEAD"} {
 		g := &baseInspector{common: common}
 		got, err := resolveRepositoryBase(context.Background(), base, nested, &current, selected, g)
@@ -66,7 +66,7 @@ func TestRepositoryBaseCapturesCurrentWorktreeCommit(t *testing.T) {
 func TestRepositoryBaseRejectsMissingOrMismatchedContext(t *testing.T) {
 	root, common := t.TempDir(), t.TempDir()
 	current := model.Manifest{Repository: model.Repository{ID: "repo"}, Checkout: model.Checkout{Claim: &model.WorkspaceClaim{Path: root}}}
-	selected := coordinator.RepositorySourceResult{Repository: model.OwnedRepository{ID: "repo", Name: "project"}, GitDir: common}
+	selected := coordinator.RepositorySourceResult{Repository: coordinator.RepositoryView{OwnedRepository: model.OwnedRepository{ID: "repo", Name: "project"}}, GitDir: common}
 	tests := []struct {
 		name      string
 		current   *model.Manifest
@@ -76,7 +76,7 @@ func TestRepositoryBaseRejectsMissingOrMismatchedContext(t *testing.T) {
 	}{
 		{"missing item", nil, root, selected, &baseInspector{common: common}},
 		{"missing claim", &model.Manifest{Repository: current.Repository}, root, selected, &baseInspector{common: common}},
-		{"other repository", &current, root, coordinator.RepositorySourceResult{Repository: model.OwnedRepository{ID: "other"}}, &baseInspector{common: common}},
+		{"other repository", &current, root, coordinator.RepositorySourceResult{Repository: coordinator.RepositoryView{OwnedRepository: model.OwnedRepository{ID: "other"}}}, &baseInspector{common: common}},
 		{"outside checkout", &current, t.TempDir(), selected, &baseInspector{common: common}},
 		{"nested unrelated repository", &current, root, selected, &baseInspector{common: t.TempDir()}},
 		{"failed Git lookup", &current, root, selected, &baseInspector{common: common, err: fmt.Errorf("unknown revision")}},

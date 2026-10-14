@@ -35,7 +35,17 @@ func (c Client) FetchRepositoryUpstream(ctx context.Context, dir string, u model
 	if err := u.Validate(); err != nil {
 		return err
 	}
-	_, err := c.output(ctx, dir, "fetch", "--atomic", "--no-tags", "--no-write-fetch-head", "--", u.URL, "+refs/heads/"+u.Branch+":"+u.Ref())
+	if u.Remote == "" || !strings.HasPrefix(u.Ref(), "refs/remotes/") {
+		return fmt.Errorf("fetch requires an observed Git upstream")
+	}
+	resolved, err := c.output(ctx, dir, "remote", "get-url", "--", u.Remote)
+	if err != nil {
+		return err
+	}
+	if err := model.ValidateRepositorySource(strings.TrimSpace(resolved)); err != nil {
+		return err
+	}
+	_, err = c.output(ctx, dir, "fetch", "--atomic", "--no-tags", "--no-write-fetch-head", "--", u.Remote, "+refs/heads/"+u.Branch+":"+u.Ref())
 	return err
 }
 func (c Client) AheadBehind(ctx context.Context, dir, left, right string) (int, int, error) {

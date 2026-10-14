@@ -15,17 +15,18 @@ import (
 const MethodRepositorySource = "repository_source"
 
 type RepositorySourceRequest struct {
-	Selector     string `json:"selector"`
-	Revision     string `json:"revision,omitempty"`
-	MetadataOnly bool   `json:"metadata_only,omitempty"`
-	SkipLabels   bool   `json:"skip_labels,omitempty"`
+	Selector        string `json:"selector"`
+	Revision        string `json:"revision,omitempty"`
+	MetadataOnly    bool   `json:"metadata_only,omitempty"`
+	SkipLabels      bool   `json:"skip_labels,omitempty"`
+	ObserveUpstream bool   `json:"observe_upstream,omitempty"`
 }
 type RepositorySourceResult struct {
-	Repository  model.OwnedRepository `json:"repository"`
-	GitDir      string                `json:"git_dir,omitempty"`
-	Commit      string                `json:"commit"`
-	PendingSync bool                  `json:"pending_sync,omitempty"`
-	Labels      []string              `json:"labels"`
+	Repository  RepositoryView `json:"repository"`
+	GitDir      string         `json:"git_dir,omitempty"`
+	Commit      string         `json:"commit"`
+	PendingSync bool           `json:"pending_sync,omitempty"`
+	Labels      []string       `json:"labels"`
 }
 
 func (d *Database) resolveRepository(r *model.Repository) error {
@@ -54,9 +55,6 @@ func (d *Database) resolveRepository(r *model.Repository) error {
 	r.GitCommonDir = path
 	r.CurrentRoot = ""
 	r.RemoteURL = ""
-	if repo.Upstream != nil {
-		r.RemoteURL = repo.Upstream.URL
-	}
 	return nil
 }
 func (d *Database) RepositorySource(ctx context.Context, request RepositorySourceRequest) (RepositorySourceResult, error) {
@@ -77,8 +75,15 @@ func (d *Database) RepositorySource(ctx context.Context, request RepositorySourc
 		if err != nil {
 			return RepositorySourceResult{}, err
 		}
+		view := RepositoryView{OwnedRepository: r}
+		if request.ObserveUpstream {
+			view, err = d.repositoryView(ctx, r)
+			if err != nil {
+				return RepositorySourceResult{}, err
+			}
+		}
 		if request.MetadataOnly {
-			return RepositorySourceResult{Repository: r, GitDir: path, PendingSync: pendingSync}, nil
+			return RepositorySourceResult{Repository: view, GitDir: path, PendingSync: pendingSync}, nil
 		}
 		rev := request.Revision
 		if _, relative := gitpkg.WorktreeRelativeRevision(rev); relative {
@@ -104,7 +109,7 @@ func (d *Database) RepositorySource(ctx context.Context, request RepositorySourc
 				labels = project.Item.Defaults.Labels
 			}
 		}
-		return RepositorySourceResult{Repository: r, GitDir: path, Commit: sha, Labels: labels, PendingSync: pendingSync}, nil
+		return RepositorySourceResult{Repository: view, GitDir: path, Commit: sha, Labels: labels, PendingSync: pendingSync}, nil
 	}
 	return RepositorySourceResult{}, fmt.Errorf("unknown repository %q; onboard it with wi repo add NAME --from SOURCE", request.Selector)
 }

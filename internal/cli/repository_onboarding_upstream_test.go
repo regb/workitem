@@ -3,7 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/coordinator"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +38,7 @@ func TestRepositoryOnboardingInfersIntegrationDestination(t *testing.T) {
 			if err := runRepository(ctx, args, cfg, true); err != nil {
 				t.Fatal(err)
 			}
-			result, err := cfg.Coordinator.RepositorySource(ctx, c.name, "")
+			result, err := cfg.Coordinator.RepositoryViewSource(ctx, c.name, "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -64,7 +64,7 @@ func TestRepositoryOnboardingInfersIntegrationDestination(t *testing.T) {
 	if err := runRepository(ctx, []string{"add", "tracked", "--from", origin}, cfg, false); err != nil {
 		t.Fatal(err)
 	}
-	tracked, err := cfg.Coordinator.RepositorySource(ctx, "tracked", "")
+	tracked, err := cfg.Coordinator.RepositoryViewSource(ctx, "tracked", "")
 	if err != nil || tracked.Repository.Upstream == nil || tracked.Repository.Upstream.Branch != "trunk" {
 		t.Fatalf("tracked=%+v err=%v", tracked, err)
 	}
@@ -75,7 +75,7 @@ func TestRepositoryOnboardingInfersIntegrationDestination(t *testing.T) {
 	if err := runRepository(ctx, []string{"add", "relative", "--from", nested}, cfg, false); err != nil {
 		t.Fatal(err)
 	}
-	relative, err := cfg.Coordinator.RepositorySource(ctx, "relative", "")
+	relative, err := cfg.Coordinator.RepositoryViewSource(ctx, "relative", "")
 	if err != nil || relative.Repository.Upstream.URL != filepath.Join(filepath.Dir(nested), "remote.git") {
 		t.Fatalf("relative=%+v err=%v", relative, err)
 	}
@@ -91,7 +91,7 @@ func TestRepositoryUpstreamJSONAndExplicitConfiguration(t *testing.T) {
 	if err := runRepository(ctx, []string{"upstream", "project", origin, "--branch", "release/stable"}, cfg, true); err != nil {
 		t.Fatal(err)
 	}
-	source, err := cfg.Coordinator.RepositorySource(ctx, "project", "")
+	source, err := cfg.Coordinator.RepositoryViewSource(ctx, "project", "")
 	if err != nil || source.Repository.Upstream.Branch != "release/stable" {
 		t.Fatalf("source=%+v err=%v", source, err)
 	}
@@ -99,11 +99,11 @@ func TestRepositoryUpstreamJSONAndExplicitConfiguration(t *testing.T) {
 	if err := runRepository(ctx, []string{"list", "--all"}, cfg, true); err != nil {
 		t.Fatal(err)
 	}
-	var repos []model.OwnedRepository
+	var repos []coordinator.RepositoryView
 	if err := json.Unmarshal(out.Bytes(), &repos); err != nil || len(repos) != 1 || repos[0].Upstream.URL != origin {
 		t.Fatalf("list=%s err=%v", out, err)
 	}
-	if strings.Contains(out.String(), "origin_url") || strings.Contains(out.String(), `"remote"`) {
+	if strings.Contains(out.String(), "origin_url") {
 		t.Fatal(out.String())
 	}
 	out.Reset()

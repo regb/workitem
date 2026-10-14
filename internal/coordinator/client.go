@@ -220,16 +220,25 @@ func (c *Client) SetRepositoryArchived(ctx context.Context, command SetRepositor
 
 func (c *Client) SetRepositoryUpstream(ctx context.Context, command SetRepositoryUpstreamCommand) (SetRepositoryUpstreamResult, error) {
 	var result SetRepositoryUpstreamResult
+	if err := c.requireGitTracking(ctx, command.RepositoryID); err != nil {
+		return result, err
+	}
 	err := c.Call(ctx, MethodSetRepositoryUpstream, command, &result)
 	return result, err
 }
 func (c *Client) RepositoryStatus(ctx context.Context, request RepositoryStatusRequest) (RepositoryStatusResult, error) {
 	var result RepositoryStatusResult
+	if err := c.requireGitTracking(ctx, request.Selector); err != nil {
+		return result, err
+	}
 	err := c.Call(ctx, MethodRepositoryStatus, request, &result)
 	return result, err
 }
 func (c *Client) SyncRepository(ctx context.Context, request RepositorySyncRequest) (RepositorySyncResult, error) {
 	var result RepositorySyncResult
+	if err := c.requireGitTracking(ctx, request.Selector); err != nil {
+		return result, err
+	}
 	err := c.Call(ctx, MethodRepositorySync, request, &result)
 	return result, err
 }

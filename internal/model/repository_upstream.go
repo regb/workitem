@@ -1,7 +1,6 @@
 package model
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -26,14 +25,22 @@ func ValidateRepositoryBranch(branch string) error {
 	return nil
 }
 
-// RepositoryUpstream is the remote destination of the integration branch.
-// Git remote aliases and the onboarding source are not repository identity.
+// RepositoryUpstream is a Git configuration observation, not registry intent.
+// URL and branch also form the input to an explicit tracking configuration edit.
 type RepositoryUpstream struct {
-	URL    string `json:"url"`
-	Branch string `json:"branch"`
+	URL         string `json:"url"`
+	Branch      string `json:"branch"`
+	Remote      string `json:"remote,omitempty"`
+	TrackingRef string `json:"tracking_ref,omitempty"`
 }
 
 func (u RepositoryUpstream) Validate() error {
+	if u.Remote != "" && (u.Remote == "." || strings.Contains(u.Remote, "/") || ValidateRepositoryBranch(u.Remote) != nil) {
+		return fmt.Errorf("upstream remote must be a simple named remote")
+	}
+	if u.TrackingRef != "" && (u.Remote == "" || !strings.HasPrefix(u.TrackingRef, "refs/remotes/") || ValidateRepositoryBranch(strings.TrimPrefix(u.TrackingRef, "refs/remotes/")) != nil) {
+		return fmt.Errorf("upstream tracking ref must be under refs/remotes/")
+	}
 	if strings.HasPrefix(u.URL, "-") || (!strings.Contains(u.URL, ":") && !filepath.IsAbs(u.URL)) {
 		return fmt.Errorf("upstream must be a Git URL or absolute repository path")
 	}
@@ -47,11 +54,17 @@ func (u RepositoryUpstream) Validate() error {
 	return nil
 }
 func ParseRepositoryUpstream(url, branch string) (*RepositoryUpstream, error) {
-	u := &RepositoryUpstream{URL: url, Branch: branch}
+	u := &RepositoryUpstream{URL: url, Branch: branch, Remote: "origin", TrackingRef: "refs/remotes/origin/" + branch}
 	return u, u.Validate()
 }
 func (u RepositoryUpstream) String() string { return u.URL + " branch " + u.Branch }
 func (u RepositoryUpstream) Ref() string {
-	hash := sha256.Sum256([]byte(u.URL + "\x00" + u.Branch))
-	return fmt.Sprintf("refs/wi/upstream/%x", hash)
+	if u.TrackingRef != "" {
+		return u.TrackingRef
+	}
+	remote := u.Remote
+	if remote == "" {
+		remote = "origin"
+	}
+	return "refs/remotes/" + remote + "/" + u.Branch
 }

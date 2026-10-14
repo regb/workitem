@@ -169,6 +169,18 @@ func (c Client) ImportBare(ctx context.Context, opts BareImportOptions) error {
 			return err
 		}
 	}
+	if opts.UpstreamBranch != "" {
+		if remote == "" {
+			return fmt.Errorf("tracking requires a remote URL")
+		}
+		next, err := model.ParseRepositoryUpstream(remote, opts.UpstreamBranch)
+		if err != nil {
+			return err
+		}
+		if err := c.SetBranchUpstream(ctx, path, opts.IntegrationBranch, nil, next); err != nil {
+			return err
+		}
+	}
 	for _, sha := range opts.RequiredCommits {
 		if _, err := c.output(ctx, path, "rev-parse", "--verify", sha+"^{commit}"); err != nil {
 			if _, err := c.output(ctx, path, "fetch", "--no-tags", "--", opts.Source, sha); err != nil {

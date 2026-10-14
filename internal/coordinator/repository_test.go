@@ -201,7 +201,7 @@ func TestMalformedRepositoryCommandsLeaveNoRecords(t *testing.T) {
 	}
 	defer db.Close()
 	for _, change := range []func(*RegisterRepositoryCommand){func(c *RegisterRepositoryCommand) { c.Repository.ID = "../escape" }, func(c *RegisterRepositoryCommand) { c.Repository.Name = "../escape" }, func(c *RegisterRepositoryCommand) { c.Repository.IntegrationBranch = "main.lock" }, func(c *RegisterRepositoryCommand) {
-		c.Repository.Upstream = &model.RepositoryUpstream{URL: "https://user:password@example.com/repo.git", Branch: "main"}
+		c.Repository.Name = "--invalid-name"
 	}, func(c *RegisterRepositoryCommand) { c.ProtocolVersion++ }, func(c *RegisterRepositoryCommand) { c.CreatedAt = time.Time{} }} {
 		c := repositoryTestCommand(importTestID, "repo")
 		change(&c)

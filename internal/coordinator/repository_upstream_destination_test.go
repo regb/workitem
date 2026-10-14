@@ -9,13 +9,13 @@ import (
 	"github.com/regb/workitem/internal/model"
 )
 
-func TestRepositoryUpstreamDoesNotDependOnGitRemoteAliases(t *testing.T) {
+func TestRepositoryUpstreamRequiresItsGitRemote(t *testing.T) {
 	f := newSyncFixture(t)
 	f.status(true)
 	remote := f.commit(f.origin, "remote", "remote\n", "remote")
 	syncGit(t, f.store, "remote", "remove", "origin")
 	result, err := f.sync("ff")
-	if err != nil || result.LocalSHA != remote {
+	if err == nil || result.LocalSHA == remote {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 }
@@ -34,8 +34,9 @@ func TestRepositoryUpstreamChangesDoNotReuseOtherDestinationObservations(t *test
 			} else {
 				next.Branch = "other-branch"
 			}
+			next.TrackingRef = "refs/remotes/" + next.Remote + "/" + next.Branch
 			id, _ := model.NewID()
-			if _, err := f.server.database.SetRepositoryUpstream(SetRepositoryUpstreamCommand{ID: id, ProtocolVersion: ProtocolVersion, RepositoryID: importTestID, PreviousUpstream: old.Repository.Upstream, Upstream: &next, CreatedAt: time.Now().UTC()}); err != nil {
+			if _, err := f.server.setRepositoryUpstream(context.Background(), SetRepositoryUpstreamCommand{ID: id, ProtocolVersion: ProtocolVersion, RepositoryID: importTestID, PreviousUpstream: old.Repository.Upstream, Upstream: &next, CreatedAt: time.Now().UTC()}); err != nil {
 				t.Fatal(err)
 			}
 			status, err := f.server.repositoryStatus(context.Background(), RepositoryStatusRequest{Selector: "project"})

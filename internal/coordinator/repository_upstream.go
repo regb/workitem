@@ -21,10 +21,10 @@ type SetRepositoryUpstreamCommand struct {
 }
 
 type SetRepositoryUpstreamResult struct {
-	Repository model.OwnedRepository `json:"repository"`
-	Changed    bool                  `json:"changed"`
-	Sequence   uint64                `json:"sequence"`
-	Duplicate  bool                  `json:"duplicate,omitempty"`
+	Repository RepositoryView `json:"repository"`
+	Changed    bool           `json:"changed"`
+	Sequence   uint64         `json:"sequence"`
+	Duplicate  bool           `json:"duplicate,omitempty"`
 }
 
 type repositoryUpstreamOutcome struct {
@@ -32,14 +32,24 @@ type repositoryUpstreamOutcome struct {
 	Result  SetRepositoryUpstreamResult  `json:"repository_upstream_result"`
 }
 
-func (d *Database) SetRepositoryUpstream(command SetRepositoryUpstreamCommand) (SetRepositoryUpstreamResult, error) {
+func validateRepositoryUpstreamCommand(command SetRepositoryUpstreamCommand) error {
 	if command.ID == "" || compactIdentifier(command.ID, 200) != command.ID || command.ProtocolVersion != ProtocolVersion || command.CreatedAt.IsZero() || !model.ValidID(command.RepositoryID) {
-		return SetRepositoryUpstreamResult{}, fmt.Errorf("valid repository upstream identity, protocol, and timestamp are required")
+		return fmt.Errorf("valid repository upstream identity, protocol, and timestamp are required")
 	}
 	if command.Upstream != nil {
 		if err := command.Upstream.Validate(); err != nil {
-			return SetRepositoryUpstreamResult{}, err
+			return err
 		}
+	}
+	if command.PreviousUpstream != nil {
+		return command.PreviousUpstream.Validate()
+	}
+	return nil
+}
+
+func (d *Database) recordRepositoryUpstream(command SetRepositoryUpstreamCommand, observed *model.RepositoryUpstream) (SetRepositoryUpstreamResult, error) {
+	if err := validateRepositoryUpstreamCommand(command); err != nil {
+		return SetRepositoryUpstreamResult{}, err
 	}
 	var result SetRepositoryUpstreamResult
 	err := d.db.Update(func(tx *bolt.Tx) error {
@@ -79,14 +89,10 @@ func (d *Database) SetRepositoryUpstream(command SetRepositoryUpstreamCommand) (
 		if err != nil {
 			return err
 		}
-		if !reflect.DeepEqual(repo.Upstream, command.PreviousUpstream) {
-			return fmt.Errorf("repository upstream state changed; retry with its current state")
-		}
-		result = SetRepositoryUpstreamResult{Repository: repo, Changed: !reflect.DeepEqual(repo.Upstream, command.Upstream)}
+		result = SetRepositoryUpstreamResult{Repository: RepositoryView{OwnedRepository: repo, Upstream: observed, UpstreamSource: "git"}, Changed: !reflect.DeepEqual(command.PreviousUpstream, observed)}
 		if result.Changed {
-			repo.Upstream = command.Upstream
 			sequence := decodeUint64(tx.Bucket(bucketMeta).Get(keyGlobalSequence)) + 1
-			payload, _ := json.Marshal(map[string]any{"repository_id": repo.ID, "name": repo.Name, "upstream": repo.Upstream})
+			payload, _ := json.Marshal(map[string]any{"repository_id": repo.ID, "name": repo.Name, "upstream": observed})
 			eventType := "repository.upstream_changed"
 			event := DomainEvent{Sequence: sequence, ID: domainEventID(command.ID, 0), Type: eventType, Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload}
 			if tx.Bucket(bucketEventIDs).Get([]byte(event.ID)) != nil {
@@ -112,7 +118,7 @@ func (d *Database) SetRepositoryUpstream(command SetRepositoryUpstreamCommand) (
 			if err := bucket.Put([]byte(repo.ID), value); err != nil {
 				return err
 			}
-			result.Repository = repo
+			result.Repository = RepositoryView{OwnedRepository: repo, Upstream: observed, UpstreamSource: "git"}
 			result.Sequence = sequence
 		}
 		encoded, err := json.Marshal(repositoryUpstreamOutcome{Command: command, Result: result})

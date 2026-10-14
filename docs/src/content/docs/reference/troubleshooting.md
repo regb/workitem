@@ -147,6 +147,14 @@ git branch --list main
 
 Commit intended source changes before merging. The registered integration branch must not be checked out in the owned store. For another explicit target, dirty paths in its worktree must not overlap incoming paths. `wi merge` does not create the target branch. When targeting the registered integration branch with an upstream configured, it fetches and fast-forward-synchronizes the base first. Use `--local` for deliberate offline integration. If histories diverge, inspect `wi repo status NAME --fetch`, then choose `wi repo sync NAME --merge` or `--reset-to-upstream --yes`. Patch-equivalent commits can have identical trees but incompatible histories; rebasing only the item onto `origin/main` does not repair stale local integration history.
 
+## Repository tracking needs attention
+
+Git configuration in the owned store is the current upstream authority. `wi repo show NAME` reports missing, incomplete, or unsafe tracking. Use `wi repo upstream NAME URL --branch BRANCH` to configure origin and integration branch tracking, or `--clear` to choose local-only operation without deleting origin.
+
+A pending reconciliation keeps its own frozen destination and blocks configuration changes. Changing Git tracking during reconciliation prevents `--continue`; `--abort` remains available and retains manually committed resolution work under a recovery ref.
+
+If a client says the daemon does not support Git-owned tracking, restart the daemon with the installed build before using these repository commands. Do not restart item agents just to update the daemon.
+
 ## Agent status reports a problem
 
 Inspect runtime status and recent events:

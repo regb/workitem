@@ -118,12 +118,18 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (MergeResult
 		var source coordinator.RepositorySourceResult
 		client := &coordinator.Client{SocketPath: a.DaemonSocketPath}
 		if a.DaemonSocketPath != "" {
-			err = client.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: m.Repository.ID, MetadataOnly: true}, &source)
+			err = client.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: m.Repository.ID, MetadataOnly: true, ObserveUpstream: true}, &source)
 			if err != nil {
 				return res, err
 			}
+			if !opts.Local && source.Repository.UpstreamSource != "git" {
+				return res, fmt.Errorf("daemon does not support Git-owned tracking; restart it before merging")
+			}
 			if source.PendingSync {
 				return res, fmt.Errorf("finish or abort pending repository reconciliation before merging")
+			}
+			if source.Repository.UpstreamError != "" && !opts.Local {
+				return res, fmt.Errorf("inspect Git upstream: %s", source.Repository.UpstreamError)
 			}
 			if source.Repository.Upstream != nil && target == source.Repository.IntegrationBranch && !opts.Local {
 				synced, syncErr := client.SyncRepository(ctx, coordinator.RepositorySyncRequest{Selector: m.Repository.ID})
@@ -140,9 +146,12 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (MergeResult
 		defer guard.Release()
 		if a.DaemonSocketPath != "" {
 			var current coordinator.RepositorySourceResult
-			err = client.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: m.Repository.ID, MetadataOnly: true}, &current)
+			err = client.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: m.Repository.ID, MetadataOnly: true, ObserveUpstream: true}, &current)
 			if err != nil {
 				return res, err
+			}
+			if !opts.Local && current.Repository.UpstreamError != "" {
+				return res, fmt.Errorf("Git upstream became invalid during integration preflight: %s", current.Repository.UpstreamError)
 			}
 			if current.PendingSync || !reflect.DeepEqual(current.Repository.Upstream, source.Repository.Upstream) {
 				return res, fmt.Errorf("repository synchronization policy changed; retry merge")

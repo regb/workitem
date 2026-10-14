@@ -12,12 +12,11 @@ import (
 // OwnedRepository is a registered Git store. Its location is derived from its
 // identity and the data root, not from the checkout used to onboard it.
 type OwnedRepository struct {
-	ID                string              `json:"id"`
-	Name              string              `json:"name"`
-	IntegrationBranch string              `json:"integration_branch"`
-	Upstream          *RepositoryUpstream `json:"upstream,omitempty"`
-	CreatedAt         time.Time           `json:"created_at"`
-	Archived          bool                `json:"archived,omitempty"`
+	ID                string    `json:"id"`
+	Name              string    `json:"name"`
+	IntegrationBranch string    `json:"integration_branch"`
+	CreatedAt         time.Time `json:"created_at"`
+	Archived          bool      `json:"archived,omitempty"`
 }
 
 // BareImportOptions is the narrow adapter contract for independent onboarding.
@@ -25,6 +24,7 @@ type BareImportOptions struct {
 	Source            string
 	Destination       string
 	OriginURL         string
+	UpstreamBranch    string
 	IntegrationBranch string
 	RequiredCommits   []string
 }
@@ -46,11 +46,6 @@ func NormalizeOwnedRepository(r OwnedRepository) (OwnedRepository, error) {
 	}
 	if r.CreatedAt.IsZero() {
 		return r, fmt.Errorf("repository created_at is required")
-	}
-	if r.Upstream != nil {
-		if err := r.Upstream.Validate(); err != nil {
-			return r, err
-		}
 	}
 	r.CreatedAt = r.CreatedAt.UTC()
 	return r, nil

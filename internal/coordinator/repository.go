@@ -105,7 +105,7 @@ func (d *Database) RegisterRepository(command RegisterRepositoryCommand) (Regist
 			return err
 		}
 		sequence := decodeUint64(tx.Bucket(bucketMeta).Get(keyGlobalSequence)) + 1
-		payload, _ := json.Marshal(map[string]any{"repository_id": r.ID, "name": r.Name, "integration_branch": r.IntegrationBranch, "upstream": r.Upstream})
+		payload, _ := json.Marshal(map[string]any{"repository_id": r.ID, "name": r.Name, "integration_branch": r.IntegrationBranch})
 		event := DomainEvent{Sequence: sequence, ID: domainEventID(command.ID, 0), Type: "repository.onboarded", Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload}
 		if tx.Bucket(bucketEventIDs).Get([]byte(event.ID)) != nil {
 			return fmt.Errorf("event identity %s already exists", event.ID)

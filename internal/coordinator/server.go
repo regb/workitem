@@ -726,19 +726,7 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		}
 		operationCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		_, guard, err := s.repositoryAccess(operationCtx, command.RepositoryID, false)
-		if err == nil {
-			defer guard.Release()
-			if command.Upstream != nil {
-				err = command.Upstream.Validate()
-			}
-		}
-		var value SetRepositoryUpstreamResult
-		if err == nil {
-			s.domainMu.Lock()
-			value, err = s.database.SetRepositoryUpstream(command)
-			s.domainMu.Unlock()
-		}
+		value, err := s.setRepositoryUpstream(operationCtx, command)
 		if err != nil {
 			s.writeError(conn, request.ID, "repository_error", err.Error())
 			return
@@ -778,11 +766,39 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			s.writeError(conn, request.ID, "database_error", err.Error())
 			return
 		}
-		result = repositories
+		var query struct {
+			ObserveUpstream bool `json:"observe_upstream"`
+		}
+		if err := json.Unmarshal(request.Payload, &query); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		if query.ObserveUpstream {
+			if access == AccessAgent {
+				s.writeError(conn, request.ID, "permission_denied", "agent endpoint does not allow Git tracking inspection")
+				return
+			}
+			views := make([]RepositoryView, 0, len(repositories))
+			for _, repo := range repositories {
+				view, err := s.database.repositoryView(context.Background(), repo)
+				if err != nil {
+					s.writeError(conn, request.ID, "repository_error", err.Error())
+					return
+				}
+				views = append(views, view)
+			}
+			result = views
+		} else {
+			result = repositories
+		}
 	case MethodRepositorySource:
 		var query RepositorySourceRequest
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
 			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		if access == AccessAgent && query.ObserveUpstream {
+			s.writeError(conn, request.ID, "permission_denied", "agent endpoint does not allow Git tracking inspection")
 			return
 		}
 		value, err := s.database.RepositorySource(context.Background(), query)

@@ -42,7 +42,7 @@ func newSyncFixture(t *testing.T) *syncFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := gitpkg.New("git").ImportBare(context.Background(), model.BareImportOptions{Source: f.origin, Destination: f.store, OriginURL: f.origin, IntegrationBranch: "main"}); err != nil {
+	if err := gitpkg.New("git").ImportBare(context.Background(), model.BareImportOptions{Source: f.origin, Destination: f.store, OriginURL: f.origin, IntegrationBranch: "main", UpstreamBranch: "main"}); err != nil {
 		t.Fatal(err)
 	}
 	syncGit(t, f.store, "config", "user.name", "Test")
@@ -57,7 +57,6 @@ func newSyncFixture(t *testing.T) *syncFixture {
 	}
 	t.Cleanup(func() { f.server.Close() })
 	command := repositoryTestCommand(importTestID, "project")
-	command.Repository.Upstream = &model.RepositoryUpstream{URL: f.origin, Branch: "main"}
 	if _, err := f.server.database.RegisterRepository(command); err != nil {
 		t.Fatal(err)
 	}
@@ -322,60 +321,62 @@ func TestRepositorySyncConcurrentRequestsRefuseActiveIntegration(t *testing.T) {
 }
 
 func TestRepositoryUpstreamDurableCASAndValidation(t *testing.T) {
-	root := t.TempDir()
-	db, err := OpenDatabase(root)
+	f := newSyncFixture(t)
+	ctx := context.Background()
+	previous := f.status(false).Repository.Upstream
+	target, err := model.ParseRepositoryUpstream(f.origin, "release/stable")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-		t.Fatal(err)
-	}
-	command := SetRepositoryUpstreamCommand{ID: "upstream-1", ProtocolVersion: ProtocolVersion, RepositoryID: importTestID, Upstream: &model.RepositoryUpstream{URL: "https://example.com/project.git", Branch: "main"}, CreatedAt: time.Now().UTC()}
-	first, err := db.SetRepositoryUpstream(command)
+	command := SetRepositoryUpstreamCommand{ID: "upstream-1", ProtocolVersion: ProtocolVersion, RepositoryID: importTestID, PreviousUpstream: previous, Upstream: target, CreatedAt: time.Now().UTC()}
+	first, err := f.server.setRepositoryUpstream(ctx, command)
 	if err != nil || !first.Changed {
 		t.Fatalf("first=%+v err=%v", first, err)
 	}
-	second, err := db.SetRepositoryUpstream(command)
+	second, err := f.server.setRepositoryUpstream(ctx, command)
 	if err != nil || !second.Duplicate {
 		t.Fatalf("second=%+v err=%v", second, err)
 	}
 	stale := command
 	stale.ID = "stale"
 	stale.Upstream = nil
-	if _, err := db.SetRepositoryUpstream(stale); err == nil {
+	if _, err := f.server.setRepositoryUpstream(ctx, stale); err == nil {
 		t.Fatal("stale change accepted")
 	}
 	noop := command
 	noop.ID = "noop"
-	noop.PreviousUpstream = command.Upstream
-	if result, err := db.SetRepositoryUpstream(noop); err != nil || result.Changed {
-		t.Fatalf("no-op=%+v err=%v", result, err)
+	noop.PreviousUpstream = target
+	if result, err := f.server.setRepositoryUpstream(ctx, noop); err != nil || result.Changed {
+		t.Fatalf("noop=%+v err=%v", result, err)
 	}
 	malformed := command
 	malformed.ID = "bad"
 	malformed.Upstream = &model.RepositoryUpstream{URL: "--upload-pack", Branch: "main"}
-	if _, err := db.SetRepositoryUpstream(malformed); err == nil {
+	if _, err := f.server.setRepositoryUpstream(ctx, malformed); err == nil {
 		t.Fatal("invalid remote accepted")
 	}
-	db.Close()
-	db, err = OpenDatabase(root)
+	f.server.Close()
+	f.server, err = NewServer(f.root, f.socket)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
-	repos, err := db.ListRepositories()
-	if err != nil || len(repos) != 1 || repos[0].Upstream == nil {
-		t.Fatalf("repos=%+v err=%v", repos, err)
+	status := f.status(false)
+	if status.Repository.Upstream == nil || status.Repository.Upstream.Branch != "release/stable" {
+		t.Fatalf("status=%+v", status)
+	}
+	raw, err := f.server.database.ListProjection(RepositoryProjection)
+	if err != nil || strings.Contains(string(raw[importTestID]), "upstream") {
+		t.Fatalf("duplicated Git configuration: %s %v", raw[importTestID], err)
 	}
 	pending, _ := json.Marshal(RepositorySyncPlan{ID: importTestID})
-	if err := db.UpdateProjections([]ProjectionUpdate{{Projection: repositorySyncProjection, Key: importTestID, Value: pending}}); err != nil {
+	if err := f.server.database.UpdateProjections([]ProjectionUpdate{{Projection: repositorySyncProjection, Key: importTestID, Value: pending}}); err != nil {
 		t.Fatal(err)
 	}
 	clear := command
 	clear.ID = "clear"
-	clear.PreviousUpstream = command.Upstream
+	clear.PreviousUpstream = target
 	clear.Upstream = nil
-	if _, err := db.SetRepositoryUpstream(clear); err == nil {
+	if _, err := f.server.setRepositoryUpstream(ctx, clear); err == nil {
 		t.Fatal("pending upstream cleared")
 	}
 }

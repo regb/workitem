@@ -23,9 +23,9 @@ wi repo add project --from https://github.com/example/project.git --branch main
 
 Register only repositories whose project-local agent resources you trust. Registration authorizes those resources in verified managed worktrees, including executable Pi extensions, project settings, MCP servers, and package loading. The bundled Pi driver receives `--approve` for each such launch, without writing a global or parent-directory trust decision. Future commits and local changes in those worktrees are covered by this repository-level policy. Unregistered paths and worktrees belonging to another Git store are not automatically approved. Direnv `.envrc` approval remains separate.
 
-The integration policy is stored in the registry; it is not rediscovered when creating or merging items. There is currently no command to change it. The bare store has no permanent integration checkout.
+The integration branch selection is stored in the registry; it is not rediscovered when creating or merging items. There is currently no command to change that selection. Its remote URL and upstream branch tracking are Git configuration, read when needed. The bare store has no permanent integration checkout.
 
-Normal `wi repo list` output shows active repositories by name, integration branch, state, and upstream URL/branch or `local-only`. `wi repo list --all` includes archived repositories, marked `archived`. `--json` retains the stable ID and other registry metadata; `repo show` also prints the ID and Git store path.
+Normal `wi repo list` output shows active repositories by name, integration branch, state, and upstream URL/branch or `untracked`. Untracked means the integration branch has no upstream tracking; an origin remote may still exist. `wi repo list --all` includes archived repositories, marked `archived`. `--json` retains the stable ID and other registry metadata; `repo show` also prints the ID and Git store path.
 
 ## Select the repository for new work
 
@@ -87,9 +87,9 @@ There is no repository deletion command.
 
 ## Fetch, merge, and push
 
-An upstream is the integration branch’s optional remote destination, stored as a URL and branch together. Wi does not keep a separate `origin_url` or the checkout used for onboarding in the repository record.
+Git owns the integration branch’s remote URL and upstream tracking. Wi reads `remote.<name>.url`, `branch.<integration>.remote`, and `branch.<integration>.merge` from the owned store, including repository-local includes. It does not keep a second current upstream configuration in `wi.db`. The database keeps registry identity, integration branch selection, and compact operation history and recovery state.
 
-URL onboarding uses that URL and the integration branch as upstream. Local onboarding uses the checkout’s origin URL when available. If the local integration branch already tracks a differently named origin branch, Wi preserves that remote branch name; otherwise it uses the integration branch name. Without an origin, upstream stays empty. Existing registered repositories are not retroactively configured.
+URL onboarding uses that URL and the integration branch as upstream. Local onboarding uses the checkout’s origin URL when available. If the local integration branch already tracks a differently named origin branch, Wi preserves that remote branch name; otherwise it uses the integration branch name. Without an origin, tracking stays unset. `--local` leaves the branch untracked even if an origin URL is available for manual Git use. Existing repositories are not retroactively configured.
 
 ```bash
 wi repo add project --from git@example.com:owner/project.git --branch main
@@ -100,7 +100,20 @@ wi repo upstream project git@example.com:owner/project.git --branch main
 wi repo upstream project --clear
 ```
 
-Use `repo add --upstream URL --upstream-branch BRANCH` to override inference. URLs are credential-free; authentication stays in Git credential helpers or SSH. The selected URL is stored directly, so later edits to Git remote aliases do not silently change Wi’s integration destination. The original checkout remains independent. Onboarding imports Git history but does not fetch the inferred upstream again.
+Use `repo add --upstream URL --upstream-branch BRANCH` to override inference. URLs are credential-free; authentication stays in Git credential helpers or SSH. `wi repo upstream` updates the owned store’s origin URL, standard remote-tracking fetch refspec, and integration branch tracking in one atomic config edit. `--clear` removes only the branch tracking pair and leaves origin available. The original checkout remains independent. Onboarding imports Git history but does not fetch the inferred upstream again.
+
+The equivalent Git configuration is:
+
+```ini
+[remote "origin"]
+    url = git@example.com:owner/project.git
+    fetch = +refs/heads/*:refs/remotes/origin/*
+[branch "main"]
+    remote = origin
+    merge = refs/heads/main
+```
+
+Direct Git edits are authoritative: changing origin changes the next synchronization destination, and removing branch tracking makes integration local-only. Wi also reads other named remotes and safe custom remote-tracking refspecs set with Git. If tracking keys come from a repository-local include, edit that configuration with Git; Wi refuses to overwrite or shadow the included keys. Local `remote = .`, incomplete tracking, ambiguous values, and fetch destinations outside `refs/remotes/` are rejected rather than guessed. Configuration changes detected during fetch or reconciliation stop integration; no fallback to an older database copy is used.
 
 ```json
 "upstream": {
@@ -109,7 +122,9 @@ Use `repo add --upstream URL --upstream-branch BRANCH` to override inference. UR
 }
 ```
 
-Omitting `upstream` means local-only integration.
+The `upstream` object in list/show/status JSON is a live Git-derived view, marked `upstream_source: "git"`, not stored registry metadata. Missing tracking means local-only integration.
+
+Past events and acknowledged command results remain historical snapshots. They do not override current Git tracking.
 
 ```bash
 wi repo status project          # cached observation; no network access
@@ -129,6 +144,8 @@ wi repo sync project --reset-to-upstream --yes
 `--merge` preserves both histories in a dedicated detached reconciliation checkout. If there are conflicts, the error and `repo status` report its path. Resolve and stage the files there, then run `wi repo sync project --continue`. `--abort` leaves integration unchanged and refuses to discard unrelated dirty or untracked files. Pending reconciliation survives daemon restart and blocks upstream changes and item integration until finished or aborted.
 
 `--reset-to-upstream --yes` replaces the owned integration tip with the fetched upstream. Wi shows the exact tips and up to 20 local-only commit IDs before applying the operation. It checks that the confirmed tips have not changed, and retains the old tip under `refs/wi/recovery/repository-sync/<operation-id>`. Item branches, their workspaces, the original checkout, and the remote remain unchanged. The old commits are removed from the integration branch’s history, not deleted from the store. Synchronization rejects active integration, active Git operations, and a checked-out integration branch.
+
+All single-repository commands default to the current work item's registered repository, resolved from its checkout or item context. This includes `show`, `status`, `sync`, `upstream`, `rename`, `archive`, and `restore`. Explicit names or IDs override context; outside an item, pass a selector. Use `wi repo rename NEW` to rename the current repository and `wi repo upstream URL` to configure it. `list` remains global and `add` requires a new name.
 
 With an upstream configured, `wi merge` synchronizes the registered integration base before rebasing an item. Use `wi merge --local` for deliberate offline/local integration. Other explicitly selected target branches remain local-only. Creation does not fetch; sync before creating an item if you want its base to include current upstream changes.
 

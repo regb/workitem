@@ -18,12 +18,12 @@ Path resolution follows the XDG base directory specification.
 Back up the data root reported by `wi info data-root`. It contains:
 
 - `wi.db`, which stores the repository registry, work-item metadata, lifecycle, labels, event history, and workspace and runtime records
-- `repositories/<id>.git`, the independent Git stores containing integration and task branches and pinned created-from commits
+- `repositories/<id>.git`, the independent Git stores containing native remote/branch-tracking config, integration and task branches, and pinned created-from commits
 - managed worktrees, including any uncommitted state
 - each item's `DESCRIPTION.md`
 - driver-owned native conversations, including Pi JSONL files
 
-Git objects, descriptions, and native conversations are not duplicated in the database. Back up the complete data root rather than selecting individual files.
+Git owns repository objects, refs, remote URLs, and branch tracking. Their current values are read from Git; timestamped observations and historical operation snapshots in `wi.db` are not substitute authority. Descriptions and native conversations are also not duplicated in the database. Back up the complete data root rather than selecting individual files.
 
 Logs, control sockets, cached helper files, and terminal process records live under the XDG state, runtime, or cache directories. They are operational files, not work-item history.
 

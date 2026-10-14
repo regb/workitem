@@ -18,7 +18,9 @@ func TestRepositoryUpstreamOptionalAndValidated(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			repo.Upstream = u
+			if err := u.Validate(); err != nil {
+				t.Fatal(err)
+			}
 			if _, err := NormalizeOwnedRepository(repo); err != nil {
 				t.Fatal(err)
 			}
@@ -38,7 +40,7 @@ func TestRepositoryUpstreamOptionalAndValidated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(bytes), "origin_url") || strings.Contains(string(bytes), `"remote"`) || !strings.Contains(string(bytes), `"url":`) {
+	if strings.Contains(string(bytes), "upstream") || strings.Contains(string(bytes), "origin_url") {
 		t.Fatal(string(bytes))
 	}
 }

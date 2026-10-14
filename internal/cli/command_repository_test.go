@@ -6,14 +6,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 )
 
 func TestRepositoryListAlignsColumns(t *testing.T) {
-	repos := []model.OwnedRepository{
-		{Name: "fleet", IntegrationBranch: "main", ID: "first"},
-		{Name: "travel-topology-monorepo", IntegrationBranch: "master", ID: "second"},
-		{Name: "workitem", IntegrationBranch: "release/integration", ID: "third"},
+	repos := []coordinator.RepositoryView{
+		{OwnedRepository: model.OwnedRepository{Name: "fleet", IntegrationBranch: "main", ID: "first"}},
+		{OwnedRepository: model.OwnedRepository{Name: "travel-topology-monorepo", IntegrationBranch: "master", ID: "second"}},
+		{OwnedRepository: model.OwnedRepository{Name: "workitem", IntegrationBranch: "release/integration", ID: "third"}},
 	}
 	var output bytes.Buffer
 	if err := writeRepositoryList(&output, repos); err != nil {
@@ -32,7 +33,7 @@ func TestRepositoryListAlignsColumns(t *testing.T) {
 		if strings.Index(lines[index], repo.IntegrationBranch) != branchColumn {
 			t.Fatalf("unaligned columns: %q", output.String())
 		}
-		if fields := strings.Fields(lines[index]); len(fields) != 4 || fields[0] != repo.Name || fields[1] != repo.IntegrationBranch || fields[2] != "active" || fields[3] != "local-only" {
+		if fields := strings.Fields(lines[index]); len(fields) != 4 || fields[0] != repo.Name || fields[1] != repo.IntegrationBranch || fields[2] != "active" || fields[3] != "untracked" {
 			t.Fatalf("row = %q", lines[index])
 		}
 	}
@@ -51,7 +52,7 @@ func (writer failedRepositoryListWriter) Write([]byte) (int, error) { return 0, 
 
 func TestRepositoryListReportsWriteFailure(t *testing.T) {
 	want := errors.New("output unavailable")
-	err := writeRepositoryList(failedRepositoryListWriter{want}, []model.OwnedRepository{{Name: "fleet", IntegrationBranch: "main", ID: "first"}})
+	err := writeRepositoryList(failedRepositoryListWriter{want}, []coordinator.RepositoryView{{OwnedRepository: model.OwnedRepository{Name: "fleet", IntegrationBranch: "main", ID: "first"}}})
 	if !errors.Is(err, want) {
 		t.Fatalf("error = %v, want %v", err, want)
 	}

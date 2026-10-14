@@ -84,7 +84,7 @@ func remoteCLI(t *testing.T) (Config, string, *bytes.Buffer, *bytes.Buffer) {
 func TestRepositoryRemoteCLIConfigurationStatusAndSync(t *testing.T) {
 	cfg, origin, out, stderr := remoteCLI(t)
 	ctx := context.Background()
-	source, err := cfg.Coordinator.RepositorySource(ctx, "project", "")
+	source, err := cfg.Coordinator.RepositoryViewSource(ctx, "project", "")
 	if err != nil || source.Repository.Upstream == nil || source.Repository.Upstream.URL != origin || source.Repository.Upstream.Branch != "main" {
 		t.Fatalf("source=%+v err=%v", source, err)
 	}
@@ -139,7 +139,7 @@ func TestRepositoryRemoteCLIConfigurationStatusAndSync(t *testing.T) {
 	if err := runRepository(ctx, []string{"upstream", "project", "--clear"}, cfg, false); err != nil {
 		t.Fatal(err)
 	}
-	source, err = cfg.Coordinator.RepositorySource(ctx, "project", "")
+	source, err = cfg.Coordinator.RepositoryViewSource(ctx, "project", "")
 	if err != nil || source.Repository.Upstream != nil {
 		t.Fatal("upstream not cleared")
 	}
@@ -207,7 +207,7 @@ func TestMergeLocalBypassesNetworkAndDefaultRefusesDivergence(t *testing.T) {
 			}
 			manifest, path := newRemoteMergeItem(t, cfg)
 			local := remoteTestCommit(t, path, "feature", "feature\n", "feature")
-			source, err := cfg.Coordinator.RepositorySource(ctx, "project", "")
+			source, err := cfg.Coordinator.RepositoryViewSource(ctx, "project", "")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -244,7 +244,7 @@ func TestRepositoryRemoteRejectsUpstreamChangeDuringConflict(t *testing.T) {
 	}
 	manifest, path := newRemoteMergeItem(t, cfg)
 	local := remoteTestCommit(t, path, "document", "local\n", "local")
-	source, err := cfg.Coordinator.RepositorySource(ctx, "project", "")
+	source, err := cfg.Coordinator.RepositoryViewSource(ctx, "project", "")
 	if err != nil {
 		t.Fatal(err)
 	}

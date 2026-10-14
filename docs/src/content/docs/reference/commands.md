@@ -15,19 +15,21 @@ Finish and archive items rather than continually expanding them. Merge, archive,
 
 ## Repositories
 
+Single-repository commands default to the current item's registered repository when the selector is omitted. Explicit names or IDs override context. Outside an item, pass a selector. `rename NEW` renames the current repository; `upstream URL` configures its upstream. `list` remains global and `add` still requires a new name.
+
 | Command | Purpose |
 | --- | --- |
 | `wi repo add NAME --from SOURCE [--branch BRANCH] [--local] [--upstream URL] [--upstream-branch BRANCH]` | Import an independent store, inferring integration upstream from a URL or local origin; `--local` disables inference |
 | `wi repo list [--all]` | List names, integration branches, state, and upstream destinations; `--all` includes archived repositories |
-| `wi repo show NAME` | Read registry metadata, store path, and integration commit |
-| `wi repo rename OLD NEW` | Change a unique name without moving resources |
-| `wi repo upstream NAME URL [--branch BRANCH]` | Configure an optional integration upstream; `--clear` restores local-only policy |
-| `wi repo status NAME [--fetch]` | Inspect cached ahead/behind history, optionally fetching without integrating |
-| `wi repo sync NAME` | Fetch and fast-forward integration, refusing divergence |
-| `wi repo sync NAME --merge` | Reconcile divergent histories in a dedicated checkout; finish with `--continue` or `--abort` |
-| `wi repo sync NAME --reset-to-upstream --yes` | Replace integration with upstream, checking exact tips and retaining a recovery ref |
-| `wi repo archive NAME` | Hide a repository and block new items, preserving all Git data and existing work |
-| `wi repo restore NAME` | Make an archived repository available for new items again |
+| `wi repo show [NAME]` | Read registry metadata, live Git tracking, store path, and integration commit |
+| `wi repo rename [OLD] NEW` | Change a unique name without moving resources |
+| `wi repo upstream [NAME] URL [--branch BRANCH]` | Edit origin and integration branch tracking in Git; `--clear` removes tracking but keeps origin |
+| `wi repo status [NAME] [--fetch]` | Inspect cached ahead/behind history, optionally fetching without integrating |
+| `wi repo sync [NAME]` | Fetch and fast-forward integration, refusing divergence; defaults to the current item’s repository |
+| `wi repo sync [NAME] --merge` | Reconcile divergent histories in a dedicated checkout; finish with `--continue` or `--abort` |
+| `wi repo sync [NAME] --reset-to-upstream --yes` | Replace integration with upstream, checking exact tips and retaining a recovery ref |
+| `wi repo archive [NAME]` | Hide a repository and block new items, preserving all Git data and existing work |
+| `wi repo restore [NAME]` | Make an archived repository available for new items again |
 
 ## Durable items
 

@@ -12,7 +12,9 @@ import (
 
 func writeRepositoryStatus(cfg Config, status coordinator.RepositoryStatusResult) {
 	fmt.Fprintf(cfg.Stdout, "%s\nIntegration branch: %s @ %s\n", status.Repository.Name, status.Repository.IntegrationBranch, shortDisplaySHA(status.LocalSHA))
-	if status.Repository.Upstream == nil {
+	if status.Repository.UpstreamError != "" {
+		fmt.Fprintf(cfg.Stdout, "Upstream configuration problem: %s\n", status.Repository.UpstreamError)
+	} else if status.Repository.Upstream == nil {
 		fmt.Fprintln(cfg.Stdout, "Upstream: none (local-only)")
 	} else {
 		fmt.Fprintf(cfg.Stdout, "Upstream: %s\nState: %s (%d ahead, %d behind)\n", status.Repository.Upstream.String(), status.State, status.Ahead, status.Behind)
@@ -35,11 +37,26 @@ func writeRepositoryStatus(cfg Config, status coordinator.RepositoryStatusResult
 
 func runRepositoryRemote(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	verb := args[0]
-	// Accept NAME before or after flags, as with repo add.
-	if len(args) > 1 && !strings.HasPrefix(args[1], "-") && (verb != "upstream" || (len(args) > 2 && args[2] == "--clear")) {
-		name := args[1]
-		args = append(append([]string{verb}, args[2:]...), name)
+	// Accept positional arguments before or after flags. --branch is the
+	// only value-taking option; keep its value attached during reordering.
+	var flags, positionals []string
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			positionals = append(positionals, args[i+1:]...)
+			break
+		}
+		if strings.HasPrefix(arg, "-") {
+			flags = append(flags, arg)
+			if arg == "--branch" && i+1 < len(args) {
+				i++
+				flags = append(flags, args[i])
+			}
+		} else {
+			positionals = append(positionals, arg)
+		}
 	}
+	args = append(append([]string{verb}, flags...), positionals...)
 	fs := newFlagSet("repo "+verb, cfg.Stderr)
 	fetch := fs.Bool("fetch", false, "fetch upstream before inspecting status")
 	clear := fs.Bool("clear", false, "remove the optional upstream")
@@ -49,18 +66,27 @@ func runRepositoryRemote(ctx context.Context, args []string, cfg Config, jsonOut
 	yes := fs.Bool("yes", false, "confirm replacing the integration tip with the fetched upstream")
 	resume := fs.Bool("continue", false, "finish pending synchronization after resolving conflicts")
 	abort := fs.Bool("abort", false, "abort pending reconciliation without advancing integration")
-	if verb == "upstream" && len(args) > 3 && !strings.HasPrefix(args[1], "-") && !strings.HasPrefix(args[2], "-") {
-		args = append(append([]string{verb}, args[3:]...), args[1], args[2])
-	}
 	if err := fs.Parse(args[1:]); err != nil {
 		return usageErr{err}
 	}
 	if verb == "upstream" {
-		if *fetch || *merge || *reset || *yes || *resume || *abort || (fs.NArg() != 2 && !(*clear && fs.NArg() == 1)) || (*clear && (fs.NArg() != 1 || *branch != "")) {
-			return usageErr{fmt.Errorf("usage: wi repo upstream NAME URL [--branch BRANCH], or wi repo upstream NAME --clear")}
+		if *fetch || *merge || *reset || *yes || *resume || *abort || (!*clear && (fs.NArg() < 1 || fs.NArg() > 2)) || (*clear && (fs.NArg() > 1 || *branch != "")) {
+			return usageErr{fmt.Errorf("usage: wi repo upstream [NAME] URL [--branch BRANCH], or [NAME] --clear")}
 		}
-		name, value := fs.Arg(0), fs.Arg(1)
-		source, err := cfg.Coordinator.RepositorySource(ctx, name, "")
+		name, value := "", ""
+		if *clear {
+			name = fs.Arg(0)
+		} else {
+			value = fs.Arg(fs.NArg() - 1)
+			if fs.NArg() == 2 {
+				name = fs.Arg(0)
+			}
+		}
+		name, err := repositorySelector(ctx, cfg, verb, name)
+		if err != nil {
+			return err
+		}
+		source, err := cfg.Coordinator.RepositoryViewSource(ctx, name, "")
 		if err != nil {
 			return err
 		}
@@ -92,10 +118,13 @@ func runRepositoryRemote(ctx context.Context, args []string, cfg Config, jsonOut
 		}
 		return nil
 	}
-	if fs.NArg() != 1 || *clear || *branch != "" {
-		return usageErr{fmt.Errorf("usage: wi repo %s NAME [options]", verb)}
+	if fs.NArg() > 1 || *clear || *branch != "" {
+		return usageErr{fmt.Errorf("usage: wi repo %s [NAME] [options]", verb)}
 	}
-	name := fs.Arg(0)
+	name, err := repositorySelector(ctx, cfg, verb, fs.Arg(0))
+	if err != nil {
+		return err
+	}
 	if verb == "status" {
 		if *merge || *reset || *yes || *resume || *abort {
 			return usageErr{fmt.Errorf("repo status accepts only --fetch")}

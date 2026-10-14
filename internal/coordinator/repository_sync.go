@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"time"
 
 	gitpkg "github.com/regb/workitem/internal/git"
@@ -30,27 +31,28 @@ type RepositoryStatusRequest struct {
 }
 
 type RepositorySyncPlan struct {
-	ID          string `json:"id"`
-	Mode        string `json:"mode"`
-	Phase       string `json:"phase"`
-	OldSHA      string `json:"old_sha"`
-	UpstreamSHA string `json:"upstream_sha"`
-	NewSHA      string `json:"new_sha,omitempty"`
-	RecoveryRef string `json:"recovery_ref"`
+	ID          string                    `json:"id"`
+	Mode        string                    `json:"mode"`
+	Phase       string                    `json:"phase"`
+	OldSHA      string                    `json:"old_sha"`
+	UpstreamSHA string                    `json:"upstream_sha"`
+	NewSHA      string                    `json:"new_sha,omitempty"`
+	RecoveryRef string                    `json:"recovery_ref"`
+	Upstream    *model.RepositoryUpstream `json:"upstream,omitempty"`
 }
 
 type RepositoryStatusResult struct {
-	Repository         model.OwnedRepository `json:"repository"`
-	LocalSHA           string                `json:"local_sha"`
-	UpstreamSHA        string                `json:"upstream_sha,omitempty"`
-	State              string                `json:"state"`
-	Ahead              int                   `json:"ahead"`
-	Behind             int                   `json:"behind"`
-	LocalOnlyCommits   []string              `json:"local_only_commits,omitempty"`
-	EqualTrees         bool                  `json:"equal_trees"`
-	FetchedAt          *time.Time            `json:"fetched_at,omitempty"`
-	Pending            *RepositorySyncPlan   `json:"pending,omitempty"`
-	ReconciliationPath string                `json:"reconciliation_path,omitempty"`
+	Repository         RepositoryView      `json:"repository"`
+	LocalSHA           string              `json:"local_sha"`
+	UpstreamSHA        string              `json:"upstream_sha,omitempty"`
+	State              string              `json:"state"`
+	Ahead              int                 `json:"ahead"`
+	Behind             int                 `json:"behind"`
+	LocalOnlyCommits   []string            `json:"local_only_commits,omitempty"`
+	EqualTrees         bool                `json:"equal_trees"`
+	FetchedAt          *time.Time          `json:"fetched_at,omitempty"`
+	Pending            *RepositorySyncPlan `json:"pending,omitempty"`
+	ReconciliationPath string              `json:"reconciliation_path,omitempty"`
 }
 
 type RepositorySyncResult struct {
@@ -129,7 +131,13 @@ func (s *Server) reconciliationPath(repoID string, plan *RepositorySyncPlan) str
 func (s *Server) inspectRepository(ctx context.Context, source RepositorySourceResult) (RepositoryStatusResult, error) {
 	g := gitpkg.New("git")
 	r := RepositoryStatusResult{Repository: source.Repository, State: "untracked"}
-	var err error
+	up, err := g.BranchUpstream(ctx, source.GitDir, source.Repository.IntegrationBranch)
+	r.Repository.Upstream = up
+	r.Repository.UpstreamSource = "git"
+	if err != nil {
+		r.Repository.UpstreamError = err.Error()
+		r.State = "problem"
+	}
 	r.LocalSHA, err = g.ResolveBranchSHA(ctx, source.GitDir, r.Repository.IntegrationBranch)
 	if err != nil {
 		return r, err
@@ -143,7 +151,7 @@ func (s *Server) inspectRepository(ctx context.Context, source RepositorySourceR
 			r.ReconciliationPath = s.reconciliationPath(r.Repository.ID, &plan)
 		}
 	}
-	if r.Repository.Upstream == nil {
+	if r.Repository.Upstream == nil || r.Repository.UpstreamError != "" {
 		return r, nil
 	}
 	exists, err := g.ReferenceExists(ctx, source.GitDir, r.Repository.Upstream.Ref())
@@ -161,6 +169,10 @@ func (s *Server) inspectRepository(ctx context.Context, source RepositorySourceR
 	var observation repositoryFetch
 	if found, err := s.database.ReadProjection(repositoryFetchProjection, r.Repository.ID, &observation); err != nil {
 		return r, err
+	} else if found && observation.SHA == r.UpstreamSHA && observation.Upstream.Ref() == r.Repository.Upstream.Ref() && observation.Upstream.URL != r.Repository.Upstream.URL {
+		r.State = "unfetched"
+		r.UpstreamSHA = ""
+		return r, nil
 	} else if found && observation.SHA == r.UpstreamSHA && observation.Upstream == *r.Repository.Upstream {
 		r.FetchedAt = &observation.At
 	}
@@ -189,11 +201,24 @@ func (s *Server) inspectRepository(ctx context.Context, source RepositorySourceR
 }
 
 func (s *Server) fetchRepository(ctx context.Context, source RepositorySourceResult) error {
+	g := gitpkg.New("git")
+	up, err := g.BranchUpstream(ctx, source.GitDir, source.Repository.IntegrationBranch)
+	if err != nil {
+		return err
+	}
+	source.Repository.Upstream = up
 	if source.Repository.Upstream == nil {
 		return fmt.Errorf("repository %s has no upstream; configure wi repo upstream %s URL --branch BRANCH", source.Repository.Name, source.Repository.Name)
 	}
 	if err := gitpkg.New("git").FetchRepositoryUpstream(ctx, source.GitDir, *source.Repository.Upstream); err != nil {
 		return fmt.Errorf("fetch upstream: %w", err)
+	}
+	current, err := g.BranchUpstream(ctx, source.GitDir, source.Repository.IntegrationBranch)
+	if err != nil {
+		return err
+	}
+	if !reflect.DeepEqual(up, current) {
+		return fmt.Errorf("Git upstream changed during fetch; integration was not updated")
 	}
 	sha, err := gitpkg.New("git").RevParse(ctx, source.GitDir, source.Repository.Upstream.Ref()+"^{commit}")
 	if err != nil {
@@ -277,13 +302,13 @@ func (s *Server) repositorySync(ctx context.Context, request RepositorySyncReque
 		if status.EqualTrees {
 			hint = "; file trees are identical but commit histories differ"
 		}
-		return result, fmt.Errorf("%s diverged from %s (%d local-only, %d upstream-only commits)%s; choose wi repo sync %s --merge or --reset-to-upstream", source.Repository.IntegrationBranch, source.Repository.Upstream.String(), status.Ahead, status.Behind, hint, source.Repository.Name)
+		return result, fmt.Errorf("%s diverged from %s (%d local-only, %d upstream-only commits)%s; choose wi repo sync %s --merge or --reset-to-upstream", source.Repository.IntegrationBranch, status.Repository.Upstream.String(), status.Ahead, status.Behind, hint, source.Repository.Name)
 	}
 	id, err := model.NewID()
 	if err != nil {
 		return result, err
 	}
-	plan := RepositorySyncPlan{ID: id, Mode: mode, OldSHA: status.LocalSHA, UpstreamSHA: status.UpstreamSHA, RecoveryRef: "refs/wi/recovery/repository-sync/" + id, Phase: "prepared", NewSHA: status.UpstreamSHA}
+	plan := RepositorySyncPlan{Upstream: status.Repository.Upstream, ID: id, Mode: mode, OldSHA: status.LocalSHA, UpstreamSHA: status.UpstreamSHA, RecoveryRef: "refs/wi/recovery/repository-sync/" + id, Phase: "prepared", NewSHA: status.UpstreamSHA}
 	if mode == "merge" && status.State == "diverged" {
 		plan.Phase = "merging"
 		plan.NewSHA = ""
@@ -413,6 +438,9 @@ func (s *Server) resumeRepositorySync(ctx context.Context, source RepositorySour
 		result.RepositoryStatusResult, err = s.inspectRepository(ctx, source)
 		return result, err
 	}
+	if plan.Phase != "applied" && plan.Upstream == nil {
+		return result, fmt.Errorf("invalid reconciliation identity: missing upstream snapshot")
+	}
 	if plan.Phase == "merging" {
 		if _, err := os.Lstat(path); os.IsNotExist(err) {
 			if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -483,6 +511,15 @@ func (s *Server) resumeRepositorySync(ctx context.Context, source RepositorySour
 		}
 	}
 	if plan.Phase != "applied" {
+		if plan.Upstream != nil {
+			current, err := g.BranchUpstream(ctx, source.GitDir, source.Repository.IntegrationBranch)
+			if err != nil {
+				return result, err
+			}
+			if !reflect.DeepEqual(current, plan.Upstream) {
+				return result, fmt.Errorf("Git upstream changed during reconciliation; restore it or use --abort")
+			}
+		}
 		if err := g.ValidateOwnedBare(ctx, source.GitDir, source.Repository.IntegrationBranch); err != nil {
 			return result, err
 		}
