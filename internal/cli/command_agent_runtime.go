@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
 )
@@ -53,6 +54,12 @@ func runAgentRuntimeStatus(ctx context.Context, args []string, cfg Config, jsonO
 	fmt.Fprintf(cfg.Stdout, "mode: %s\n", res.Runtime.Mode)
 	fmt.Fprintf(cfg.Stdout, "state: %s\n", res.Runtime.State)
 	fmt.Fprintf(cfg.Stdout, "online: %t\n", res.Online)
+	if res.Runtime.Readiness != "" {
+		fmt.Fprintf(cfg.Stdout, "readiness: %s\n", res.Runtime.Readiness)
+	}
+	if reason := driverprotocol.RuntimeReasonText(res.Runtime.ReadinessReasonCode); reason != "" {
+		fmt.Fprintf(cfg.Stdout, "readiness reason: %s\n", reason)
+	}
 	if res.Runtime.HostPID > 0 {
 		fmt.Fprintf(cfg.Stdout, "host pid: %d\n", res.Runtime.HostPID)
 	}

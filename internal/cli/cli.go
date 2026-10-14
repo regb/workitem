@@ -51,6 +51,11 @@ func Main(ctx context.Context, args []string) int {
 	if len(args) > 0 && args[0] == "internal-picker-render" {
 		return runPickerRender(args[1:], env, os.Stdout, os.Stderr)
 	}
+	filtered, jsonOut := extractGlobals(args)
+	_, helpRequested := requestedHelpTopic(filtered)
+	if len(filtered) == 0 || filtered[0] == "help" || helpRequested {
+		return Run(ctx, args, Config{Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, Env: env})
+	}
 	if versionCommandRequested(args) {
 		return Run(ctx, args, Config{Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, Env: env})
 	}
@@ -58,6 +63,14 @@ func Main(ctx context.Context, args []string) int {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return ExitError
+	}
+	if filtered[0] == "init" {
+		self, err := os.Executable()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return ExitError
+		}
+		return runInitMain(ctx, filtered[1:], paths.ConfigFile, self, env, os.Stdin, os.Stdout, os.Stderr, jsonOut)
 	}
 	if infoCommandRequested(args) {
 		filtered, jsonOut := extractGlobals(args)
@@ -67,18 +80,18 @@ func Main(ctx context.Context, args []string) int {
 		filtered, jsonOut := extractGlobals(args)
 		return runDaemonMain(ctx, filtered[1:], paths, os.Stdout, os.Stderr, jsonOut)
 	}
-	st := store.New(paths.DataRoot)
-	if err := st.Ensure(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		return ExitError
-	}
 	cfgFile, warnings, err := config.Load(paths.ConfigFile)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		fmt.Fprintf(os.Stderr, "%s: %v\n", paths.ConfigFile, err)
 		return ExitError
 	}
 	for _, warning := range warnings {
 		fmt.Fprintf(os.Stderr, "warning: config: %s\n", warning)
+	}
+	st := store.New(paths.DataRoot)
+	if err := st.Ensure(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return ExitError
 	}
 	application := app.New(st, git.New("git"))
 	application.DeepWorkConfig = cfgFile.DeepWork
@@ -88,9 +101,9 @@ func Main(ctx context.Context, args []string) int {
 	application.AgentStatusConfig = cfgFile.AgentStatus
 	application.AttentionConfig = cfgFile.Attention
 	application.DirenvConfig = cfgFile.Direnv
+	application.DefaultAgent = cfgFile.DefaultAgent
 	application.AgentsConfig = cfgFile.Agents
 	application.DriversConfig = cfgFile.Drivers
-	_, jsonOut := extractGlobals(args)
 	if !jsonOut && inputIsTerminal(os.Stdin) {
 		application.ApproveDirenv = func(ctx context.Context, manifest model.Manifest, rcPath string) (bool, error) {
 			return promptDirenvApproval(os.Stdin, os.Stderr, manifest, rcPath)
@@ -102,7 +115,9 @@ func Main(ctx context.Context, args []string) int {
 	application.Direnv = direnvClient
 	if self, err := os.Executable(); err == nil {
 		application.SelfPath = self
-		application.BundledDriverCommands["pi"] = app.BundledDriverCommand{Path: self, Args: []string{"internal-driver", "pi"}}
+		for _, driver := range []string{"pi", "claude"} {
+			application.BundledDriverCommands[driver] = app.BundledDriverCommand{Path: self, Args: []string{"internal-driver", driver}}
+		}
 	}
 	for driverName, client := range configuredDriverClients(cfgFile, application.SelfPath, env) {
 		application.ConversationBackends[driverName] = client

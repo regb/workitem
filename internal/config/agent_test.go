@@ -7,9 +7,9 @@ import (
 )
 
 func TestStartupMessageConfiguration(t *testing.T) {
-	defaults, _, err := config.Load("")
-	if err != nil || defaults.Agent.StartupMessage != config.DefaultStartupMessage {
-		t.Fatalf("defaults=%+v %v", defaults.Agent, err)
+	defaults := config.Default()
+	if defaults.Agent.StartupMessage != config.DefaultStartupMessage {
+		t.Fatalf("defaults=%+v", defaults.Agent)
 	}
 	path := filepath.Join(t.TempDir(), "config.toml")
 	writeFile(t, path, "[agent]\nstartup_message = \"Read wi show.\\nCheck acceptance criteria.\"\n")

@@ -21,8 +21,9 @@ const ContentVersion = 1
 const MaxContentTextBytes = 256 << 10
 
 // Content is an ephemeral, read-only snapshot, never a retained runtime event.
-// Text contains only the currently streaming assistant message. Final messages
-// must be read from conversation.history. Readers replace, rather than append,
+// Text contains the currently streaming assistant message, or the latest
+// persisted assistant message for transcript-backed drivers. History remains
+// authoritative for final messages. Readers replace, rather than append,
 // snapshots, so reconnecting cannot duplicate deltas.
 type Content struct {
 	ProtocolVersion int          `json:"protocol_version"`
@@ -201,6 +202,43 @@ func (s *ContentServer) UpdateTool(eventType, text, toolID, toolName, input, out
 		s.value.Activity = "Idle"
 	}
 }
+
+// PublishTranscript replaces a transcript-backed snapshot. It cannot affect
+// runtime events, durable status, or control acceptance.
+func (s *ContentServer) PublishTranscript(leaf, text, activity string, tool *ContentTool) {
+	s.publishSnapshot(leaf, text, activity, tool, false)
+}
+
+// PublishStreaming replaces private incremental content without emitting runtime
+// events. Truncation may have occurred upstream before text reached this socket.
+func (s *ContentServer) PublishStreaming(leaf, text, activity string, tool *ContentTool, truncated bool) {
+	s.publishSnapshot(leaf, text, activity, tool, truncated)
+}
+func (s *ContentServer) publishSnapshot(leaf, text, activity string, tool *ContentTool, truncated bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.value.Sequence++
+	s.value.LeafID = leaf
+	s.value.Activity = boundedContentField(activity)
+	s.value.Truncated = truncated || len(text) > MaxContentTextBytes
+	if len(text) > MaxContentTextBytes {
+		end := MaxContentTextBytes
+		for end > 0 && !utf8.RuneStart(text[end]) {
+			end--
+		}
+		text = text[:end]
+	}
+	s.value.Text = text
+	s.value.Tool = nil
+	if tool != nil {
+		copy := *tool
+		copy.Input = boundedContentField(copy.Input)
+		copy.Output = boundedContentField(copy.Output)
+		copy.Name = boundedContentField(copy.Name)
+		s.value.Tool = &copy
+	}
+}
+
 func boundedContentField(value string) string {
 	if len(value) <= 64<<10 {
 		return value

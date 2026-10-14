@@ -22,6 +22,13 @@ type helpDoc struct {
 }
 
 var helpDocs = map[string]helpDoc{
+	"init": {
+		Summary:     "Set up Wi and select a default coding agent",
+		Usage:       []string{"wi init [--default PROFILE]"},
+		Description: []string{"Asks bundled drivers to discover installed agents on PATH, then prompts for the default profile. Writes explicit profiles with absolute executable paths to $XDG_CONFIG_HOME/wi/config.toml, or ~/.config/wi/config.toml. Never overwrites an existing configuration and does not start a daemon or agent."},
+		Options:     []helpOption{{"--default PROFILE", "Select a detected profile without prompting. Required with --json."}},
+		Examples:    []string{"wi init", "wi init --default pi", "wi init --default claude --json"},
+	},
 	"repo": {
 		Summary:     "Manage named Wi-owned repositories",
 		Usage:       []string{"wi repo <add|list|show|rename|archive|restore|upstream|status|sync>"},
@@ -149,7 +156,7 @@ var helpDocs = map[string]helpDoc{
 			{"--desc-file <path>", "Read DESCRIPTION.md content from a file."},
 			{"--start", "Start an unattached agent and send the configured startup message."},
 			{"--prompt <text>", "Start an agent and send this message without changing the description; implies --start."},
-			{"--agent <name>", "Select a configured agent definition; default is default."},
+			{"--agent <name>", "Select a named agent profile; omitted uses default_agent from config."},
 			{"--agent-mode <mode>", "With --start or --prompt, start tui (default) or headless."},
 			{"--slug <slug>", "Set the initial active slug; must be unique."},
 			{"--label <label>", "Add a label after inherited defaults; repeatable."},
@@ -443,21 +450,22 @@ var helpDocs = map[string]helpDoc{
 	},
 	"agent control": {
 		Summary:     "Submit a low-level command to the owning agent runtime",
-		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--actor <name>] [--stdin | --file <path> | <message...>]", "wi agent control <abort|shutdown> [--item <selector>] [--actor <name>]"},
-		Description: []string{"Submits directly to runtime control without consulting derived busy/idle status. Send defaults to steering delivery at the agent's next turn boundary; --follow-up waits until the current run settles."},
+		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--actor <name>] [--image <path>] [--stdin | --file <path> | <message...>]", "wi agent control <abort|shutdown> [--item <selector>] [--actor <name>]"},
+		Description: []string{"Submits directly to runtime control without consulting derived busy/idle status. Send defaults to the driver's steering delivery; --follow-up waits until the current run settles."},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
 			{"--actor <name>", "Record the control source/actor."},
 			{"--stdin", "Read the message from standard input."},
 			{"--file <path>", "Read the message from a file."},
+			{"--image <path>", "Attach an image; repeatable, up to four files and 8 MiB total. Text is optional with images."},
 		},
 		Examples: []string{`wi agent control send --item auth "Focus on the failing test"`, `wi agent control send --follow-up --item auth "Summarize when finished"`},
 	},
 	"agent control send": {
 		Summary:     "Send input with explicit delivery semantics",
-		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--actor <name>] [--stdin | --file <path> | <message...>]"},
-		Description: []string{"Defaults to steering: while busy, deliver after the current assistant turn and tool calls; while idle, start immediately. --follow-up delivers only after the current run fully settles."},
-		Options:     []helpOption{{"--follow-up", "Wait until the current run fully settles."}, {"--item <selector>", "Select an item explicitly."}, {"--actor <name>", "Record the control source/actor."}, {"--stdin", "Read the message from standard input."}, {"--file <path>", "Read the message from a file."}},
+		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--actor <name>] [--image <path>] [--stdin | --file <path> | <message...>]"},
+		Description: []string{"Defaults to the driver's steering delivery; while idle, start a turn. --follow-up delivers only after the current run fully settles. Image attachments require an image-capable runtime."},
+		Options:     []helpOption{{"--follow-up", "Wait until the current run fully settles."}, {"--item <selector>", "Select an item explicitly."}, {"--actor <name>", "Record the control source/actor."}, {"--stdin", "Read the message from standard input."}, {"--file <path>", "Read the message from a file."}, {"--image <path>", "Attach an image; repeatable, up to four files and 8 MiB total. Text is optional with images."}},
 	},
 	"agent control abort": {
 		Summary: "Abort current agent work",
@@ -528,7 +536,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Administration:")
-	printCommandRows(w, [][2]string{{"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete archived work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
+	printCommandRows(w, [][2]string{{"init", "Set up agent profiles and select the default"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete archived work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "States:")
 	fmt.Fprintln(w, "  backlog | working | waiting | archived")

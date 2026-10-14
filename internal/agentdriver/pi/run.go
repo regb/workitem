@@ -13,6 +13,7 @@ import (
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
+	"github.com/regb/workitem/internal/agentdriver/discovery"
 	"github.com/regb/workitem/internal/version"
 )
 
@@ -35,6 +36,13 @@ func Run(ctx context.Context) error {
 	}
 	if request.ProtocolVersion != driverprotocol.Version || request.Driver != "pi" {
 		return respondError(fmt.Errorf("incompatible Pi driver request"))
+	}
+	if request.Operation == driverprotocol.OperationConfigDiscover {
+		result, err := discovery.Executable("pi", "Pi", "pi")
+		if err != nil {
+			return respondError(err)
+		}
+		return reply(driverprotocol.Response{ProtocolVersion: driverprotocol.Version, ConfigDiscovery: &result})
 	}
 	if request.Operation == driverprotocol.OperationConfigValidate {
 		if _, err := parseConfig(request.Config); err != nil {

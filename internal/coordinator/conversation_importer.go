@@ -280,12 +280,12 @@ func importConversationFile(ctx context.Context, database *Database, path, sourc
 func applyConversationFact(index *ConversationIndex, attention *AttentionActivity, fact ConversationEventFact) {
 	copyFact := fact
 	index.LastEvent = &copyFact
-	turnActivity := fact.Role == "user" || fact.Role == "assistant" || fact.Role == "toolResult" || fact.Type == "toolResult" || containsCoordinator(fact.ContentTypes, "toolCall", "toolResult", "bashExecution")
+	turnActivity := fact.Role == "user" || fact.Role == "assistant" || fact.Role == "toolResult" || fact.Type == "toolResult" || containsCoordinator(fact.ContentTypes, "toolCall", "toolResult", "bashExecution", "tool_use", "tool_result")
 	if turnActivity {
 		index.LastTurnActivity = &copyFact
 	}
 	switch {
-	case fact.Role == "user":
+	case fact.Role == "user" && !fact.Terminal && !containsCoordinator(fact.ContentTypes, "tool_result"):
 		index.LastUserPrompt = &copyFact
 		if !fact.Timestamp.IsZero() && (attention.LastRequestedAt == nil || fact.Timestamp.After(*attention.LastRequestedAt)) {
 			at := fact.Timestamp.UTC()
@@ -300,10 +300,10 @@ func applyConversationFact(index *ConversationIndex, attention *AttentionActivit
 				attention.LastCompletedAt = &at
 			}
 		}
-	case fact.Role == "toolResult" || fact.Type == "toolResult" || containsCoordinator(fact.ContentTypes, "toolCall", "toolResult", "bashExecution"):
+	case fact.Role == "toolResult" || fact.Type == "toolResult" || containsCoordinator(fact.ContentTypes, "toolCall", "toolResult", "bashExecution", "tool_use", "tool_result"):
 		index.LastToolActivity = &copyFact
 	}
-	if fact.Role == "assistant" && containsCoordinator(fact.ContentTypes, "toolCall", "bashExecution") {
+	if fact.Role == "assistant" && containsCoordinator(fact.ContentTypes, "toolCall", "bashExecution", "tool_use") {
 		index.LastToolActivity = &copyFact
 	}
 }
@@ -311,6 +311,9 @@ func applyConversationFact(index *ConversationIndex, attention *AttentionActivit
 func inferIndexedConversationTurnState(index ConversationIndex) string {
 	if index.LastTurnActivity == nil {
 		return "idle"
+	}
+	if index.LastTurnActivity.Terminal && index.LastTurnActivity.Failed {
+		return "failed"
 	}
 	if terminal := index.LastTerminalAssistant; terminal != nil {
 		if (index.LastUserPrompt == nil || !index.LastUserPrompt.Timestamp.After(terminal.Timestamp)) && (index.LastToolActivity == nil || !index.LastToolActivity.Timestamp.After(terminal.Timestamp)) {

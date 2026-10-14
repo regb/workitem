@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/coordinator"
@@ -110,14 +111,18 @@ func coordinatorRuntimeEvents(events []coordinator.DomainEvent) []agent.RuntimeE
 	result := make([]agent.RuntimeEvent, 0, len(events))
 	for _, event := range events {
 		var payload struct {
-			RuntimeID string `json:"runtime_id"`
-			CommandID string `json:"command_id"`
-			RequestID string `json:"request_id"`
-			Role      string `json:"role"`
-			ToolName  string `json:"tool_name"`
+			RuntimeID     string `json:"runtime_id"`
+			CommandID     string `json:"command_id"`
+			RequestID     string `json:"request_id"`
+			Role          string `json:"role"`
+			ToolName      string `json:"tool_name"`
+			Failed        bool   `json:"failed"`
+			Readiness     string `json:"readiness"`
+			ReasonCode    string `json:"reason_code"`
+			DeliveryState string `json:"delivery_state"`
 		}
 		_ = json.Unmarshal(event.Payload, &payload)
-		result = append(result, agent.RuntimeEvent{ProtocolVersion: agent.RuntimeProtocolVersion, EventID: event.ID, RuntimeID: payload.RuntimeID, WorkItemID: event.ItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: payload.CommandID, RequestID: payload.RequestID, Role: payload.Role, ToolName: payload.ToolName})
+		result = append(result, agent.RuntimeEvent{ProtocolVersion: agent.RuntimeProtocolVersion, EventID: event.ID, RuntimeID: payload.RuntimeID, WorkItemID: event.ItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: payload.CommandID, RequestID: payload.RequestID, Role: payload.Role, ToolName: payload.ToolName, Failed: payload.Failed, Readiness: payload.Readiness, ReasonCode: payload.ReasonCode, DeliveryState: payload.DeliveryState})
 	}
 	return result
 }
@@ -144,6 +149,18 @@ func printAgentRuntimeEvent(cfg Config, event agent.RuntimeEvent, jsonOut bool) 
 	fmt.Fprintf(cfg.Stdout, "%s  %-20s", event.Timestamp.Format(timeFormatHuman), event.Type)
 	if event.ToolName != "" {
 		fmt.Fprintf(cfg.Stdout, " %s", event.ToolName)
+	}
+	if event.Failed {
+		fmt.Fprint(cfg.Stdout, " failed")
+	}
+	if event.Readiness != "" {
+		fmt.Fprintf(cfg.Stdout, " readiness=%s", event.Readiness)
+	}
+	if event.DeliveryState != "" {
+		fmt.Fprintf(cfg.Stdout, " delivery=%s", event.DeliveryState)
+	}
+	if reason := driverprotocol.RuntimeReasonText(event.ReasonCode); reason != "" {
+		fmt.Fprintf(cfg.Stdout, " reason=%s", reason)
 	}
 	if event.Text != "" {
 		fmt.Fprintf(cfg.Stdout, " %s", truncateRunes(strings.ReplaceAll(event.Text, "\n", " "), 120))

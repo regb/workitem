@@ -33,6 +33,36 @@ func (b *configCheckingBackend) ValidateConfig(_ context.Context, name string, r
 	return nil
 }
 
+func TestDefaultAgentIsResolvedAndStoredAtCreation(t *testing.T) {
+	ctx := context.Background()
+	st := store.New(t.TempDir())
+	a := newTestApp(st, newFakeGit(t))
+	first, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "First", CWD: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Manifest.Agent != "pi" {
+		t.Fatalf("stored agent %q", first.Manifest.Agent)
+	}
+	a.AgentsConfig["review"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{}}
+	a.DefaultAgent = "review"
+	second, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "Second", CWD: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Manifest.Agent != "review" {
+		t.Fatalf("stored agent %q", second.Manifest.Agent)
+	}
+	original, err := st.LoadManifest(first.Manifest.ID)
+	if err != nil || original.Agent != "pi" {
+		t.Fatalf("existing item changed: %+v %v", original, err)
+	}
+	explicit, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "Explicit", Agent: "pi", CWD: t.TempDir()})
+	if err != nil || explicit.Manifest.Agent != "pi" {
+		t.Fatalf("explicit: %+v %v", explicit, err)
+	}
+}
+
 func TestAgentConfigValidationMergesSettingsWithoutResources(t *testing.T) {
 	st := store.New(t.TempDir())
 	a := newTestApp(st, newFakeGit(t))

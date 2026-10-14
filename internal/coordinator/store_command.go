@@ -224,6 +224,21 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		if runtime.WorkItemID != command.ItemID {
 			return "", nil, errors.New("runtime item id mismatch")
 		}
+		// Bootstrap publishes capabilities concurrently with driver status facts.
+		// A host snapshot must not roll back newer owner-fenced readiness.
+		if bucket := tx.Bucket(bucketProjections).Bucket([]byte(RuntimeOwnershipProjection)); bucket != nil {
+			var current model.AgentRuntime
+			if data := bucket.Get([]byte(command.ItemID)); data != nil {
+				if err := json.Unmarshal(data, &current); err != nil {
+					return "", nil, err
+				}
+			}
+			if current.ID == runtime.ID && current.ReadinessObservedAt != nil && (runtime.ReadinessObservedAt == nil || !runtime.ReadinessObservedAt.After(*current.ReadinessObservedAt)) {
+				runtime.Readiness = current.Readiness
+				runtime.ReadinessReasonCode = current.ReadinessReasonCode
+				runtime.ReadinessObservedAt = current.ReadinessObservedAt
+			}
+		}
 		if err := putProjectionValue(tx, RuntimeOwnershipProjection, command.ItemID, runtime); err != nil {
 			return "", nil, err
 		}

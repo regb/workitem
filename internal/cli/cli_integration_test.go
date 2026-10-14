@@ -15,6 +15,7 @@ import (
 	pidriver "github.com/regb/workitem/internal/agentdriver/pi"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/cli"
+	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
@@ -1159,6 +1160,8 @@ func TestRemovedTopLevelPlumbingAliasesAreUnknown(t *testing.T) {
 
 func bindTestCoordinator(t *testing.T, application *app.App, st *store.Store) {
 	t.Helper()
+	application.DefaultAgent = "pi"
+	application.AgentsConfig["pi"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{}}
 	socket := filepath.Join(testutil.ShortTempDir(t), "daemon.sock")
 	server, err := coordinator.NewServer(st.Root, socket)
 	if err != nil {
@@ -1199,6 +1202,8 @@ func configuredApp(t *testing.T) (*bytes.Buffer, *bytes.Buffer, *app.App) {
 		Commit: commit,
 	}}
 	application := app.New(st, fg)
+	application.DefaultAgent = "pi"
+	application.AgentsConfig["pi"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{}}
 	application.ConversationBackends["pi"] = fakeConversationBackend{}
 	socket := filepath.Join(testutil.ShortTempDir(t), "daemon.sock")
 	server, err := coordinator.NewServer(root, socket)

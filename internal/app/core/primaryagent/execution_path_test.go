@@ -1,6 +1,7 @@
 package primaryagent
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -23,6 +24,34 @@ func TestExecutionCWDFallsBackWithoutCheckout(t *testing.T) {
 	}
 }
 
+func TestCheckoutContainsPhysicalCWD(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "slot")
+	outside := filepath.Join(dir, "outside")
+	alias := filepath.Join(dir, "logical")
+	for _, p := range []string{root, outside} {
+		if err := os.Mkdir(p, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink(root, alias); err != nil {
+		t.Fatal(err)
+	}
+	physical, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !CheckoutContainsPath(alias, physical) || !CheckoutContainsPath(physical, alias) {
+		t.Fatal("physical/logical CWD mismatch")
+	}
+	escape := filepath.Join(root, "escape")
+	if err := os.Symlink(outside, escape); err != nil {
+		t.Fatal(err)
+	}
+	if CheckoutContainsPath(root, escape) {
+		t.Fatal("outside symlink accepted")
+	}
+}
 func TestCheckoutContainsPath(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "slot-0002")
 	if !CheckoutContainsPath(root, filepath.Join(root, "internal", "app")) {

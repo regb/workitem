@@ -79,10 +79,17 @@ func (a *App) NewWorkItem(ctx context.Context, opts NewWorkItemOptions) (NewWork
 	return NewWorkItemResult{Manifest: res.Manifest, ItemDir: res.ItemDir, Warnings: res.Warnings}, nil
 }
 
-func (a *App) resolveAgentName(value string) (string, error) {
-	if value == "" {
-		value = "default"
+// agentProfileName resolves omitted choices and historical item records that
+// used the old implicit "default" profile. New items persist the named profile.
+func (a *App) agentProfileName(value string) string {
+	if value == "" || value == "default" {
+		return a.DefaultAgent
 	}
+	return value
+}
+
+func (a *App) resolveAgentName(value string) (string, error) {
+	value = a.agentProfileName(value)
 	definition, ok := a.AgentsConfig[value]
 	if !ok {
 		return "", fmt.Errorf("agent definition %q is not configured", value)

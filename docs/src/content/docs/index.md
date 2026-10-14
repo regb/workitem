@@ -14,6 +14,7 @@ Follow [Installation](getting-started/installation/) and the [Quick start](getti
 ## A common workflow
 
 ```bash
+wi init
 wi repo add project --from /path/to/repository --branch main
 wi new --title "Add request retries" --repo project --desc-file task.md --start
 wi list

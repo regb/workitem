@@ -20,15 +20,16 @@ const (
 )
 
 type Config struct {
-	DeepWork    DeepWorkConfig                    `json:"deep_work"`
-	Item        ItemConfig                        `json:"item"`
-	List        ListConfig                        `json:"list"`
-	Agent       AgentConfig                       `json:"agent"`
-	AgentStatus AgentStatusConfig                 `json:"agent_status"`
-	Attention   AttentionConfig                   `json:"attention"`
-	Direnv      DirenvConfig                      `json:"direnv"`
-	Agents      map[string]AgentDefinitionConfig  `json:"agents"`
-	Drivers     map[string]DriverDefinitionConfig `json:"drivers"`
+	DefaultAgent string                            `json:"default_agent"`
+	DeepWork     DeepWorkConfig                    `json:"deep_work"`
+	Item         ItemConfig                        `json:"item"`
+	List         ListConfig                        `json:"list"`
+	Agent        AgentConfig                       `json:"agent"`
+	AgentStatus  AgentStatusConfig                 `json:"agent_status"`
+	Attention    AttentionConfig                   `json:"attention"`
+	Direnv       DirenvConfig                      `json:"direnv"`
+	Agents       map[string]AgentDefinitionConfig  `json:"agents"`
+	Drivers      map[string]DriverDefinitionConfig `json:"drivers"`
 }
 
 type AgentConfig struct {
@@ -88,18 +89,18 @@ type DirenvConfig struct {
 }
 
 func Default() Config {
-	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{"default": {Driver: "pi", Config: map[string]any{}}}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}}}
+	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}}
 }
 
 func Load(path string) (Config, []string, error) {
 	cfg := Default()
 	if strings.TrimSpace(path) == "" {
-		return cfg, nil, nil
+		return cfg, nil, Validate(cfg)
 	}
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return cfg, nil, nil
+			return cfg, nil, Validate(cfg)
 		}
 		return cfg, nil, fmt.Errorf("open config: %w", err)
 	}
@@ -133,6 +134,12 @@ func Load(path string) (Config, []string, error) {
 			continue
 		}
 		switch section + "." + key {
+		case ".default_agent":
+			parsed, err := strconv.Unquote(value)
+			if err != nil {
+				return cfg, warnings, fmt.Errorf("parse default_agent on line %d: %w", lineNo, err)
+			}
+			cfg.DefaultAgent = parsed
 		case "deep_work.max_active":
 			parsed, err := strconv.Atoi(value)
 			if err != nil {
@@ -206,9 +213,14 @@ func Validate(cfg Config) error {
 	if _, err := priority.Rank(cfg.Attention.Priority, nil); err != nil {
 		return err
 	}
-	defaultAgent, ok := cfg.Agents["default"]
-	if !ok || strings.TrimSpace(defaultAgent.Driver) == "" {
-		return fmt.Errorf("agents.default must select a driver")
+	if strings.TrimSpace(cfg.DefaultAgent) == "" {
+		return fmt.Errorf("default_agent must name an agent profile; run 'wi init' to create your configuration, or set default_agent in the existing file")
+	}
+	if _, ok := cfg.Agents[cfg.DefaultAgent]; !ok {
+		return fmt.Errorf("default_agent references unconfigured profile %q", cfg.DefaultAgent)
+	}
+	if _, ok := cfg.Agents["default"]; ok {
+		return fmt.Errorf("agents.default is no longer supported; rename it and set default_agent to its profile name")
 	}
 	for name, definition := range cfg.Agents {
 		if strings.TrimSpace(name) == "" || strings.TrimSpace(definition.Driver) == "" {

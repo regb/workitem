@@ -13,6 +13,15 @@ Each item is one bounded task. `wi new` requires `--title TEXT` or `--untitled`.
 
 Finish and archive items rather than continually expanding them. Merge, archive, and push are separate decisions.
 
+## Initial setup
+
+| Command | Purpose |
+| --- | --- |
+| `wi init` | Discover installed agents and select the default, then write the initial user config |
+| `wi init --default PROFILE [--json]` | Select a detected profile without prompting |
+
+Setup refuses to overwrite an existing config and does not start agents or the coordinator. A missing default profile is a configuration error; run setup before repository or item commands.
+
 ## Repositories
 
 Single-repository commands default to the current item's registered repository when the selector is omitted. Explicit names or IDs override context. Outside an item, pass a selector. `rename NEW` renames the current repository; `upstream URL` configures its upstream. `list` remains global and `add` still requires a new name.
@@ -78,7 +87,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi agent runtime status\|ensure\|stop` | Manage the exclusive runtime owner |
 | `wi agent status` | Inspect derived agent and worktree observations |
 | `wi agent monitor` | Read normalized runtime events |
-| `wi agent control send` | Send steering or follow-up input |
+| `wi agent control send` | Send steering or follow-up text and optional repeatable `--image` attachments |
 | `wi agent control abort` | Abort the current agent run |
 
 ## Attention and views

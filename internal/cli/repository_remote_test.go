@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/regb/workitem/internal/app"
+	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
@@ -62,6 +63,8 @@ func remoteCLI(t *testing.T) (Config, string, *bytes.Buffer, *bytes.Buffer) {
 	t.Cleanup(func() { server.Close(); <-done })
 	native := store.New(root)
 	application := app.New(native, gitpkg.New("git"))
+	application.DefaultAgent = "pi"
+	application.AgentsConfig["pi"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{}}
 	client := &coordinator.Client{SocketPath: socket}
 	BindCoordinatorApp(application, native, client)
 	out, stderr := &bytes.Buffer{}, &bytes.Buffer{}

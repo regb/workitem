@@ -104,8 +104,15 @@ func (a *App) waitForAgentRuntimeReady(ctx context.Context, itemID string, runti
 		if current.State == model.AgentRuntimeProblem || current.State == model.AgentRuntimeStopped {
 			return false, fmt.Errorf("agent runtime %s is %s before accepting the initial prompt", runtime.ID, current.State)
 		}
-		if _, err := os.Stat(socketPath); err == nil && current.Capabilities.Prompt {
-			return true, nil
+		if _, err := os.Stat(socketPath); err == nil {
+			if current.Capabilities.Prompt {
+				return true, nil
+			}
+			// The host is running while bootstrap is still in progress. Empty
+			// capabilities do not establish that the driver lacks prompt support.
+			if current.State == model.AgentRuntimeRunning && (current.Capabilities.NativeTUI || current.Capabilities.Headless) {
+				return false, fmt.Errorf("agent driver does not support startup prompts; enter its native interface and type the task instead")
+			}
 		}
 		return false, nil
 	}

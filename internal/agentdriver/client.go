@@ -39,6 +39,25 @@ func (c Client) request(ctx context.Context, operation, agent string, config jso
 	return *response.Conversation, nil
 }
 
+// DiscoverConfig asks the driver for installed profiles without acquiring a
+// conversation. Older drivers may reject this optional operation.
+func (c Client) DiscoverConfig(ctx context.Context) (driverprotocol.ConfigDiscoveryResult, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	env := c.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	response, err := RunOperation(ctx, c.Path, c.Args, driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: c.Driver, Operation: driverprotocol.OperationConfigDiscover}, env)
+	if err != nil {
+		return driverprotocol.ConfigDiscoveryResult{}, err
+	}
+	if response.ConfigDiscovery == nil {
+		return driverprotocol.ConfigDiscoveryResult{}, fmt.Errorf("driver %q omitted config.discover response", c.Driver)
+	}
+	return *response.ConfigDiscovery, nil
+}
+
 // ValidateConfig fails closed for drivers that do not implement config.validate.
 func (c Client) ValidateConfig(ctx context.Context, agent string, config json.RawMessage) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)

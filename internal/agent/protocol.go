@@ -21,6 +21,7 @@ type ControlCommand = driverprotocol.ControlCommand
 type ImageContent = driverprotocol.ImageContent
 
 const (
+	EventRuntimeStatus    = driverprotocol.EventRuntimeStatus
 	EventRuntimeReady     = driverprotocol.EventRuntimeReady
 	EventCommandAccepted  = driverprotocol.EventCommandAccepted
 	EventCommandRejected  = driverprotocol.EventCommandRejected
@@ -53,6 +54,10 @@ type RuntimeEvent struct {
 	ToolCallID       string          `json:"tool_call_id,omitempty"`
 	ToolName         string          `json:"tool_name,omitempty"`
 	Error            string          `json:"error,omitempty"`
+	Failed           bool            `json:"failed,omitempty"`
+	Readiness        string          `json:"readiness,omitempty"`
+	ReasonCode       string          `json:"reason_code,omitempty"`
+	DeliveryState    string          `json:"delivery_state,omitempty"`
 	Data             map[string]any  `json:"data,omitempty"`
 	Backend          string          `json:"backend,omitempty"`
 	BackendEventType string          `json:"backend_event_type,omitempty"`

@@ -135,6 +135,7 @@ type App struct {
 	AgentStatusConfig              config.AgentStatusConfig
 	AttentionConfig                config.AttentionConfig
 	DirenvConfig                   config.DirenvConfig
+	DefaultAgent                   string
 	AgentsConfig                   map[string]config.AgentDefinitionConfig
 	DriversConfig                  map[string]config.DriverDefinitionConfig
 	BundledDriverCommands          map[string]BundledDriverCommand
@@ -147,7 +148,7 @@ type App struct {
 
 func New(st Store, git Git) *App {
 	cfg := config.Default()
-	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, AgentConfig: cfg.Agent, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DirenvConfig: cfg.Direnv, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
+	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, AgentConfig: cfg.Agent, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DirenvConfig: cfg.Direnv, DefaultAgent: cfg.DefaultAgent, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
 	return a
 }
 

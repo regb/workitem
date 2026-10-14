@@ -10,6 +10,7 @@ import (
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
+	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
@@ -116,6 +117,8 @@ func TestAgentProjectTrustRequiresVerifiedRegisteredManagedWorktree(t *testing.T
 					t.Fatal(err)
 				}
 				application = New(native, git)
+				application.DefaultAgent = "pi"
+				application.AgentsConfig["pi"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{}}
 				application.DaemonSocketPath = socket
 				application.AgentRuntimeSocketRoot = testutil.ShortTempDir(t)
 				application.BundledDriverCommands["pi"] = BundledDriverCommand{Path: "test-driver"}

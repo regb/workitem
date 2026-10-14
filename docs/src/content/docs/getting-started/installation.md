@@ -11,11 +11,11 @@ Install these programs before building `wi`:
 
 - [Go](https://go.dev/doc/install) 1.24 or newer
 - [Git](https://git-scm.com/)
-- [Pi](https://pi.dev)
+- [Pi](https://pi.dev) or [Claude Code](https://code.claude.com/) for coding-agent runtimes
 - [tmux](https://github.com/tmux/tmux) for interactive TUI mode
 - [fzf](https://github.com/junegunn/fzf) 0.71+ for the optional `wi switch` picker
 
-Headless agents do not require tmux or fzf. Pi must be installed and configured for the model provider you intend to use. The Wi skill is embedded in the Wi executable. At runtime startup, the Pi driver exports a private temporary copy and passes it explicitly with `--skill`; do not add a separate copy to Pi configuration. Global skills and settings are not modified.
+Headless agents do not require tmux or fzf. Pi and Claude support TUI and headless modes. Claude headless requires Claude Code 2.1.299 or later and the native receipt/identity capabilities used by the adapter. Configure your chosen agent's normal authentication before starting a runtime. The Wi skill is embedded in the Wi executable. At runtime startup, the Pi driver exports a private temporary copy and passes it explicitly with `--skill`; do not add a separate copy to Pi configuration. Global skills and settings are not modified.
 
 Check the prerequisites available for your workflow:
 
@@ -46,6 +46,14 @@ wi info
 ```
 
 When Go supplies VCS metadata, development versions include the Git revision and dirty-checkout status. Managed-worktree builds may instead report `devel` without a revision. This identifies the code behind a local installation without a manual development version number.
+
+Run first-time setup before using ordinary commands:
+
+```bash
+wi init
+```
+
+Setup detects installed agents through their drivers and asks you to choose the default. It writes profiles with absolute executable paths to `~/.config/wi/config.toml`, or `$XDG_CONFIG_HOME/wi/config.toml`. For scripts, use `wi init --default pi` or `wi init --default claude`. Setup does not launch agents, test authentication, or overwrite an existing config. If you already have a config, set `default_agent = "pi"` to an existing named profile; a missing or dangling pointer is an error.
 
 The daemon starts automatically when an ordinary command needs it. You do not need to start tmux before running `wi`; TUI operations create or reuse the required server and sessions.
 

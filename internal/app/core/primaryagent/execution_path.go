@@ -31,6 +31,15 @@ func CheckoutContainsPath(checkoutPath, candidate string) bool {
 	if err != nil {
 		return false
 	}
+	// Native backends may report the physical CWD (e.g. /private/tmp on
+	// macOS), while a managed claim retains the operator's logical path.
+	// Existing symlinks also must not make an outside path appear contained.
+	if physical, err := filepath.EvalSymlinks(root); err == nil {
+		root = physical
+	}
+	if physical, err := filepath.EvalSymlinks(path); err == nil {
+		path = physical
+	}
 	rel, err := filepath.Rel(root, path)
 	if err != nil || filepath.IsAbs(rel) {
 		return false

@@ -42,4 +42,7 @@ type AgentRuntime struct {
 	StartedAt                time.Time           `json:"started_at"`
 	UpdatedAt                time.Time           `json:"updated_at"`
 	StoppedAt                *time.Time          `json:"stopped_at,omitempty"`
+	Readiness                string              `json:"readiness,omitempty"`
+	ReadinessReasonCode      string              `json:"readiness_reason_code,omitempty"`
+	ReadinessObservedAt      *time.Time          `json:"readiness_observed_at,omitempty"`
 }

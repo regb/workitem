@@ -10,7 +10,7 @@ import (
 // GenerateConversationTitle asks the configured default driver for a title.
 // The driver owns the auxiliary request; no primary conversation is acquired.
 func (a *App) GenerateConversationTitle(ctx context.Context, prompt string) (string, error) {
-	definition, configured := a.AgentsConfig["default"]
+	definition, configured := a.AgentsConfig[a.DefaultAgent]
 	if !configured || strings.TrimSpace(definition.Driver) == "" {
 		return "", fmt.Errorf("default agent has no configured conversation driver")
 	}
@@ -24,5 +24,5 @@ func (a *App) GenerateConversationTitle(ctx context.Context, prompt string) (str
 	if err != nil {
 		return "", err
 	}
-	return backend.GenerateTitle(ctx, prompt, "default", raw)
+	return backend.GenerateTitle(ctx, prompt, a.DefaultAgent, raw)
 }

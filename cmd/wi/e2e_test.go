@@ -110,14 +110,18 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 		t.Fatalf("release binary version = %+v", released)
 	}
 
-	runWiE2E(t, binary, repository, env, "repo", "add", "test", "--from", repository)
-	// Validate through the real bundled driver process, with neither Pi nor
-	// tmux on PATH. Invalid settings must fail before any item is created.
 	configDir := filepath.Join(configHome, "wi")
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte("[agents.invalid]\ndriver = \"pi\"\n[agents.invalid.config]\nthinking = \"extreme\"\n"), 0600); err != nil {
+	defaultProfile := "default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n"
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(defaultProfile), 0600); err != nil {
+		t.Fatal(err)
+	}
+	runWiE2E(t, binary, repository, env, "repo", "add", "test", "--from", repository)
+	// Validate through the real bundled driver process, with neither Pi nor
+	// tmux on PATH. Invalid settings must fail before any item is created.
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(defaultProfile+"[agents.invalid]\ndriver = \"pi\"\n[agents.invalid.config]\nthinking = \"extreme\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	emptyList := string(runWiE2E(t, binary, repository, env, "list", "--ids"))

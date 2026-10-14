@@ -44,6 +44,18 @@ Wi checks configuration before `new --start` creates an item, before `start`/`re
 
 Validation must not launch a coding backend, create native content, allocate resources, or make a model request. Clients fail closed on rejection, missing acknowledgement, or unsupported operations, with a bounded request deadline. Validation is not a guarantee of later executable, authentication, network, or model availability; drivers must also validate launch requests. Error messages should identify missing fields without revealing secret values.
 
+### Configuration discovery
+
+`config.discover` is an optional, read-only process request without a runtime, conversation, or existing config. It returns `config_discovery`:
+
+```json
+{"profiles":[{"name":"pi","label":"Pi","config":{"executable":"/home/me/bin/pi"}}],"warnings":[]}
+```
+
+Each profile has a unique lowercase name using letters, digits, and hyphens, an optional label, and an opaque flat configuration object. Values must be strings, booleans, integers, or string arrays supported by Wi's config parser. `default` is reserved for the user's selection. Return an empty profiles list when no suitable installation exists. Rejection or an omitted discovery response means the driver does not support discovery.
+
+Discovery must not launch a coding backend, authenticate, make model requests, create native content, or return credentials. Bundled drivers locate their executable on `PATH` and return an absolute launcher path, preserving installation symlinks. `wi init` validates each discovered profile through `config.validate`, asks the user to select a named default, writes the default_agent pointer, and publishes the config without overwriting an existing file. The operation and response field are additive within protocol version 2.
+
 ## Bundled skills
 
 The host embeds `skills/wi/` in the Wi executable at build time and includes trusted resources in the optional `launch.skills` array. Each skill has a `name` and `files`; each file has a portable relative `path`, base64-encoded `data`, and optional `executable` flag. No backend destination paths are supplied by the host. Payloads are limited to 16 skills, 64 files per skill, and 4 MiB of content in total. Absolute, hidden, escaping, duplicate, and file/directory-colliding paths are rejected.
@@ -75,9 +87,11 @@ Pi title requests use a temporary working directory and non-persisted print mode
 
 ## Runtime controls and events
 
-The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. Host-side application control resolves daemon-owned state, verifies current runtime ownership and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. Prompt-like commands may carry generic base64 `images` with MIME types only when the driver advertises `image_input`; each driver translates that payload to its native API. A driver must reject unsupported controls rather than simulate TUI keystrokes.
+The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. Host-side application control resolves daemon-owned state, verifies current runtime ownership and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. Prompt-like commands may carry generic base64 `images` with MIME types only when the driver advertises `image_input`; each driver translates that payload to its native API. A driver must reject unsupported controls. It may translate supported commands through backend APIs or its own verified TUI input transport. Terminal input belongs inside the driver, not application policy. For the bundled Claude driver, native acceptance is confirmed through TUI lifecycle hooks or headless replay/queue receipts after input delivery; an initial acknowledgement can instead mean a command entered its bounded queue. It does not advertise atomic idle control. Unknown delivery outcomes must not trigger automatic retyping.
 
-Control messages are limited to 64 KiB of UTF-8 text and four images totaling at most 8 MiB decoded. Images require nonempty canonical base64 and JPEG, PNG, GIF, or WebP MIME types. Control sockets accept up to 12 MiB of serialized JSON to accommodate base64 and escaping; event sockets retain their 1 MiB limit. Both the host and bundled Pi drivers validate image content before handing it off.
+Control messages are limited to 64 KiB of UTF-8 text and four images totaling at most 8 MiB decoded. Images require nonempty canonical base64 and JPEG, PNG, GIF, or WebP MIME types. Control sockets accept up to 12 MiB of serialized JSON to accommodate base64 and escaping; event sockets retain their 1 MiB limit. The host and bundled drivers validate image content before handing it off. Drivers can restrict the supported formats further; the Claude TUI driver currently accepts PNG and JPEG.
+
+Claude headless uses a persistent native streaming-JSON process. Its initialized CLI must be version 2.1.299 or later. Native input UUIDs correlate receipts, merged results, and cancellation with Wi command/request IDs. Pending work is reserved immediately, up to 32 inputs; follow-ups wait for results, while steering uses native `next` priority. Its deduplication table holds at most 1024 commands. Input writes have three-second deadlines; missing receipts after 15 seconds report uncertainty without resending. Frames are limited to 16 MiB. Invalid or truncated frames fail the runtime with a fixed reason code, never native text. Native interrupt receipts confirm the interrupt request, not background-task termination. Shutdown is bounded by SIGTERM then SIGKILL after three seconds. Headless rejects interactive approval/input callbacks and all atomic idle-only operations.
 
 `idle_guard` describes support for guarded operations, not the owner's current activity or readiness.
 
@@ -87,13 +101,17 @@ Pi headless mode reserves submitted work immediately and uses native idle-only p
 
 The `wi agent exec` host owns `runtime.event_socket_path`. A driver opens one connection per compact `RuntimeEvent` and receives the same accepted/error response shape. The host checks protocol, runtime, and work-item identity before relaying the event through the private coordinator API. Drivers never receive the coordinator socket or its protocol metadata. Prompts, responses, deltas, tool arguments, paths, and unrestricted errors do not belong in retained daemon events.
 
+Optional `runtime.status` events carry `readiness` and `reason_code`. Readiness is a closed vocabulary: `starting`, `ready`, `busy`, `awaiting_confirmation`, `waiting_input`, `blocked`, or `stopping`. It describes observed input access separately from process state. The coordinator updates only the current owner's cache, rejects stale observations, and retains compact status history. Command events can carry `delivery_state`: `queued`, `submitted`, `confirmed`, `not_sent`, `uncertain`, or `cancelled`. `reason_code` is also a closed safe vocabulary defined in `agentdriver/protocol/runtime_status.go`; unknown values are rejected rather than retained as native text. `queue.changed` is retained for delivery tracking. Fields are additive and omitted on older drivers.
+
 ## Live content snapshots
 
 Content uses independent protocol version 1. It is optional, read-only, and ephemeral. `ContentSocketPath(controlPath)` derives a runtime-specific hashed filename beside the control socket. Drivers must not unlink a predecessor's endpoint. A crash can leave an old socket without blocking the next owner.
 
 Each connection sends a newline-delimited `ContentRequest` with content protocol version, runtime ID, and work-item ID, and receives one `Content` snapshot. Both request and response identities must match the verified owner. The host rechecks ownership after reading. Sockets are user-only, reads have bounded deadlines, and slow consumers must not block turns.
 
-A snapshot contains sequence, current assistant text, activity, optional leaf identity, and truncation information. Text is capped at 256 KiB, preserving UTF-8. An optional tool snapshot carries its ID, name, running/completed/failed status, and input/output previews limited to 64 KiB each. Pi currently publishes structured tool snapshots in headless mode. Consumers replace snapshots rather than concatenate them. Completion clears streaming text; final messages come from native history. Content and unrestricted errors must never enter retained daemon events.
+A snapshot contains sequence, current assistant text, activity, optional leaf identity, and truncation information. Text is capped at 256 KiB, preserving UTF-8. An optional tool snapshot carries its ID, name, running/completed/failed status, and input/output previews limited to 64 KiB each. Pi and Claude publish structured tool snapshots in headless mode. Consumers replace snapshots rather than concatenate them. Pi completion clears streaming text. Claude retains the last private assistant snapshot until new model activity replaces it. Final history remains authoritative. Content and unrestricted errors must never enter retained daemon events.
+
+Claude TUI streaming uses `MessageDisplay` line batches through an additional private runtime-local endpoint. These are not compact runtime events or per-token deltas. `streaming` indicates incremental content availability, not a particular chunk size. Snapshots retain native history leaf IDs rather than native display-message IDs. Missing batches and upstream truncation set snapshot truncation; native history remains authoritative for complete messages.
 
 These snapshots do not provide lossless replay or a history watermark. Consumers must refresh history after completion, reconnect, or branch/owner changes. Sequence numbers are scoped to one runtime. Opening a content or history view never starts a runtime or changes its mode.
 

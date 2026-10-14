@@ -8,6 +8,7 @@ Pick one small task with an observable definition of done. This walkthrough impl
 First [register a repository](../../concepts/repositories/):
 
 ```bash
+wi init
 wi repo add project --from /path/to/repository --branch main
 ```
 

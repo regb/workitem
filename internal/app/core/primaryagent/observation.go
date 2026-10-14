@@ -375,6 +375,9 @@ func deriveAgentStatus(process AgentProcessStatus, session ConversationStatus, n
 		}
 		return "idle", "conversation has no turn activity yet"
 	}
+	if session.InferredTurnState == "failed" && session.LastTurnActivity.Terminal && session.LastTurnActivity.Failed {
+		return "problem", "latest turn failed or was interrupted"
+	}
 	if session.InferredTurnState == "failed" && session.LastTerminalAssistant != nil {
 		return "problem", "latest terminal assistant message ended with " + session.LastTerminalAssistant.StopReason
 	}

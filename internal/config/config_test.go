@@ -3,21 +3,48 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/regb/workitem/internal/config"
 )
 
-func TestLoadDefaultsWhenMissing(t *testing.T) {
+func TestMissingDefaultProfileIsConfigurationError(t *testing.T) {
 	cfg, warnings, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
-	if err != nil {
-		t.Fatal(err)
+	if err == nil || !strings.Contains(err.Error(), "default_agent") || !strings.Contains(err.Error(), "wi init") || len(cfg.Agents) != 0 {
+		t.Fatalf("cfg=%+v err=%v", cfg, err)
 	}
 	if len(warnings) != 0 {
 		t.Fatalf("warnings = %+v", warnings)
 	}
 	if cfg.DeepWork.MaxActive != 2 || cfg.List.RepositoryFolders != 2 || cfg.Attention.Priority != "recent-request" {
 		t.Fatalf("cfg = %+v", cfg)
+	}
+}
+
+func TestExistingConfigWithoutDefaultProfileFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[agents.pi]\ndriver = \"pi\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "default_agent") {
+		t.Fatalf("expected missing default error: %v", err)
+	}
+}
+
+func TestDefaultAgentReferenceValidation(t *testing.T) {
+	for _, content := range []string{
+		"default_agent = \"missing\"\n[agents.pi]\ndriver = \"pi\"\n",
+		"default_agent = \"\"\n[agents.pi]\ndriver = \"pi\"\n",
+		"default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n[agents.default]\ndriver = \"pi\"\n",
+	} {
+		path := filepath.Join(t.TempDir(), "config.toml")
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := config.Load(path); err == nil {
+			t.Fatalf("accepted %q", content)
+		}
 	}
 }
 
@@ -48,7 +75,7 @@ func TestLoadAgentDefinitionsAndDriverDefaults(t *testing.T) {
 	if len(warnings) != 0 {
 		t.Fatalf("warnings=%v", warnings)
 	}
-	if cfg.Agents["default"].Driver != "pi" || cfg.Agents["web-search"].Driver != "pi" || cfg.Agents["web-search"].Label != "Pi · Web search" {
+	if cfg.DefaultAgent != "pi" || cfg.Agents["pi"].Driver != "pi" || cfg.Agents["web-search"].Driver != "pi" || cfg.Agents["web-search"].Label != "Pi · Web search" {
 		t.Fatalf("agents=%+v", cfg.Agents)
 	}
 	if cfg.Drivers["pi"].Defaults["executable"] != "/opt/pi/bin/pi" {
@@ -121,6 +148,9 @@ func TestRejectNegativeLimit(t *testing.T) {
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
+	if filepath.Base(path) == "config.toml" && !strings.Contains(content, "default_agent =") {
+		content = "default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n" + content
+	}
 	if err := osWriteFile(path, []byte(content)); err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 
 const (
 	OperationConfigValidate           = "config.validate"
+	OperationConfigDiscover           = "config.discover"
 	OperationLaunch                   = "launch"
 	OperationConversationCreate       = "conversation.create"
 	OperationConversationCWD          = "conversation.cwd"
@@ -33,7 +34,22 @@ type Response struct {
 	Ready            *Ready                  `json:"ready,omitempty"`
 	Conversation     *ConversationResponse   `json:"conversation,omitempty"`
 	ConfigValidation *ConfigValidationResult `json:"config_validation,omitempty"`
+	ConfigDiscovery  *ConfigDiscoveryResult  `json:"config_discovery,omitempty"`
 	Error            string                  `json:"error,omitempty"`
+}
+
+// ConfigDiscoveryResult contains installed agent profiles, not credentials.
+// Discovery is read-only and must not launch an agent or create native content.
+// Config contains a flat object of strings, booleans, integers or string arrays,
+// matching Wi's configuration file values. An empty list means not installed.
+type ConfigDiscoveryResult struct {
+	Profiles []DiscoveredAgentConfig `json:"profiles"`
+	Warnings []string                `json:"warnings,omitempty"`
+}
+type DiscoveredAgentConfig struct {
+	Name   string          `json:"name"`
+	Label  string          `json:"label,omitempty"`
+	Config json.RawMessage `json:"config"`
 }
 
 // ConfigValidationResult acknowledges validation of the merged driver config.

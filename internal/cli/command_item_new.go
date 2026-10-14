@@ -26,7 +26,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	fs.BoolVar(&start, "start", false, "start an agent immediately without attaching and send the startup message")
 	fs.StringVar(&prompt, "prompt", "", "start an agent and send this message without changing the description")
 	fs.StringVar(&agentMode, "agent-mode", "tui", "with --start, runtime mode: tui or headless")
-	fs.StringVar(&agentName, "agent", "default", "configured agent definition")
+	fs.StringVar(&agentName, "agent", "", "named agent profile (default: default_agent from config)")
 	fs.StringVar(&slug, "slug", "", "explicit active slug for the new work item")
 	fs.Var(&labels, "label", "label to add (repeatable)")
 	fs.BoolVar(&noDefaultLabels, "no-default-labels", false, "do not inherit user or repository default labels")

@@ -27,6 +27,8 @@ func runAgentControlMessage(ctx context.Context, args []string, cfg Config, json
 	fs := newFlagSet("agent control send", cfg.Stderr)
 	var item, actor, filePath string
 	var fromStdin, followUp bool
+	var imagePaths repeatFlag
+	fs.Var(&imagePaths, "image", "attach an image file; repeatable, up to four files and 8 MiB total")
 	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
 	fs.StringVar(&actor, "actor", "", "control actor/source")
 	fs.StringVar(&filePath, "file", "", "read message from file")
@@ -35,9 +37,16 @@ func runAgentControlMessage(ctx context.Context, args []string, cfg Config, json
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
 	}
-	message, err := readAgentControlMessage(cfg, fs.Args(), filePath, fromStdin)
+	images, err := readAgentControlImages(cfg.CWD, imagePaths)
 	if err != nil {
 		return usageErr{err}
+	}
+	message := ""
+	if len(imagePaths) == 0 || len(fs.Args()) > 0 || filePath != "" || fromStdin {
+		message, err = readAgentControlMessage(cfg, fs.Args(), filePath, fromStdin)
+		if err != nil {
+			return usageErr{err}
+		}
 	}
 	commandType := agent.CommandSteer
 	if followUp {
@@ -45,7 +54,7 @@ func runAgentControlMessage(ctx context.Context, args []string, cfg Config, json
 	}
 	res, err := cfg.App.AgentControl(ctx, app.AgentControlOptions{
 		ResolveOptions: app.ResolveOptions{Selector: item, CWD: cfg.CWD, Env: cfg.Env},
-		CommandType:    commandType, Message: message, Actor: actor,
+		CommandType:    commandType, Message: message, Images: images, Actor: actor,
 	})
 	if err != nil {
 		return err

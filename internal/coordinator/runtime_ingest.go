@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/model"
 )
@@ -17,16 +18,19 @@ func safeRuntimeID(value string) bool {
 }
 
 type RuntimeSemanticEvent struct {
-	ID         string    `json:"id"`
-	RuntimeID  string    `json:"runtime_id"`
-	WorkItemID string    `json:"work_item_id"`
-	Type       string    `json:"type"`
-	Timestamp  time.Time `json:"timestamp"`
-	CommandID  string    `json:"command_id,omitempty"`
-	RequestID  string    `json:"request_id,omitempty"`
-	Role       string    `json:"role,omitempty"`
-	ToolName   string    `json:"tool_name,omitempty"`
-	Failed     bool      `json:"failed,omitempty"`
+	ID            string    `json:"id"`
+	RuntimeID     string    `json:"runtime_id"`
+	WorkItemID    string    `json:"work_item_id"`
+	Type          string    `json:"type"`
+	Timestamp     time.Time `json:"timestamp"`
+	CommandID     string    `json:"command_id,omitempty"`
+	RequestID     string    `json:"request_id,omitempty"`
+	Role          string    `json:"role,omitempty"`
+	ToolName      string    `json:"tool_name,omitempty"`
+	Failed        bool      `json:"failed,omitempty"`
+	Readiness     string    `json:"readiness,omitempty"`
+	ReasonCode    string    `json:"reason_code,omitempty"`
+	DeliveryState string    `json:"delivery_state,omitempty"`
 }
 
 type RuntimeOwnerMismatchError struct {
@@ -62,6 +66,12 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if !allowedLiveRuntimeEvent(event.Type) {
 		return RuntimeIngestResult{}, fmt.Errorf("runtime event type %q is not retained", event.Type)
 	}
+	if !driverprotocol.ValidReadiness(event.Readiness) || !driverprotocol.ValidReasonCode(event.ReasonCode) || !driverprotocol.ValidDeliveryState(event.DeliveryState) {
+		return RuntimeIngestResult{}, errors.New("invalid compact runtime status facts")
+	}
+	if event.Type == agent.EventRuntimeStatus && event.Readiness == "" {
+		return RuntimeIngestResult{}, errors.New("runtime.status requires readiness")
+	}
 	canonical, err := database.CanonicalManifest(event.WorkItemID)
 	if err != nil {
 		return RuntimeIngestResult{}, err
@@ -89,6 +99,21 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128)}
 	applied := applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
 	updates := []ProjectionUpdate{}
+	readiness := event.Readiness
+	if event.Type == agent.EventRuntimeReady && readiness == "" {
+		readiness = "ready"
+	}
+	if readiness != "" && applied && (owner.ReadinessObservedAt == nil || !event.Timestamp.Before(*owner.ReadinessObservedAt)) {
+		owner.Readiness = readiness
+		owner.ReadinessReasonCode = event.ReasonCode
+		at := event.Timestamp.UTC()
+		owner.ReadinessObservedAt = &at
+		value, _ := json.Marshal(owner)
+		updates = append(updates, ProjectionUpdate{Projection: RuntimeOwnershipProjection, Key: event.WorkItemID, Value: value})
+		if event.Type == agent.EventRuntimeStatus {
+			applied = true
+		}
+	}
 	if applied {
 		activity.ObservedAt = time.Now().UTC()
 		activity.Source = "daemon.runtime.live"
@@ -102,7 +127,7 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 		observationBytes, _ := json.Marshal(observation)
 		updates = append(updates, ProjectionUpdate{Projection: AgentObservationProjection, Key: event.WorkItemID, Value: observationBytes})
 	}
-	payload, _ := json.Marshal(map[string]any{"runtime_id": event.RuntimeID, "command_id": compactIdentifier(event.CommandID, 200), "request_id": header.RequestID, "role": header.Role, "tool_name": header.ToolName, "failed": event.Failed})
+	payload, _ := json.Marshal(map[string]any{"runtime_id": event.RuntimeID, "command_id": compactIdentifier(event.CommandID, 200), "request_id": header.RequestID, "role": header.Role, "tool_name": header.ToolName, "failed": event.Failed, "readiness": event.Readiness, "reason_code": event.ReasonCode, "delivery_state": event.DeliveryState})
 	commandID := "runtime-event:" + event.ID
 	committed, err := database.Commit(Command{ID: commandID, ProtocolVersion: ProtocolVersion, Type: "runtime.event.ingest", Actor: "runtime", ItemID: event.WorkItemID, ReceivedAt: time.Now().UTC()}, []PendingEvent{{ID: event.ID, ItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), Actor: "runtime", Payload: payload}}, updates)
 	if err != nil {
@@ -117,7 +142,7 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 
 func allowedLiveRuntimeEvent(eventType string) bool {
 	switch eventType {
-	case agent.EventRuntimeReady, agent.EventRuntimeStopping, agent.EventRuntimeFailed,
+	case agent.EventRuntimeStatus, agent.EventQueueChanged, agent.EventRuntimeReady, agent.EventRuntimeStopping, agent.EventRuntimeFailed,
 		agent.EventAgentStarted, agent.EventAgentSettled,
 		agent.EventTurnStarted, agent.EventTurnEnded,
 		agent.EventMessageCompleted,
@@ -136,20 +161,58 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 	case agent.EventTurnStarted, agent.EventAgentStarted, agent.EventCommandAccepted, agent.EventToolStarted:
 		observation.Status = "busy"
 		observation.Reason = "live runtime event reports active work"
+		if event.Type == agent.EventCommandAccepted && event.ReasonCode == "native_confirmed" {
+			observation.Reason = "Native command receipt confirmed; execution not yet observed"
+		}
 		observation.TurnState = "incomplete"
 		observation.Activity.LastRequestedAt = &at
 	case agent.EventTurnEnded, agent.EventAgentSettled:
 		observation.Status = "idle"
 		observation.Reason = "live runtime event reports settled work"
 		observation.TurnState = "idle"
+		if event.Failed {
+			observation.Status = "problem"
+			observation.Reason = "live runtime event reports failed or interrupted work"
+			observation.TurnState = "failed"
+		}
 		observation.Activity.LastCompletedAt = &at
 	case agent.EventRuntimeFailed, agent.EventCommandRejected:
 		observation.Status = "problem"
 		observation.Reason = "live runtime event reports a failure"
+		if reason := driverprotocol.RuntimeReasonText(event.ReasonCode); reason != "" {
+			observation.Reason = reason
+		}
+	case agent.EventRuntimeStatus:
+		observation.ProcessOnline = true
+		// Input readiness is independent of the last turn's outcome. Returning
+		// to an empty editor or JSON inbox must not erase actionable failure.
+		if event.Readiness == "ready" && observation.TurnState == "failed" {
+			return
+		}
+		observation.Reason = driverprotocol.RuntimeReasonText(event.ReasonCode)
+		switch event.Readiness {
+		case "blocked", "waiting_input":
+			observation.Status = "problem"
+		case "starting", "stopping", "awaiting_confirmation":
+			observation.Status = "idle"
+		case "busy":
+			observation.Status = "busy"
+			observation.TurnState = "incomplete"
+		case "ready":
+			observation.Status = "idle"
+		}
 	case agent.EventRuntimeReady:
 		observation.ProcessOnline = true
+		if observation.TurnState == "failed" && event.Readiness != "busy" {
+			return
+		}
 		observation.Status = "idle"
 		observation.Reason = "runtime is ready"
 		observation.TurnState = "idle"
+		if event.Readiness == "busy" {
+			observation.Status = "busy"
+			observation.TurnState = "incomplete"
+			observation.Reason = driverprotocol.RuntimeReasonText(event.ReasonCode)
+		}
 	}
 }
