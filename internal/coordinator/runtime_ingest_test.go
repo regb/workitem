@@ -50,7 +50,7 @@ func TestLiveRuntimeEventImmediatelyUpdatesActionability(t *testing.T) {
 		t.Fatalf("duplicate=%+v err=%v", duplicate, err)
 	}
 
-	settled := RuntimeSemanticEvent{ID: "runtime-1:event-2", RuntimeID: "runtime-1", WorkItemID: importTestID, Type: "agent.settled", Timestamp: now.Add(2 * time.Second)}
+	settled := RuntimeSemanticEvent{ID: "runtime-1:event-2", RuntimeID: "runtime-1", WorkItemID: importTestID, Type: "agent.settled", Timestamp: now.Add(2 * time.Second), Outcome: "completed"}
 	if _, err := IngestRuntimeEvent(context.Background(), db, settled); err != nil {
 		t.Fatal(err)
 	}

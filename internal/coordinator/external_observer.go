@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
@@ -52,6 +53,7 @@ type AgentObservation struct {
 	Process            ProjectedProcess       `json:"process"`
 	Runtime            *model.AgentRuntime    `json:"runtime,omitempty"`
 	Terminal           *model.TerminalRuntime `json:"terminal,omitempty"`
+	AgentLoopState     string                 `json:"agent_loop_state,omitempty"`
 	TurnState          string                 `json:"turn_state,omitempty"`
 	LastActivityAt     *time.Time             `json:"last_activity_at,omitempty"`
 	Worktree           *ProjectedWorktree     `json:"worktree,omitempty"`
@@ -201,18 +203,42 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 		observation.Activity.LastRequestedAt = laterTime(observation.Activity.LastRequestedAt, live.LastRequestedAt)
 		observation.Activity.LastCompletedAt = laterTime(observation.Activity.LastCompletedAt, live.LastCompletedAt)
 	}
+	observation.AgentLoopState = ""
 	liveOwnerCurrent := liveFound && ownerFound && claimCurrent && live.RuntimeID == owner.ID
 	liveCurrent := liveOwnerCurrent && live.Source == "daemon.runtime.live" && live.LastEventAt != nil && (!conversationFound || conversation.LastTurnActivity == nil || !live.LastEventAt.Before(conversation.LastTurnActivity.Timestamp))
+	if liveOwnerCurrent && live.Source == "daemon.runtime.live" {
+		observation.AgentLoopState = live.AgentState
+	}
 	switch {
-	case liveCurrent && live.RuntimeState == model.AgentRuntimeProblem:
+	case liveOwnerCurrent && live.RuntimeState == model.AgentRuntimeProblem:
 		observation.Status = "problem"
 		observation.Reason = "live runtime event reports a failure"
-	case liveCurrent && live.TurnState == "busy":
+	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && observation.ProcessOnline && (owner.Readiness == "blocked" || owner.Readiness == "waiting_input") && owner.ReadinessObservedAt != nil && (live.LastRequestedAt == nil || !owner.ReadinessObservedAt.Before(*live.LastRequestedAt)) && (live.LastCompletedAt == nil || !owner.ReadinessObservedAt.Before(*live.LastCompletedAt)):
+		observation.Status = "problem"
+		observation.Reason = driverprotocol.RuntimeReasonText(owner.ReadinessReasonCode)
+	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && live.AgentState == "active" && !observation.ProcessOnline:
+		observation.Status = "problem"
+		observation.Reason = "live agent loop was active but runtime ownership is offline"
+	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && live.AgentState == "active" && observation.ProcessOnline:
+		observation.Status = "busy"
+		observation.Reason = "live agent loop is active"
+		observation.TurnState = "incomplete"
+		observation.LastActivityAt = live.LastEventAt
+	case liveCurrent && live.AgentState == "failed":
+		observation.Status = "problem"
+		observation.Reason = "live agent loop settled with a failure"
+		observation.TurnState = "failed"
+	case liveCurrent && live.AgentState == "settled":
+		observation.Status = "idle"
+		observation.Reason = "live agent loop reports settled work"
+		observation.TurnState = "idle"
+		observation.LastActivityAt = live.LastEventAt
+	case liveCurrent && live.TurnState == "busy" && observation.ProcessOnline:
 		observation.Status = "busy"
 		observation.Reason = "live runtime event reports active work"
 		observation.TurnState = "incomplete"
 		observation.LastActivityAt = live.LastEventAt
-	case liveCurrent && live.TurnState == "idle":
+	case liveCurrent && live.TurnState == "idle" && (!conversationFound || conversation.InferredTurnState != "failed"):
 		observation.Status = "idle"
 		observation.Reason = "live runtime event reports settled work"
 		observation.TurnState = "idle"

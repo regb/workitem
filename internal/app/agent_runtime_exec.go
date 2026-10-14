@@ -63,7 +63,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 					request.Respond(fmt.Errorf("runtime event identity does not match its launch"))
 					continue
 				}
-				_, err := client.IngestRuntimeEvent(ctx, coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState})
+				_, err := client.IngestRuntimeEvent(ctx, coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState})
 				request.Respond(err)
 			}
 		}()

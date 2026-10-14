@@ -86,6 +86,12 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 	eventParent := ctx
 	emit := func(event protocol.RuntimeEvent) {
 		sequence++
+		if event.Type == protocol.EventAgentSettled {
+			event.Outcome = "completed"
+			if event.Failed {
+				event.Outcome = "failed"
+			}
+		}
 		event.ProtocolVersion = protocol.RuntimeVersion
 		event.EventID = fmt.Sprintf("claude:%s:%d", r.Runtime.ID, sequence)
 		event.RuntimeID = r.Runtime.ID

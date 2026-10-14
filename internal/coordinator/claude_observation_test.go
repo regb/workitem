@@ -8,11 +8,16 @@ import (
 func TestFailedSettledEventIsActionable(t *testing.T) {
 	for _, kind := range []string{"agent.settled", "turn.ended"} {
 		observation := AgentObservation{Status: "busy"}
-		applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: kind, Failed: true, Timestamp: time.Now()})
+		activity := RuntimeActivity{}
+		event := RuntimeSemanticEvent{Type: kind, Failed: true, Timestamp: time.Now()}
+		applyRuntimeActivity(&activity, runtimeEventHeader{Type: kind, Failed: true, Timestamp: event.Timestamp}, "", "")
+		applyLiveRuntimeObservation(&observation, event, activity)
 		if observation.Status != "problem" || observation.TurnState != "failed" {
 			t.Fatalf("%+v", observation)
 		}
-		applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: "agent.started", Timestamp: time.Now()})
+		event = RuntimeSemanticEvent{Type: "agent.started", Timestamp: time.Now()}
+		applyRuntimeActivity(&activity, runtimeEventHeader{Type: event.Type, Timestamp: event.Timestamp}, "", "")
+		applyLiveRuntimeObservation(&observation, event, activity)
 		if observation.Status != "busy" {
 			t.Fatalf("%+v", observation)
 		}

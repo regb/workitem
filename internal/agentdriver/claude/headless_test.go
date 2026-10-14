@@ -321,12 +321,19 @@ func TestHeadlessRuntimeMultiTurnAndShutdown(t *testing.T) {
 				for end := time.Now().Add(3 * time.Second); time.Now().Before(end); {
 					mu.Lock()
 					found := false
+					invalidOutcome := false
 					for _, e := range captured {
 						if e.Type == protocol.EventAgentSettled && e.CommandID == id {
+							if (e.Failed && e.Outcome != "failed") || (!e.Failed && e.Outcome != "completed") {
+								invalidOutcome = true
+							}
 							found = true
 						}
 					}
 					mu.Unlock()
+					if invalidOutcome {
+						t.Fatal("settlement missing explicit outcome", id)
+					}
 					if found {
 						return
 					}

@@ -40,16 +40,21 @@ func coordinatorAgentStatus(ctx context.Context, cfg Config, selector string, st
 	if value.Worktree != nil {
 		worktree = &app.WorktreeStatus{Status: value.Worktree.Status, Reason: value.Worktree.Reason, CheckoutPath: value.Worktree.CheckoutPath, Head: value.Worktree.Head, ExpectedBranch: value.Worktree.ExpectedBranch, CurrentBranch: value.Worktree.CurrentBranch, BranchMatches: value.Worktree.BranchMatches, BranchMismatch: value.Worktree.BranchMismatch, Dirty: value.Worktree.Dirty, HasChanges: value.Worktree.HasChanges}
 	}
-	status, reason := value.Status, value.Reason
-	if status == "busy" && staleAfter > 0 && value.LastActivityAt != nil && time.Since(*value.LastActivityAt) > staleAfter {
-		status = "problem"
-		reason = "latest conversation activity is incomplete and older than " + staleAfter.String()
-	}
+	status, reason := projectedAgentStatus(value, staleAfter, time.Now())
 	warnings := append(append([]string(nil), value.Warnings...), conversationWarnings...)
 	if !projection.Projection.Fresh {
 		warnings = append(warnings, "daemon agent observation is stale")
 	}
 	return app.AgentStatusResult{WorkItemID: manifest.ID, Status: status, Reason: reason, ObservedAt: value.ObservedAt, Terminal: value.Terminal, Runtime: value.Runtime, Process: process, Conversation: conversationStatus, Worktree: worktree, Manifest: manifest, Warnings: warnings}, nil
+}
+
+func projectedAgentStatus(value coordinator.AgentObservation, staleAfter time.Duration, now time.Time) (string, string) {
+	status, reason := value.Status, value.Reason
+	if status == "busy" && value.AgentLoopState != "active" && staleAfter > 0 && value.LastActivityAt != nil && now.Sub(*value.LastActivityAt) > staleAfter {
+		status = "problem"
+		reason = "latest conversation activity is incomplete and older than " + staleAfter.String()
+	}
+	return status, reason
 }
 
 func coordinatorWorkListObserver(client *coordinator.Client) viewapp.Observe {

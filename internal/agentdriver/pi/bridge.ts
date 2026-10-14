@@ -111,6 +111,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   let runtimeRetry: ReturnType<typeof setTimeout> | undefined;
   let idleProbe: ReturnType<typeof setInterval> | undefined;
   let activityReportedBusy = false;
+  let settledFailed = false;
   const runtimeQueue: Array<Record<string, unknown>> = [];
   let lastDaemonRejection = "";
   let rejectionLogCooldown = 0;
@@ -188,7 +189,8 @@ export default function wiBridge(pi: ExtensionAPI) {
       request_id: record.request_id,
       role: record.role,
       tool_name: record.tool_name,
-      failed: record.type === "runtime.failed" || record.type === "command.rejected",
+      outcome: record.outcome,
+      failed: record.failed === true || record.type === "runtime.failed" || record.type === "command.rejected",
     });
     drainRuntimeQueue();
   };
@@ -225,7 +227,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   const reconcileIdle = () => {
     if (!activityReportedBusy || !context?.isIdle()) return;
     try {
-      emit("agent.settled", { data: { reconciled: true }, backend_event_type: "idle_probe" });
+      emit("agent.settled", { data: { reconciled: true }, failed: settledFailed, outcome: settledFailed ? "failed" : "completed", backend_event_type: "idle_probe" });
       activityReportedBusy = false;
       currentRequestId = "";
     } catch {
@@ -368,6 +370,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   });
   pi.on("agent_start", (event, ctx) => {
     context = ctx;
+    settledFailed = false;
     activityReportedBusy = true;
     emit("agent.started", { backend_event_type: "agent_start", backend_event: { type: "agent_start", ...event } });
   });
@@ -375,9 +378,13 @@ export default function wiBridge(pi: ExtensionAPI) {
     context = ctx;
     emit("agent.ended", { backend_event_type: "agent_end", backend_event: { type: "agent_end", ...event } });
   });
+  pi.on("agent_before_settle", (event, ctx) => {
+    context = ctx;
+    settledFailed = event.outcome === "error" || event.outcome === "aborted";
+  });
   pi.on("agent_settled", (event, ctx) => {
     context = ctx;
-    emit("agent.settled", { backend_event_type: "agent_settled", backend_event: { type: "agent_settled", ...event } });
+    emit("agent.settled", { failed: settledFailed, outcome: settledFailed ? "failed" : "completed", backend_event_type: "agent_settled", backend_event: { type: "agent_settled", ...event } });
     activityReportedBusy = false;
     currentRequestId = "";
   });
@@ -411,6 +418,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   pi.on("message_end", (event, ctx) => {
     context = ctx;
     const message = event.message;
+    if (message.role === "assistant") settledFailed = message.stopReason === "error" || message.stopReason === "aborted";
     emit("message.completed", {
       role: message.role,
       text: message.role === "assistant" ? textFromContent(message.content) : undefined,

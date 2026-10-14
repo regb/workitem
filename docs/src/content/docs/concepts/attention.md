@@ -7,6 +7,10 @@ Attention answers a practical question: which active item should you inspect nex
 
 An item normally needs attention when it is `working`, its agent is idle, and neither agent nor worktree observation reports a problem. Busy work appears in progress. Waiting work remains outside the attention queue until resumed.
 
+An intermediate assistant or tool error does not end an active agent loop. Pi's hooks keep the item busy through retries, recovery, compaction, and queued work. Only `agent_settled` ends that loop: successful settlement is idle, and failed settlement is a problem. Current-owner hooks take priority over intermediate native messages while the verified runtime is online. Offline or fatal runtimes remain problems. There is no error-recovery timeout, and live active loops are exempt from native-history staleness checks. These observations do not change the item's lifecycle.
+
+Older runtimes without live hooks still use native-history inference. Installing Wi does not inject hooks into a running Pi process; explicitly restart that item’s agent to load the updated driver.
+
 ## Inspect the queue
 
 ```bash

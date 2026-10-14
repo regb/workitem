@@ -21,9 +21,12 @@ type AttentionActivity struct {
 }
 
 type RuntimeActivity struct {
-	WorkItemID      string     `json:"work_item_id"`
-	RuntimeID       string     `json:"runtime_id,omitempty"`
-	RuntimeState    string     `json:"runtime_state,omitempty"`
+	WorkItemID   string `json:"work_item_id"`
+	RuntimeID    string `json:"runtime_id,omitempty"`
+	RuntimeState string `json:"runtime_state,omitempty"`
+	// AgentState spans inner turns, tool failures, retries, and compaction.
+	// Only agent.settled closes an active session-level run.
+	AgentState      string     `json:"agent_state,omitempty"`
 	TurnState       string     `json:"turn_state,omitempty"`
 	LastEventAt     *time.Time `json:"last_event_at,omitempty"`
 	LastRequestedAt *time.Time `json:"last_requested_at,omitempty"`

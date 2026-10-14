@@ -69,4 +69,8 @@ type RuntimeEvent struct {
 	Readiness       string    `json:"readiness,omitempty"`
 	ReasonCode      string    `json:"reason_code,omitempty"`
 	DeliveryState   string    `json:"delivery_state,omitempty"`
+
+	// Outcome is explicit final settlement: completed or failed. An absent
+	// outcome from older drivers must not be mistaken for proven success.
+	Outcome string `json:"outcome,omitempty"`
 }

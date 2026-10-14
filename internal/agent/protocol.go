@@ -53,6 +53,7 @@ type RuntimeEvent struct {
 	Text             string          `json:"text,omitempty"`
 	ToolCallID       string          `json:"tool_call_id,omitempty"`
 	ToolName         string          `json:"tool_name,omitempty"`
+	Outcome          string          `json:"outcome,omitempty"`
 	Error            string          `json:"error,omitempty"`
 	Failed           bool            `json:"failed,omitempty"`
 	Readiness        string          `json:"readiness,omitempty"`

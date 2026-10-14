@@ -19,7 +19,7 @@ func runAgentStatus(ctx context.Context, args []string, cfg Config, jsonOut bool
 	var staleAfter time.Duration
 	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
 	fs.BoolVar(&all, "all", false, "show an overview for all working/waiting items")
-	fs.DurationVar(&staleAfter, "stale-after", 10*time.Minute, "mark incomplete agent activity stale after this duration")
+	fs.DurationVar(&staleAfter, "stale-after", 10*time.Minute, "mark incomplete native-history activity stale after this duration; active live loops are exempt")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
 	}

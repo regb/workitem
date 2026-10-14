@@ -33,6 +33,9 @@ type runtimeEventHeader struct {
 	ToolName         string    `json:"tool_name,omitempty"`
 	Backend          string    `json:"backend,omitempty"`
 	BackendEventType string    `json:"backend_event_type,omitempty"`
+	Failed           bool      `json:"failed,omitempty"`
+	Outcome          string    `json:"outcome,omitempty"`
+	Readiness        string    `json:"readiness,omitempty"`
 }
 
 func fileFingerprint(file *os.File, size int64) (string, error) {
@@ -94,8 +97,27 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 	switch event.Type {
 	case agent.EventRuntimeReady:
 		activity.RuntimeState = model.AgentRuntimeRunning
-		activity.TurnState = "idle"
+		if activity.AgentState != "active" && activity.AgentState != "failed" {
+			activity.AgentState = ""
+		}
+		if activity.AgentState == "active" {
+			activity.TurnState = "busy"
+		} else if activity.AgentState == "failed" {
+			activity.TurnState = "failed"
+		} else {
+			activity.TurnState = "idle"
+		}
+		if event.Readiness == "busy" && activity.AgentState != "active" {
+			activity.AgentState = ""
+			activity.TurnState = "busy"
+		}
+	case agent.EventRuntimeStatus:
+		if event.Readiness == "busy" && activity.AgentState != "active" {
+			activity.AgentState = ""
+			activity.TurnState = "busy"
+		}
 	case agent.EventAgentStarted:
+		activity.AgentState = "active"
 		activity.RuntimeState = model.AgentRuntimeRunning
 		activity.TurnState = "busy"
 		activity.LastRequestedAt = &at
@@ -103,14 +125,38 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 		activity.RuntimeState = model.AgentRuntimeStopping
 	case agent.EventRuntimeFailed:
 		activity.RuntimeState = model.AgentRuntimeProblem
-	case agent.EventTurnStarted, agent.EventCommandAccepted, agent.EventToolStarted:
+	case agent.EventCommandAccepted:
+		if activity.AgentState != "active" {
+			activity.AgentState = ""
+		}
 		activity.TurnState = "busy"
 		activity.LastRequestedAt = &at
-	case agent.EventTurnEnded, agent.EventAgentSettled:
+	case agent.EventTurnStarted, agent.EventToolStarted:
+		activity.TurnState = "busy"
+		activity.LastRequestedAt = &at
+	case agent.EventTurnEnded:
+		// One model response ending is not session settlement. Pi can recover,
+		// retry, compact, or continue through queued work after this boundary.
+		if activity.AgentState != "active" {
+			activity.TurnState = ""
+			if event.Failed {
+				activity.AgentState = "failed"
+				activity.TurnState = "failed"
+			}
+		}
+	case agent.EventAgentSettled:
+		activity.AgentState = ""
 		activity.TurnState = "idle"
+		if event.Outcome == "completed" {
+			activity.AgentState = "settled"
+		}
+		if event.Failed || event.Outcome == "failed" {
+			activity.AgentState = "failed"
+			activity.TurnState = "failed"
+		}
 		activity.LastCompletedAt = &at
 	case agent.EventMessageCompleted:
-		if event.Role == "assistant" || event.Role == "" {
+		if activity.AgentState != "active" && (event.Role == "assistant" || event.Role == "") {
 			activity.LastCompletedAt = &at
 		}
 	}

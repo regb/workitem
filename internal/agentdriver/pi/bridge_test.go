@@ -10,7 +10,7 @@ func TestBridgeReconcilesMissedSettledEventFromIdleContext(t *testing.T) {
 	for _, fragment := range []string{
 		"activityReportedBusy = true",
 		"context?.isIdle()",
-		`emit("agent.settled", { data: { reconciled: true }`,
+		`emit("agent.settled", { data: { reconciled: true }, failed: settledFailed`,
 		"setInterval(reconcileIdle, 1000)",
 		"clearInterval(idleProbe)",
 	} {

@@ -186,7 +186,7 @@ func startRuntimeTestEventRelay(t *testing.T, path string, client *coordinator.C
 	go func() {
 		for request := range server.Requests() {
 			event := request.Event
-			_, err := client.IngestRuntimeEvent(context.Background(), coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed})
+			_, err := client.IngestRuntimeEvent(context.Background(), coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome})
 			request.Respond(err)
 		}
 	}()

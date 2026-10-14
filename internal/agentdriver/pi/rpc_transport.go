@@ -40,23 +40,24 @@ type queuedLiveEvent struct {
 }
 
 type nativeRPCTransport struct {
-	content          *driverprotocol.ContentServer
-	spec             ExecSpec
-	stdin            io.WriteCloser
-	pending          map[string]agent.ControlCommand
-	handled          map[string]bool
-	busy             bool
-	work             map[string]bool // Submitted work, with true marking settlement before its response.
-	responses        map[string]func(error)
-	shutdownPending  bool
-	ready            bool
-	stopping         bool
-	currentRequestID string
-	liveQueue        chan queuedLiveEvent
-	liveContext      context.Context
-	liveNonce        string
-	liveSequence     uint64
-	liveDisabled     atomic.Bool
+	content             *driverprotocol.ContentServer
+	spec                ExecSpec
+	stdin               io.WriteCloser
+	pending             map[string]agent.ControlCommand
+	handled             map[string]bool
+	lastAssistantFailed bool
+	busy                bool
+	work                map[string]bool // Submitted work, with true marking settlement before its response.
+	responses           map[string]func(error)
+	shutdownPending     bool
+	ready               bool
+	stopping            bool
+	currentRequestID    string
+	liveQueue           chan queuedLiveEvent
+	liveContext         context.Context
+	liveNonce           string
+	liveSequence        uint64
+	liveDisabled        atomic.Bool
 }
 
 func runNativeRPC(ctx context.Context, path string, args, env []string, spec ExecSpec) error {
@@ -314,6 +315,9 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 	switch output.Type {
 	case "agent_start", "turn_start":
 		t.busy = true
+		if output.Type == "agent_start" {
+			t.lastAssistantFailed = false
+		}
 	case "agent_settled":
 		t.busy = false
 		for id := range t.work {
@@ -331,6 +335,18 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 	}
 	event := t.nativeEvent(normalizedPiEventType(output.Type), output.Type, raw, t.currentRequestID)
 	populateNormalizedPiEvent(&event, raw)
+	if (output.Type == "message_end" || output.Type == "turn_end") && event.Role == "assistant" {
+		message, _ := event.Data["message"].(map[string]any)
+		reason, _ := message["stopReason"].(string)
+		t.lastAssistantFailed = reason == "error" || reason == "aborted"
+	}
+	if output.Type == "agent_settled" {
+		event.Failed = t.lastAssistantFailed
+		event.Outcome = "completed"
+		if event.Failed {
+			event.Outcome = "failed"
+		}
+	}
 	if output.Type == "agent_settled" {
 		defer func() { t.currentRequestID = "" }()
 	}
@@ -397,7 +413,7 @@ func (t *nativeRPCTransport) queueLiveEvent(event agent.RuntimeEvent, ack chan s
 		return false
 	}
 	t.ensureRuntimeEventID(&event)
-	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
+	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Outcome: event.Outcome, Failed: event.Failed || event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
 	select {
 	case t.liveQueue <- queuedLiveEvent{event: semantic, ack: ack}:
 		return true

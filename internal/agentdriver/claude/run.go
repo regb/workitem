@@ -163,6 +163,12 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 		}
 		eventCtx, cancel := context.WithDeadline(ctx, deadline)
 		defer cancel()
+		if event.Type == protocol.EventAgentSettled {
+			event.Outcome = "completed"
+			if event.Failed {
+				event.Outcome = "failed"
+			}
+		}
 		event.ProtocolVersion = protocol.RuntimeVersion
 		event.EventID = fmt.Sprintf("claude:%s:%d", r.Runtime.ID, sequence.Add(1))
 		event.RuntimeID = r.Runtime.ID

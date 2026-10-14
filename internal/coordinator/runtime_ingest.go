@@ -31,6 +31,7 @@ type RuntimeSemanticEvent struct {
 	Readiness     string    `json:"readiness,omitempty"`
 	ReasonCode    string    `json:"reason_code,omitempty"`
 	DeliveryState string    `json:"delivery_state,omitempty"`
+	Outcome       string    `json:"outcome,omitempty"`
 }
 
 type RuntimeOwnerMismatchError struct {
@@ -72,6 +73,9 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if event.Type == agent.EventRuntimeStatus && event.Readiness == "" {
 		return RuntimeIngestResult{}, errors.New("runtime.status requires readiness")
 	}
+	if event.Outcome != "" && (event.Type != agent.EventAgentSettled || (event.Outcome != "completed" && event.Outcome != "failed") || (event.Outcome == "completed" && event.Failed)) {
+		return RuntimeIngestResult{}, errors.New("invalid agent settlement outcome")
+	}
 	canonical, err := database.CanonicalManifest(event.WorkItemID)
 	if err != nil {
 		return RuntimeIngestResult{}, err
@@ -96,7 +100,7 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if err != nil {
 		return RuntimeIngestResult{}, err
 	}
-	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128)}
+	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness}
 	applied := applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
 	updates := []ProjectionUpdate{}
 	readiness := event.Readiness
@@ -122,12 +126,12 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 
 		observation := AgentObservation{WorkItemID: event.WorkItemID, Activity: AttentionActivity{WorkItemID: event.WorkItemID}, Warnings: []string{}}
 		_, _ = database.ReadProjection(AgentObservationProjection, event.WorkItemID, &observation)
-		applyLiveRuntimeObservation(&observation, event)
+		applyLiveRuntimeObservation(&observation, event, activity)
 		observation.ObservedAt = activity.ObservedAt
 		observationBytes, _ := json.Marshal(observation)
 		updates = append(updates, ProjectionUpdate{Projection: AgentObservationProjection, Key: event.WorkItemID, Value: observationBytes})
 	}
-	payload, _ := json.Marshal(map[string]any{"runtime_id": event.RuntimeID, "command_id": compactIdentifier(event.CommandID, 200), "request_id": header.RequestID, "role": header.Role, "tool_name": header.ToolName, "failed": event.Failed, "readiness": event.Readiness, "reason_code": event.ReasonCode, "delivery_state": event.DeliveryState})
+	payload, _ := json.Marshal(map[string]any{"runtime_id": event.RuntimeID, "command_id": compactIdentifier(event.CommandID, 200), "request_id": header.RequestID, "role": header.Role, "tool_name": header.ToolName, "failed": event.Failed, "outcome": event.Outcome, "readiness": event.Readiness, "reason_code": event.ReasonCode, "delivery_state": event.DeliveryState})
 	commandID := "runtime-event:" + event.ID
 	committed, err := database.Commit(Command{ID: commandID, ProtocolVersion: ProtocolVersion, Type: "runtime.event.ingest", Actor: "runtime", ItemID: event.WorkItemID, ReceivedAt: time.Now().UTC()}, []PendingEvent{{ID: event.ID, ItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), Actor: "runtime", Payload: payload}}, updates)
 	if err != nil {
@@ -154,8 +158,9 @@ func allowedLiveRuntimeEvent(eventType string) bool {
 	}
 }
 
-func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSemanticEvent) {
+func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSemanticEvent, activity RuntimeActivity) {
 	at := event.Timestamp.UTC()
+	observation.AgentLoopState = activity.AgentState
 	observation.LastActivityAt = &at
 	switch event.Type {
 	case agent.EventTurnStarted, agent.EventAgentStarted, agent.EventCommandAccepted, agent.EventToolStarted:
@@ -167,6 +172,22 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 		observation.TurnState = "incomplete"
 		observation.Activity.LastRequestedAt = &at
 	case agent.EventTurnEnded, agent.EventAgentSettled:
+		if (event.Type == agent.EventTurnEnded && activity.AgentState != "active" && !event.Failed) || (event.Type == agent.EventAgentSettled && activity.AgentState == "") {
+			break
+		}
+		if activity.AgentState == "active" {
+			observation.Status = "busy"
+			observation.Reason = "live agent loop is active"
+			observation.TurnState = "incomplete"
+			break
+		}
+		if activity.AgentState == "failed" {
+			observation.Status = "problem"
+			observation.Reason = "live agent loop settled with a failure"
+			observation.TurnState = "failed"
+			observation.Activity.LastCompletedAt = &at
+			break
+		}
 		observation.Status = "idle"
 		observation.Reason = "live runtime event reports settled work"
 		observation.TurnState = "idle"
@@ -214,5 +235,10 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 			observation.TurnState = "incomplete"
 			observation.Reason = driverprotocol.RuntimeReasonText(event.ReasonCode)
 		}
+	}
+	if activity.AgentState == "active" && activity.RuntimeState != model.AgentRuntimeProblem && !(event.Type == agent.EventRuntimeStatus && (event.Readiness == "blocked" || event.Readiness == "waiting_input")) {
+		observation.Status = "busy"
+		observation.Reason = "live agent loop is active"
+		observation.TurnState = "incomplete"
 	}
 }
