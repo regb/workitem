@@ -64,6 +64,9 @@ func Main(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return ExitError
 	}
+	if filtered[0] == "config" {
+		return runConfigMain(filtered[1:], paths.ConfigFile, os.Stdout, os.Stderr, jsonOut)
+	}
 	if filtered[0] == "init" {
 		self, err := os.Executable()
 		if err != nil {
@@ -431,11 +434,14 @@ func (e usageErr) Unwrap() error { return e.err }
 
 func exitCode(err error) int {
 	var amb store.AmbiguousError
+	var configKey configKeyNotFoundError
 	switch {
 	case err == nil:
 		return ExitOK
 	case errors.As(err, &amb):
 		return ExitAmbiguous
+	case errors.As(err, &configKey):
+		return ExitNotFound
 	case errors.Is(err, store.ErrNotFound):
 		return ExitNotFound
 	}

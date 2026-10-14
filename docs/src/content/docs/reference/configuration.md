@@ -15,6 +15,33 @@ For noninteractive setup, use `wi init --default pi` or `wi init --default claud
 
 A missing `default_agent`, or a reference to an undefined profile, is a configuration error. Agent profiles are not implicit defaults. A repository may also provide `.config/wi.toml` for supported project settings, but it cannot define user agent profiles.
 
+## Inspect configuration
+
+```bash
+wi config agents
+wi config get default_agent
+wi config get deep_work.max_active
+wi config get list.labels --json
+wi config get agent.startup_message
+wi config drivers
+wi config show --json
+```
+
+`wi config` defaults to `show`. Queries read global user configuration with built-in defaults. They do not apply repository settings, environment label rules, or profile/driver merges used at launch. They do not start or contact the coordinator, discover installed agents, run driver validation, or execute direnv. Invalid configuration still reports an error.
+
+`agents` lists configured profiles sorted by name, their drivers, optional labels, and the default marker. Its JSON object contains `default_agent` and an `agents` array with `name`, `driver`, optional `label`, and `default`. A configured profile does not imply that its executable is installed or authenticated.
+
+`get KEY` accepts dot-separated configuration keys or sections. Text scalars print directly; sections print sorted dotted settings. `--json` emits the selected JSON value, without a wrapper. An unknown key exits with code 3; invalid arguments exit with code 2.
+
+Driver-specific profile settings, driver defaults, and custom driver commands may contain secrets. Wi hides their values by default, retaining the setting names. Use `--show-sensitive` only when you intend to reveal them, including in JSON output:
+
+```bash
+wi config get agents.pi.config --show-sensitive --json
+wi config get drivers.pi.defaults --show-sensitive --json
+```
+
+`wi info config-file` prints the configuration path. `wi init` remains the first-time setup command; configuration queries never rewrite the file.
+
 ## Example
 
 ```toml

@@ -130,6 +130,18 @@ var helpDocs = map[string]helpDoc{
 		Options: []helpOption{{"--force", "Abort busy turns and terminate verified runtime process groups if graceful shutdown times out."}},
 		SeeAlso: []string{"agent runtime stop", "terminal close", "daemon stop"},
 	},
+	"config": {
+		Summary:     "Inspect global configuration without starting services",
+		Usage:       []string{"wi config [show] [--show-sensitive]", "wi config get KEY [--show-sensitive]", "wi config agents", "wi config drivers [--show-sensitive]"},
+		Description: []string{"Read-only queries of user configuration with built-in defaults. Does not load repository overrides or environment label rules, discover installations, run drivers or direnv, or contact/start the daemon. Configuration must be valid.", "Driver-specific settings and custom driver commands are redacted by default because they can contain secrets. --show-sensitive reveals them, including in JSON. get returns the selected JSON value with --json, or a plain scalar/dotted settings in text; unknown keys exit 3."},
+		Options:     []helpOption{{"--show-sensitive", "Reveal opaque driver settings and custom commands; may expose secrets."}},
+		Examples:    []string{"wi config agents", "wi config get default_agent", "wi config get deep_work.max_active", "wi config show --json"},
+		SeeAlso:     []string{"init", "info", "config show", "config get", "config agents", "config drivers"},
+	},
+	"config show":    {Summary: "Show global settings with built-in defaults", Usage: []string{"wi config show [--show-sensitive]"}, Description: []string{"Outputs sorted dotted settings in text or a configuration object with --json. Driver-specific values and commands are redacted unless --show-sensitive is supplied. Repository and environment overrides are not applied."}, SeeAlso: []string{"config"}},
+	"config get":     {Summary: "Query one configuration key or section", Usage: []string{"wi config get KEY [--show-sensitive]"}, Description: []string{"Use dot-separated JSON keys, such as default_agent, deep_work.max_active, item.defaults.labels, agent.startup_message, agents.pi.config, or drivers.pi.defaults. Unknown keys exit 3. Scalars print directly in text; --json always emits the selected value as JSON."}, SeeAlso: []string{"config"}},
+	"config agents":  {Summary: "List configured agent profiles and the default", Usage: []string{"wi config agents"}, Description: []string{"Lists profiles sorted by name, with driver, optional label, and a default marker. JSON returns default_agent and an agents array containing name, driver, label when set, and default. Does not discover installations, check authentication, or inspect runtime availability."}, SeeAlso: []string{"config", "agent", "init"}},
+	"config drivers": {Summary: "Inspect configured drivers and their defaults", Usage: []string{"wi config drivers [--show-sensitive]"}, Description: []string{"Queries the drivers section, including built-in drivers. Custom commands and opaque defaults are redacted unless --show-sensitive is supplied. No driver executable is resolved or launched."}, SeeAlso: []string{"config"}},
 	"info": {
 		Summary:     "Show resolved paths for the current wi data root",
 		Usage:       []string{"wi info [key]"},
@@ -180,6 +192,7 @@ var helpDocs = map[string]helpDoc{
 		Summary: "List and filter work items",
 		Usage:   []string{"wi list [options]"},
 		Description: []string{
+			"JSON preserves lifecycle-keyed sections and adds display_sections with key, title, and ordered item_ids matching text grouping. Full IDs and slugs remain available in sections. Empty display groups have empty arrays. JSON is an object, not an item array.",
 			"Shows active work grouped by actionability. Archived items are hidden by default. --archived selects archived-only, --all includes active and archived, and --state archived implies archived visibility. Live agent/worktree inspection adds AGENT and WORKTREE columns unless --no-agent is used.",
 			"Label rules are additive. A bare label or +label requires that label; -label excludes it. All positive labels must match and no negative label may match.",
 			"Global defaults use labels = [\"+team\", \"-personal\"] in the [list] section of config.toml. WI_LIST_LABELS accepts comma-separated rules. CLI rules use repeatable --label flags.",
@@ -536,7 +549,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Administration:")
-	printCommandRows(w, [][2]string{{"init", "Set up agent profiles and select the default"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete archived work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
+	printCommandRows(w, [][2]string{{"init", "Set up agent profiles and select the default"}, {"config", "Inspect global settings and agent profiles"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete archived work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "States:")
 	fmt.Fprintln(w, "  backlog | working | waiting | archived")

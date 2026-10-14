@@ -22,6 +22,17 @@ Finish and archive items rather than continually expanding them. Merge, archive,
 
 Setup refuses to overwrite an existing config and does not start agents or the coordinator. A missing default profile is a configuration error; run setup before repository or item commands.
 
+## Configuration queries
+
+| Command | Purpose |
+| --- | --- |
+| `wi config [show] [--json]` | Inspect global settings with built-in defaults |
+| `wi config get KEY [--json]` | Query a scalar or section by dot-separated key |
+| `wi config agents [--json]` | List configured agent profiles and mark the default |
+| `wi config drivers [--json]` | Inspect driver definitions and defaults |
+
+These commands are local and read-only. They do not start a daemon or agent, load project overrides, or discover installations. Opaque driver settings and custom commands are redacted unless `--show-sensitive` is supplied. See [Configuration](../configuration/) for examples.
+
 ## Repositories
 
 Single-repository commands default to the current item's registered repository when the selector is omitted. Explicit names or IDs override context. Outside an item, pass a selector. `rename NEW` renames the current repository; `upstream URL` configures its upstream. `list` remains global and `add` still requires a new name.
@@ -39,6 +50,22 @@ Single-repository commands default to the current item's registered repository w
 | `wi repo sync [NAME] --reset-to-upstream --yes` | Replace integration with upstream, checking exact tips and retaining a recovery ref |
 | `wi repo archive [NAME]` | Hide a repository and block new items, preserving all Git data and existing work |
 | `wi repo restore [NAME]` | Make an archived repository available for new items again |
+
+## List JSON
+
+`wi list --json` returns an object with `deep_work`, `sections`, `warnings`, and `display_sections`. It is not a top-level array. Existing `sections` remain keyed by lifecycle: `working`, `waiting`, `backlog`, and optionally `archived`. Full IDs, slugs, and titles are available there regardless of text truncation.
+
+`display_sections` adds the text display grouping and ordering without duplicating items. Each entry contains `key`, `title`, and an ordered `item_ids` array referencing items in `sections`. With agent observations, keys include `needs_attention`, `needs_fixing`, `in_progress`, `waiting`, and `backlog`. Without observations, including `--no-agent`, grouping follows lifecycle. Archived visibility follows `--archived` and `--all`. Empty display groups have empty ID arrays; text omits their headings.
+
+```bash
+# All visible items, using stable IDs instead of truncated text selectors.
+wi list --json | jq -r '.sections[][]? | [.id, .slug, .title] | @tsv'
+
+# Items in the same NEEDS ATTENTION group and order as the text listing.
+wi list --json | jq -r '.display_sections[] | select(.key == "needs_attention") | .item_ids[]'
+```
+
+Use a JSON parser rather than matching serialized whitespace. A working lifecycle item can appear in NEEDS ATTENTION, NEEDS FIXING, or IN PROGRESS without changing its lifecycle state.
 
 ## Durable items
 

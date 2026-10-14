@@ -57,6 +57,30 @@ func TestInitBootstrapsThroughBundledDrivers(t *testing.T) {
 	if out, err := run("init", "--default", "pi"); err == nil || !strings.Contains(out, "already exists") {
 		t.Fatalf("overwrite: %v %s", err, out)
 	}
+	// Inspection uses the config only, even inside a project with invalid
+	// declarative settings and with only fake backends on PATH.
+	if err := os.MkdirAll(filepath.Join(temp, ".config"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(temp, ".config", "wi.toml"), []byte("not a valid project config"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, query := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"config", "agents", "--json"}, `"default_agent": "claude"`},
+		{[]string{"config", "get", "default_agent"}, "claude\n"},
+		{[]string{"config", "get", "deep_work.max_active", "--json"}, "2\n"},
+		{[]string{"config", "get", "agents.pi.config.executable"}, "[redacted]\n"},
+		{[]string{"config", "get", "agents.pi.config.executable", "--show-sensitive"}, filepath.Join(tools, "pi") + "\n"},
+		{[]string{"config", "drivers", "--json"}, `"defaults"`},
+		{[]string{"config", "--help"}, "Read-only"},
+	} {
+		if out, err := run(query.args...); err != nil || !strings.Contains(out, query.want) {
+			t.Fatalf("config query %v: %v %s", query.args, err, out)
+		}
+	}
 	after, _ := os.ReadFile(path)
 	if !bytes.Equal(before, after) {
 		t.Fatal("overwrote config")

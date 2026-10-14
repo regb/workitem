@@ -1,0 +1,226 @@
+package cli
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"sort"
+	"strings"
+	"text/tabwriter"
+
+	"github.com/regb/workitem/internal/config"
+)
+
+type configKeyNotFoundError struct{ key string }
+
+func (e configKeyNotFoundError) Error() string {
+	return fmt.Sprintf("unknown configuration key %q", e.key)
+}
+
+// Configuration inspection is independent of the app, daemon, repository
+// environment, and driver processes.
+func runConfigMain(args []string, path string, stdout, stderr io.Writer, jsonOut bool) int {
+	if err := queryConfig(args, path, stdout, stderr, jsonOut); err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitCode(err)
+	}
+	return ExitOK
+}
+
+func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut bool) error {
+	showSensitive := false
+	positional := []string{}
+	for _, arg := range args {
+		if arg == "--show-sensitive" {
+			showSensitive = true
+			continue
+		}
+		if strings.HasPrefix(arg, "-") {
+			return usageErr{fmt.Errorf("unknown config option %q", arg)}
+		}
+		positional = append(positional, arg)
+	}
+	if len(positional) == 0 {
+		positional = []string{"show"}
+	}
+	command := positional[0]
+	if (command == "get" && (len(positional) != 2 || strings.TrimSpace(positional[1]) == "")) || (command != "get" && len(positional) != 1) {
+		return usageErr{fmt.Errorf("usage: wi config <show|get KEY|agents|drivers> [--show-sensitive]")}
+	}
+	if command != "show" && command != "get" && command != "agents" && command != "drivers" {
+		return usageErr{fmt.Errorf("unknown config command %q", command)}
+	}
+	cfg, warnings, err := config.Load(path)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	for _, warning := range warnings {
+		fmt.Fprintf(stderr, "warning: config: %s\n", warning)
+	}
+	if command == "agents" {
+		return printConfigAgents(stdout, cfg, jsonOut)
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		return err
+	}
+	var tree map[string]any
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&tree); err != nil {
+		return err
+	}
+	// Optional JSON fields still represent queryable settings when unset.
+	tree["direnv"].(map[string]any)["auto_trust_repositories"] = cfg.Direnv.AutoTrustRepositories
+	tree["item"].(map[string]any)["defaults"].(map[string]any)["labels"] = cfg.Item.Defaults.Labels
+	for name, profile := range cfg.Agents {
+		definition := tree["agents"].(map[string]any)[name].(map[string]any)
+		definition["label"] = profile.Label
+		if _, ok := definition["config"]; !ok {
+			definition["config"] = map[string]any{}
+		}
+	}
+	for name, driver := range cfg.Drivers {
+		definition := tree["drivers"].(map[string]any)[name].(map[string]any)
+		definition["command"] = driver.Command
+		if _, ok := definition["defaults"]; !ok {
+			definition["defaults"] = map[string]any{}
+		}
+	}
+	if !showSensitive {
+		redactConfigDriverSettings(tree)
+	}
+	var value any = tree
+	key := ""
+	if command == "drivers" {
+		key = "drivers"
+	} else if command == "get" {
+		key = positional[1]
+	}
+	if key != "" {
+		for _, part := range strings.Split(key, ".") {
+			object, ok := value.(map[string]any)
+			if !ok {
+				return configKeyNotFoundError{key}
+			}
+			value, ok = object[part]
+			if !ok || part == "" {
+				return configKeyNotFoundError{key}
+			}
+		}
+	}
+	if jsonOut {
+		return writeJSON(stdout, value)
+	}
+	if _, ok := value.(map[string]any); ok {
+		return printConfigTree(stdout, key, value)
+	}
+	if text, ok := value.(string); ok {
+		_, err = fmt.Fprintln(stdout, text)
+		return err
+	}
+	return writeJSON(stdout, value)
+}
+
+// Driver settings are opaque: key-name heuristics cannot safely identify
+// secrets. Keep their structure, but hide every value unless explicitly asked.
+func redactConfigDriverSettings(tree map[string]any) {
+	for _, section := range []string{"agents", "drivers"} {
+		definitions, _ := tree[section].(map[string]any)
+		for _, value := range definitions {
+			definition, _ := value.(map[string]any)
+			field := "config"
+			if section == "drivers" {
+				field = "defaults"
+				if command, ok := definition["command"].(string); ok && command != "" {
+					definition["command"] = "[redacted]"
+				}
+			}
+			if settings, ok := definition[field]; ok {
+				definition[field] = redactConfigValue(settings)
+			}
+		}
+	}
+}
+
+func redactConfigValue(value any) any {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, entry := range v {
+			v[key] = redactConfigValue(entry)
+		}
+		return v
+	case []any:
+		for i, entry := range v {
+			v[i] = redactConfigValue(entry)
+		}
+		return v
+	case nil:
+		return nil
+	default:
+		return "[redacted]"
+	}
+}
+
+func printConfigTree(w io.Writer, prefix string, value any) error {
+	if object, ok := value.(map[string]any); ok && len(object) > 0 {
+		keys := make([]string, 0, len(object))
+		for key := range object {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			path := key
+			if prefix != "" {
+				path = prefix + "." + key
+			}
+			if err := printConfigTree(w, path, object[key]); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(w, "%s = %s\n", prefix, encoded)
+	return err
+}
+
+type configAgentProfile struct {
+	Name    string `json:"name"`
+	Driver  string `json:"driver"`
+	Label   string `json:"label,omitempty"`
+	Default bool   `json:"default"`
+}
+
+func printConfigAgents(w io.Writer, cfg config.Config, jsonOut bool) error {
+	names := make([]string, 0, len(cfg.Agents))
+	for name := range cfg.Agents {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	profiles := make([]configAgentProfile, 0, len(names))
+	for _, name := range names {
+		definition := cfg.Agents[name]
+		profiles = append(profiles, configAgentProfile{Name: name, Driver: definition.Driver, Label: definition.Label, Default: name == cfg.DefaultAgent})
+	}
+	if jsonOut {
+		return writeJSON(w, struct {
+			DefaultAgent string               `json:"default_agent"`
+			Agents       []configAgentProfile `json:"agents"`
+		}{cfg.DefaultAgent, profiles})
+	}
+	table := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(table, "NAME\tDRIVER\tDEFAULT\tLABEL")
+	for _, profile := range profiles {
+		marker := ""
+		if profile.Default {
+			marker = "*"
+		}
+		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n", profile.Name, profile.Driver, marker, profile.Label)
+	}
+	return table.Flush()
+}

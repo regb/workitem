@@ -47,6 +47,7 @@ func agentDisplayLabel(label, marker string) string {
 }
 
 type workDisplaySection struct {
+	Key   string
 	Name  string
 	Items []app.WorkListItem
 }
@@ -109,7 +110,7 @@ func runList(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 		res.Warnings = append(res.Warnings, agentWarnings...)
 	}
 	if jsonOut {
-		return writeJSON(cfg.Stdout, res)
+		return writeJSON(cfg.Stdout, workListJSON(res, mode, agents))
 	}
 	for _, w := range res.Warnings {
 		fmt.Fprintf(cfg.Stderr, "warning: %s\n", w)
@@ -120,6 +121,30 @@ func runList(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	}
 	printWorkList(cfg.Stdout, res, mode, colorEnabled(cfg.Env, cfg.Stdout), agents, listDisplayOptions{ShowIDs: ids || mode != "active", CurrentID: currentID})
 	return nil
+}
+
+// Lifecycle sections remain stable; display sections reference those items by
+// full ID, using the same grouping and ordering as the text renderer.
+type workListDisplaySection struct {
+	Key     string   `json:"key"`
+	Title   string   `json:"title"`
+	ItemIDs []string `json:"item_ids"`
+}
+type workListJSONResult struct {
+	app.WorkListResult
+	DisplaySections []workListDisplaySection `json:"display_sections"`
+}
+
+func workListJSON(res app.WorkListResult, mode string, agents map[string]string) workListJSONResult {
+	result := workListJSONResult{WorkListResult: res, DisplaySections: []workListDisplaySection{}}
+	for _, section := range workDisplaySections(res, mode, agents) {
+		ids := make([]string, 0, len(section.Items))
+		for _, item := range section.Items {
+			ids = append(ids, item.ID)
+		}
+		result.DisplaySections = append(result.DisplaySections, workListDisplaySection{Key: section.Key, Title: section.Name, ItemIDs: ids})
+	}
+	return result
 }
 
 type projectedManifestStore struct{ manifests []model.Manifest }
@@ -298,9 +323,9 @@ func printWorkList(w io.Writer, res app.WorkListResult, mode string, color bool,
 
 func workDisplaySections(res app.WorkListResult, mode string, agents map[string]string) []workDisplaySection {
 	if len(agents) == 0 {
-		sections := []workDisplaySection{{Name: "WORKING", Items: res.Sections.Working}, {Name: "WAITING", Items: res.Sections.Waiting}, {Name: "BACKLOG", Items: res.Sections.Backlog}}
+		sections := []workDisplaySection{{Key: "working", Name: "WORKING", Items: res.Sections.Working}, {Key: "waiting", Name: "WAITING", Items: res.Sections.Waiting}, {Key: "backlog", Name: "BACKLOG", Items: res.Sections.Backlog}}
 		if mode == "all" || mode == "archived" {
-			sections = append(sections, workDisplaySection{Name: "ARCHIVED", Items: res.Sections.Archived})
+			sections = append(sections, workDisplaySection{Key: "archived", Name: "ARCHIVED", Items: res.Sections.Archived})
 		}
 		return sections
 	}
@@ -332,14 +357,14 @@ func workDisplaySections(res app.WorkListResult, mode string, agents map[string]
 		return needsAttention[i].ID < needsAttention[j].ID
 	})
 	sections := []workDisplaySection{
-		{Name: "NEEDS ATTENTION", Items: needsAttention},
-		{Name: "NEEDS FIXING", Items: needsFixing},
-		{Name: "IN PROGRESS", Items: inProgress},
-		{Name: "WAITING", Items: waiting},
-		{Name: "BACKLOG", Items: res.Sections.Backlog},
+		{Key: "needs_attention", Name: "NEEDS ATTENTION", Items: needsAttention},
+		{Key: "needs_fixing", Name: "NEEDS FIXING", Items: needsFixing},
+		{Key: "in_progress", Name: "IN PROGRESS", Items: inProgress},
+		{Key: "waiting", Name: "WAITING", Items: waiting},
+		{Key: "backlog", Name: "BACKLOG", Items: res.Sections.Backlog},
 	}
 	if mode == "all" || mode == "archived" {
-		sections = append(sections, workDisplaySection{Name: "ARCHIVED", Items: res.Sections.Archived})
+		sections = append(sections, workDisplaySection{Key: "archived", Name: "ARCHIVED", Items: res.Sections.Archived})
 	}
 	return sections
 }
