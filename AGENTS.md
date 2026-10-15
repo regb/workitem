@@ -49,6 +49,12 @@ Short-lived work has a durable record: restarting an agent, releasing a worktree
 
 Package-boundary tests enforce allowed imports. Child packages must not import the parent `internal/app` package.
 
+## Protected documentation and agent instructions
+
+- Do not edit `README.md`, `AGENTS.md`, or skill instruction files such as `skills/wi/SKILL.md` unless the user explicitly asks to change those files. This includes files named `SKILL.md` or `SKILLS.md`.
+- A general request to update documentation does not authorize changes to these files. Make ordinary documentation updates under `docs/` instead.
+- If a code change makes a protected file inaccurate, report the mismatch and ask before editing it. Do not rewrite, reorganize, or expand these files as incidental cleanup.
+
 ## Change workflow
 
 Do not create Git commits unless the user explicitly asks for a commit. Leave completed changes in the working tree for review.

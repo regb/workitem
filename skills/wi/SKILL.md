@@ -1,78 +1,121 @@
 ---
 name: wi
-description: Use when the user wants to manage work items or use the wi CLI.
+description: Use when the user wants to manage work items or use the wi cli.
 ---
 
-Wi manages short-lived development tasks in registered Git repositories. Each item should have one bounded objective and a clear completion condition. Its description, conversation, and history remain durable after completion; do not turn an item into a permanent project chat.
+`wi` is a cli to manage short-lived work items for git-based projects.
 
-## Authority and context
+- Each work item is isolated in its own worktree and is assigned an agent session.
+- `wi` is primarly a cli designed for human operators and many commands are meant for human use.
+- Avoid using any create/edit commands until explicitly asked to by the user.
+- Do not perform navigation, workspace, terminal, or workflow cleanup operations directly as they can impact the currently visible item for the user.
+- Commands automatically resolve the curent repo and item from the context where `wi` is ran.
 
-- Read task context with `wi show --json`; inspect `WI_*` variables when needed.
-- Create or update items only when explicitly asked.
-- Do not navigate, start/stop runtimes, alter workspaces or terminals, merge, archive, or delete without explicit authorization. These operations affect the user's environment.
-- Commands normally resolve the current item from its environment or checkout. Backlog items may have no checkout, conversation, or runtime.
+## Manage repos
 
-## Repositories
+Git repositories are the top-level organizations for work items, a work item is always spawned within the context of a repo.
+Wi keeps a global store of all repos that it manages, and a repo must be added explicitly before being able to create a work item in it.
 
 ```bash
 wi repo list
-wi repo list --all
-wi repo archive NAME
-wi repo restore NAME
-wi repo add NAME --from GIT_CHECKOUT_PATH --branch INTEGRATION_BRANCH
-wi repo status NAME
-wi repo upstream NAME URL --branch BRANCH
-wi repo sync NAME
+wi repo add NAME --from GIT_CHECKOUT_PATH --branch DEFAULT_INTEGRATION_BRANCH
 ```
 
-Repositories must be registered explicitly. Onboarding imports committed state into an independent bare store without modifying or depending on the source checkout. Repository selection defaults to the current item's repository; outside an item, pass `--repo NAME`. Registration authorizes project-local agent resources in its verified managed worktrees. Pi receives per-launch approval, not a saved global trust decision; direnv `.envrc` approval remains separate.
+Use a local checkout of the repo you want to start managing, set the integration branch that `wi` will use to merge back the changes on each work item, if you omit it, it will try to discover it automatically and usually resolve main or master.
 
-Only archive or restore a repository when explicitly asked. Archiving hides it from the default list and blocks new items, including inherited selection. It preserves its reserved name, Git data, dirty worktrees, and existing items and does not stop agents. Restore allows new items again. There is no repository deletion command; do not delete Git stores or worktrees manually.
-
-## File a task
+Usually you don't need to specify a repo as you will file items related to the current item which is already associated with the right repo.
+A repo can have a remote upstream where it syncs its integration branch.
 
 ```bash
-wi new --title "Fix banner flicker" --desc-file task.md
+wi repo status
+wi repo sync
 ```
 
-This captures backlog work without starting it. For capture before naming, use `wi new --untitled`; it creates an editable `Untitled task` title and an ID-derived slug. `--title` and `--untitled` are mutually exclusive. Later title edits do not rename the active slug or branch.
+## Work item context
 
-Use a short recognizable title and a self-contained description with evidence, constraints, and completion criteria. A recipient may have none of the current conversation.
+An agent session is always running in the context of a work item.
+You can inspect `WI_*` env variables if you need to understand in which work item context you are currently running.
 
-Creation defaults to the registered integration commit. Use `--base=HEAD` to build on the current claimed worktree's commit; dirty files are not copied.
+To inspect the item description and the task:
 
-When explicitly requested, `--start` activates the item and sends the configured startup message. `--prompt` implies `--start` and supplies that message, not the description. Use it only when agent startup is explicitly authorized. Existing-item `start` and `resume` send no prompt.
+```bash
+wi show --json
+```
 
-File unrelated discoveries as separate tasks. Correcting the original objective can stay in the same item.
+## Filing work items
 
-## Review and finish
+Create a new work item with its description in a markdown file:
+
+```bash
+wi new --title "Item title" --desc-file DESC_FILE
+```
+
+It default to the repo of the current work item, use `--repo REPO_NAME` if you want to file the item in another repo.
+The command will file the work item but not start it.
+
+The title should be short (3 to 5 words ideally) and help quickly recognize the item.
+Titles are ephemeral, they don't need to capture fully the task but contain enough hints that they can be differentiated among currently active items.
+Good titles: `Fix flag xyz`, `Reproduce banner flicker`
+Bad title: `issue follow-up`, `Fix the flag abc identified on banner 42 on June 16 when user click twice`
+
+The description should be written in a descriptive style as you would do on a ticket tracking system.
+It should be very actionable and include enough context to be self-contained.
+If you file an item as a related work or follow up work, consider that the person that will work on it might have no context of your current session and all they will know is the repository at the chosen branch along with the item description that you sent.
+
+An item is always created from the default integration branch of the repo; if you want to start it from the commit in the current worktree, use `--base=HEAD`.
+
+A new item is added in the backlog and not acted on. You can start an agent automatically to tackle it with `--start`. You can choose an agent profile with `--agent`.
+Using `--prompt` automatically starts the agent and passes a prompt directly instead of a definition.
+
+```bash
+wi config agents
+wi new --title "Fix issue 23" --prompt "Please look up issue 23 and fix it" --agent claude
+```
+
+## Completing work items
+
+When the work on the item is completed and commited on the local branch, use:
+
+```bash
+wi merge
+```
+
+to merge it to the default integration branch.
+This command synchronizes a configured upstream before merging, but does not push.
+
+Once an item is merged and all work scoped to the task is settled (or accounted for in follow-up items), an item can be archived.
+Never run the archive command without explicit instructions from the user.
+Usually this is rather ran as part of review and management of items, not directly within an item, so use:
+
+```bash
+wi archive --item ITEM_NAME
+```
+
+## Update item state
+
+Avoid updating wi items unless explicitly asked to do so.
+
+```bash
+wi show --json
+wi edit --label backend --label reliability
+wi edit --remove-label blocked
+
+wi state show --json
+wi state set waiting
+wi state set working
+wi state set backlog
+wi state set archived
+```
+
+`state set` changes durable lifecycle only. It does not start/stop agents or clean terminal/workspace resources.
+
+## Review work items
+
+Use when asked to inventory, review, or triage current work:
 
 ```bash
 wi list --json
 wi list --json --state working
 wi list --json --label +backend --label -blocked
-wi list --json --all
-wi workspace status --json
+wi list --json --all # To include archived items
 ```
-
-An idle agent is not proof of completion. Review the diff and relevant tests. Once intended changes are committed and the checkout is clean, an explicitly authorized `wi merge` integrates into the registered branch; it synchronizes a configured upstream base first, but does not push or archive. `--local` deliberately skips that remote preflight. Upstreams are native Git remote/branch tracking, inferred from a URL or local origin during new onboarding. Git config is authoritative; list/show/status expose derived observations, not a database copy. --local on repo add leaves tracking unset; --clear removes tracking without deleting origin. Existing repositories are not retroactively changed. Divergence requires an explicitly authorized `wi repo sync NAME --merge` or `--reset-to-upstream --yes`; never reset integration history without authorization. Pending reconciliation uses a dedicated checkout and explicit `--continue`/`--abort`, not an item workspace. The restricted agent endpoint does not allow upstream changes, status fetching, or synchronization.
-
-Archive when the objective is settled and remaining work has separate follow-up items. Only do so on explicit user instruction. Archiving keeps the task record.
-
-## Metadata and lifecycle
-
-When asked to update an item:
-
-```bash
-wi edit --title "Clarified objective"
-wi edit --label backend --label reliability --remove-label blocked
-wi edit --desc-file revised-task.md
-wi edit --deep
-wi edit --no-deep
-wi state show --json
-wi state set waiting
-```
-
-`wi edit` applies metadata changes together without changing lifecycle, slug, branch, or runtime and without sending a prompt. With no edit flags, it opens title and description in `$VISUAL`/`$EDITOR`; use flags from an agent session rather than invoking an interactive editor. Use `--item SELECTOR` for another item and IDs for archived items. `wi show` reads metadata and description. The old title, label, and deep commands are removed, with no aliases. The restricted agent endpoint rejects edits; do not try to bypass it.
-
-`state set` changes lifecycle only. It does not start/stop agents or clean workspace/terminal resources. Use `wi help <command>` for exact options and safety rules.
