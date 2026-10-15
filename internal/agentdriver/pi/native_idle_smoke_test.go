@@ -53,7 +53,11 @@ func TestNativePiIdleShutdown(t *testing.T) {
 	done := make(chan error, 1)
 	spec := ExecSpec{RuntimeID: "smoke-owner", WorkItemID: "smoke-item", Mode: agent.ModeHeadless, CWD: root, ControlSocketPath: controlPath, EventSocketPath: eventPath}
 	env := append(os.Environ(), "WI_ID=smoke-item", "WI_AGENT_RUNTIME_ID=smoke-owner", "WI_AGENT_MODE=headless", "WI_AGENT_CONTROL_SOCKET="+controlPath, "WI_AGENT_EVENT_SOCKET="+eventPath)
-	args := []string{"--mode", "rpc", "--session", filepath.Join(root, "native.jsonl"), "--no-extensions", "--extension", bridge, "--no-skills", "--no-tools", "--no-context-files", "--no-approve"}
+	promptPath := filepath.Join(root, "system-prompt.md")
+	if err := os.WriteFile(promptPath, []byte("Wi system instructions.\nRead the current work item."), 0600); err != nil {
+		t.Fatal(err)
+	}
+	args := []string{"--append-system-prompt", promptPath, "--mode", "rpc", "--session", filepath.Join(root, "native.jsonl"), "--no-extensions", "--extension", bridge, "--no-skills", "--no-tools", "--no-context-files", "--no-approve"}
 	go func() { done <- runNativeRPC(ctx, path, args, env, spec) }()
 	select {
 	case <-ready:

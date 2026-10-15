@@ -43,6 +43,9 @@ type LaunchRequest struct {
 	Config          json.RawMessage   `json:"config"`
 	Environment     map[string]string `json:"environment,omitempty"`
 	Skills          []Skill           `json:"skills,omitempty"`
+	// AppendSystemPrompt is host-supplied text, not a replacement system prompt
+	// or a conversation message. Empty means no host-provided addition.
+	AppendSystemPrompt string `json:"append_system_prompt,omitempty"`
 	// ProjectTrusted authorizes project-local agent resources for this launch.
 	// The host sets it only after verifying a registered repository worktree.
 	ProjectTrusted bool `json:"project_trusted,omitempty"`

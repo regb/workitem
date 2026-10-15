@@ -47,21 +47,22 @@ type Client struct {
 }
 
 type ExecSpec struct {
-	SessionPath       string
-	BridgePath        string
-	Mode              agent.Mode
-	CWD               string
-	Env               map[string]string
-	LogPath           string
-	WorkItemID        string
-	RuntimeID         string
-	ControlSocketPath string
-	EventSocketPath   string
-	Extensions        []string
-	Skills            []string
-	Model             string
-	Thinking          string
-	ProjectTrusted    bool
+	SessionPath        string
+	BridgePath         string
+	Mode               agent.Mode
+	CWD                string
+	Env                map[string]string
+	LogPath            string
+	WorkItemID         string
+	RuntimeID          string
+	ControlSocketPath  string
+	EventSocketPath    string
+	Extensions         []string
+	Skills             []string
+	Model              string
+	Thinking           string
+	AppendSystemPrompt string
+	ProjectTrusted     bool
 }
 
 func New(path string) Client {
@@ -156,6 +157,24 @@ func (c Client) ExecMode(ctx context.Context, spec ExecSpec) error {
 			return fmt.Errorf("Pi skill path must be absolute: %q", skill)
 		}
 		args = append(args, "--skill", skill)
+	}
+	if strings.TrimSpace(spec.AppendSystemPrompt) != "" {
+		// Pi accepts either text or a filename. A private file ensures the
+		// configured value is always literal text, even if it names a file.
+		prompt, err := os.CreateTemp("", "wi-pi-system-prompt-*.md")
+		if err != nil {
+			return fmt.Errorf("create Pi system prompt: %w", err)
+		}
+		defer os.Remove(prompt.Name())
+		_, writeErr := prompt.WriteString(spec.AppendSystemPrompt)
+		closeErr := prompt.Close()
+		if writeErr != nil {
+			return fmt.Errorf("write Pi system prompt: %w", writeErr)
+		}
+		if closeErr != nil {
+			return fmt.Errorf("close Pi system prompt: %w", closeErr)
+		}
+		args = append(args, "--append-system-prompt", prompt.Name())
 	}
 	if spec.ProjectTrusted {
 		args = append(args, "--approve")

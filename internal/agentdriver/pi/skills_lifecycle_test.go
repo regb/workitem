@@ -21,7 +21,7 @@ func TestLaunchCleansTemporarySkillsOnFailure(t *testing.T) {
 		if err := os.WriteFile(backend, []byte("#!/bin/sh\nexit 42\n"), 0700); err != nil {
 			t.Fatal(err)
 		}
-		request := protocol.LaunchRequest{Skills: skills.Bundled(), Config: []byte(`{"executable":"` + backend + `"}`), Runtime: protocol.Runtime{Mode: protocol.ModeTUI, CWD: t.TempDir()}, Conversation: protocol.Conversation{Locator: "/tmp/test-session.jsonl"}}
+		request := protocol.LaunchRequest{AppendSystemPrompt: "host instructions", Skills: skills.Bundled(), Config: []byte(`{"executable":"` + backend + `"}`), Runtime: protocol.Runtime{Mode: protocol.ModeTUI, CWD: t.TempDir()}, Conversation: protocol.Conversation{Locator: "/tmp/test-session.jsonl"}}
 		replyError := errors.New("readiness rejected")
 		err := launch(context.Background(), request, func(protocol.Ready) error {
 			if rejectReady {

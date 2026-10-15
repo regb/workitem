@@ -23,6 +23,7 @@ wi config get default_agent
 wi config get deep_work.max_active
 wi config get list.labels --json
 wi config get agent.startup_message
+wi config get agent.append_system_prompt
 wi config drivers
 wi config show --json
 ```
@@ -127,6 +128,17 @@ Repository configuration cannot grant execution trust. This prevents a checked-i
 `agent.startup_message` is the global message sent by `wi new --start`. It must be a non-empty quoted string. Escape newlines as `\n` within the string. `--prompt TEXT` overrides this message for that creation and implies `--start`. It conflicts with an explicit `--start=false`. Neither message changes the durable description supplied through `--desc-file`.
 
 `wi resume` never sends a startup message. `wi start` for an existing item opens its runtime without submitting a message. Use `wi agent control send` to explicitly start a turn in an existing conversation.
+
+## Appended system instructions
+
+`agent.append_system_prompt` adds text to the backend\'s normal system prompt for every newly launched runtime, including resumed conversations. The bundled Pi and Claude drivers apply it in both TUI and headless modes. It is separate from `startup_message` and does not submit a user message.
+
+The default identifies the conversation as a Wi item and directs the agent to read `wi show`. Inspect it with `wi config get agent.append_system_prompt`. Set a quoted string to customize it; escape newlines as `\n`. An empty or whitespace-only string disables Wi\'s addition. Values are literal text, not file paths. Changes apply to future launches, not existing runtimes.
+
+```toml
+[agent]
+append_system_prompt = "Read the task with `wi show`. Ask before changing other work items."
+```
 
 ## Coding agents and drivers
 

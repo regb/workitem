@@ -25,6 +25,8 @@ A `launch` request contains the agent name, merged driver configuration, runtime
 
 The optional `launch.project_trusted` boolean authorizes project-local agent configuration and resources for this launch. An absent field means no host approval. The host sets it only after verifying the runtime directory is the current claimed managed slot of a registered repository and its Git common directory matches the owned store. Drivers may translate this authorization to their native project-resource approval mechanism. The bundled Pi driver passes `--approve` in both modes. This does not authorize direnv shell code, modify Pi's saved trust decisions, or grant blanket trust to a parent directory. Short-lived title and configuration operations do not receive this runtime authorization.
 
+The additive `launch.append_system_prompt` string carries host-configured text to append to the backend\'s normal system prompt. It is not a replacement prompt or an initial conversation message. The bundled Pi and Claude drivers honor it in both modes, for creation and resume. Empty text means no host addition; drivers must not substitute their own Wi boilerplate. External drivers need to implement this field to apply the setting. It is launch configuration, not retained runtime-event content.
+
 The runtime mode is independent of the process protocol:
 
 - `tui` asks the driver to run its interactive backend. `wi` composes that runtime with tmux.

@@ -40,7 +40,10 @@ func TestDriverLaunchesConfiguredPiWithTemporarySkill(t *testing.T) {
 printf '%s\n' "$@" > "$ARGS_PATH"
 printf '%s\n%s\n' "$PI_CODING_AGENT_DIR" "$PI_CODING_AGENT_SESSION_DIR" > "$ENV_PATH"
 while [ "$#" -gt 0 ]; do
-  if [ "$1" = '--skill' ]; then
+  if [ "$1" = '--append-system-prompt' ]; then
+    shift
+    cat "$1" > "$PROMPT_COPY" || exit 1
+  elif [ "$1" = '--skill' ]; then
     shift
     cat "$1/SKILL.md" > "$SKILL_COPY" || exit 1
   fi
@@ -60,6 +63,8 @@ done
 	t.Setenv("ARGS_PATH", argsPath)
 	t.Setenv("ENV_PATH", envPath)
 	t.Setenv("SKILL_COPY", capture)
+	promptCopy := filepath.Join(dir, "prompt-copy")
+	t.Setenv("PROMPT_COPY", promptCopy)
 	profileDir := filepath.Join(dir, "profile")
 	if err := os.Mkdir(profileDir, 0700); err != nil {
 		t.Fatal(err)
@@ -82,7 +87,7 @@ done
 	defer cancel()
 	ready := make(chan error, 1)
 	go func() {
-		response, err := server.ServeOnce(ctx, driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: "pi", Agent: "web", Config: config, ProjectTrusted: true, Skills: skills.Bundled(), Runtime: driverprotocol.Runtime{ID: "runtime", WorkItemID: "item", Mode: driverprotocol.ModeTUI, CWD: dir, ControlSocketPath: filepath.Join(dir, "control.sock")}, Conversation: driverprotocol.Conversation{ID: "session", Locator: filepath.Join(dir, "session.jsonl")}})
+		response, err := server.ServeOnce(ctx, driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: "pi", Agent: "web", Config: config, AppendSystemPrompt: "Shared host instructions", ProjectTrusted: true, Skills: skills.Bundled(), Runtime: driverprotocol.Runtime{ID: "runtime", WorkItemID: "item", Mode: driverprotocol.ModeTUI, CWD: dir, ControlSocketPath: filepath.Join(dir, "control.sock")}, Conversation: driverprotocol.Conversation{ID: "session", Locator: filepath.Join(dir, "session.jsonl")}})
 		if err == nil && !response.Capabilities.BundledSkills {
 			t.Error("missing bundled skill capability")
 		}
@@ -100,6 +105,10 @@ done
 	}
 	if !strings.Contains(string(args), "--approve\n") || !strings.Contains(string(args), "/tools/web-search.ts") || !strings.Contains(string(args), "--session") || !strings.Contains(string(args), "openai-codex/gpt-test") || !strings.Contains(string(args), "high") {
 		t.Fatalf("args=%s", args)
+	}
+	promptText, err := os.ReadFile(promptCopy)
+	if err != nil || string(promptText) != "Shared host instructions" {
+		t.Fatalf("system prompt=%q err=%v", promptText, err)
 	}
 	lines := strings.Split(strings.TrimSpace(string(args)), "\n")
 	skillPath := ""

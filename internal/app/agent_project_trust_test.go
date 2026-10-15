@@ -122,6 +122,7 @@ func TestAgentProjectTrustRequiresVerifiedRegisteredManagedWorktree(t *testing.T
 				application.DaemonSocketPath = socket
 				application.AgentRuntimeSocketRoot = testutil.ShortTempDir(t)
 				application.BundledDriverCommands["pi"] = BundledDriverCommand{Path: "test-driver"}
+				application.AgentConfig.AppendSystemPrompt = "Shared custom system instructions\nfor either mode."
 				for _, runtimeMode := range []agent.Mode{agent.ModeTUI, agent.ModeHeadless} {
 					runtime := model.AgentRuntime{ID: string(runtimeMode), WorkItemID: itemID, ConversationID: sessionID, Mode: string(runtimeMode), State: model.AgentRuntimeStarting, WorkspaceClaimID: m.Checkout.Claim.ID, WorkspaceClaimGeneration: m.Checkout.Claim.Generation}
 					if err := native.SaveAgentRuntime(ctx, itemID, runtime); err != nil {
@@ -130,6 +131,9 @@ func TestAgentProjectTrustRequiresVerifiedRegisteredManagedWorktree(t *testing.T
 					called := false
 					application.RunAgentDriver = func(_ context.Context, _ string, _ []string, request driverprotocol.LaunchRequest, _ []string, onReady func(driverprotocol.Ready) error) error {
 						called = true
+						if request.AppendSystemPrompt != application.AgentConfig.AppendSystemPrompt {
+							t.Fatal("launch lost system prompt")
+						}
 						if !request.ProjectTrusted || request.Runtime.Mode != driverprotocol.Mode(runtimeMode) {
 							t.Fatalf("unapproved launch=%+v", request)
 						}

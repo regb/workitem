@@ -10,8 +10,6 @@ import (
 	protocol "github.com/regb/workitem/agentdriver/protocol"
 )
 
-const workItemSystemPrompt = "This conversation belongs to a Wi work item. Read its task with `wi show` and inspect task context with `wi show --json`. File unrelated work as a separate item; do not change lifecycle, workspaces, or terminals without the user's authorization."
-
 // runtimeSetup owns only resources shared by both modes. Native TUI hooks,
 // terminal input, and headless JSON transport remain in their mode runners.
 type runtimeSetup struct {
@@ -21,6 +19,7 @@ type runtimeSetup struct {
 	content                                      *protocol.ContentServer
 	cleanupSkills                                func()
 	config                                       Config
+	appendSystemPrompt                           string
 }
 
 func prepareRuntime(r protocol.LaunchRequest, c Config) (*runtimeSetup, error) {
@@ -39,7 +38,7 @@ func prepareRuntime(r protocol.LaunchRequest, c Config) (*runtimeSetup, error) {
 	if err != nil {
 		return nil, err
 	}
-	p := &runtimeSetup{executable: executable, session: session, native: native, locator: r.Conversation.Locator, env: runtimeEnvironment(env, r.Runtime.Mode), config: c}
+	p := &runtimeSetup{executable: executable, session: session, native: native, locator: r.Conversation.Locator, env: runtimeEnvironment(env, r.Runtime.Mode), config: c, appendSystemPrompt: r.AppendSystemPrompt}
 	success := false
 	defer func() {
 		if !success {
@@ -95,7 +94,10 @@ func (p *runtimeSetup) args(modeArgs ...string) ([]string, error) {
 	}
 	// Both modes bypass per-tool permission prompts on creation and resume.
 	// This is not a sandbox or permission to answer authentication/trust dialogs.
-	args := []string{"--dangerously-skip-permissions", "--append-system-prompt", workItemSystemPrompt}
+	args := []string{"--dangerously-skip-permissions"}
+	if strings.TrimSpace(p.appendSystemPrompt) != "" {
+		args = append(args, "--append-system-prompt", p.appendSystemPrompt)
+	}
 	args = append(args, modeArgs...)
 	args = append(args, sessionArgs...)
 	if p.skills != "" {

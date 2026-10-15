@@ -42,6 +42,7 @@ func TestConfigQueryDefaultsScalarsAndSections(t *testing.T) {
 		want string
 	}{
 		{[]string{"get", "default_agent"}, false, "pi\n"},
+		{[]string{"get", "agent.append_system_prompt"}, false, "This conversation belongs to a Wi work item."},
 		{[]string{"get", "default_agent"}, true, "\"pi\"\n"},
 		{[]string{"get", "deep_work.max_active"}, true, "2\n"},
 		{[]string{"get", "agents.pi.label"}, false, "My Pi\n"},
@@ -57,6 +58,23 @@ func TestConfigQueryDefaultsScalarsAndSections(t *testing.T) {
 				t.Fatalf("code=%d out=%s err=%s", code, &out, &errout)
 			}
 		})
+	}
+}
+
+func TestConfigQueriesConfiguredSystemPrompt(t *testing.T) {
+	path := configQueryFixture(t)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, writeErr := file.WriteString("\n[agent]\nappend_system_prompt = \"Custom system instructions.\"\n")
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
+		t.Fatalf("write=%v close=%v", writeErr, closeErr)
+	}
+	var out, errout bytes.Buffer
+	if code := runConfigMain([]string{"get", "agent.append_system_prompt"}, path, &out, &errout, true); code != ExitOK || out.String() != "\"Custom system instructions.\"\n" {
+		t.Fatalf("%d %s %s", code, &out, &errout)
 	}
 }
 

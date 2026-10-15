@@ -14,9 +14,10 @@ import (
 )
 
 const (
-	DefaultMaxDeepWorkActive = 2
-	DefaultRepositoryFolders = 2
-	DefaultStartupMessage    = "Read this work item's description with `wi show`. Work on the task it describes. Run relevant checks and report the outcome."
+	DefaultMaxDeepWorkActive  = 2
+	DefaultRepositoryFolders  = 2
+	DefaultAppendSystemPrompt = "This conversation belongs to a Wi work item. Read its task with `wi show` and inspect task context with `wi show --json`. File unrelated work as a separate item; do not change lifecycle, workspaces, or terminals without the user's authorization."
+	DefaultStartupMessage     = "Read this work item's description with `wi show`. Work on the task it describes. Run relevant checks and report the outcome."
 )
 
 type Config struct {
@@ -33,7 +34,8 @@ type Config struct {
 }
 
 type AgentConfig struct {
-	StartupMessage string `json:"startup_message"`
+	AppendSystemPrompt string `json:"append_system_prompt"`
+	StartupMessage     string `json:"startup_message"`
 }
 
 type AgentDefinitionConfig struct {
@@ -89,7 +91,7 @@ type DirenvConfig struct {
 }
 
 func Default() Config {
-	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}}
+	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}}
 }
 
 func Load(path string) (Config, []string, error) {
@@ -164,6 +166,12 @@ func Load(path string) (Config, []string, error) {
 				return cfg, warnings, fmt.Errorf("parse list.labels on line %d: %w", lineNo, err)
 			}
 			cfg.List.Labels = parsed
+		case "agent.append_system_prompt":
+			parsed, err := strconv.Unquote(value)
+			if err != nil {
+				return cfg, warnings, fmt.Errorf("parse agent.append_system_prompt on line %d: %w", lineNo, err)
+			}
+			cfg.Agent.AppendSystemPrompt = parsed
 		case "agent.startup_message":
 			parsed, err := strconv.Unquote(value)
 			if err != nil {
@@ -195,6 +203,9 @@ func Load(path string) (Config, []string, error) {
 }
 
 func Validate(cfg Config) error {
+	if strings.ContainsRune(cfg.Agent.AppendSystemPrompt, 0) {
+		return fmt.Errorf("agent.append_system_prompt must not contain NUL")
+	}
 	if strings.TrimSpace(cfg.Agent.StartupMessage) == "" {
 		return fmt.Errorf("agent.startup_message must not be empty")
 	}

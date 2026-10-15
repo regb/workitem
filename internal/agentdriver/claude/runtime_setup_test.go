@@ -73,7 +73,7 @@ func TestSharedRuntimeSetupBothModes(t *testing.T) {
 			root := t.TempDir()
 			locator := filepath.Join(root, "sessions", uuid("shared")+".jsonl")
 			control := filepath.Join(root, "control.sock")
-			request := protocol.LaunchRequest{Runtime: protocol.Runtime{Mode: mode, ID: "runtime", WorkItemID: "item", CWD: root, ControlSocketPath: control}, Conversation: protocol.Conversation{Locator: locator}, Environment: map[string]string{"HOME": root, "CLAUDE_CONFIG_DIR": filepath.Join(root, ".claude"), "TMUX": "private socket", "TMUX_PANE": "%1", "TMUX_TMPDIR": root, "WI_ID": "item"}, Skills: []protocol.Skill{{Name: "wi", Files: []protocol.SkillFile{{Path: "SKILL.md", Data: []byte("fixture skill")}}}}}
+			request := protocol.LaunchRequest{AppendSystemPrompt: "Custom Wi context\nPreserve this text.", Runtime: protocol.Runtime{Mode: mode, ID: "runtime", WorkItemID: "item", CWD: root, ControlSocketPath: control}, Conversation: protocol.Conversation{Locator: locator}, Environment: map[string]string{"HOME": root, "CLAUDE_CONFIG_DIR": filepath.Join(root, ".claude"), "TMUX": "private socket", "TMUX_PANE": "%1", "TMUX_TMPDIR": root, "WI_ID": "item"}, Skills: []protocol.Skill{{Name: "wi", Files: []protocol.SkillFile{{Path: "SKILL.md", Data: []byte("fixture skill")}}}}}
 			p, err := prepareRuntime(request, Config{Executable: "sh", Model: "haiku", Effort: "low"})
 			if err != nil {
 				t.Fatal(err)
@@ -92,7 +92,7 @@ func TestSharedRuntimeSetupBothModes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			want := []string{"--dangerously-skip-permissions", "--append-system-prompt", workItemSystemPrompt, "--mode-fixture", "--session-id", p.session, "--plugin-dir", p.skills, "--model", "haiku", "--effort", "low"}
+			want := []string{"--dangerously-skip-permissions", "--append-system-prompt", request.AppendSystemPrompt, "--mode-fixture", "--session-id", p.session, "--plugin-dir", p.skills, "--model", "haiku", "--effort", "low"}
 			if !reflect.DeepEqual(args, want) {
 				t.Fatal(args)
 			}
@@ -107,6 +107,65 @@ func TestSharedRuntimeSetupBothModes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestSystemPromptAppendOnCreateAndResume(t *testing.T) {
+	for _, mode := range []protocol.Mode{protocol.ModeTUI, protocol.ModeHeadless} {
+		for _, resume := range []bool{false, true} {
+			for _, prompt := range []string{"Custom instructions\nPreserve this text.", "", "   "} {
+				root := t.TempDir()
+				locator := filepath.Join(root, uuid("prompt")+".jsonl")
+				if resume {
+					if err := os.WriteFile(locator, []byte("existing native history"), 0600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				request := protocol.LaunchRequest{AppendSystemPrompt: prompt, Runtime: protocol.Runtime{Mode: mode, ID: "runtime", WorkItemID: "item", CWD: root, ControlSocketPath: filepath.Join(root, "control.sock")}, Conversation: protocol.Conversation{Locator: locator}, Environment: map[string]string{"HOME": root, "CLAUDE_CONFIG_DIR": filepath.Join(root, ".claude")}}
+				p, err := prepareRuntime(request, Config{Executable: "sh"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				args, err := p.args()
+				p.close()
+				if err != nil {
+					t.Fatal(err)
+				}
+				count := 0
+				sessionFlag := "--session-id"
+				if resume {
+					sessionFlag = "--resume"
+				}
+				foundSession := false
+				for i, arg := range args {
+					if arg == "--system-prompt" {
+						t.Fatal("replaced native system prompt")
+					}
+					if arg == sessionFlag {
+						foundSession = true
+					}
+					if arg == "--append-system-prompt" {
+						count++
+						if i+1 >= len(args) || args[i+1] != prompt {
+							t.Fatal(args)
+						}
+					}
+				}
+				want := 1
+				if strings.TrimSpace(prompt) == "" {
+					want = 0
+				}
+				if count != want || !foundSession {
+					t.Fatalf("mode=%s resume=%v prompt=%q args=%v", mode, resume, prompt, args)
+				}
+				if resume {
+					data, err := os.ReadFile(locator)
+					if err != nil || string(data) != "existing native history" {
+						t.Fatal("native history changed", err)
+					}
+				}
+			}
+		}
 	}
 }
 

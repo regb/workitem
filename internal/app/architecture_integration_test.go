@@ -2048,6 +2048,9 @@ func TestAgentExecHoldsLockAndRunsPiWithExplicitRootConversationLocator(t *testi
 	var driverEnv []string
 	application.RunAgentDriver = func(_ context.Context, _ string, _ []string, request driverprotocol.LaunchRequest, environment []string, onReady func(driverprotocol.Ready) error) error {
 		driverEnv = append([]string(nil), environment...)
+		if request.AppendSystemPrompt != config.DefaultAppendSystemPrompt {
+			t.Fatal("missing default system instructions")
+		}
 		if request.ProjectTrusted {
 			t.Fatal("legacy repository received automatic project approval")
 		}
