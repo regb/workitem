@@ -46,7 +46,7 @@ func TestConfigQueryDefaultsScalarsAndSections(t *testing.T) {
 		{[]string{"get", "default_agent"}, true, "\"pi\"\n"},
 		{[]string{"get", "deep_work.max_active"}, true, "2\n"},
 		{[]string{"get", "agents.pi.label"}, false, "My Pi\n"},
-		{[]string{"get", "direnv.auto_trust_repositories"}, true, "null\n"},
+		{[]string{"get", "extensions.direnv.trust"}, true, "\"prompt\"\n"},
 		{[]string{"get", "drivers.claude.defaults"}, true, "{}\n"},
 		{[]string{"get", "agents.web-search.config"}, true, "{}\n"},
 		{[]string{"get", "agent"}, false, "agent.startup_message = "},
@@ -150,6 +150,19 @@ func TestConfigQueryWarningsStayOffJSONAndNumbersRemainExact(t *testing.T) {
 	}
 	var out, errout bytes.Buffer
 	if code := runConfigMain([]string{"get", "deep_work.max_active"}, path, &out, &errout, true); code != ExitOK || out.String() != "9007199254740993\n" || !strings.Contains(errout.String(), "warning: config:") {
+		t.Fatalf("code=%d out=%s err=%s", code, &out, &errout)
+	}
+}
+
+func TestConfigRejectsRepositoryPolicyFlags(t *testing.T) {
+	path := configQueryFixture(t)
+	var out, errout bytes.Buffer
+	if code := runConfigMain([]string{"get", "extensions.direnv.trust", "--repo", "biskoui"}, path, &out, &errout, true); code != ExitUsage || !strings.Contains(errout.String(), "repo settings") {
+		t.Fatalf("code=%d out=%s err=%s", code, &out, &errout)
+	}
+	out.Reset()
+	errout.Reset()
+	if code := runConfigMain([]string{"extensions"}, path, &out, &errout, true); code != ExitOK || !strings.Contains(out.String(), "\"repository\": true") {
 		t.Fatalf("code=%d out=%s err=%s", code, &out, &errout)
 	}
 }

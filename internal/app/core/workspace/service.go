@@ -31,10 +31,7 @@ type Tmux interface {
 	HasSession(context.Context, string) (bool, error)
 }
 
-type Direnv interface {
-	Status(context.Context, string) (model.DirenvStatus, error)
-	Deny(context.Context, string) error
-}
+type PrepareCheckout func(context.Context, contract.CheckoutPreparation) ([]string, error)
 
 type Resolver func(context.Context, contract.ResolveOptions) (model.Manifest, error)
 type OwnershipObserver func(*model.AgentRuntime) bool
@@ -43,14 +40,14 @@ type Service struct {
 	store     Store
 	git       Git
 	tmux      Tmux
-	direnv    Direnv
+	prepare   PrepareCheckout
 	resolve   Resolver
 	ownership OwnershipObserver
 	now       func() time.Time
 }
 
-func New(st Store, git Git, tmux Tmux, direnv Direnv, resolve Resolver, ownership OwnershipObserver, now func() time.Time) *Service {
-	return &Service{store: st, git: git, tmux: tmux, direnv: direnv, resolve: resolve, ownership: ownership, now: now}
+func New(st Store, git Git, tmux Tmux, prepare PrepareCheckout, resolve Resolver, ownership OwnershipObserver, now func() time.Time) *Service {
+	return &Service{store: st, git: git, tmux: tmux, prepare: prepare, resolve: resolve, ownership: ownership, now: now}
 }
 
 type GitStatus struct {

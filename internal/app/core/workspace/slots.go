@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/regb/workitem/internal/app/contract"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -79,12 +80,18 @@ func (s *Service) assignSlot(ctx context.Context, m model.Manifest) (slotAssignm
 }
 
 func (s *Service) finishSlotAssignment(ctx context.Context, m model.Manifest, path, branch, source string, warnings []string, reused bool) (slotAssignment, error) {
-	if reused {
-		if revoked, err := s.revokeReusedSlotDirenvTrust(ctx, path); err != nil {
-			return slotAssignment{}, fmt.Errorf("revoke direnv trust for reused slot before assignment: %w", err)
-		} else if revoked {
-			warnings = append(warnings, "revoked prior direnv trust for reused slot; runtime startup will request approval again")
+	if m.Checkout.Claim != nil || m.Checkout.ClaimGeneration == ^uint64(0) {
+		return slotAssignment{}, fmt.Errorf("cannot prepare an occupied or exhausted checkout claim")
+	}
+	if s.prepare != nil {
+		w, err := s.prepare(ctx, contract.CheckoutPreparation{ItemID: m.ID, RepositoryID: m.Repository.ID, Path: path, Generation: m.Checkout.ClaimGeneration + 1, Reused: reused})
+		warnings = append(warnings, w...)
+		if err != nil {
+			return slotAssignment{}, fmt.Errorf("prepare checkout before claim publication: %w", err)
 		}
+	}
+	if err := ctx.Err(); err != nil {
+		return slotAssignment{}, err
 	}
 	if _, err := m.Checkout.AssignNewClaim(m.Checkout.Specification.Executor, repositoryKey(m.Repository), filepath.Base(path), path); err != nil {
 		return slotAssignment{}, err

@@ -36,6 +36,8 @@ const (
 	MethodSetRepositoryUpstream = "set_repository_upstream"
 	MethodRepositoryStatus      = "repository_status"
 	MethodRepositorySync        = "repository_sync"
+	MethodRepositorySettings    = "repository_settings"
+	MethodSetRepositorySetting  = "set_repository_setting"
 	MethodListManifests         = "list_manifests"
 	MethodConversation          = "conversation"
 	MethodAgentObservation      = "agent_observation"

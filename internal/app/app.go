@@ -20,7 +20,7 @@ import (
 	workspacecore "github.com/regb/workitem/internal/app/core/workspace"
 	viewapp "github.com/regb/workitem/internal/app/view"
 	"github.com/regb/workitem/internal/config"
-	direnvpkg "github.com/regb/workitem/internal/direnv"
+	"github.com/regb/workitem/internal/extension"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
@@ -67,13 +67,6 @@ type ConversationBackend interface {
 	ObserveConversation(ctx context.Context, conversation model.Conversation, path string, now time.Time) (driverprotocol.ConversationObservation, []string, error)
 }
 
-type Direnv interface {
-	Status(ctx context.Context, dir string) (direnvpkg.Status, error)
-	Allow(ctx context.Context, rcPath string) error
-	Deny(ctx context.Context, rcPath string) error
-	Environment(ctx context.Context, dir string, base map[string]string) (map[string]string, error)
-}
-
 type Store interface {
 	Ensure() error
 	CreateItem(ctx context.Context, manifest model.Manifest, events ...model.Event) error
@@ -116,7 +109,7 @@ type App struct {
 	Git                            Git
 	Tmux                           Tmux
 	ConversationBackends           map[string]ConversationBackend
-	Direnv                         Direnv
+	Extensions                     extension.Pipeline
 	Process                        ProcessInspector
 	Clock                          Clock
 	NewID                          func() (string, error)
@@ -134,12 +127,10 @@ type App struct {
 	AgentConfig                    config.AgentConfig
 	AgentStatusConfig              config.AgentStatusConfig
 	AttentionConfig                config.AttentionConfig
-	DirenvConfig                   config.DirenvConfig
 	DefaultAgent                   string
 	AgentsConfig                   map[string]config.AgentDefinitionConfig
 	DriversConfig                  map[string]config.DriverDefinitionConfig
 	BundledDriverCommands          map[string]BundledDriverCommand
-	ApproveDirenv                  agentcore.DirenvApprover
 	AgentRuntimeLauncher           agent.Launcher
 	RunAgentDriver                 AgentDriverRunner
 	ConversationProjectionObserver agentcore.ConversationObserver
@@ -148,7 +139,7 @@ type App struct {
 
 func New(st Store, git Git) *App {
 	cfg := config.Default()
-	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, AgentConfig: cfg.Agent, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DirenvConfig: cfg.Direnv, DefaultAgent: cfg.DefaultAgent, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
+	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, AgentConfig: cfg.Agent, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DefaultAgent: cfg.DefaultAgent, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
 	return a
 }
 
@@ -191,7 +182,7 @@ func (a *App) itemService() *itemcore.Service {
 	})
 }
 func (a *App) workspaceService() *workspacecore.Service {
-	return workspacecore.New(a.Store, a.Git, a.Tmux, a.Direnv, a.ResolveItem, func(runtime *model.AgentRuntime) bool {
+	return workspacecore.New(a.Store, a.Git, a.Tmux, a.Extensions.PrepareCheckout, a.ResolveItem, func(runtime *model.AgentRuntime) bool {
 		return a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive
 	}, a.now)
 }

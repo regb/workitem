@@ -12,11 +12,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/regb/workitem/internal/model"
 )
 
-type Status = model.DirenvStatus
+type Status struct {
+	Found   bool
+	RCPath  string
+	Allowed bool
+	Raw     string
+}
 
 type Runner interface {
 	Run(ctx context.Context, path string, args []string, dir string, env []string) ([]byte, error)

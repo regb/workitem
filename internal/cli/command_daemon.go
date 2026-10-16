@@ -14,6 +14,7 @@ import (
 
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/extensions/bundled"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/xdg"
 )
@@ -148,7 +149,7 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 		}
 		signalCtx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer cancel()
-		cfgFile, _, err := config.Load(paths.ConfigFile)
+		cfgFile, _, err := config.LoadWithRegistry(paths.ConfigFile, bundled.Registry())
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return ExitError
@@ -179,6 +180,7 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 			return ExitError
 		}
 		defer server.Close()
+		server.ConfigureRepositorySettings(bundled.Registry())
 		if !jsonOut {
 			fmt.Fprintf(stderr, "wi daemon listening on %s (agent endpoint %s)\n", socketPath, agentSocketPath)
 		}

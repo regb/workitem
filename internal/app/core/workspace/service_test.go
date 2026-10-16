@@ -2,6 +2,7 @@ package workspace
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,19 +10,6 @@ import (
 	"github.com/regb/workitem/internal/app/contract"
 	"github.com/regb/workitem/internal/model"
 )
-
-type fakeDirenv struct {
-	status model.DirenvStatus
-	denied string
-}
-
-func (d *fakeDirenv) Status(context.Context, string) (model.DirenvStatus, error) {
-	return d.status, nil
-}
-func (d *fakeDirenv) Deny(_ context.Context, path string) error {
-	d.denied = path
-	return nil
-}
 
 type fakeGit struct{}
 
@@ -49,12 +37,19 @@ func (*recordingStore) LoadAgentRuntime(string) (*model.AgentRuntime, error) { r
 func (*recordingStore) ListManifests() ([]model.Manifest, []error)           { return nil, nil }
 func (*recordingStore) WorktreesDir() string                                 { return "" }
 
-func TestReusedSlotRevokesExistingDirenvTrust(t *testing.T) {
-	direnv := &fakeDirenv{status: model.DirenvStatus{Found: true, Allowed: true, RCPath: "/slot/.envrc"}}
-	s := New(nil, fakeGit{}, nil, direnv, nil, nil, nil)
-	revoked, err := s.revokeReusedSlotDirenvTrust(context.Background(), "/slot")
-	if err != nil || !revoked || direnv.denied != "/slot/.envrc" {
-		t.Fatalf("revoked=%v denied=%q err=%v", revoked, direnv.denied, err)
+func TestCheckoutPreparationCanStopClaimPublication(t *testing.T) {
+	called := false
+	s := New(nil, fakeGit{}, nil, func(ctx context.Context, r contract.CheckoutPreparation) ([]string, error) {
+		called = true
+		if !r.Reused || r.Generation != 4 {
+			t.Fatal(r)
+		}
+		return nil, fmt.Errorf("preparation failed")
+	}, nil, nil, nil)
+	m := model.Manifest{Checkout: model.Checkout{ClaimGeneration: 3}}
+	result, err := s.finishSlotAssignment(context.Background(), m, "/slot", "branch", "source", nil, true)
+	if err == nil || !called || result.Manifest.Checkout.Claim != nil {
+		t.Fatalf("result=%+v error=%v", result, err)
 	}
 }
 

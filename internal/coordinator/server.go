@@ -15,31 +15,39 @@ import (
 
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/options"
 	"github.com/regb/workitem/internal/store"
 	"github.com/regb/workitem/internal/version"
 )
 
 type Server struct {
-	dataRoot               string
-	socketPath             string
-	database               *Database
-	observer               *ExternalObserver
-	native                 *store.Store
-	listener               *net.UnixListener
-	agentListener          *net.UnixListener
-	agentSocketPath        string
-	startedAt              time.Time
-	buildIdentity          string
-	domainMu               sync.Mutex
-	notifyMu               sync.Mutex
-	eventNotify            chan struct{}
-	importMu               sync.RWMutex
-	lastConversationImport ConversationImportReport
-	conversationDecoders   ConversationDecoders
-	closed                 chan struct{}
-	closeDone              chan struct{}
-	closeOnce              sync.Once
-	wg                     sync.WaitGroup
+	dataRoot                   string
+	socketPath                 string
+	database                   *Database
+	observer                   *ExternalObserver
+	native                     *store.Store
+	listener                   *net.UnixListener
+	agentListener              *net.UnixListener
+	agentSocketPath            string
+	startedAt                  time.Time
+	buildIdentity              string
+	domainMu                   sync.Mutex
+	notifyMu                   sync.Mutex
+	eventNotify                chan struct{}
+	importMu                   sync.RWMutex
+	lastConversationImport     ConversationImportReport
+	conversationDecoders       ConversationDecoders
+	repositorySettingsRegistry *options.Registry
+	closed                     chan struct{}
+	closeDone                  chan struct{}
+	closeOnce                  sync.Once
+	wg                         sync.WaitGroup
+}
+
+// ConfigureRepositorySettings installs trusted declarative schemas before Serve.
+// Clients cannot register schemas or authorize their own setting writes.
+func (s *Server) ConfigureRepositorySettings(registry *options.Registry) {
+	s.repositorySettingsRegistry = registry
 }
 
 func NewServer(dataRoot, socketPath string, decoders ...ConversationDecoders) (*Server, error) {
@@ -727,6 +735,32 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		operationCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		value, err := s.setRepositoryUpstream(operationCtx, command)
+		if err != nil {
+			s.writeError(conn, request.ID, "repository_error", err.Error())
+			return
+		}
+		result = value
+	case MethodRepositorySettings:
+		var query RepositorySettingsRequest
+		if err := json.Unmarshal(request.Payload, &query); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		value, err := s.database.RepositorySettings(query.Selector)
+		if err != nil {
+			s.writeError(conn, request.ID, "repository_error", err.Error())
+			return
+		}
+		result = value
+	case MethodSetRepositorySetting:
+		var command SetRepositorySettingCommand
+		if err := json.Unmarshal(request.Payload, &command); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		s.domainMu.Lock()
+		value, err := s.database.SetRepositorySetting(command, s.repositorySettingsRegistry)
+		s.domainMu.Unlock()
 		if err != nil {
 			s.writeError(conn, request.ID, "repository_error", err.Error())
 			return

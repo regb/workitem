@@ -84,9 +84,11 @@ wi agent control send --item ITEM 'Read the task with wi show, implement it, and
 
 Interactive startup asks before trusting an unapproved `.envrc`. Declining, JSON mode, and non-interactive startup continue without it.
 
-Run `wi switch ITEM` interactively to review the approval prompt. For repositories you fully control, add the absolute repository path to the user configuration under `direnv.auto_trust_repositories`.
+Approve the checkout's `.envrc` with `direnv allow /path/to/checkout/.envrc`, or use interactive startup when a new runtime is needed. Existing runtime environments are not changed in place.
 
-Repository `.config/wi.toml` cannot approve its own commands.
+For automatic approval, run `wi repo settings set NAME extensions.direnv.trust always`. This is operator-owned repository policy and also approves changed contents. Inspect stored overrides and effective policy with `wi repo settings show NAME`. Use `wi repo settings unset NAME extensions.direnv.trust` to restore global/default inheritance.
+
+The bundled extension still revokes stale approval on slot reuse. Checked-in `.config/wi.toml` cannot grant approval. See [Configuration](../configuration/#direnv-trust) for loading and trust options.
 
 ## `wi next` says nothing needs attention
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/regb/workitem/internal/config"
+	"github.com/regb/workitem/internal/extensions/bundled"
 )
 
 func TestMissingDefaultProfileIsConfigurationError(t *testing.T) {
@@ -51,17 +52,16 @@ func TestDefaultAgentReferenceValidation(t *testing.T) {
 func TestLoadDirenvAutoTrustRepositories(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	writeFile(t, path, "[direnv]\nauto_trust_repositories = [\"/srv/repos/one\", \"/srv/repos/two\"]\n")
-	cfg, warnings, err := config.Load(path)
-	if err != nil || len(warnings) != 0 || len(cfg.Direnv.AutoTrustRepositories) != 2 {
-		t.Fatalf("cfg=%+v warnings=%v err=%v", cfg, warnings, err)
+	if _, _, err := config.LoadWithRegistry(path, bundled.Registry()); err == nil || !strings.Contains(err.Error(), "no longer supported") {
+		t.Fatalf("legacy allowlist error=%v", err)
 	}
 }
 
 func TestLoadRejectsRelativeDirenvAutoTrustRepository(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	writeFile(t, path, "[direnv]\nauto_trust_repositories = [\"relative/repo\"]\n")
-	if _, _, err := config.Load(path); err == nil {
-		t.Fatal("expected relative auto-trust path rejection")
+	if _, _, err := config.LoadWithRegistry(path, bundled.Registry()); err == nil {
+		t.Fatal("expected retired path allowlist rejection")
 	}
 }
 

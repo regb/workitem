@@ -9,11 +9,3 @@ type WorktreeAddOptions struct {
 	StartPoint string
 	NewBranch  bool
 }
-
-// DirenvStatus is the adapter-neutral trust observation for one .envrc.
-type DirenvStatus struct {
-	Found   bool
-	RCPath  string
-	Allowed bool
-	Raw     string
-}

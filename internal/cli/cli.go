@@ -17,7 +17,8 @@ import (
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/direnv"
+	"github.com/regb/workitem/internal/extension"
+	"github.com/regb/workitem/internal/extensions/bundled"
 	"github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
@@ -43,6 +44,7 @@ type Config struct {
 	StateRoot              string
 	App                    *app.App
 	Coordinator            *coordinator.Client
+	GlobalConfig           *config.Config
 	ControlAccess          string
 }
 
@@ -83,7 +85,7 @@ func Main(ctx context.Context, args []string) int {
 		filtered, jsonOut := extractGlobals(args)
 		return runDaemonMain(ctx, filtered[1:], paths, os.Stdout, os.Stderr, jsonOut)
 	}
-	cfgFile, warnings, err := config.Load(paths.ConfigFile)
+	cfgFile, warnings, err := config.LoadWithRegistry(paths.ConfigFile, bundled.Registry())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", paths.ConfigFile, err)
 		return ExitError
@@ -103,19 +105,17 @@ func Main(ctx context.Context, args []string) int {
 	application.AgentConfig = cfgFile.Agent
 	application.AgentStatusConfig = cfgFile.AgentStatus
 	application.AttentionConfig = cfgFile.Attention
-	application.DirenvConfig = cfgFile.Direnv
 	application.DefaultAgent = cfgFile.DefaultAgent
 	application.AgentsConfig = cfgFile.Agents
 	application.DriversConfig = cfgFile.Drivers
+	var approve extension.Approver
 	if !jsonOut && inputIsTerminal(os.Stdin) {
-		application.ApproveDirenv = func(ctx context.Context, manifest model.Manifest, rcPath string) (bool, error) {
-			return promptDirenvApproval(os.Stdin, os.Stderr, manifest, rcPath)
+		approve = func(ctx context.Context, request extension.Approval) (bool, error) {
+			return promptExtensionApproval(os.Stdin, os.Stderr, request)
 		}
 	}
 	mux := tmux.New("tmux")
 	application.Tmux = mux
-	direnvClient := direnv.New("direnv")
-	application.Direnv = direnvClient
 	if self, err := os.Executable(); err == nil {
 		application.SelfPath = self
 		for _, driver := range []string{"pi", "claude"} {
@@ -126,16 +126,9 @@ func Main(ctx context.Context, args []string) int {
 		application.ConversationBackends[driverName] = client
 	}
 	cwd, _ := os.Getwd()
-	if commandUsesCLIProjectEnvironment(args) {
-		env, err = loadCLIProjectEnvironment(ctx, direnvClient, cwd, env)
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return ExitError
-		}
-	}
 	application.AgentRuntimeStateRoot = paths.DataStateRoot
 	application.AgentRuntimeSocketRoot = paths.DataRuntimeRoot
-	runConfig := Config{RequireOwnedRepository: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, CWD: cwd, Env: env, StateRoot: paths.DataStateRoot, App: application}
+	runConfig := Config{RequireOwnedRepository: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, CWD: cwd, Env: env, StateRoot: paths.DataStateRoot, App: application, GlobalConfig: &cfgFile}
 	defaultSocketPath, err := coordinator.SocketPath(paths.RuntimeDir, paths.DataRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "daemon is required for this command: %s\n", err)
@@ -174,6 +167,29 @@ func Main(ctx context.Context, args []string) int {
 		return ExitError
 	}
 	BindCoordinatorApp(application, st, runConfig.Coordinator)
+	application.Extensions = bundled.New(cfgFile, approve, func(ctx context.Context, id string) (model.RepositorySettings, error) {
+		result, err := client.RepositorySettings(ctx, id)
+		return result.Settings, err
+	})
+	if commandUsesCLIProjectEnvironment(args) {
+		repositoryID, boundary := "", ""
+		if current, findErr := application.Store.FindByWorktree(cwd); findErr == nil {
+			repositoryID = current.Repository.ID
+			if current.Checkout.Claim != nil {
+				boundary = current.Checkout.Claim.Path
+			}
+		}
+		var projectWarnings []string
+		env, projectWarnings, err = loadCLIProjectEnvironment(ctx, application.Extensions, cwd, boundary, repositoryID, env)
+		for _, warning := range projectWarnings {
+			fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
+		}
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return ExitError
+		}
+		runConfig.Env = env
+	}
 	return Run(ctx, args, runConfig)
 }
 
@@ -460,8 +476,8 @@ func inputIsTerminal(input *os.File) bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-func promptDirenvApproval(input io.Reader, output io.Writer, manifest model.Manifest, rcPath string) (bool, error) {
-	fmt.Fprintf(output, "Worktree .envrc is not trusted: %s\nAllow it before starting the Conversation for %s? [y/N] ", rcPath, manifest.Slug)
+func promptExtensionApproval(input io.Reader, output io.Writer, request extension.Approval) (bool, error) {
+	fmt.Fprintf(output, "%s\nPath: %s\nItem: %s [y/N] ", request.Question, request.Path, request.ItemID)
 	line, err := bufio.NewReader(input).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return false, err

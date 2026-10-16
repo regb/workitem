@@ -37,8 +37,8 @@ func TestArchiveHelpExplainsRestoration(t *testing.T) {
 
 func TestAllPublicHelpTopicsAreDocumented(t *testing.T) {
 	topics := []string{
-		"config", "config show", "config get", "config agents", "config drivers", "version", "new", "list", "show", "events", "start", "switch", "next", "resume", "merge", "shelve", "archive", "delete", "shutdown", "edit",
-		"repo", "repo list", "repo rename", "repo archive", "repo restore",
+		"config", "config show", "config get", "config agents", "config drivers", "config extensions", "version", "new", "list", "show", "events", "start", "switch", "next", "resume", "merge", "shelve", "archive", "delete", "shutdown", "edit",
+		"repo", "repo list", "repo rename", "repo archive", "repo restore", "repo settings", "repo settings show", "repo settings set", "repo settings unset",
 		"state", "state show", "state set",
 		"attention", "attention activity", "attention defer", "attention queue",
 		"workspace", "workspace status", "workspace ensure", "workspace release",

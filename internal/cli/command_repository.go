@@ -51,6 +51,8 @@ func runRepository(ctx context.Context, args []string, cfg Config, jsonOut bool)
 		return usageErr{fmt.Errorf("usage: wi repo add|list|show|rename|archive|restore|upstream|status|sync")}
 	}
 	switch args[0] {
+	case "settings":
+		return runRepositorySettings(ctx, args[1:], cfg, jsonOut)
 	case "upstream", "status", "sync":
 		return runRepositoryRemote(ctx, args, cfg, jsonOut)
 	case "list":

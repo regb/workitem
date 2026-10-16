@@ -1,15 +1,16 @@
 package config
 
 import (
-	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
-	"strconv"
+	"sort"
 	"strings"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/options"
 	"github.com/regb/workitem/internal/priority"
 )
 
@@ -21,187 +22,180 @@ const (
 )
 
 type Config struct {
-	DefaultAgent string                            `json:"default_agent"`
-	DeepWork     DeepWorkConfig                    `json:"deep_work"`
-	Item         ItemConfig                        `json:"item"`
-	List         ListConfig                        `json:"list"`
-	Agent        AgentConfig                       `json:"agent"`
-	AgentStatus  AgentStatusConfig                 `json:"agent_status"`
-	Attention    AttentionConfig                   `json:"attention"`
-	Direnv       DirenvConfig                      `json:"direnv"`
-	Agents       map[string]AgentDefinitionConfig  `json:"agents"`
-	Drivers      map[string]DriverDefinitionConfig `json:"drivers"`
+	DefaultAgent  string                            `json:"default_agent"`
+	DeepWork      DeepWorkConfig                    `json:"deep_work"`
+	Item          ItemConfig                        `json:"item"`
+	List          ListConfig                        `json:"list"`
+	Agent         AgentConfig                       `json:"agent"`
+	AgentStatus   AgentStatusConfig                 `json:"agent_status"`
+	Attention     AttentionConfig                   `json:"attention"`
+	Agents        map[string]AgentDefinitionConfig  `json:"agents"`
+	Drivers       map[string]DriverDefinitionConfig `json:"drivers"`
+	Extensions    map[string]map[string]any         `json:"extensions"`
+	optionOrigins map[string]string
 }
 
 type AgentConfig struct {
 	AppendSystemPrompt string `json:"append_system_prompt"`
 	StartupMessage     string `json:"startup_message"`
 }
-
 type AgentDefinitionConfig struct {
 	Driver string         `json:"driver"`
 	Label  string         `json:"label,omitempty"`
 	Config map[string]any `json:"config,omitempty"`
 }
-
 type DriverDefinitionConfig struct {
 	Command  string         `json:"command,omitempty"`
 	Defaults map[string]any `json:"defaults,omitempty"`
 }
-
 type ProjectConfig struct {
 	Item ItemConfig `json:"item"`
 }
-
 type ItemConfig struct {
 	Defaults ItemDefaultsConfig `json:"defaults"`
 }
-
 type ItemDefaultsConfig struct {
 	Labels []string `json:"labels,omitempty"`
 }
-
 type DeepWorkConfig struct {
 	MaxActive int `json:"max_active"`
 }
-
 type ListConfig struct {
 	RepositoryFolders int      `json:"repository_folders"`
-	Labels            []string `json:"labels,omitempty"`
+	Labels            []string `json:"labels"`
 }
-
 type AttentionConfig struct {
 	Priority string `json:"priority"`
 }
-
 type AgentStatusConfig struct {
 	Markers AgentStatusMarkersConfig `json:"markers"`
 }
-
 type AgentStatusMarkersConfig struct {
 	Busy    string `json:"busy,omitempty"`
 	Idle    string `json:"idle,omitempty"`
 	Problem string `json:"problem,omitempty"`
 }
 
-type DirenvConfig struct {
-	// AutoTrustRepositories is a user-configured allowlist. Repository config
-	// must never be able to opt itself into execution trust.
-	AutoTrustRepositories []string `json:"auto_trust_repositories,omitempty"`
-}
-
 func Default() Config {
-	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}}
+	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, Extensions: map[string]map[string]any{}}
 }
-
-func Load(path string) (Config, []string, error) {
+func Load(path string) (Config, []string, error) { return LoadWithRegistry(path, nil) }
+func LoadWithRegistry(path string, registry *options.Registry) (Config, []string, error) {
 	cfg := Default()
-	if strings.TrimSpace(path) == "" {
-		return cfg, nil, Validate(cfg)
-	}
-	f, err := os.Open(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, nil, Validate(cfg)
-		}
-		return cfg, nil, fmt.Errorf("open config: %w", err)
-	}
-	defer f.Close()
-
-	section := ""
+	root := map[string]any{}
 	warnings := []string{}
-	scanner := bufio.NewScanner(f)
-	lineNo := 0
-	for scanner.Scan() {
-		lineNo++
-		line := stripComment(strings.TrimSpace(scanner.Text()))
-		if line == "" {
+	if strings.TrimSpace(path) != "" {
+		data, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			return cfg, warnings, fmt.Errorf("open config: %w", err)
+		}
+		if err == nil {
+			if err := toml.Unmarshal(data, &root); err != nil {
+				return cfg, warnings, fmt.Errorf("parse config: %w", err)
+			}
+		}
+	}
+	for _, definition := range registry.Definitions() {
+		for _, section := range definition.RetiredSections {
+			if _, exists := root[section]; exists {
+				return cfg, warnings, fmt.Errorf("[%s] is no longer supported; configure [extensions.%s] global defaults and wi repo settings explicitly", section, definition.Name)
+			}
+		}
+	}
+	// Validate the typed core and preserve extension tables for registered schemas.
+	known := map[string]map[string]bool{
+		"deep_work": {"max_active": true}, "item": {"defaults": true}, "list": {"repository_folders": true, "labels": true}, "agent": {"startup_message": true, "append_system_prompt": true}, "agent_status": {"markers": true}, "attention": {"priority": true},
+	}
+	for section, value := range root {
+		if keys, ok := known[section]; ok {
+			if entries, ok := value.(map[string]any); ok {
+				for key := range entries {
+					if !keys[key] {
+						warnings = append(warnings, "ignored unknown key "+section+"."+key)
+					}
+				}
+			}
 			continue
 		}
-		if strings.HasPrefix(line, "[") && strings.HasSuffix(line, "]") {
-			section = strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(line, "["), "]"))
-			continue
-		}
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
-			warnings = append(warnings, fmt.Sprintf("line %d ignored: expected key = value", lineNo))
-			continue
-		}
-		key = strings.TrimSpace(key)
-		value = strings.TrimSpace(value)
-		if handled, err := parseAgentDriverSetting(&cfg, section, key, value); handled {
-			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse %s.%s on line %d: %w", section, key, lineNo, err)
-			}
-			continue
-		}
-		switch section + "." + key {
-		case ".default_agent":
-			parsed, err := strconv.Unquote(value)
-			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse default_agent on line %d: %w", lineNo, err)
-			}
-			cfg.DefaultAgent = parsed
-		case "deep_work.max_active":
-			parsed, err := strconv.Atoi(value)
-			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse deep_work.max_active on line %d: %w", lineNo, err)
-			}
-			cfg.DeepWork.MaxActive = parsed
-		case "item.defaults.labels":
-			parsed, err := parseStringArray(value)
-			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse item.defaults.labels on line %d: %w", lineNo, err)
-			}
-			cfg.Item.Defaults.Labels = parsed
-		case "list.repository_folders":
-			parsed, err := strconv.Atoi(value)
-			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse list.repository_folders on line %d: %w", lineNo, err)
-			}
-			cfg.List.RepositoryFolders = parsed
-		case "list.labels":
-			parsed, err := parseStringArray(value)
-			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse list.labels on line %d: %w", lineNo, err)
-			}
-			cfg.List.Labels = parsed
-		case "agent.append_system_prompt":
-			parsed, err := strconv.Unquote(value)
-			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse agent.append_system_prompt on line %d: %w", lineNo, err)
-			}
-			cfg.Agent.AppendSystemPrompt = parsed
-		case "agent.startup_message":
-			parsed, err := strconv.Unquote(value)
-			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse agent.startup_message on line %d: %w", lineNo, err)
-			}
-			cfg.Agent.StartupMessage = parsed
-		case "attention.priority":
-			cfg.Attention.Priority = parseStringValue(value)
-		case "agent_status.markers.busy":
-			cfg.AgentStatus.Markers.Busy = parseStringValue(value)
-		case "agent_status.markers.idle":
-			cfg.AgentStatus.Markers.Idle = parseStringValue(value)
-		case "agent_status.markers.problem":
-			cfg.AgentStatus.Markers.Problem = parseStringValue(value)
-		case "direnv.auto_trust_repositories":
-			parsed, err := parseStringArray(value)
-			if err != nil {
-				return cfg, warnings, fmt.Errorf("parse direnv.auto_trust_repositories on line %d: %w", lineNo, err)
-			}
-			cfg.Direnv.AutoTrustRepositories = parsed
+		switch section {
+		case "default_agent", "agents", "drivers", "extensions", "repositories":
 		default:
-			warnings = append(warnings, fmt.Sprintf("line %d ignored: unknown key %s.%s", lineNo, section, key))
+			warnings = append(warnings, "ignored unknown key "+section)
 		}
 	}
-	if err := scanner.Err(); err != nil {
-		return cfg, warnings, fmt.Errorf("read config: %w", err)
+	if _, exists := root["repositories"]; exists {
+		return cfg, warnings, fmt.Errorf("repository overrides no longer belong in config.toml; use wi repo settings set NAME extensions.EXTENSION.OPTION VALUE explicitly")
 	}
-	return cfg, warnings, Validate(cfg)
+	data, err := json.Marshal(root)
+	if err != nil {
+		return cfg, warnings, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	if err := decoder.Decode(&cfg); err != nil {
+		return cfg, warnings, fmt.Errorf("decode config: %w", err)
+	}
+	for name, d := range cfg.Agents {
+		for key, value := range d.Config {
+			d.Config[key] = normalizeArray(value)
+		}
+		cfg.Agents[name] = d
+	}
+	for name, d := range cfg.Drivers {
+		for key, value := range d.Defaults {
+			d.Defaults[key] = normalizeArray(value)
+		}
+		cfg.Drivers[name] = d
+	}
+	if err := Validate(cfg); err != nil {
+		return cfg, warnings, err
+	}
+	w, err := registry.Validate(cfg.Extensions, false)
+	warnings = append(warnings, w...)
+	if err != nil {
+		return cfg, warnings, err
+	}
+	cfg.optionOrigins = map[string]string{}
+	for _, d := range registry.Definitions() {
+		for _, o := range d.Options {
+			cfg.optionOrigins["extensions."+d.Name+"."+o.Name] = "default"
+		}
+	}
+	for name, values := range cfg.Extensions {
+		for key := range values {
+			cfg.optionOrigins["extensions."+name+"."+key] = "user"
+		}
+	}
+	cfg.Extensions = registry.Resolve(cfg.Extensions, nil)
+	sort.Strings(warnings)
+	return cfg, warnings, nil
+}
+func (cfg Config) ExtensionOrigins() map[string]string {
+	result := map[string]string{}
+	for key, value := range cfg.optionOrigins {
+		result[key] = value
+	}
+	return result
 }
 
+func normalizeArray(value any) any {
+	if entries, ok := value.([]any); ok {
+		stringsOnly := make([]string, len(entries))
+		for i, entry := range entries {
+			text, ok := entry.(string)
+			if !ok {
+				return value
+			}
+			stringsOnly[i] = text
+		}
+		return stringsOnly
+	}
+	return value
+}
+
+func (cfg Config) ExtensionSettings(registry *options.Registry) map[string]map[string]any {
+	return registry.Resolve(cfg.Extensions, nil)
+}
 func Validate(cfg Config) error {
 	if strings.ContainsRune(cfg.Agent.AppendSystemPrompt, 0) {
 		return fmt.Errorf("agent.append_system_prompt must not contain NUL")
@@ -233,139 +227,16 @@ func Validate(cfg Config) error {
 	if _, ok := cfg.Agents["default"]; ok {
 		return fmt.Errorf("agents.default is no longer supported; rename it and set default_agent to its profile name")
 	}
-	for name, definition := range cfg.Agents {
-		if strings.TrimSpace(name) == "" || strings.TrimSpace(definition.Driver) == "" {
+	for name, d := range cfg.Agents {
+		if strings.TrimSpace(name) == "" || strings.TrimSpace(d.Driver) == "" {
 			return fmt.Errorf("agent definitions require a name and driver")
 		}
-		if len([]rune(definition.Label)) > 80 {
+		if len([]rune(d.Label)) > 80 {
 			return fmt.Errorf("agent %q label is too long", name)
 		}
-		if _, ok := cfg.Drivers[definition.Driver]; !ok {
-			return fmt.Errorf("agent %q selects unconfigured driver %q", name, definition.Driver)
-		}
-	}
-	for _, repository := range cfg.Direnv.AutoTrustRepositories {
-		if !filepath.IsAbs(strings.TrimSpace(repository)) {
-			return fmt.Errorf("direnv.auto_trust_repositories entries must be absolute paths: %q", repository)
+		if _, ok := cfg.Drivers[d.Driver]; !ok {
+			return fmt.Errorf("agent %q selects unconfigured driver %q", name, d.Driver)
 		}
 	}
 	return nil
-}
-
-func parseAgentDriverSetting(cfg *Config, section, key, value string) (bool, error) {
-	parts := strings.Split(section, ".")
-	if len(parts) < 2 {
-		return false, nil
-	}
-	switch parts[0] {
-	case "agents":
-		name := strings.TrimSpace(parts[1])
-		definition := cfg.Agents[name]
-		if len(parts) == 2 && (key == "driver" || key == "label") {
-			parsed := parseStringValue(value)
-			if key == "driver" {
-				definition.Driver = parsed
-			} else {
-				definition.Label = parsed
-			}
-			if definition.Config == nil {
-				definition.Config = map[string]any{}
-			}
-			cfg.Agents[name] = definition
-			return true, nil
-		}
-		if len(parts) == 3 && parts[2] == "config" {
-			parsed, err := parseDriverValue(value)
-			if err != nil {
-				return true, err
-			}
-			if definition.Config == nil {
-				definition.Config = map[string]any{}
-			}
-			definition.Config[key] = parsed
-			cfg.Agents[name] = definition
-			return true, nil
-		}
-	case "drivers":
-		name := strings.TrimSpace(parts[1])
-		driver := cfg.Drivers[name]
-		if len(parts) == 2 && key == "command" {
-			driver.Command = parseStringValue(value)
-			if driver.Defaults == nil {
-				driver.Defaults = map[string]any{}
-			}
-			cfg.Drivers[name] = driver
-			return true, nil
-		}
-		if len(parts) == 3 && parts[2] == "defaults" {
-			parsed, err := parseDriverValue(value)
-			if err != nil {
-				return true, err
-			}
-			if driver.Defaults == nil {
-				driver.Defaults = map[string]any{}
-			}
-			driver.Defaults[key] = parsed
-			cfg.Drivers[name] = driver
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-func parseDriverValue(value string) (any, error) {
-	value = strings.TrimSpace(value)
-	if strings.HasPrefix(value, "[") {
-		return parseStringArray(value)
-	}
-	if value == "true" || value == "false" {
-		return value == "true", nil
-	}
-	if len(value) >= 2 && value[0] == '"' {
-		return parseStringValue(value), nil
-	}
-	if number, err := strconv.Atoi(value); err == nil {
-		return number, nil
-	}
-	return nil, fmt.Errorf("expected a string, string array, boolean, or integer")
-}
-
-func parseStringArray(s string) ([]string, error) {
-	raw := strings.TrimSpace(s)
-	if len(raw) < 2 || raw[0] != '[' || raw[len(raw)-1] != ']' {
-		return nil, fmt.Errorf("expected an array of quoted strings")
-	}
-	body := strings.TrimSpace(raw[1 : len(raw)-1])
-	body = strings.TrimSpace(strings.TrimSuffix(body, ","))
-	raw = "[" + body + "]"
-	var values []string
-	if err := json.Unmarshal([]byte(raw), &values); err != nil {
-		return nil, fmt.Errorf("expected an array of quoted strings: %w", err)
-	}
-	return values, nil
-}
-
-func parseStringValue(s string) string {
-	s = strings.TrimSpace(s)
-	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
-		if unquoted, err := strconv.Unquote(s); err == nil {
-			return unquoted
-		}
-	}
-	return s
-}
-
-func stripComment(s string) string {
-	inQuote := false
-	for i, r := range s {
-		switch r {
-		case '"':
-			inQuote = !inQuote
-		case '#':
-			if !inQuote {
-				return strings.TrimSpace(s[:i])
-			}
-		}
-	}
-	return s
 }

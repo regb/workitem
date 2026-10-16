@@ -119,6 +119,10 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	runWiE2E(t, binary, repository, env, "repo", "add", "test", "--from", repository)
+	if output := runWiE2E(t, binary, repository, env, "repo", "settings", "show", "test", "--json"); !strings.Contains(string(output), "\"trust\": \"prompt\"") {
+		t.Fatalf("repository configuration lookup=%s", output)
+	}
+	exerciseRepositorySettingsE2E(t, binary, repository, env)
 	// Validate through the real bundled driver process, with neither Pi nor
 	// tmux on PATH. Invalid settings must fail before any item is created.
 	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(defaultProfile+"[agents.invalid]\ndriver = \"pi\"\n[agents.invalid.config]\nthinking = \"extreme\"\n"), 0600); err != nil {
@@ -301,6 +305,39 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 		t.Fatalf("daemon log leaked into cache: %v", err)
 	}
 	exerciseRepositoryArchiveE2E(t, binary, repository, env, created.WorkItemID)
+}
+
+func exerciseRepositorySettingsE2E(t *testing.T, binary, repository string, env []string) {
+	t.Helper()
+	var changed struct {
+		Changed  bool   `json:"changed"`
+		Revision uint64 `json:"revision"`
+	}
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "set", "test", "extensions.direnv.trust", "always", "--json"), &changed)
+	if !changed.Changed || changed.Revision != 1 {
+		t.Fatal(changed)
+	}
+	var shown struct {
+		Revision  uint64                                `json:"revision"`
+		Overrides map[string]map[string]json.RawMessage `json:"overrides"`
+		Effective map[string]map[string]any             `json:"effective"`
+		Origins   map[string]string                     `json:"origins"`
+	}
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "show", "test", "--json"), &shown)
+	if shown.Revision != 1 || shown.Effective["extensions.direnv"]["trust"] != "always" || string(shown.Overrides["extensions.direnv"]["trust"]) != `"always"` {
+		t.Fatalf("settings=%+v", shown)
+	}
+	assertWiE2EFails(t, binary, repository, env, "repo", "settings", "set", "test", "extensions.direnv.trust", "typo", "--json")
+	assertWiE2EFails(t, binary, repository, env, "repo", "settings", "set", "test", "extensions.missing.trust", "always", "--json")
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "unset", "test", "extensions.direnv.trust", "--json"), &changed)
+	if !changed.Changed || changed.Revision != 2 {
+		t.Fatal(changed)
+	}
+	shown.Overrides = nil
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "show", "test", "--json"), &shown)
+	if shown.Revision != 2 || shown.Effective["extensions.direnv"]["trust"] != "prompt" || len(shown.Overrides) != 0 {
+		t.Fatalf("unset did not restore defaults: %+v", shown)
+	}
 }
 
 func exerciseRepositoryArchiveE2E(t *testing.T, binary, repository string, env []string, itemID string) {

@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/regb/workitem/internal/config"
+	"github.com/regb/workitem/internal/extensions/bundled"
 )
 
 type configKeyNotFoundError struct{ key string }
@@ -31,7 +32,16 @@ func runConfigMain(args []string, path string, stdout, stderr io.Writer, jsonOut
 func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut bool) error {
 	showSensitive := false
 	positional := []string{}
-	for _, arg := range args {
+	showOrigins := false
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--repo" {
+			return usageErr{fmt.Errorf("repository policy is stored by the daemon; use wi repo settings show NAME")}
+		}
+		if arg == "--origins" {
+			showOrigins = true
+			continue
+		}
 		if arg == "--show-sensitive" {
 			showSensitive = true
 			continue
@@ -46,20 +56,36 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 	}
 	command := positional[0]
 	if (command == "get" && (len(positional) != 2 || strings.TrimSpace(positional[1]) == "")) || (command != "get" && len(positional) != 1) {
-		return usageErr{fmt.Errorf("usage: wi config <show|get KEY|agents|drivers> [--show-sensitive]")}
+		return usageErr{fmt.Errorf("usage: wi config <show|get KEY|agents|drivers|extensions> [--origins] [--show-sensitive]")}
 	}
-	if command != "show" && command != "get" && command != "agents" && command != "drivers" {
+	if command != "show" && command != "get" && command != "agents" && command != "drivers" && command != "extensions" {
 		return usageErr{fmt.Errorf("unknown config command %q", command)}
 	}
-	cfg, warnings, err := config.Load(path)
+	cfg, warnings, err := config.LoadWithRegistry(path, bundled.Registry())
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
 	for _, warning := range warnings {
 		fmt.Fprintf(stderr, "warning: config: %s\n", warning)
 	}
+	if showOrigins && (command == "agents" || command == "extensions") {
+		return usageErr{fmt.Errorf("--origins applies to configuration value queries, not profile/schema summaries")}
+	}
 	if command == "agents" {
 		return printConfigAgents(stdout, cfg, jsonOut)
+	}
+	if command == "extensions" {
+		definitions := bundled.Registry().Definitions()
+		if !showSensitive {
+			for i := range definitions {
+				for j := range definitions[i].Options {
+					if definitions[i].Options[j].Secret {
+						definitions[i].Options[j].Default = "[redacted]"
+					}
+				}
+			}
+		}
+		return writeJSON(stdout, definitions)
 	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {
@@ -72,7 +98,6 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 		return err
 	}
 	// Optional JSON fields still represent queryable settings when unset.
-	tree["direnv"].(map[string]any)["auto_trust_repositories"] = cfg.Direnv.AutoTrustRepositories
 	tree["item"].(map[string]any)["defaults"].(map[string]any)["labels"] = cfg.Item.Defaults.Labels
 	for name, profile := range cfg.Agents {
 		definition := tree["agents"].(map[string]any)[name].(map[string]any)
@@ -90,6 +115,8 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 	}
 	if !showSensitive {
 		redactConfigDriverSettings(tree)
+		registry := bundled.Registry()
+		registry.Redact(tree["extensions"].(map[string]any))
 	}
 	var value any = tree
 	key := ""
@@ -109,6 +136,18 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 				return configKeyNotFoundError{key}
 			}
 		}
+	}
+	if showOrigins {
+		origins := map[string]string{}
+		for path, origin := range cfg.ExtensionOrigins() {
+			if key == "" || path == key || strings.HasPrefix(path, key+".") {
+				origins[path] = origin
+			}
+		}
+		return writeJSON(stdout, struct {
+			Value   any               `json:"value"`
+			Origins map[string]string `json:"origins"`
+		}{value, origins})
 	}
 	if jsonOut {
 		return writeJSON(stdout, value)
