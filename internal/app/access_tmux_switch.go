@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -16,23 +17,103 @@ const orphanRuntimeStopTimeout = 5 * time.Second
 
 // SwitchWorkItem is state-neutral porcelain. It composes required worktree
 // materialization, a TUI agent runtime, and optional terminal attachment.
-// Entering an item marks its conversation read.
+// When another client controls the agent it enters the terminal read-only.
 func (a *App) SwitchWorkItem(ctx context.Context, opts ResolveOptions, attach bool) (CompositionResult, error) {
-	result, err := a.switchWorkItem(ctx, opts, attach)
+	return a.SwitchWorkItemWithControl(ctx, opts, attach, false)
+}
+
+// SwitchWorkItemWithControl enters an item's terminal as its controller. With
+// take it displaces another controller, aborting a turn in flight and
+// replacing a headless runtime with a TUI one on the same conversation.
+func (a *App) SwitchWorkItemWithControl(ctx context.Context, opts ResolveOptions, attach, take bool) (CompositionResult, error) {
+	m, err := a.resolveWorkspaceEntryItem(ctx, opts)
+	if err != nil {
+		return CompositionResult{}, err
+	}
+	var control *ControlResult
+	if a.Leases != nil && m.State == model.StateActive {
+		acquired, err := a.AcquireControl(ctx, ControlRequest{ResolveOptions: ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}, Holder: model.LeaseHolderTerminal, ClientID: "terminal", Label: "tmux", Confirm: take})
+		var confirmation *ControlConfirmationError
+		if errors.As(err, &confirmation) {
+			return a.enterTerminalReadOnly(ctx, m, opts, attach, confirmation.Plan)
+		}
+		if err != nil {
+			return CompositionResult{}, err
+		}
+		control = &acquired
+	}
+	result, err := a.switchWorkItem(ctx, m, opts, attach)
 	if err != nil {
 		return result, err
 	}
-	if _, markErr := a.MarkRead(ctx, ResolveOptions{Selector: result.WorkItemID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
+	result.Control = control
+	if control != nil {
+		result.Warnings = append(result.Warnings, control.Warnings...)
+	}
+	if _, markErr := a.MarkRead(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
 		result.Warnings = append(result.Warnings, "could not mark the conversation read: "+markErr.Error())
 	}
 	return result, nil
 }
 
-func (a *App) switchWorkItem(ctx context.Context, opts ResolveOptions, attach bool) (CompositionResult, error) {
-	m, err := a.resolveWorkspaceEntryItem(ctx, opts)
+// enterTerminalReadOnly attaches to a live TUI runtime as an observer. Pane
+// input stays disabled while another client holds control.
+func (a *App) enterTerminalReadOnly(ctx context.Context, m model.Manifest, opts ResolveOptions, attach bool, plan ControlPlan) (CompositionResult, error) {
+	holder := "another client"
+	if plan.Displaces != nil {
+		holder = "the " + plan.Displaces.Holder
+		if plan.Displaces.Label != "" {
+			holder += " (" + plan.Displaces.Label + ")"
+		}
+	}
+	existing, err := a.Store.LoadAgentRuntime(m.ID)
 	if err != nil {
 		return CompositionResult{}, err
 	}
+	ownership := a.primaryAgentService().ObserveOwnership(existing)
+	if !ownership.ProcessAlive || ownership.Mode != string(agent.ModeTUI) || !a.tmuxTerminalExists(ctx, m) {
+		reasons := strings.Join(plan.Reasons, "; ")
+		return CompositionResult{}, fmt.Errorf("%s is controlled by %s and has no terminal to observe (%s); run `wi switch --take --item %s` to take over in the terminal", m.ID, holder, reasons, m.ID)
+	}
+	unlock, err := a.lockController(ctx, m.ID)
+	if err != nil {
+		return CompositionResult{}, err
+	}
+	current, err := a.controlStatus(ctx, m, false)
+	if err != nil {
+		unlock()
+		return CompositionResult{}, err
+	}
+	if current.Lease == nil || current.Lease.Holder == model.LeaseHolderTerminal {
+		unlock()
+		return CompositionResult{}, fmt.Errorf("controller changed before opening the read-only terminal; retry")
+	}
+	panes := a.paneControl()
+	if panes == nil {
+		unlock()
+		return CompositionResult{}, fmt.Errorf("cannot guarantee a read-only terminal: input control is unavailable")
+	}
+	if err := panes.SetPaneInput(ctx, agentPaneTarget(m), false); err != nil {
+		unlock()
+		return CompositionResult{}, fmt.Errorf("cannot guarantee a read-only terminal: %w", err)
+	}
+	unlock()
+	terminal, err := a.enterExistingTerminal(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}, attach)
+	if err != nil {
+		return CompositionResult{}, err
+	}
+	warnings := append([]string(nil), terminal.Warnings...)
+	warnings = append(warnings, fmt.Sprintf("read-only: %s controls this agent; run `wi switch --take --item %s` to take over", holder, m.ID))
+	if panes := a.paneControl(); panes != nil {
+		_ = panes.DisplayMessage(ctx, agentPaneTarget(m), "wi: read-only, controlled by "+holder+". Run `wi switch --take` to take over.")
+	}
+	if _, markErr := a.MarkRead(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
+		warnings = append(warnings, "could not mark the conversation read: "+markErr.Error())
+	}
+	return CompositionResult{WorkItemID: m.ID, Checkout: m.Checkout, Terminal: &terminal, Conversation: m.PrimaryConversation, AgentRuntime: existing, Manifest: m, ReadOnly: true, Warnings: warnings}, nil
+}
+
+func (a *App) switchWorkItem(ctx context.Context, m model.Manifest, opts ResolveOptions, attach bool) (CompositionResult, error) {
 	existing, err := a.Store.LoadAgentRuntime(m.ID)
 	if err != nil {
 		return CompositionResult{}, err

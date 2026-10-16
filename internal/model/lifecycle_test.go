@@ -40,6 +40,23 @@ func TestBlockerValidationAndOpenness(t *testing.T) {
 	}
 }
 
+func TestControlChannelDerivesFromLegacyCapabilities(t *testing.T) {
+	for _, tc := range []struct {
+		capabilities RuntimeCapabilities
+		want         Channels
+	}{
+		{RuntimeCapabilities{NativeTUI: true, Prompt: true, IdleGuard: true}, Channels{Observe: true, Control: ControlStructured, AtomicIdle: true, Terminal: true}},
+		{RuntimeCapabilities{NativeTUI: true, Prompt: true}, Channels{Observe: true, Control: ControlEmulated, Terminal: true}},
+		{RuntimeCapabilities{Headless: true, Prompt: true}, Channels{Observe: true, Control: ControlStructured}},
+		{RuntimeCapabilities{NativeTUI: true, Prompt: true, Control: ControlStructured}, Channels{Observe: true, Control: ControlStructured, Terminal: true}},
+		{RuntimeCapabilities{NativeTUI: true}, Channels{Observe: true, Terminal: true}},
+	} {
+		if got := tc.capabilities.Channels(); got != tc.want {
+			t.Fatalf("%+v channels = %+v, want %+v", tc.capabilities, got, tc.want)
+		}
+	}
+}
+
 func TestBlockerDescribeAndMeta(t *testing.T) {
 	until := time.Date(2026, 10, 20, 9, 0, 0, 0, time.Local)
 	for _, tc := range []struct {

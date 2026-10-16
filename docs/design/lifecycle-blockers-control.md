@@ -1,7 +1,7 @@
-# Lifecycle, waiting, and attention
+# Lifecycle, waiting, attention, and runtime control
 
 This records the design decisions behind wi's work-item lifecycle, waiting,
-and attention, and the questions still open.
+attention, and runtime control, and the questions still open.
 
 ## Lifecycle describes resources
 
@@ -64,6 +64,60 @@ Wi's own clients mark read (`wi switch`, the picker, `wi next`), and
 marks read. Waiting also marks the item read: the decision to park it is made
 after seeing it.
 
+## Runtime channels and controllers
+
+A runtime exposes channels, reported by its driver per runtime instance in its
+ready capabilities (`control: structured | emulated`):
+
+| Runtime | Observe | Control | Terminal |
+| --- | --- | --- | --- |
+| Pi headless | yes | structured, atomic idle guard | no |
+| Pi TUI | yes | structured (bridge), atomic idle guard | yes |
+| Claude headless | yes | structured, observed idle only | no |
+| Claude TUI | yes | emulated (tmux keystrokes) | yes |
+
+Clients declare the channel they need: a browser controller needs structured
+control, a terminal controller needs the terminal channel, observers need only
+observe.
+
+Each agent has at most one controller and any number of observers. The
+controller lease lives in coordinator memory (a rebuildable observation, lost
+on restart):
+
+- A vacant lease is invisible: the first sender takes it.
+- If the runtime lacks the needed channel and is idle, wi replaces it on the
+  same conversation without asking (browser: keystroke TUI or offline runtime
+  -> headless; terminal: headless -> TUI).
+- Displacing another controller, or aborting a turn in flight, requires
+  explicit takeover, which aborts the turn and replaces the runtime when
+  needed.
+- Browser leases are renewable and expire; terminal control is implicit while
+  a tmux client is attached to the item's session.
+- While a browser controls a TUI runtime, wi disables input to the agent pane
+  (`select-pane -d`); terminals keep rendering. `wi switch` enters read-only
+  and `wi switch --take` takes over. When no lease is live, the next status
+  check re-enables pane input.
+- Enforcement covers clients that go through wi; a raw `tmux attach` can still
+  type into an enabled pane.
+
+Each lease has a generation ID. Host acquisition uses an expected lease ID,
+including the vacant state, so a stale plan cannot silently replace a different
+controller. Renewals retain the ID; replacement changes it. Denied acquisitions
+perform no abort or runtime replacement.
+
+Structured sends also check the controller lease. Browser callers supply the
+holder, client ID, and lease ID returned by acquisition. A plain CLI send uses
+the shared terminal identity and holds a vacant lease only for delivery; it
+cannot send through a browser's lease. Browser leases default to 45 seconds.
+
+Handoff, structured delivery, and pane repair use a separate per-item controller
+lock, always acquired before resource operation locks. Read-only terminal entry
+must successfully disable pane input before attaching. Input-control failures
+are reported rather than presenting a writable terminal as read-only.
+
+The browser client that motivates the lease (a web UI) is a separate change
+built on this API.
+
 ## Upgrading stored data
 
 Schema 7 replaces the former `working | waiting | archived` lifecycle in place
@@ -85,7 +139,21 @@ elsewhere before retrying; Wi never silently overwrites recovery data.
 
 ## Open questions
 
-1. Waiting items with an unread response join the queue at their natural rank;
+1. Terminal presence is coarse: any attached tmux client counts as the
+   controller, and one shared `terminal` identity covers all tmux clients.
+   Per-client identity and detach hooks would release terminal control
+   promptly.
+2. Pane input is re-enabled lazily, on the next status check, after a browser
+   lease expires. A daemon-side expiry hook would avoid a briefly frozen pane.
+3. Claude headless has no atomic idle guard, so idle-only prompts check
+   observed status and a race remains.
+4. Interactive approvals and questions in headless mode are not modeled as a
+   capability yet; this decides how far headless-first goes, especially for
+   Claude.
+5. A wi-rendered terminal client over the structured channel would let
+   terminal users control headless runtimes without swapping to the native
+   TUI.
+6. Waiting items with an unread response join the queue at their natural rank;
    whether they should rank first is a strategy choice.
-2. Event names: `work_item.archived` is now `work_item.closed`; older history
+7. Event names: `work_item.archived` is now `work_item.closed`; older history
    keeps its original names.

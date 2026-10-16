@@ -146,7 +146,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 	cmd.Env = env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	input := discoverTUIInput(env)
-	if err := reply(protocol.Ready{ProtocolVersion: protocol.Version, BackendPath: executable, Capabilities: protocol.Capabilities{NativeTUI: true, Monitor: true, BundledSkills: true, LiveContent: true, Streaming: true, ImageInput: supportsImageInput(input), Prompt: supportsControl(input, protocol.CommandPrompt), Steering: supportsControl(input, protocol.CommandSteer), FollowUp: supportsControl(input, protocol.CommandFollowUp), Cancel: supportsControl(input, protocol.CommandAbort)}}); err != nil {
+	if err := reply(protocol.Ready{ProtocolVersion: protocol.Version, BackendPath: executable, Capabilities: protocol.Capabilities{NativeTUI: true, Monitor: true, BundledSkills: true, LiveContent: true, Streaming: true, ImageInput: supportsImageInput(input), Prompt: supportsControl(input, protocol.CommandPrompt), Steering: supportsControl(input, protocol.CommandSteer), FollowUp: supportsControl(input, protocol.CommandFollowUp), Cancel: supportsControl(input, protocol.CommandAbort), Control: protocol.ControlEmulated}}); err != nil {
 		return err
 	}
 	if err := cmd.Start(); err != nil {

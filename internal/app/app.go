@@ -135,6 +135,9 @@ type App struct {
 	RunAgentDriver                 AgentDriverRunner
 	ConversationProjectionObserver agentcore.ConversationObserver
 	WorkListObserver               viewapp.Observe
+	// Leases is the coordinator's controller lease table; nil disables
+	// single-controller enforcement.
+	Leases ControlLeases
 }
 
 func New(st Store, git Git) *App {
@@ -232,5 +235,9 @@ type CompositionResult struct {
 	AgentLaunched bool                `json:"agent_launched,omitempty"`
 	AgentRuntime  *model.AgentRuntime `json:"agent_runtime,omitempty"`
 	Manifest      model.Manifest      `json:"manifest"`
-	Warnings      []string            `json:"warnings"`
+	// ReadOnly reports a terminal entered as an observer because another
+	// client controls the agent.
+	ReadOnly bool           `json:"read_only,omitempty"`
+	Control  *ControlResult `json:"control,omitempty"`
+	Warnings []string       `json:"warnings"`
 }

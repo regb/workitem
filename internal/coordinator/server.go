@@ -38,6 +38,7 @@ type Server struct {
 	lastConversationImport     ConversationImportReport
 	conversationDecoders       ConversationDecoders
 	repositorySettingsRegistry *options.Registry
+	leases                     *leaseTable
 	closed                     chan struct{}
 	closeDone                  chan struct{}
 	closeOnce                  sync.Once
@@ -116,7 +117,7 @@ func newServer(dataRoot, socketPath, agentSocketPath string, conversationDecoder
 			return nil, fmt.Errorf("listen on agent coordinator socket: %w", err)
 		}
 	}
-	server := &Server{dataRoot: dataRoot, socketPath: socketPath, agentSocketPath: agentSocketPath, database: database, observer: observer, native: nativeStore, listener: listener, agentListener: agentListener, startedAt: time.Now().UTC(), buildIdentity: version.BuildIdentity(), lastConversationImport: conversationReport, conversationDecoders: conversationDecoders, eventNotify: make(chan struct{}), closed: make(chan struct{}), closeDone: make(chan struct{})}
+	server := &Server{dataRoot: dataRoot, socketPath: socketPath, agentSocketPath: agentSocketPath, database: database, observer: observer, native: nativeStore, listener: listener, agentListener: agentListener, startedAt: time.Now().UTC(), buildIdentity: version.BuildIdentity(), lastConversationImport: conversationReport, conversationDecoders: conversationDecoders, leases: newLeaseTable(), eventNotify: make(chan struct{}), closed: make(chan struct{}), closeDone: make(chan struct{})}
 	return server, nil
 }
 
@@ -446,6 +447,31 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		conversationWarnings := append([]string(nil), s.lastConversationImport.Warnings...)
 		s.importMu.RUnlock()
 		result = ConversationProjectionResult{Projection: ProjectionMetadata{Revision: uint64(session.Offset), Source: session.Source, ObservedAt: session.ObservedAt, Fresh: found, Warnings: conversationWarnings}, Found: found, Conversation: session}
+	case MethodLeaseGet:
+		var itemRequest ItemRequest
+		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
+			s.writeError(conn, request.ID, "invalid_request", "valid item_id is required")
+			return
+		}
+		result = model.LeaseResult{Lease: s.leases.get(itemRequest.ItemID, time.Now().UTC())}
+	case MethodLeaseAcquire, MethodLeaseRelease:
+		var leaseRequest model.LeaseRequest
+		if err := json.Unmarshal(request.Payload, &leaseRequest); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", "decode lease request: "+err.Error())
+			return
+		}
+		var leaseResult model.LeaseResult
+		var err error
+		if request.Method == MethodLeaseAcquire {
+			leaseResult, err = s.leases.acquire(leaseRequest, time.Now().UTC())
+		} else {
+			leaseResult, err = s.leases.release(leaseRequest)
+		}
+		if err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		result = leaseResult
 	case MethodItemResources:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {

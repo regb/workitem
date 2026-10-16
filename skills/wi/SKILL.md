@@ -88,7 +88,7 @@ Never close an item without explicit instructions from the user.
 Usually this is rather ran as part of review and management of items, not directly within an item, so use:
 
 ```bash
-wi close --item ITEM_NAME --resolution completed|abandonned|superseeded
+wi close --item ITEM_NAME --resolution completed|abandoned|superseded
 ```
 
 ## Update item state

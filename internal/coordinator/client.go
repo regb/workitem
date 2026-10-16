@@ -265,3 +265,21 @@ func (c *Client) ListManifests(ctx context.Context) ([]model.Manifest, error) {
 	result, err := c.ManifestProjection(ctx)
 	return result.Manifests, err
 }
+
+func (c *Client) Lease(ctx context.Context, itemID string) (*model.ControlLease, error) {
+	var result model.LeaseResult
+	err := c.Call(ctx, MethodLeaseGet, ItemRequest{ItemID: itemID}, &result)
+	return result.Lease, err
+}
+
+func (c *Client) AcquireLease(ctx context.Context, request model.LeaseRequest) (model.LeaseResult, error) {
+	var result model.LeaseResult
+	err := c.Call(ctx, MethodLeaseAcquire, request, &result)
+	return result, err
+}
+
+func (c *Client) ReleaseLease(ctx context.Context, request model.LeaseRequest) (model.LeaseResult, error) {
+	var result model.LeaseResult
+	err := c.Call(ctx, MethodLeaseRelease, request, &result)
+	return result, err
+}

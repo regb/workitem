@@ -410,17 +410,18 @@ var helpDocs = map[string]helpDoc{
 		Summary: "Select and switch to a work item",
 		Usage: []string{
 			"wi switch [--no-agent] [--no-preview] [--label <rule>]...",
-			"wi switch [--item <selector>] <item>",
-			"wi switch --current",
+			"wi switch [--take] [--item <selector>] <item>",
+			"wi switch [--take] --current",
 		},
 		Description: []string{
 			"Without an item, opens an interactive fzf picker over active and backlog items using the same actionability projection and label rules as wi list. Backlog items appear last in a distinct color. The picker initially selects the current item when present; changing the filter resets the cursor to the first match. Rows show status, title, then repository. Status and repository widths use the longest values in the full snapshot and stay fixed while filtering. The title uses the remaining list-pane width and truncates at the end, adapting on resize or preview toggles. Full titles remain searchable; slugs are available in the details preview. The preview uses 40% of the width on wide terminals and moves below the list on narrow terminals; Alt-P hides or shows it. Selecting a backlog item starts it; selecting an active item is state-neutral before entering its TUI, including a waiting one. The daemon refreshes native activity before capturing candidates; the open picker is an explicitly marked frozen snapshot and can be reopened to refresh. A tmux key binding can host the complete operation in a popup so startup prompts and errors remain visible.",
 			"With an explicit item, or with --current, performs the existing state-neutral switch directly: enter a verified existing TUI terminal even when its checkout needs repair, otherwise ensure the worktree, primary TUI runtime, and tmux access, then attach or switch the client. JSON requires an explicit item or --current and never attaches.",
-			"Switching marks the conversation read.",
+			"Each agent has one controller and any number of observers. Switching takes control when nobody else holds it, replacing an idle headless runtime with a TUI on the same conversation. When a web client controls the agent, switch enters the TUI read-only: tmux pane input stays disabled. --take displaces the other controller, aborting a turn in flight and restarting a headless runtime as a TUI. Switching marks the conversation read.",
 		},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly instead of opening the picker."},
 			{"--current", "Use implicit WI_ID, tmux, or checkout resolution instead of opening the picker."},
+			{"--take", "Take control from another client; aborts a turn in flight and replaces a headless runtime."},
 			{"--no-agent", "In picker mode, skip live agent/worktree inspection."},
 			{"--no-preview", "In picker mode, disable the durable-details and observed-status preview pane."},
 			{"--label <rule>", "In picker mode, apply the same repeatable label rules as wi list."},
@@ -429,7 +430,7 @@ var helpDocs = map[string]helpDoc{
 			{"WI_FZF", "Override the fzf-compatible picker executable."},
 			{"WI_LIST_LABELS", "Comma-separated label rules overlaid on config."},
 		},
-		Examples: []string{`wi switch`, `wi switch agent-context`, `wi switch --current`, `wi switch --label +backend --label -blocked`},
+		Examples: []string{`wi switch`, `wi switch agent-context`, `wi switch --current`, `wi switch --take auth`, `wi switch --label +backend --label -blocked`},
 	},
 	"workspace": {
 		Summary:     "Inspect and manage the repository worktree",

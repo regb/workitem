@@ -20,6 +20,7 @@ func BindCoordinatorApp(application *app.App, native *storepkg.Store, client *co
 	application.DaemonSocketPath = client.SocketPath
 	application.ConversationProjectionObserver = coordinatorConversationObserver(client)
 	application.WorkListObserver = coordinatorWorkListObserver(client)
+	application.Leases = client
 }
 
 // coordinatorStore makes the daemon the commit point for every mutation issued

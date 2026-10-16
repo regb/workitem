@@ -24,6 +24,8 @@ type RuntimeCapabilities struct {
 	FollowUp    bool `json:"follow_up"`
 	Cancel      bool `json:"cancel"`
 	Monitor     bool `json:"monitor"`
+	// Control is the driver-reported control channel kind; see ControlChannel.
+	Control string `json:"control,omitempty"`
 }
 
 type AgentRuntime struct {

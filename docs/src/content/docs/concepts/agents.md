@@ -22,7 +22,7 @@ Headless mode does not use tmux:
 wi start --agent-mode headless item-slug
 ```
 
-These modes are alternatives. To change modes, stop the current owner, wait for it to report offline, then start the other mode:
+These modes are alternatives. Taking control from a client that needs the other mode switches it for you (see [Controllers and observers](#controllers-and-observers)). To change modes by hand, stop the current owner, wait for it to report offline, then start the other mode:
 
 ```bash
 wi agent runtime stop item-slug
@@ -30,6 +30,32 @@ wi agent runtime status item-slug
 ```
 
 Bundled Pi and Claude support both modes. Claude headless requires Claude Code 2.1.299 or later and keeps one persistent process for successive turns. Its private output uses API text deltas; the native TUI still uses line batches. Neither Claude mode offers atomic idle-only controls. Drivers must advertise the requested mode. Force cleanup affects only verified Wi-owned processes.
+
+## Channels
+
+Each running runtime exposes up to three channels, reported by its driver at startup:
+
+| Runtime | Observe | Control | Terminal |
+| --- | --- | --- | --- |
+| Pi headless | yes | structured, atomic idle guard | no |
+| Pi TUI | yes | structured through its extension bridge, atomic idle guard | yes |
+| Claude headless | yes | structured; idle-only prompts are checked against observed status | no |
+| Claude TUI | yes | emulated with tmux keystrokes | yes |
+
+Observing (history and live output) works for every runtime. Clients differ in what they need to control: a browser client, such as a web UI built on wi's control API, needs structured control; a tmux client needs the terminal channel.
+
+## Controllers and observers
+
+Each agent has at most one **controller**, the only client allowed to send input, and any number of **observers**. The controller holds a lease kept in the daemon's memory; leases never persist across a daemon restart. Lease holders are terminals and browser clients (holder `web`); a browser lease expires unless renewed.
+
+- **Vacant control is invisible.** The first client that sends takes the lease. If the runtime lacks the channel it needs and is idle, Wi restarts it in the right mode on the same conversation without asking: a browser client restarts a keystroke-driven TUI headless, and `wi switch` restarts a headless runtime as a TUI.
+- **Taking over is explicit.** When another client controls the agent, `wi switch --take` (or a browser client's takeover) asks first. Taking over aborts a turn in flight, and may restart the runtime as above.
+- **Terminals become read-only.** While a browser client controls a TUI runtime, Wi disables input to its tmux pane; attached terminals keep rendering. `wi switch` without `--take` enters read-only. When the browser lease expires, the next status check re-enables input.
+- **A terminal counts as controlling** while a tmux client is attached to the item's session, even without an explicit lease.
+
+Structured sends validate the current lease as well as terminal entry. Browser callers identify their holder, client, and lease generation; stale generations are rejected. Plain CLI sends share the terminal identity and cannot send while a browser controls the agent. Browser leases default to 45 seconds and need renewal.
+
+The lease is enforced for clients that go through Wi. A raw `tmux attach` that bypasses Wi can still type into an enabled pane.
 
 ## Observation and input
 

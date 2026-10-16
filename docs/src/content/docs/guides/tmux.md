@@ -11,7 +11,7 @@ Tmux is optional. `wi` uses it as the human-access layer for native Pi TUI sessi
 wi switch auth
 ```
 
-With an explicit item, `switch` validates active work, ensures its worktree and TUI runtime, then enters its wi-owned tmux session. Switching marks the conversation read.
+With an explicit item, `switch` validates active work, ensures its worktree and TUI runtime, then enters its wi-owned tmux session. Switching marks the conversation read and takes [control](../../concepts/agents/#controllers-and-observers) when nobody else holds it. If another client, such as a browser, controls the agent, the TUI opens read-only: pane input stays disabled and a status message explains how to take over. `wi switch --take` aborts a turn in flight, replaces a headless runtime with a TUI on the same conversation, and re-enables input.
 
 Without an item, `switch` opens an `fzf` picker:
 

@@ -190,6 +190,10 @@ func Main(ctx context.Context, args []string) int {
 		}
 		runConfig.Env = env
 	}
+	if runConfig.ControlAccess == coordinator.AccessAgent {
+		// The restricted agent endpoint cannot read or take control leases.
+		application.Leases = nil
+	}
 	return Run(ctx, args, runConfig)
 }
 

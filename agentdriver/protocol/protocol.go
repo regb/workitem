@@ -64,7 +64,16 @@ type Capabilities struct {
 	FollowUp      bool `json:"follow_up"`
 	Cancel        bool `json:"cancel"`
 	Monitor       bool `json:"monitor"`
+	// Control names the runtime's control channel: "structured" when commands
+	// are delivered and acknowledged by the driver, "emulated" when the driver
+	// can only type into a terminal UI. Older drivers omit it.
+	Control string `json:"control,omitempty"`
 }
+
+const (
+	ControlStructured = "structured"
+	ControlEmulated   = "emulated"
+)
 
 type Hello struct {
 	ProtocolVersion int    `json:"protocol_version"`
