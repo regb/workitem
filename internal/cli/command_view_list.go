@@ -20,7 +20,7 @@ import (
 func enrichWorkListAgentStatus(ctx context.Context, cfg Config, res *app.WorkListResult) (map[string]string, []string) {
 	warnings := cfg.App.EnrichWorkList(ctx, res, app.ResolveOptions{CWD: cfg.CWD, Env: cfg.Env})
 	labels := map[string]string{}
-	for _, item := range append(append([]app.WorkListItem{}, res.Sections.Working...), res.Sections.Waiting...) {
+	for _, item := range append(append([]app.WorkListItem{}, res.Sections.Active...), res.Sections.Waiting...) {
 		if item.Agent != nil {
 			labels[item.ID] = agentDisplayLabel(item.Agent.Label, item.Agent.Marker)
 		}
@@ -57,29 +57,32 @@ func runList(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	var archived, all, noAgent, ids bool
 	var labels repeatFlag
 	var state string
-	fs.BoolVar(&archived, "archived", false, "show archived work items only")
-	fs.BoolVar(&all, "all", false, "show active and archived work items")
+	fs.BoolVar(&archived, "closed", false, "show closed work items only")
+	fs.BoolVar(&all, "all", false, "show open and closed work items")
 	fs.BoolVar(&noAgent, "no-agent", false, "do not inspect primary agent/worktree status for visible active work items")
 	fs.BoolVar(&ids, "ids", false, "show ID column in active list output")
 	fs.Var(&labels, "label", "include/exclude label rule; repeatable (+label, -label, or bare label)")
-	fs.StringVar(&state, "state", "", "filter by state: backlog, working, waiting, archived")
+	fs.StringVar(&state, "state", "", "filter by state: backlog, active, closed")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
 	}
 	if len(fs.Args()) != 0 {
-		return usageErr{errors.New("usage: wi list [--archived|--all] [--label <[+|-]label>]... [--state <state>] [--no-agent] [--ids]")}
+		return usageErr{errors.New("usage: wi list [--closed|--all] [--label <[+|-]label>]... [--state <state>] [--no-agent] [--ids]")}
 	}
-	state = strings.TrimSpace(state)
-	if state != "" && state != model.StateBacklog && state != model.StateWorking && state != model.StateWaiting && state != model.StateArchived {
-		return usageErr{fmt.Errorf("invalid state %q; expected backlog, working, waiting, or archived", state)}
+	if state = strings.TrimSpace(state); state != "" {
+		normalized, err := model.NormalizeStateInput(state)
+		if err != nil {
+			return usageErr{err}
+		}
+		state = normalized
 	}
 	if archived && all {
-		return usageErr{errors.New("pass either --archived or --all, not both")}
+		return usageErr{errors.New("pass either --closed or --all, not both")}
 	}
-	if archived && state != "" && state != model.StateArchived {
-		return usageErr{fmt.Errorf("--archived conflicts with --state %s", state)}
+	if archived && state != "" && state != model.StateClosed {
+		return usageErr{fmt.Errorf("--closed conflicts with --state %s", state)}
 	}
-	if state == model.StateArchived && !all {
+	if state == model.StateClosed && !all {
 		archived = true
 	}
 	labelRules, err := effectiveListLabelRules(cfg.App.ListConfig.Labels, cfg.Env, labels)
@@ -191,16 +194,18 @@ func printWorkList(w io.Writer, res app.WorkListResult, mode string, color bool,
 	deepWidth := len("DEEP")
 	agentWidth := len("AGENT")
 	worktreeWidth := len("WORKTREE")
-	showWorktree := false
+	resolutionWidth := len("RESOLUTION")
+	showWorktree, showResolution := false, false
+	slugs := listSlugs(res)
 	for _, section := range displaySections {
 		for _, item := range section.Items {
 			if opts.ShowIDs {
 				ids = append(ids, item.ID)
 			}
-			if n := utf8.RuneCountInString(itemDisplayName(item)); n > nameWidth {
+			if n := utf8.RuneCountInString(itemDisplayName(item) + waitingSuffix(item, slugs)); n > nameWidth {
 				nameWidth = n
 			}
-			if n := utf8.RuneCountInString(strings.Join(labelMarkers(item), "  ")); n > labelWidth {
+			if n := utf8.RuneCountInString(strings.Join(listLabelMarkers(item, color), "  ")); n > labelWidth {
 				labelWidth = n
 			}
 			if showAgent {
@@ -212,6 +217,12 @@ func printWorkList(w io.Writer, res app.WorkListResult, mode string, color bool,
 				showWorktree = true
 				if n := utf8.RuneCountInString(worktreeListLabel(item)); n > worktreeWidth {
 					worktreeWidth = n
+				}
+			}
+			if item.Resolution != "" {
+				showResolution = true
+				if n := utf8.RuneCountInString(item.Resolution); n > resolutionWidth {
+					resolutionWidth = n
 				}
 			}
 		}
@@ -241,32 +252,28 @@ func printWorkList(w io.Writer, res app.WorkListResult, mode string, color bool,
 		return
 	}
 	fmt.Fprintln(w)
-	idHeader := listHeaderCell("ID", 10, color)
-	itemHeader := listHeaderCell("ITEM", nameWidth, color)
-	agentHeader := listHeaderCell("AGENT", agentWidth, color)
-	worktreeHeader := listHeaderCell("WORKTREE", worktreeWidth, color)
-	deepHeader := listHeaderCell("DEEP", deepWidth, color)
-	labelsHeader := listHeaderCell("LABELS", labelWidth, color)
-	repoHeader := colorBold("REPOSITORY", color)
+	// Rows are a marker, an optional ID prefix, then two-space separated
+	// columns; REPOSITORY is last and unpadded.
+	header := []string{listHeaderCell("ITEM", nameWidth, color)}
+	if showResolution {
+		header = append(header, listHeaderCell("RESOLUTION", resolutionWidth, color))
+	}
 	if showAgent {
-		if opts.ShowIDs {
-			if showWorktree {
-				fmt.Fprintf(w, "%s %s %s  %s  %s  %s  %s  %s\n", " ", idHeader, itemHeader, agentHeader, worktreeHeader, deepHeader, labelsHeader, repoHeader)
-			} else {
-				fmt.Fprintf(w, "%s %s %s  %s  %s  %s  %s\n", " ", idHeader, itemHeader, agentHeader, deepHeader, labelsHeader, repoHeader)
-			}
-		} else if showWorktree {
-			fmt.Fprintf(w, "%s %s  %s  %s  %s  %s  %s\n", " ", itemHeader, agentHeader, worktreeHeader, deepHeader, labelsHeader, repoHeader)
-		} else {
-			fmt.Fprintf(w, "%s %s  %s  %s  %s  %s\n", " ", itemHeader, agentHeader, deepHeader, labelsHeader, repoHeader)
-		}
-	} else {
-		if opts.ShowIDs {
-			fmt.Fprintf(w, "%s %s %s  %s  %s  %s\n", " ", idHeader, itemHeader, deepHeader, labelsHeader, repoHeader)
-		} else {
-			fmt.Fprintf(w, "%s %s  %s  %s  %s\n", " ", itemHeader, deepHeader, labelsHeader, repoHeader)
+		header = append(header, listHeaderCell("AGENT", agentWidth, color))
+		if showWorktree {
+			header = append(header, listHeaderCell("WORKTREE", worktreeWidth, color))
 		}
 	}
+	header = append(header, listHeaderCell("DEEP", deepWidth, color), listHeaderCell("LABELS", labelWidth, color))
+	header = append(header, colorBold("REPOSITORY", color))
+	printRow := func(marker, id string, cells []string) {
+		prefix := marker + " "
+		if opts.ShowIDs {
+			prefix += id + " "
+		}
+		fmt.Fprintln(w, prefix+strings.Join(cells, "  "))
+	}
+	printRow(" ", listHeaderCell("ID", 10, color), header)
 	fmt.Fprintln(w)
 	firstSection := true
 	printSection := func(name string, items []app.WorkListItem) {
@@ -286,34 +293,30 @@ func printWorkList(w io.Writer, res app.WorkListResult, mode string, color bool,
 			if current {
 				marker = "›"
 			}
-			display := truncateRunes(itemDisplayName(item), nameWidth)
-			displayCell := padRight(display, nameWidth)
-			if current {
-				displayCell = colorBold(displayCell, color)
+			// What an item waits for follows its name in yellow; the name is
+			// truncated first so the waiting label stays visible.
+			suffix := waitingSuffix(item, slugs)
+			name := truncateRunes(itemDisplayName(item), max(8, nameWidth-utf8.RuneCountInString(suffix)))
+			padding := strings.Repeat(" ", max(0, nameWidth-utf8.RuneCountInString(name+suffix)))
+			// Unread responses are bold, like unread mail; the current item is
+			// bold as well and keeps its › marker.
+			if current || item.Unread {
+				name = colorBold(name, color)
 			}
-			repository := item.Repository
-			worktree := padRight(worktreeListLabel(item), worktreeWidth)
-			deep := formatDeepWorkColumn(item.DeepWork, deepWidth)
-			labels := formatLabelColumn(labelMarkers(item), labelWidth, color)
+			displayCell := name + colorWaiting(suffix, color) + padding
+			cells := []string{displayCell}
+			if showResolution {
+				cells = append(cells, padRight(item.Resolution, resolutionWidth))
+			}
 			if showAgent {
-				if opts.ShowIDs {
-					if showWorktree {
-						fmt.Fprintf(w, "%s %-10s %s  %s  %s  %s  %s  %s\n", marker, prefixes[item.ID], displayCell, padRight(agents[item.ID], agentWidth), worktree, deep, labels, repository)
-					} else {
-						fmt.Fprintf(w, "%s %-10s %s  %s  %s  %s  %s\n", marker, prefixes[item.ID], displayCell, padRight(agents[item.ID], agentWidth), deep, labels, repository)
-					}
-				} else if showWorktree {
-					fmt.Fprintf(w, "%s %s  %s  %s  %s  %s  %s\n", marker, displayCell, padRight(agents[item.ID], agentWidth), worktree, deep, labels, repository)
-				} else {
-					fmt.Fprintf(w, "%s %s  %s  %s  %s  %s\n", marker, displayCell, padRight(agents[item.ID], agentWidth), deep, labels, repository)
-				}
-			} else {
-				if opts.ShowIDs {
-					fmt.Fprintf(w, "%s %-10s %s  %s  %s  %s\n", marker, prefixes[item.ID], displayCell, deep, labels, repository)
-				} else {
-					fmt.Fprintf(w, "%s %s  %s  %s  %s\n", marker, displayCell, deep, labels, repository)
+				cells = append(cells, padRight(agents[item.ID], agentWidth))
+				if showWorktree {
+					cells = append(cells, padRight(worktreeListLabel(item), worktreeWidth))
 				}
 			}
+			cells = append(cells, formatDeepWorkColumn(item.DeepWork, deepWidth), formatLabelColumn(listLabelMarkers(item, color), labelWidth, color))
+			cells = append(cells, item.Repository)
+			printRow(marker, fmt.Sprintf("%-10s", prefixes[item.ID]), cells)
 		}
 	}
 	for _, section := range displaySections {
@@ -323,9 +326,9 @@ func printWorkList(w io.Writer, res app.WorkListResult, mode string, color bool,
 
 func workDisplaySections(res app.WorkListResult, mode string, agents map[string]string) []workDisplaySection {
 	if len(agents) == 0 {
-		sections := []workDisplaySection{{Key: "working", Name: "WORKING", Items: res.Sections.Working}, {Key: "waiting", Name: "WAITING", Items: res.Sections.Waiting}, {Key: "backlog", Name: "BACKLOG", Items: res.Sections.Backlog}}
+		sections := []workDisplaySection{{Key: "active", Name: "ACTIVE", Items: res.Sections.Active}, {Key: "waiting", Name: "WAITING", Items: res.Sections.Waiting}, {Key: "backlog", Name: "BACKLOG", Items: res.Sections.Backlog}}
 		if mode == "all" || mode == "archived" {
-			sections = append(sections, workDisplaySection{Key: "archived", Name: "ARCHIVED", Items: res.Sections.Archived})
+			sections = append(sections, workDisplaySection{Key: "closed", Name: "CLOSED", Items: res.Sections.Closed})
 		}
 		return sections
 	}
@@ -333,13 +336,16 @@ func workDisplaySections(res app.WorkListResult, mode string, agents map[string]
 	needsFixing := []app.WorkListItem{}
 	inProgress := []app.WorkListItem{}
 	waiting := []app.WorkListItem{}
-	for _, item := range append(append([]app.WorkListItem{}, res.Sections.Working...), res.Sections.Waiting...) {
+	for _, item := range append(append([]app.WorkListItem{}, res.Sections.Active...), res.Sections.Waiting...) {
 		bucket := workItemBucket(item, agents)
 		if bucket == "needs_fixing" {
 			needsFixing = append(needsFixing, item)
 			continue
 		}
-		if item.State == model.StateWaiting {
+		// A busy agent is working on something the operator asked for, so a
+		// waiting item shows IN PROGRESS; once done, its unread response keeps
+		// it in NEEDS ATTENTION until read, then it returns to WAITING.
+		if item.Waiting && item.AttentionRank == 0 && bucket != "in_progress" {
 			waiting = append(waiting, item)
 			continue
 		}
@@ -364,7 +370,7 @@ func workDisplaySections(res app.WorkListResult, mode string, agents map[string]
 		{Key: "backlog", Name: "BACKLOG", Items: res.Sections.Backlog},
 	}
 	if mode == "all" || mode == "archived" {
-		sections = append(sections, workDisplaySection{Key: "archived", Name: "ARCHIVED", Items: res.Sections.Archived})
+		sections = append(sections, workDisplaySection{Key: "closed", Name: "CLOSED", Items: res.Sections.Closed})
 	}
 	return sections
 }
@@ -412,6 +418,39 @@ func labelMarkers(item app.WorkListItem) []string {
 		markers = append(markers, "capacity full")
 	}
 	markers = append(markers, item.Labels...)
+	return markers
+}
+
+// maxWaitingSuffix bounds the waiting label shown after an item name.
+const maxWaitingSuffix = 24
+
+// waitingSuffix is the compact waiting label shown after an item's name.
+func waitingSuffix(item app.WorkListItem, slugs map[string]string) string {
+	if len(item.Blockers) == 0 {
+		return ""
+	}
+	text := model.ShortList(item.Blockers, time.Now(), func(id string) string { return slugs[id] })
+	return "  · " + truncateRunes(text, maxWaitingSuffix)
+}
+
+// listSlugs names every listed item so item blockers can show a slug.
+func listSlugs(res app.WorkListResult) map[string]string {
+	slugs := map[string]string{}
+	for _, items := range [][]app.WorkListItem{res.Sections.Active, res.Sections.Waiting, res.Sections.Backlog, res.Sections.Closed} {
+		for _, item := range items {
+			slugs[item.ID] = itemDisplayName(item)
+		}
+	}
+	return slugs
+}
+
+// listLabelMarkers adds a textual unread marker when color, and therefore
+// bold titles, are unavailable.
+func listLabelMarkers(item app.WorkListItem, color bool) []string {
+	markers := labelMarkers(item)
+	if item.Unread && !color {
+		markers = append([]string{"unread"}, markers...)
+	}
 	return markers
 }
 
@@ -535,6 +574,14 @@ func colorWarning(s string, enabled bool) string {
 		return s
 	}
 	return "\x1b[31m" + s + "\x1b[0m"
+}
+
+// colorWaiting calls out what an item waits for.
+func colorWaiting(s string, enabled bool) string {
+	if !enabled || s == "" {
+		return s
+	}
+	return pickerYellow + s + pickerReset
 }
 
 func colorBold(s string, enabled bool) string {

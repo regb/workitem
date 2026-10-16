@@ -17,7 +17,9 @@ import (
 	"github.com/regb/workitem/internal/agent"
 	piadapter "github.com/regb/workitem/internal/agentdriver/pi"
 	"github.com/regb/workitem/internal/app"
+	itemcore "github.com/regb/workitem/internal/app/core/item"
 	"github.com/regb/workitem/internal/config"
+	"github.com/regb/workitem/internal/coordinator"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
@@ -34,6 +36,68 @@ func newTestApp(st *store.Store, git app.Git) *app.App {
 	application.ConversationBackends["pi"] = fakeConversationBackend{}
 	application.ConversationProjectionObserver = piadapter.ObserveConversation(st.ItemDir)
 	return application
+}
+
+func enableFixtureBlockerCommands(application *app.App) {
+	if native, ok := application.Store.(*store.Store); ok {
+		application.Store = &fixtureBlockerStore{Store: native}
+	}
+}
+
+// Native-file fixtures use the real coordinator policy in a temporary database.
+// Production has no native-file fallback for blocker mutations.
+type fixtureBlockerStore struct{ *store.Store }
+
+func (s *fixtureBlockerStore) AddBlockers(ctx context.Context, id string, blocks []model.Blocker, at time.Time) (itemcore.BlockerResult, error) {
+	root, err := os.MkdirTemp("", "wi-blocker-fixture-")
+	if err != nil {
+		return itemcore.BlockerResult{}, err
+	}
+	defer os.RemoveAll(root)
+	db, err := coordinator.OpenDatabase(root)
+	if err != nil {
+		return itemcore.BlockerResult{}, err
+	}
+	defer db.Close()
+	manifests, errs := s.ListManifests()
+	if len(errs) > 0 {
+		return itemcore.BlockerResult{}, errs[0]
+	}
+	imported := map[string]coordinator.ImportedManifest{}
+	for _, m := range manifests {
+		imported[m.ID] = coordinator.ImportedManifest{Manifest: m, Digest: m.ID}
+	}
+	if _, err := db.SyncImportedManifests(imported, true); err != nil {
+		return itemcore.BlockerResult{}, err
+	}
+	before, err := db.CanonicalManifest(id)
+	if err != nil {
+		return itemcore.BlockerResult{}, err
+	}
+	result, err := db.ExecuteManifestCommand(coordinator.ManifestCommand{ID: "fixture-blocker", ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandBlockerAdd, ItemID: id, ExpectedRevision: &before.Revision, Blockers: blocks, CreatedAt: at})
+	if err != nil {
+		return itemcore.BlockerResult{}, err
+	}
+	if err := s.SaveManifest(ctx, result.Manifest); err != nil {
+		return itemcore.BlockerResult{}, err
+	}
+	events, err := db.ListItemEvents(id)
+	if err != nil {
+		return itemcore.BlockerResult{}, err
+	}
+	for _, e := range events {
+		if e.CausationID != "fixture-blocker" {
+			continue
+		}
+		var data map[string]any
+		if err := json.Unmarshal(e.Payload, &data); err != nil {
+			return itemcore.BlockerResult{}, err
+		}
+		if err := s.AppendEvent(ctx, id, model.NewEvent(e.Timestamp, e.Type, e.Actor, data)); err != nil {
+			return itemcore.BlockerResult{}, err
+		}
+	}
+	return itemcore.BlockerMutationResult(before.Manifest, result.Manifest, result.Changed, at), nil
 }
 
 type fakeConversationBackend struct{}
@@ -478,24 +542,25 @@ func TestStateTransitionsAndCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if started.State != model.StateWorking || !started.Changed {
+	if started.State != model.StateActive || !started.Changed {
 		t.Fatalf("started = %+v", started)
 	}
 	if _, err := application.StartWorkItem(context.Background(), app.ResolveOptions{Selector: second.Manifest.ID}, false, false); err == nil {
 		t.Fatal("expected deep work capacity refusal")
 	}
-	waiting, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: first.Manifest.ID}, model.StateWaiting, false)
+	enableFixtureBlockerCommands(application)
+	waiting, err := application.AddBlockers(context.Background(), app.ResolveOptions{Selector: first.Manifest.ID}, []model.Blocker{{Kind: model.BlockerExternal, Event: "review"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if waiting.State != model.StateWaiting {
-		t.Fatalf("waiting = %+v", waiting)
+	if !waiting.Waiting || waiting.Manifest.State != model.StateActive {
+		t.Fatalf("blocked = %+v", waiting)
 	}
-	resumed, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: first.Manifest.ID}, model.StateWorking, false)
+	resumed, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: first.Manifest.ID}, model.StateActive, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if resumed.State != model.StateWorking {
+	if resumed.State != model.StateActive {
 		t.Fatalf("resumed = %+v", resumed)
 	}
 	shelved, err := application.Shelve(context.Background(), app.ResolveOptions{Selector: first.Manifest.ID}, false)
@@ -510,7 +575,7 @@ func TestStateTransitionsAndCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if forced.State != model.StateWorking {
+	if forced.State != model.StateActive {
 		t.Fatalf("forced = %+v", forced)
 	}
 }
@@ -532,7 +597,8 @@ func TestResumeWorkItemAttachesWorkspace(t *testing.T) {
 	if _, err := application.StartWorkItem(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, false, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, model.StateWaiting, false); err != nil {
+	enableFixtureBlockerCommands(application)
+	if _, err := application.AddBlockers(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, []model.Blocker{{Kind: model.BlockerExternal, Event: "review"}}); err != nil {
 		t.Fatal(err)
 	}
 	ft.attach = nil
@@ -540,7 +606,7 @@ func TestResumeWorkItemAttachesWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Transition.State != model.StateWorking || res.Workspace.Terminal.Session == "" || !res.Workspace.Terminal.Attached {
+	if res.Transition.State != model.StateActive || res.Workspace.Terminal.Session == "" || !res.Workspace.Terminal.Attached {
 		t.Fatalf("resume result = %+v", res)
 	}
 	if len(ft.attach) != 1 || ft.attach[0] != res.Workspace.Terminal.Session {
@@ -573,7 +639,7 @@ func TestShelveDirtyCheckoutDoesNotKillTmux(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.State != model.StateWorking || !m.Checkout.Present() || m.Checkout.Claim == nil {
+	if m.State != model.StateActive || !m.Checkout.Present() || m.Checkout.Claim == nil {
 		t.Fatalf("dirty checkout should remain assigned: %+v", m)
 	}
 	if len(ft.killed) != 0 {
@@ -606,7 +672,7 @@ func TestShelveDoesNotReleaseCheckoutWhenTmuxCloseFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m.State != model.StateWorking || !m.Checkout.Present() || m.Checkout.Claim == nil {
+	if m.State != model.StateActive || !m.Checkout.Present() || m.Checkout.Claim == nil {
 		t.Fatalf("workspace should remain assigned after tmux close failure: %+v", m)
 	}
 	if len(ft.killed) != 1 || ft.killed[0] != started.Workspace.Terminal.Session {
@@ -669,19 +735,19 @@ func TestArchiveRestoreAndListOrdering(t *testing.T) {
 	if _, err := application.StartWorkItem(context.Background(), app.ResolveOptions{Selector: a.Manifest.ID}, false, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.Archive(context.Background(), app.ResolveOptions{Selector: d.Manifest.ID}, false); err != nil {
+	if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: d.Manifest.ID}, model.ResolutionCompleted, false); err != nil {
 		t.Fatal(err)
 	}
 	list := application.WorkList(app.WorkListOptions{})
-	if len(list.Sections.Working) != 1 || list.Sections.Working[0].ID != a.Manifest.ID {
-		t.Fatalf("working = %+v", list.Sections.Working)
+	if len(list.Sections.Active) != 1 || list.Sections.Active[0].ID != a.Manifest.ID {
+		t.Fatalf("active = %+v", list.Sections.Active)
 	}
 	if len(list.Sections.Backlog) != 2 || list.Sections.Backlog[0].ID != b.Manifest.ID || list.Sections.Backlog[1].ID != c.Manifest.ID || !list.Sections.Backlog[1].CapacityFull {
 		t.Fatalf("backlog = %+v", list.Sections.Backlog)
 	}
 	archived := application.WorkList(app.WorkListOptions{ArchivedOnly: true})
-	if len(archived.Sections.Archived) != 1 || archived.Sections.Archived[0].ID != d.Manifest.ID {
-		t.Fatalf("archived = %+v", archived.Sections.Archived)
+	if len(archived.Sections.Closed) != 1 || archived.Sections.Closed[0].ID != d.Manifest.ID {
+		t.Fatalf("closed = %+v", archived.Sections.Closed)
 	}
 	restored, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: d.Manifest.ID}, model.StateBacklog, false)
 	if err != nil {
@@ -732,7 +798,7 @@ func TestArchivedItemsLoseSlugAndDoNotReserveIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstBranch := first.Manifest.Checkout.Specification.Branch
-	archived, err := application.Archive(context.Background(), app.ResolveOptions{Selector: first.Manifest.Slug}, false)
+	archived, err := application.Close(context.Background(), app.ResolveOptions{Selector: first.Manifest.Slug}, model.ResolutionCompleted, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -774,10 +840,10 @@ func TestCheckoutCreateRejectsArchivedItem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.Archive(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, false); err != nil {
+	if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, model.ResolutionCompleted, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.CheckoutCreate(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}); err == nil || !strings.Contains(err.Error(), "is archived") {
+	if _, err := application.CheckoutCreate(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}); err == nil || !strings.Contains(err.Error(), "is closed") {
 		t.Fatalf("expected archived checkout refusal, got %v", err)
 	}
 }
@@ -829,21 +895,21 @@ func TestSwitchWorkItemMaterializesMissingWorkspaceWithoutChangingState(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.StateWorking, false); err != nil {
+	if _, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.StateActive, false); err != nil {
 		t.Fatal(err)
 	}
 	switched, err := application.SwitchWorkItem(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if switched.Manifest.State != model.StateWorking || !switched.Checkout.Present() || switched.Manifest.PrimaryConversation == nil {
+	if switched.Manifest.State != model.StateActive || !switched.Checkout.Present() || switched.Manifest.PrimaryConversation == nil {
 		t.Fatalf("switch porcelain = %+v", switched)
 	}
 	persisted, err := st.LoadManifest(created.Manifest.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.State != model.StateWorking {
+	if persisted.State != model.StateActive {
 		t.Fatalf("switch changed state to %s", persisted.State)
 	}
 }
@@ -869,26 +935,27 @@ func TestSwitchWorkItemDoesNotChangeWaitingState(t *testing.T) {
 	if _, err := application.StartWorkItem(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, false, false); err != nil {
 		t.Fatal(err)
 	}
-	waited, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, model.StateWaiting, false)
+	enableFixtureBlockerCommands(application)
+	waited, err := application.AddBlockers(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, []model.Blocker{{Kind: model.BlockerExternal, Event: "review"}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if waited.State != model.StateWaiting {
-		t.Fatalf("waited = %+v", waited)
+	if !waited.Waiting {
+		t.Fatalf("blocked = %+v", waited)
 	}
 	switched, err := application.SwitchWorkItem(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if switched.Manifest.State != model.StateWaiting {
-		t.Fatalf("switch changed state: %+v", switched.Manifest)
+	if switched.Manifest.State != model.StateActive || len(switched.Manifest.Blockers) != 1 {
+		t.Fatalf("switch changed state or blockers: %+v", switched.Manifest)
 	}
 	loaded, err := st.LoadManifest(newRes.Manifest.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded.State != model.StateWaiting {
-		t.Fatalf("loaded state = %s", loaded.State)
+	if loaded.State != model.StateActive || len(loaded.Blockers) != 1 {
+		t.Fatalf("loaded state = %s blockers = %+v", loaded.State, loaded.Blockers)
 	}
 }
 
@@ -1388,7 +1455,8 @@ func TestAttentionQueueRanksRecentRequestsBeforeDeferredItems(t *testing.T) {
 	if err != nil || next.Selected.Item.Title != "A" || next.CurrentInQueue || next.Deferred != nil {
 		t.Fatalf("next --defer from busy item = %+v err=%v", next, err)
 	}
-	if _, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: items["B"].id}, model.StateWaiting, false); err != nil {
+	enableFixtureBlockerCommands(application)
+	if _, err := application.AddBlockers(context.Background(), app.ResolveOptions{Selector: items["B"].id}, []model.Blocker{{Kind: model.BlockerExternal, Event: "review"}}); err != nil {
 		t.Fatal(err)
 	}
 	next, err = application.NextWorkItem(context.Background(), app.NextWorkItemOptions{ResolveOptions: app.ResolveOptions{Env: map[string]string{"WI_ID": items["B"].id}}, DeferCurrent: true}, false)
@@ -1403,7 +1471,7 @@ func TestAttentionQueueRanksRecentRequestsBeforeDeferredItems(t *testing.T) {
 	if err != nil || next.Selected.Item.Title != "E" || next.CurrentInQueue || next.Deferred == nil || next.Deferred.WorkItemID != items["A"].id {
 		t.Fatalf("next --defer with label-filtered current = %+v err=%v", next, err)
 	}
-	precomputed := app.AttentionQueueResult{Candidates: []app.AttentionCandidate{{Item: app.WorkListItem{ID: items["E"].id, Slug: "e", Title: "E", State: model.StateWorking}, Rank: 1}}}
+	precomputed := app.AttentionQueueResult{Candidates: []app.AttentionCandidate{{Item: app.WorkListItem{ID: items["E"].id, Slug: "e", Title: "E", State: model.StateActive}, Rank: 1}}}
 	preselection := app.NextQueueSelection{Index: 0, WorkItemID: items["E"].id}
 	next, err = application.NextWorkItem(context.Background(), app.NextWorkItemOptions{
 		ResolveOptions:       app.ResolveOptions{Env: map[string]string{"WI_ID": items["A"].id}},
@@ -1421,21 +1489,28 @@ func TestAttentionQueueRanksRecentRequestsBeforeDeferredItems(t *testing.T) {
 	next, err = application.NextWorkItem(context.Background(), app.NextWorkItemOptions{
 		ResolveOptions: app.ResolveOptions{Env: map[string]string{"WI_ID": items["F"].id}},
 		WaitCurrent:    true,
+		WaitBlockers:   []model.Blocker{{Kind: model.BlockerExternal, Event: "waiting"}},
 	}, false)
-	if err != nil || next.Waited == nil || next.Waited.State != model.StateWaiting || next.Selected.Item.Title != "E" || next.CurrentInQueue {
+	if err != nil || next.Waited == nil || !next.Waited.Waiting || next.Selected.Item.Title != "E" || next.CurrentInQueue {
 		t.Fatalf("next --wait from F = %+v err=%v", next, err)
 	}
 	waitingManifest, err := st.LoadManifest(items["F"].id)
-	if err != nil || waitingManifest.State != model.StateWaiting {
+	if err != nil || waitingManifest.State != model.StateActive || len(waitingManifest.Blockers) != 1 {
 		t.Fatalf("waited manifest = %+v err=%v", waitingManifest, err)
 	}
 	waitingEvents, err := st.ReadEvents(items["F"].id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	waitEvent := waitingEvents[len(waitingEvents)-1]
-	if waitEvent.Type != "work_item.state_set" || waitEvent.Data["workspace_unchanged"] != true {
-		t.Fatalf("next --wait did not use the canonical state primitive: %+v", waitEvent)
+	blockedEvent := false
+	for _, event := range waitingEvents {
+		if event.Type == "work_item.state_set" && event.Data["new_state"] == "waiting" {
+			t.Fatalf("next --wait changed lifecycle state: %+v", event)
+		}
+		blockedEvent = blockedEvent || event.Type == "blocker.added"
+	}
+	if !blockedEvent {
+		t.Fatalf("next --wait did not record a blocker: %+v", waitingEvents)
 	}
 	events, err := st.ReadEvents(items["A"].id)
 	if err != nil {
@@ -1484,11 +1559,11 @@ func TestArchiveStopsRuntimeBeforeArchiving(t *testing.T) {
 		request.Respond(nil)
 		proc.setAlive(4321, false)
 	}()
-	archived, err := application.Archive(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, false)
+	archived, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if archived.State != model.StateArchived || !containsString(archived.Warnings, "requested agent runtime shutdown") {
+	if archived.State != model.StateClosed || !containsString(archived.Warnings, "requested agent runtime shutdown") {
 		t.Fatalf("archived = %+v", archived)
 	}
 }
@@ -1530,16 +1605,16 @@ func TestNextWorkItemArchivePersistsBeforeSchedulingPreviousTerminalClose(t *tes
 	}
 	result, err := application.NextWorkItem(context.Background(), app.NextWorkItemOptions{
 		ResolveOptions: app.ResolveOptions{Env: map[string]string{"WI_ID": created[0].Manifest.ID, "TMUX": "/tmp/tmux"}},
-		ArchiveCurrent: true,
+		CloseCurrent:   true,
 	}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Selected.Item.ID != created[1].Manifest.ID || result.Archived == nil || result.Archived.WorkItemID != created[0].Manifest.ID {
+	if result.Selected.Item.ID != created[1].Manifest.ID || result.Closed == nil || result.Closed.WorkItemID != created[0].Manifest.ID {
 		t.Fatalf("result = %+v", result)
 	}
 	archived, err := st.LoadManifest(created[0].Manifest.ID)
-	if err != nil || archived.State != model.StateArchived || archived.Slug != "" || archived.Checkout.Present() {
+	if err != nil || archived.State != model.StateClosed || archived.Slug != "" || archived.Checkout.Present() {
 		t.Fatalf("archived = %+v err=%v", archived, err)
 	}
 	if len(mux.killed) != 0 || len(mux.killedAsync) != 1 || mux.killedAsync[0] != created[0].Manifest.TerminalSessionName() {
@@ -1574,12 +1649,12 @@ func TestNextWorkItemArchiveJSONModeDoesNotPretendTmuxSwitched(t *testing.T) {
 		created = append(created, item)
 	}
 	mux.current = created[0].Manifest.TerminalSessionName()
-	partial, err := application.NextWorkItem(context.Background(), app.NextWorkItemOptions{ResolveOptions: app.ResolveOptions{Env: map[string]string{"WI_ID": created[0].Manifest.ID, "TMUX": "/tmp/tmux"}}, ArchiveCurrent: true}, false)
+	partial, err := application.NextWorkItem(context.Background(), app.NextWorkItemOptions{ResolveOptions: app.ResolveOptions{Env: map[string]string{"WI_ID": created[0].Manifest.ID, "TMUX": "/tmp/tmux"}}, CloseCurrent: true}, false)
 	if err == nil || partial.Workspace.WorkItemID != created[1].Manifest.ID || !strings.Contains(err.Error(), "cannot close current tmux session") {
 		t.Fatalf("partial=%+v err=%v", partial, err)
 	}
 	current, loadErr := st.LoadManifest(created[0].Manifest.ID)
-	if loadErr != nil || current.State == model.StateArchived {
+	if loadErr != nil || current.State == model.StateClosed {
 		t.Fatalf("current=%+v err=%v", current, loadErr)
 	}
 }
@@ -1610,12 +1685,12 @@ func TestNextWorkItemArchivePreflightFailsBeforeSwitching(t *testing.T) {
 		created = append(created, item)
 	}
 	fg.status = " M dirty.go"
-	partial, err := application.NextWorkItem(context.Background(), app.NextWorkItemOptions{ResolveOptions: app.ResolveOptions{Env: map[string]string{"WI_ID": created[0].Manifest.ID}}, ArchiveCurrent: true}, false)
-	if err == nil || partial.Workspace.WorkItemID != "" || !strings.Contains(err.Error(), "could not prepare current item "+created[0].Manifest.ID+" for archive before switching") {
+	partial, err := application.NextWorkItem(context.Background(), app.NextWorkItemOptions{ResolveOptions: app.ResolveOptions{Env: map[string]string{"WI_ID": created[0].Manifest.ID}}, CloseCurrent: true}, false)
+	if err == nil || partial.Workspace.WorkItemID != "" || !strings.Contains(err.Error(), "could not prepare current item "+created[0].Manifest.ID+" for close before switching") {
 		t.Fatalf("partial=%+v err=%v", partial, err)
 	}
 	current, loadErr := st.LoadManifest(created[0].Manifest.ID)
-	if loadErr != nil || current.State == model.StateArchived {
+	if loadErr != nil || current.State == model.StateClosed {
 		t.Fatalf("current=%+v err=%v", current, loadErr)
 	}
 }
@@ -1760,7 +1835,7 @@ func TestHeadlessRuntimeUsesNativeControlWithoutTmux(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: itemID}, model.StateWorking, false); err != nil {
+	if _, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: itemID}, model.StateActive, false); err != nil {
 		t.Fatal(err)
 	}
 	ensured, err := application.EnsureAgentRuntime(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, agent.ModeHeadless)
@@ -1935,7 +2010,7 @@ func TestNewAgentWorkItemStartsDetachedHeadlessRuntimeWithSeparateMessage(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Start.Transition.State != model.StateWorking || result.Start.Workspace.AgentRuntime == nil || result.Start.Workspace.AgentRuntime.Mode != string(agent.ModeHeadless) || result.Start.Workspace.Terminal != nil {
+	if result.Start.Transition.State != model.StateActive || result.Start.Workspace.AgentRuntime == nil || result.Start.Workspace.AgentRuntime.Mode != string(agent.ModeHeadless) || result.Start.Workspace.Terminal != nil {
 		t.Fatalf("start result = %+v", result.Start)
 	}
 	if !result.Control.Submitted || result.Control.Command.Message != prompt || result.Control.Command.Actor != "planner" {
@@ -1945,7 +2020,7 @@ func TestNewAgentWorkItemStartsDetachedHeadlessRuntimeWithSeparateMessage(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	if shown.Description != "The refresh operation can race with writes. Add a regression test." || shown.Manifest.State != model.StateWorking {
+	if shown.Description != "The refresh operation can race with writes. Add a regression test." || shown.Manifest.State != model.StateActive {
 		t.Fatalf("shown = %+v", shown)
 	}
 	if launcher.spec.CWD == "" || strings.Join(launcher.spec.Args, " ") == "" {
@@ -2247,7 +2322,7 @@ func TestCheckoutRemoveDoesNotArchiveAndCreateReusesBranch(t *testing.T) {
 	if removed.Checkout.ClaimGeneration != initialClaim.Generation || removed.Checkout.Specification != initial.Checkout.Specification {
 		t.Fatalf("release lost checkout intent or generation: %+v", removed.Checkout)
 	}
-	if removed.Manifest.State == model.StateArchived || removed.Checkout.Present() || removed.Checkout.Claim != nil {
+	if removed.Manifest.State == model.StateClosed || removed.Checkout.Present() || removed.Checkout.Claim != nil {
 		t.Fatalf("removed = %+v", removed)
 	}
 	if _, err := os.Stat(initialPath); err != nil {

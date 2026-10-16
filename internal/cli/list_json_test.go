@@ -11,14 +11,14 @@ import (
 )
 
 func TestListJSONAddsDisplayGroupsWithoutChangingLifecycleSections(t *testing.T) {
-	idle := app.WorkListItem{ID: "idle", Slug: "a-full-untruncated-slug", State: model.StateWorking, AttentionRank: 2, Agent: &viewapp.AgentStatus{Bucket: "needs_attention"}}
-	first := app.WorkListItem{ID: "first", State: model.StateWorking, AttentionRank: 1, Agent: &viewapp.AgentStatus{Bucket: "needs_attention"}}
-	busy := app.WorkListItem{ID: "busy", State: model.StateWorking, Agent: &viewapp.AgentStatus{Bucket: "in_progress"}}
-	broken := app.WorkListItem{ID: "broken", State: model.StateWorking, Agent: &viewapp.AgentStatus{Bucket: "in_progress"}, Worktree: &viewapp.WorktreeStatus{Status: "problem"}}
-	waiting := app.WorkListItem{ID: "waiting", State: model.StateWaiting, Agent: &viewapp.AgentStatus{Bucket: "needs_attention"}}
+	idle := app.WorkListItem{ID: "idle", Slug: "a-full-untruncated-slug", State: model.StateActive, AttentionRank: 2, Agent: &viewapp.AgentStatus{Bucket: "needs_attention"}}
+	first := app.WorkListItem{ID: "first", State: model.StateActive, AttentionRank: 1, Agent: &viewapp.AgentStatus{Bucket: "needs_attention"}}
+	busy := app.WorkListItem{ID: "busy", State: model.StateActive, Agent: &viewapp.AgentStatus{Bucket: "in_progress"}}
+	broken := app.WorkListItem{ID: "broken", State: model.StateActive, Agent: &viewapp.AgentStatus{Bucket: "in_progress"}, Worktree: &viewapp.WorktreeStatus{Status: "problem"}}
+	waiting := app.WorkListItem{ID: "waiting", State: model.StateActive, Waiting: true, Agent: &viewapp.AgentStatus{Bucket: "needs_attention"}}
 	backlog := app.WorkListItem{ID: "backlog", State: model.StateBacklog}
-	archived := app.WorkListItem{ID: "archived", State: model.StateArchived}
-	res := app.WorkListResult{Sections: viewapp.Sections{Working: []app.WorkListItem{idle, busy, broken, first}, Waiting: []app.WorkListItem{waiting}, Backlog: []app.WorkListItem{backlog}, Archived: []app.WorkListItem{archived}}, Warnings: []string{"sample warning"}}
+	archived := app.WorkListItem{ID: "archived", State: model.StateClosed}
+	res := app.WorkListResult{Sections: viewapp.Sections{Active: []app.WorkListItem{idle, busy, broken, first}, Waiting: []app.WorkListItem{waiting}, Backlog: []app.WorkListItem{backlog}, Closed: []app.WorkListItem{archived}}, Warnings: []string{"sample warning"}}
 	agents := map[string]string{"idle": "idle", "busy": "busy", "broken": "busy", "waiting": "idle", "first": "idle"}
 	for _, tt := range []struct {
 		mode   string
@@ -26,9 +26,9 @@ func TestListJSONAddsDisplayGroupsWithoutChangingLifecycleSections(t *testing.T)
 		keys   []string
 	}{
 		{"active", agents, []string{"needs_attention", "needs_fixing", "in_progress", "waiting", "backlog"}},
-		{"all", agents, []string{"needs_attention", "needs_fixing", "in_progress", "waiting", "backlog", "archived"}},
-		{"active", nil, []string{"working", "waiting", "backlog"}},
-		{"archived", nil, []string{"working", "waiting", "backlog", "archived"}},
+		{"all", agents, []string{"needs_attention", "needs_fixing", "in_progress", "waiting", "backlog", "closed"}},
+		{"active", nil, []string{"active", "waiting", "backlog"}},
+		{"archived", nil, []string{"active", "waiting", "backlog", "closed"}},
 	} {
 		result := workListJSON(res, tt.mode, tt.agents)
 		if !reflect.DeepEqual(result.Sections, res.Sections) {

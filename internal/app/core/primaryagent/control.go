@@ -40,8 +40,8 @@ func (s *Service) Control(ctx context.Context, opts ControlOptions) (ControlResu
 		return ControlResult{}, err
 	}
 	commandType := strings.TrimSpace(opts.CommandType)
-	if m.State == model.StateArchived && commandType != agent.CommandAbort && commandType != agent.CommandShutdown {
-		return ControlResult{}, fmt.Errorf("archived conversations are read-only")
+	if m.State == model.StateClosed && commandType != agent.CommandAbort && commandType != agent.CommandShutdown {
+		return ControlResult{}, fmt.Errorf("closed conversations are read-only")
 	}
 	runtime, err := s.store.LoadAgentRuntime(m.ID)
 	if err != nil {

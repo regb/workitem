@@ -277,8 +277,14 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = runResume(ctx, args[1:], cfg, jsonOut)
 	case "shelve":
 		err = runShelve(ctx, args[1:], cfg, jsonOut)
-	case "archive":
-		err = runArchiveCommand(ctx, args[1:], cfg, jsonOut)
+	case "close":
+		err = runClose(ctx, args[1:], cfg, jsonOut)
+	case "wait":
+		err = runWait(ctx, args[1:], cfg, jsonOut)
+	case "pick":
+		err = runPick(ctx, args[1:], cfg, jsonOut)
+	case "blocker":
+		err = runBlocker(ctx, args[1:], cfg, jsonOut)
 	case "delete":
 		err = runDelete(ctx, args[1:], cfg, jsonOut)
 	case "shutdown":

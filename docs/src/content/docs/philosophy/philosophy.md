@@ -3,7 +3,7 @@ title: Philosophy
 description: Short-lived tasks, durable records, and explicit local control.
 ---
 
-Wi organizes development around small tasks, not permanent agent sessions or project-sized workspaces. Each item should have a bounded objective and a clear completion condition. Review the result and archive the item; file a different objective as new work.
+Wi organizes development around small tasks, not permanent agent sessions or project-sized workspaces. Each item should have a bounded objective and a clear completion condition. Review the result and close the item; file a different objective as new work.
 
 ## Durable does not mean ongoing
 

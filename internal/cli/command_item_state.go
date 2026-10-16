@@ -47,19 +47,22 @@ func runStateShow(ctx context.Context, args []string, cfg Config, jsonOut bool) 
 
 func runStateSet(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	if len(args) == 0 {
-		return usageErr{errors.New("usage: wi state set <backlog|working|waiting|archived> [--item <selector>] [--force] [item]")}
+		return usageErr{errors.New("usage: wi state set <backlog|active|closed> [--item <selector>] [--force] [item]")}
 	}
-	target := args[0]
+	target, err := model.NormalizeStateInput(args[0])
+	if err != nil {
+		return usageErr{err}
+	}
 	fs := newFlagSet("state set", cfg.Stderr)
 	var item string
 	var force bool
 	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
-	fs.BoolVar(&force, "force", false, "override deep-work capacity when setting backlog work to working")
+	fs.BoolVar(&force, "force", false, "override deep-work capacity when setting backlog work to active")
 	if err := fs.Parse(args[1:]); err != nil {
 		return usageErr{err}
 	}
-	if target != model.StateWorking && force {
-		return usageErr{errors.New("--force is only valid when setting state to working")}
+	if target != model.StateActive && force {
+		return usageErr{errors.New("--force is only valid when setting state to active")}
 	}
 	selector, err := itemSelectorFromFlag(fs, item)
 	if err != nil {

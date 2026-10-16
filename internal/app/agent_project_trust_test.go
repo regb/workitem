@@ -110,7 +110,7 @@ func TestAgentProjectTrustRequiresVerifiedRegisteredManagedWorktree(t *testing.T
 				t.Fatal(err)
 			}
 			if mode == "verified" {
-				m.State = model.StateWorking
+				m.State = model.StateActive
 				sessionID, _ := model.NewID()
 				m.PrimaryConversation = &model.Conversation{Driver: "pi", ID: sessionID, Locator: "sessions/pi/" + sessionID + ".jsonl"}
 				if err := native.SaveManifest(ctx, m); err != nil {

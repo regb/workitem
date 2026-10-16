@@ -3,7 +3,7 @@ title: Merge completed work
 description: Fast-forward a local target, rebasing only when needed.
 ---
 
-`wi merge` integrates one clean working or waiting item into an existing local branch.
+`wi merge` integrates one clean active item into an existing local branch.
 
 ```bash
 wi merge --item auth main
@@ -40,10 +40,10 @@ For an explicitly selected non-integration target, dirty files in its worktree a
 
 ## Finish the work item separately
 
-Inspect the result and use normal Git commands to push if required. Then archive the item:
+Inspect the result and use normal Git commands to push if required. Then close the item:
 
 ```bash
-wi archive auth
+wi close auth
 ```
 
-Verify the integration before archiving. The task record remains available; file further objectives as new items.
+Verify the integration before closing. The task record remains available; file further objectives as new items.

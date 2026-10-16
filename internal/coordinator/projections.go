@@ -16,8 +16,12 @@ type AttentionActivity struct {
 	LastRequestedAt *time.Time `json:"last_requested_at,omitempty"`
 	LastCompletedAt *time.Time `json:"last_completed_at,omitempty"`
 	LastDeferredAt  *time.Time `json:"last_deferred_at,omitempty"`
-	ObservedAt      time.Time  `json:"observed_at"`
-	Source          string     `json:"source"`
+	// Read markers are operator intent recorded through attention events. An
+	// unread mark keeps a response actionable even after it was opened.
+	LastReadAt   *time.Time `json:"last_read_at,omitempty"`
+	LastUnreadAt *time.Time `json:"last_unread_at,omitempty"`
+	ObservedAt   time.Time  `json:"observed_at"`
+	Source       string     `json:"source"`
 }
 
 type RuntimeActivity struct {

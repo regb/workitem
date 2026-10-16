@@ -66,3 +66,27 @@ func TestUnknownStrategyFails(t *testing.T) {
 		t.Fatal("expected unknown strategy to fail")
 	}
 }
+
+func TestUnreadComparesResponsesAndMarkersToLastRead(t *testing.T) {
+	base := time.Now()
+	at := func(offset time.Duration) *time.Time { value := base.Add(offset); return &value }
+	for _, tc := range []struct {
+		name                    string
+		completed, read, unread *time.Time
+		want                    bool
+	}{
+		{"no response", nil, nil, nil, false},
+		{"never read", at(0), nil, nil, true},
+		{"read after response", at(0), at(time.Second), nil, false},
+		{"response after read", at(2 * time.Second), at(time.Second), nil, true},
+		{"marked unread after read", at(0), at(time.Second), at(2 * time.Second), true},
+		{"read after unread mark", at(0), at(3 * time.Second), at(2 * time.Second), false},
+	} {
+		if got := priority.Unread(tc.completed, tc.read, tc.unread); got != tc.want {
+			t.Fatalf("%s: unread=%v", tc.name, got)
+		}
+	}
+	if priority.Eligible(true, false) || !priority.Eligible(true, true) || !priority.Eligible(false, false) {
+		t.Fatal("eligibility rule is wrong")
+	}
+}

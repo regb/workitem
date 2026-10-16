@@ -44,8 +44,8 @@ func (s *Service) ValidateSwitchTarget(ctx context.Context, o contract.ResolveOp
 	if e != nil {
 		return model.Manifest{}, e
 	}
-	if m.State == model.StateArchived {
-		return model.Manifest{}, fmt.Errorf("work item %s is archived; run `wi state set backlog --item %s` before entering it", m.ID, m.ID)
+	if m.State == model.StateClosed {
+		return model.Manifest{}, fmt.Errorf("work item %s is closed; run `wi state set backlog --item %s` before entering it", m.ID, m.ID)
 	}
 	if m.State == model.StateBacklog {
 		return model.Manifest{}, fmt.Errorf("work item %s is backlog; use `wi start` to start it", m.ID)

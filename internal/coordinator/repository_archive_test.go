@@ -123,9 +123,9 @@ func TestRepositoryArchiveFencesCreationButNotExistingItems(t *testing.T) {
 	if _, err := db.ExecuteAgentCreateItemCommand(second); err == nil || !strings.Contains(err.Error(), "archived") {
 		t.Fatalf("agent creation err=%v", err)
 	}
-	transition := ManifestCommand{ID: "existing:start", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: firstID, ExpectedRevision: &created.Revision, Actor: "user", TargetState: model.StateWorking, CreatedAt: now}
+	transition := ManifestCommand{ID: "existing:start", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: firstID, ExpectedRevision: &created.Revision, Actor: "user", TargetState: model.StateActive, CreatedAt: now}
 	working, err := db.ExecuteManifestCommand(transition)
-	if err != nil || working.Manifest.State != model.StateWorking {
+	if err != nil || working.Manifest.State != model.StateActive {
 		t.Fatalf("existing transition=%+v err=%v", working, err)
 	}
 	// Full manifest saves must also continue working, not just domain commands.

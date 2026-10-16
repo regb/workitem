@@ -25,24 +25,29 @@ const (
 	CommandStateSet     = "item.state.set"
 	CommandTitleSet     = "item.title.set"
 	CommandEdit         = "item.edit"
+	CommandBlockerAdd   = "item.blocker.add"
+	CommandBlockerClear = "item.blocker.clear"
 )
 
 type ManifestCommand struct {
-	ID               string        `json:"id"`
-	ProtocolVersion  int           `json:"protocol_version"`
-	Type             string        `json:"type"`
-	ItemID           string        `json:"item_id"`
-	ExpectedRevision *uint64       `json:"expected_revision"`
-	Actor            string        `json:"actor"`
-	Labels           []string      `json:"labels,omitempty"`
-	DeepWork         *bool         `json:"deep_work,omitempty"`
-	TargetState      string        `json:"target_state,omitempty"`
-	Title            string        `json:"title,omitempty"`
-	Edit             *MetadataEdit `json:"edit,omitempty"`
-	EventType        string        `json:"event_type,omitempty"`
-	Force            bool          `json:"force,omitempty"`
-	MaxActive        int           `json:"max_active,omitempty"`
-	CreatedAt        time.Time     `json:"created_at"`
+	ID               string          `json:"id"`
+	ProtocolVersion  int             `json:"protocol_version"`
+	Type             string          `json:"type"`
+	ItemID           string          `json:"item_id"`
+	ExpectedRevision *uint64         `json:"expected_revision"`
+	Actor            string          `json:"actor"`
+	Labels           []string        `json:"labels,omitempty"`
+	DeepWork         *bool           `json:"deep_work,omitempty"`
+	TargetState      string          `json:"target_state,omitempty"`
+	Title            string          `json:"title,omitempty"`
+	Edit             *MetadataEdit   `json:"edit,omitempty"`
+	EventType        string          `json:"event_type,omitempty"`
+	Force            bool            `json:"force,omitempty"`
+	MaxActive        int             `json:"max_active,omitempty"`
+	Resolution       string          `json:"resolution,omitempty"`
+	Blockers         []model.Blocker `json:"blockers,omitempty"`
+	BlockerID        string          `json:"blocker_id,omitempty"`
+	CreatedAt        time.Time       `json:"created_at"`
 }
 
 type CanonicalManifest struct {
@@ -218,47 +223,13 @@ func (d *Database) executeManifestCommand(command ManifestCommand, queueOptions 
 		}
 		result = ManifestCommandResult{CommandID: command.ID, Manifest: manifest, Revision: revision, Changed: changed, Events: []DomainEvent{}, CommittedAt: time.Now().UTC()}
 		if changed {
-			meta, events, eventIDs := tx.Bucket(bucketMeta), tx.Bucket(bucketEvents), tx.Bucket(bucketEventIDs)
-			sequence := decodeUint64(meta.Get(keyGlobalSequence))
-			for index, pending := range pendingEvents {
-				sequence++
-				revision++
-				eventID := domainEventID(command.ID, index)
-				if eventIDs.Get([]byte(eventID)) != nil {
-					return fmt.Errorf("duplicate event id %s", eventID)
-				}
-				event := DomainEvent{Sequence: sequence, ID: eventID, ItemID: command.ItemID, ItemRevision: revision, Type: pending.Type, Timestamp: command.CreatedAt.UTC(), Actor: command.Actor, CausationID: command.ID, Payload: pending.Payload}
-				encoded, err := json.Marshal(event)
-				if err != nil {
-					return err
-				}
-				if err := events.Put(encodeUint64(sequence), encoded); err != nil {
-					return err
-				}
-				if err := eventIDs.Put([]byte(eventID), encodeUint64(sequence)); err != nil {
-					return err
-				}
-				result.Events = append(result.Events, event)
-			}
-			if err := revisions.Put([]byte(command.ItemID), encodeUint64(revision)); err != nil {
-				return err
-			}
-			manifestBytes, err := json.Marshal(manifest)
+			events, newRevision, err := commitManifestEvents(tx, manifest, command.ID, command.Actor, command.CreatedAt, pendingEvents)
 			if err != nil {
 				return err
 			}
-			if err := projection.Put([]byte(command.ItemID), manifestBytes); err != nil {
-				return err
-			}
-			digest := sha256.Sum256(manifestBytes)
-			if err := tx.Bucket(bucketImportSources).Put([]byte(command.ItemID), []byte(hex.EncodeToString(digest[:]))); err != nil {
-				return err
-			}
-			if err := meta.Put(keyGlobalSequence, encodeUint64(sequence)); err != nil {
-				return err
-			}
+			result.Events = events
 			result.Manifest = manifest
-			result.Revision = revision
+			result.Revision = newRevision
 		}
 		if command.Type == CommandEdit && command.Edit != nil && command.Edit.DescriptionDigest != "" && command.Edit.DescriptionDigest != command.Edit.PreviousDescriptionDigest {
 			write := pendingNativeWrite{CommandID: command.ID, Operation: "edit-description", Manifest: manifest, DescriptionDigest: command.Edit.DescriptionDigest, PreviousDescriptionDigest: command.Edit.PreviousDescriptionDigest}
@@ -380,6 +351,20 @@ func applyManifestCommand(command ManifestCommand, manifest *model.Manifest, all
 			eventType = "deep_work.set"
 		}
 		appendEvent(eventType, map[string]any{"deep_work": *command.DeepWork})
+	case CommandBlockerAdd:
+		if err := applyBlockerAddCommand(command, manifest, allManifests, appendEvent); err != nil {
+			return nil, false, err
+		}
+		if len(pending) == 0 {
+			return pending, false, nil
+		}
+	case CommandBlockerClear:
+		if err := applyBlockerClearCommand(command, manifest, appendEvent); err != nil {
+			return nil, false, err
+		}
+		if len(pending) == 0 {
+			return pending, false, nil
+		}
 	case CommandStateSet:
 		if err := applyStateSetCommand(command, manifest, allManifests, appendEvent); err != nil {
 			return nil, false, err
@@ -422,6 +407,7 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 	projection := tx.Bucket(bucketProjections)
 	manifestsBucket := projection.Bucket([]byte(ManifestProjection))
 	observationsBucket := projection.Bucket([]byte(AgentObservationProjection))
+	attentionBucket := projection.Bucket([]byte(AttentionActivityProjection))
 	if manifestsBucket == nil {
 		return ActionabilityQueueResult{}, errors.New("manifest projection is unavailable")
 	}
@@ -438,10 +424,11 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 		}
 		return manifests[i].ID < manifests[j].ID
 	})
+	now := time.Now()
 	projected := map[string]ActionabilityQueueCandidate{}
 	candidates := []priority.Candidate{}
 	for _, manifest := range manifests {
-		if manifest.State != model.StateWorking || !matchesCanonicalLabels(manifest.Labels, options.LabelRules) || observationsBucket == nil {
+		if manifest.State != model.StateActive || !matchesCanonicalLabels(manifest.Labels, options.LabelRules) || observationsBucket == nil {
 			continue
 		}
 		encoded := observationsBucket.Get([]byte(manifest.ID))
@@ -455,8 +442,25 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 		if observation.Status == "" || observation.Status == "busy" || observation.Status == "problem" || observation.Worktree != nil && observation.Worktree.Status == "problem" {
 			continue
 		}
+		// Read markers are written by commands in this transaction; the
+		// observation copy only catches up on the next reconcile.
+		if attentionBucket != nil {
+			if encoded := attentionBucket.Get([]byte(manifest.ID)); encoded != nil {
+				var markers AttentionActivity
+				if json.Unmarshal(encoded, &markers) == nil {
+					observation.Activity.LastReadAt = laterTime(observation.Activity.LastReadAt, markers.LastReadAt)
+					observation.Activity.LastUnreadAt = laterTime(observation.Activity.LastUnreadAt, markers.LastUnreadAt)
+					observation.Activity.LastDeferredAt = laterTime(observation.Activity.LastDeferredAt, markers.LastDeferredAt)
+				}
+			}
+		}
+		blocked := manifest.Waiting(now)
+		unread := priority.Unread(observation.Activity.LastCompletedAt, observation.Activity.LastReadAt, observation.Activity.LastUnreadAt)
+		if !priority.Eligible(blocked, unread) {
+			continue
+		}
 		baseOrder := len(candidates)
-		candidate := priority.Candidate{ID: manifest.ID, DeepWork: manifest.DeepWork, BaseOrder: baseOrder, StateChangedAt: manifest.StateChangedAt, LastRequestedAt: observation.Activity.LastRequestedAt, LastCompletedAt: observation.Activity.LastCompletedAt, LastDeferredAt: observation.Activity.LastDeferredAt}
+		candidate := priority.Candidate{ID: manifest.ID, DeepWork: manifest.DeepWork, BaseOrder: baseOrder, StateChangedAt: manifest.StateChangedAt, LastRequestedAt: observation.Activity.LastRequestedAt, LastCompletedAt: observation.Activity.LastCompletedAt, LastDeferredAt: observation.Activity.LastDeferredAt, Waiting: blocked, Unread: unread}
 		candidates = append(candidates, candidate)
 		projected[manifest.ID] = ActionabilityQueueCandidate{Manifest: manifest, Activity: observation.Activity}
 	}
@@ -504,37 +508,45 @@ func matchesCanonicalLabels(labels []string, rules map[string]bool) bool {
 
 func applyStateSetCommand(command ManifestCommand, manifest *model.Manifest, all []model.Manifest, appendEvent func(string, map[string]any)) error {
 	target := command.TargetState
-	if target != model.StateBacklog && target != model.StateWorking && target != model.StateWaiting && target != model.StateArchived {
-		return fmt.Errorf("invalid state %q; expected backlog, working, waiting, or archived", target)
+	if target != model.StateBacklog && target != model.StateActive && target != model.StateClosed {
+		return fmt.Errorf("invalid state %q; expected backlog, active, or closed", target)
+	}
+	if command.Resolution != "" && target != model.StateClosed {
+		return fmt.Errorf("a resolution is only valid when closing an item")
 	}
 	previous := manifest.State
 	if previous == target {
 		return nil
 	}
-	if previous == model.StateArchived {
+	if previous == model.StateClosed {
 		if target != model.StateBacklog {
-			return fmt.Errorf("work item %s is archived; restore it to backlog before changing it", manifest.ID)
+			return fmt.Errorf("work item %s is closed; reopen it to backlog before changing it", manifest.ID)
 		}
 		slug, err := uniqueCanonicalSlug(model.Slugify(manifest.Title), manifest.ID, all)
 		if err != nil {
 			return err
 		}
-		manifest.Slug, manifest.State = slug, model.StateBacklog
-		appendEvent("work_item.state_set", map[string]any{"previous_state": previous, "new_state": manifest.State, "slug": slug, "workspace_unchanged": true})
+		previousResolution := manifest.Resolution
+		manifest.Slug, manifest.State, manifest.Resolution = slug, model.StateBacklog, ""
+		appendEvent("work_item.state_set", map[string]any{"previous_state": previous, "new_state": manifest.State, "slug": slug, "previous_resolution": previousResolution, "workspace_unchanged": true})
 		return nil
 	}
-	if target == model.StateArchived {
+	if target == model.StateClosed {
+		resolution := command.Resolution
+		if resolution == "" {
+			resolution = model.ResolutionCompleted
+		}
+		if !model.ValidResolution(resolution) {
+			return fmt.Errorf("invalid resolution %q; expected completed, abandoned, or superseded", resolution)
+		}
+		clearAllBlockers(manifest, "closed", appendEvent)
 		previousSlug := manifest.Slug
-		manifest.State, manifest.Slug = model.StateArchived, ""
-		appendEvent("work_item.state_set", map[string]any{"previous_state": previous, "new_state": manifest.State, "previous_slug": previousSlug, "workspace_unchanged": true})
+		manifest.State, manifest.Slug, manifest.Resolution = model.StateClosed, "", resolution
+		appendEvent("work_item.state_set", map[string]any{"previous_state": previous, "new_state": manifest.State, "previous_slug": previousSlug, "resolution": resolution, "workspace_unchanged": true})
 		return nil
 	}
-	if previous == model.StateBacklog && target != model.StateWorking {
-		return fmt.Errorf("cannot move backlog item directly to %s; run `wi start` first", target)
-	}
-	valid := target == model.StateWorking && (previous == model.StateBacklog || previous == model.StateWaiting) ||
-		target == model.StateWaiting && previous == model.StateWorking ||
-		target == model.StateBacklog && (previous == model.StateWorking || previous == model.StateWaiting)
+	valid := target == model.StateActive && previous == model.StateBacklog ||
+		target == model.StateBacklog && previous == model.StateActive
 	if !valid {
 		return fmt.Errorf("invalid state transition %s -> %s", previous, target)
 	}
@@ -542,7 +554,7 @@ func applyStateSetCommand(command ManifestCommand, manifest *model.Manifest, all
 	if command.MaxActive < 0 {
 		command.MaxActive = 0
 	}
-	if manifest.DeepWork && previous == model.StateBacklog && target == model.StateWorking && active >= command.MaxActive && !command.Force {
+	if manifest.DeepWork && previous == model.StateBacklog && target == model.StateActive && active >= command.MaxActive && !command.Force {
 		return fmt.Errorf("cannot activate %q. Deep work active limit reached: %d/%d. Currently active: %s. Use --force to activate this work item anyway", manifest.Title, active, command.MaxActive, strings.Join(activeIDs, ", "))
 	}
 	manifest.State = target
@@ -567,7 +579,7 @@ func applyStateSetCommand(command ManifestCommand, manifest *model.Manifest, all
 func canonicalDeepWorkCapacity(manifests []model.Manifest) (int, []string) {
 	active, ids := 0, []string{}
 	for _, manifest := range manifests {
-		if manifest.DeepWork && (manifest.State == model.StateWorking || manifest.State == model.StateWaiting) {
+		if manifest.DeepWork && manifest.State == model.StateActive {
 			active++
 			ids = append(ids, manifest.ID)
 		}
@@ -579,7 +591,7 @@ func canonicalDeepWorkCapacity(manifests []model.Manifest) (int, []string) {
 func uniqueCanonicalSlug(base, itemID string, manifests []model.Manifest) (string, error) {
 	used := map[string]bool{}
 	for _, manifest := range manifests {
-		if manifest.ID != itemID && manifest.State != model.StateArchived && manifest.Slug != "" {
+		if manifest.ID != itemID && manifest.State != model.StateClosed && manifest.Slug != "" {
 			used[manifest.Slug] = true
 		}
 	}

@@ -85,7 +85,7 @@ func coordinatorViewObservation(value coordinator.AgentObservation) viewapp.Obse
 	if value.Worktree != nil {
 		worktree = &viewapp.WorktreeStatus{Status: value.Worktree.Status, Reason: value.Worktree.Reason, CheckoutPath: value.Worktree.CheckoutPath, Head: value.Worktree.Head, ExpectedBranch: value.Worktree.ExpectedBranch, CurrentBranch: value.Worktree.CurrentBranch, BranchMatches: value.Worktree.BranchMatches, BranchMismatch: value.Worktree.BranchMismatch, Dirty: value.Worktree.Dirty, HasChanges: value.Worktree.HasChanges}
 	}
-	return viewapp.Observation{Status: value.Status, Reason: value.Reason, ProcessOnline: value.ProcessOnline, TurnState: value.TurnState, LastActivityAgeSeconds: age, Worktree: worktree, Activity: viewapp.Activity{LastRequestedAt: value.Activity.LastRequestedAt, LastCompletedAt: value.Activity.LastCompletedAt, LastDeferredAt: value.Activity.LastDeferredAt}, Warnings: append([]string(nil), value.Warnings...)}
+	return viewapp.Observation{Status: value.Status, Reason: value.Reason, ProcessOnline: value.ProcessOnline, TurnState: value.TurnState, LastActivityAgeSeconds: age, Worktree: worktree, Activity: viewapp.Activity{LastRequestedAt: value.Activity.LastRequestedAt, LastCompletedAt: value.Activity.LastCompletedAt, LastDeferredAt: value.Activity.LastDeferredAt, LastReadAt: value.Activity.LastReadAt, LastUnreadAt: value.Activity.LastUnreadAt}, Warnings: append([]string(nil), value.Warnings...)}
 }
 
 func coordinatorConversationObserver(client *coordinator.Client) agentcore.ConversationObserver {

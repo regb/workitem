@@ -289,8 +289,8 @@ func (s *Service) resolveTerminalItem(ctx context.Context, opts contract.Resolve
 	if err != nil {
 		return model.Manifest{}, err
 	}
-	if m.State == model.StateArchived {
-		return model.Manifest{}, fmt.Errorf("work item %s is archived; set it to backlog before ensuring terminal access", m.ID)
+	if m.State == model.StateClosed {
+		return model.Manifest{}, fmt.Errorf("work item %s is closed; set it to backlog before ensuring terminal access", m.ID)
 	}
 	return m, nil
 }

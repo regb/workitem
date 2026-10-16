@@ -16,15 +16,15 @@ func (a *App) Shelve(ctx context.Context, opts ResolveOptions, force bool) (Stat
 		return StateTransitionResult{}, err
 	}
 	defer operation.Release()
-	if m.State == model.StateArchived {
-		return StateTransitionResult{}, fmt.Errorf("work item %s is archived; run `wi state set backlog --item %s` before shelving it", m.ID, m.ID)
+	if m.State == model.StateClosed {
+		return StateTransitionResult{}, fmt.Errorf("work item %s is closed; run `wi state set backlog --item %s` before shelving it", m.ID, m.ID)
 	}
 	prevState := m.State
 	if prevState == model.StateBacklog {
 		cap := a.DeepWorkCapacity()
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Changed: false, Manifest: m, DeepWork: m.DeepWork, Capacity: &cap}, nil
 	}
-	if prevState != model.StateWorking && prevState != model.StateWaiting {
+	if prevState != model.StateActive {
 		return StateTransitionResult{}, fmt.Errorf("invalid state transition %s -> %s", prevState, model.StateBacklog)
 	}
 	m, workspaceWarnings, workspaceChanged, err := a.closeWorkspace(ctx, m, force, opts.Env)
@@ -44,21 +44,30 @@ func (a *App) Shelve(ctx context.Context, opts ResolveOptions, force bool) (Stat
 	return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Changed: true, Manifest: m, DeepWork: m.DeepWork, Capacity: &cap, Warnings: workspaceWarnings}, nil
 }
 
-func (a *App) Archive(ctx context.Context, opts ResolveOptions, force bool) (StateTransitionResult, error) {
+// Close stops the runtime, releases the workspace, and records the item as
+// closed with a resolution. Whether the work was completed is independent of
+// the item being closed.
+func (a *App) Close(ctx context.Context, opts ResolveOptions, resolution string, force bool) (StateTransitionResult, error) {
+	if resolution == "" {
+		resolution = model.ResolutionCompleted
+	}
+	if !model.ValidResolution(resolution) {
+		return StateTransitionResult{}, fmt.Errorf("invalid resolution %q; expected completed, abandoned, or superseded", resolution)
+	}
 	m, operation, err := a.lockItemOperation(ctx, opts)
 	if err != nil {
 		return StateTransitionResult{}, err
 	}
 	defer operation.Release()
 	prevState := m.State
-	if m.State == model.StateArchived {
+	if m.State == model.StateClosed {
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Changed: false, Manifest: m}, nil
 	}
 	warnings, err := a.prepareArchive(ctx, m, opts, force)
 	if err != nil {
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Manifest: m, Warnings: warnings}, err
 	}
-	return a.finishArchive(ctx, m, prevState, opts.Env, force, warnings)
+	return a.finishArchive(ctx, m, prevState, resolution, opts.Env, force, warnings)
 }
 
 func (a *App) prepareArchive(ctx context.Context, m model.Manifest, opts ResolveOptions, force bool) ([]string, error) {
@@ -69,7 +78,7 @@ func (a *App) prepareArchive(ctx context.Context, m model.Manifest, opts Resolve
 	return a.stopRuntimeForArchive(ctx, m, opts, force)
 }
 
-func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState string, env map[string]string, force bool, warnings []string, deferTerminalClose ...bool) (StateTransitionResult, error) {
+func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, resolution string, env map[string]string, force bool, warnings []string, deferTerminalClose ...bool) (StateTransitionResult, error) {
 	workspaceChanged := false
 	deferredSession := ""
 	var workspaceWarnings []string
@@ -80,13 +89,15 @@ func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState str
 		m, workspaceWarnings, workspaceChanged, err = a.closeWorkspace(ctx, m, force, env)
 	}
 	if err != nil {
-		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Manifest: m, Warnings: append(warnings, workspaceWarnings...)}, fmt.Errorf("archive not committed; external resources may already have changed: %w", err)
+		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Manifest: m, Warnings: append(warnings, workspaceWarnings...)}, fmt.Errorf("close not committed; external resources may already have changed: %w", err)
 	}
 	retained := m
 	now := a.now()
 	previousSlug := m.Slug
-	m.State = model.StateArchived
+	m.State = model.StateClosed
 	m.Slug = ""
+	m.Resolution = resolution
+	m.Blockers = nil
 	m.StateChangedAt = now
 	m.UpdatedAt = now
 	if err := a.Store.SaveManifest(ctx, m); err != nil {
@@ -96,15 +107,15 @@ func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState str
 		if current, inspectErr := a.Store.LoadManifest(m.ID); inspectErr == nil {
 			retained = current
 		} else {
-			warnings = append(warnings, "could not refresh retained archive state: "+inspectErr.Error())
+			warnings = append(warnings, "could not refresh retained close state: "+inspectErr.Error())
 		}
-		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: retained.State, Changed: retained.State != prevState, Manifest: retained, Warnings: warnings}, fmt.Errorf("workspace cleanup completed, but archive state could not be saved: %w", err)
+		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: retained.State, Changed: retained.State != prevState, Manifest: retained, Warnings: warnings}, fmt.Errorf("workspace cleanup completed, but closed state could not be saved: %w", err)
 	}
-	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(now, "work_item.archived", "user", map[string]any{"previous_state": prevState, "new_state": m.State, "previous_slug": previousSlug, "workspace_closed": workspaceChanged, "forced": force}))
+	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(now, "work_item.closed", "user", map[string]any{"previous_state": prevState, "new_state": m.State, "resolution": resolution, "previous_slug": previousSlug, "workspace_closed": workspaceChanged, "forced": force}))
 	warnings = append(warnings, workspaceWarnings...)
 	if deferredSession != "" {
 		if err := a.Tmux.KillSessionAsync(ctx, deferredSession); err != nil {
-			warnings = append(warnings, "item is archived, but the previous terminal could not be scheduled for closure: "+err.Error())
+			warnings = append(warnings, "item is closed, but the previous terminal could not be scheduled for closure: "+err.Error())
 		} else {
 			warnings = append(warnings, "scheduled previous terminal session for closure: "+deferredSession)
 			_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "terminal.close_scheduled", "wi", map[string]any{"session": deferredSession, "reason": "lifecycle_cleanup"}))

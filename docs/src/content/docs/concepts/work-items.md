@@ -5,7 +5,7 @@ description: One bounded task, with a durable record after completion.
 
 A work item is a short-lived development task with one objective and a clear completion condition. Fix a defect, add a bounded feature, or answer a specific investigation question. Avoid items such as "Maintain the API" that have no natural end.
 
-Review the result, integrate it where appropriate, and archive the item. File unrelated discoveries as new tasks rather than continually expanding the original scope.
+Review the result, integrate it where appropriate, and close the item. File unrelated discoveries as new tasks rather than continually expanding the original scope.
 
 ## What remains durable
 
@@ -41,7 +41,7 @@ The ID is permanent; the active slug is a human-readable selector. Selectors can
 
 The slug is fixed at creation while the item remains active, including before its first checkout. Archiving clears it. Restoring to backlog allocates a fresh slug while retaining the ID and history.
 
-The implementation branch specification is fixed at creation and survives archive/restore; a new active slug does not rename the branch. Title and description remain editable in every lifecycle state. Use `wi edit --title "New title"` for the current item or `wi edit --item SELECTOR --title "New title"` for another. `wi edit` with no edit flags opens title and description in an editor. Select archived items by ID. Updating them does not change the slug or branch, alter native conversation history, or automatically send a prompt. Auxiliary title suggestions update presentation only.
+The implementation branch specification is fixed at creation and survives close/reopen; a new active slug does not rename the branch. Title and description remain editable in every lifecycle state. Use `wi edit --title "New title"` for the current item or `wi edit --item SELECTOR --title "New title"` for another. `wi edit` with no edit flags opens title and description in an editor. Select closed items by ID. Updating them does not change the slug or branch, alter native conversation history, or automatically send a prompt. Auxiliary title suggestions update presentation only.
 
 ## Labels and deep work
 

@@ -75,27 +75,3 @@ func runShelve(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 	printTransition(cfg.Stdout, res)
 	return nil
 }
-
-func runArchiveCommand(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
-	fs := newFlagSet("archive", cfg.Stderr)
-	var item string
-	var force bool
-	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
-	fs.BoolVar(&force, "force", false, "allow archiving while retaining an unclosable current terminal")
-	if err := fs.Parse(args); err != nil {
-		return usageErr{err}
-	}
-	selector, err := itemSelectorFromFlag(fs, item)
-	if err != nil {
-		return usageErr{err}
-	}
-	res, err := cfg.App.Archive(ctx, app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env}, force)
-	if err != nil {
-		return err
-	}
-	if jsonOut {
-		return writeJSON(cfg.Stdout, res)
-	}
-	printTransition(cfg.Stdout, res)
-	return nil
-}

@@ -244,14 +244,24 @@ func normalizeManifest(m *model.Manifest) error {
 	if strings.TrimSpace(m.Title) == "" {
 		return fmt.Errorf("title is required")
 	}
-	if m.State != model.StateBacklog && m.State != model.StateWorking && m.State != model.StateWaiting && m.State != model.StateArchived {
+	if m.State != model.StateBacklog && m.State != model.StateActive && m.State != model.StateClosed {
 		return fmt.Errorf("invalid state %q", m.State)
 	}
-	if m.State != model.StateArchived && m.Slug == "" {
-		return fmt.Errorf("slug is required for non-archived work items")
+	if m.State != model.StateClosed && m.Slug == "" {
+		return fmt.Errorf("slug is required for open work items")
 	}
-	if m.State == model.StateArchived && m.Slug != "" {
-		return fmt.Errorf("slug must be empty for archived work items")
+	if m.State == model.StateClosed && m.Slug != "" {
+		return fmt.Errorf("slug must be empty for closed work items")
+	}
+	if m.Resolution != "" && (m.State != model.StateClosed || !model.ValidResolution(m.Resolution)) {
+		return fmt.Errorf("resolution %q is only valid for closed work items", m.Resolution)
+	}
+	seenBlockers := map[string]bool{}
+	for _, blocker := range m.Blockers {
+		if blocker.ID == "" || seenBlockers[blocker.ID] || !model.ValidBlockerKind(blocker.Kind) {
+			return fmt.Errorf("invalid blocker %q", blocker.ID)
+		}
+		seenBlockers[blocker.ID] = true
 	}
 	if m.StateChangedAt.IsZero() {
 		return fmt.Errorf("state_changed_at is required")
@@ -588,7 +598,7 @@ func matchActiveSlugs(manifests []model.Manifest, selector string) activeSlugMat
 		return matches
 	}
 	for _, manifest := range manifests {
-		if manifest.State == model.StateArchived || manifest.Slug == "" {
+		if manifest.State == model.StateClosed || manifest.Slug == "" {
 			continue
 		}
 		if manifest.Slug == normalized {
@@ -673,7 +683,7 @@ func ResolveFromManifests(manifests []model.Manifest, selector string, descripti
 
 	var title []model.Manifest
 	for _, m := range manifests {
-		if m.State != model.StateArchived && strings.EqualFold(m.Title, selector) {
+		if m.State != model.StateClosed && strings.EqualFold(m.Title, selector) {
 			title = append(title, m)
 		}
 	}
@@ -698,7 +708,7 @@ func ResolveFromManifests(manifests []model.Manifest, selector string, descripti
 	partial := []model.Manifest{}
 	seen := map[string]bool{}
 	for _, m := range manifests {
-		if m.State == model.StateArchived {
+		if m.State == model.StateClosed {
 			continue
 		}
 		matched := false

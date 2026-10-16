@@ -93,7 +93,7 @@ extensions = ["/home/me/tools/web-search.ts"]
 
 ## Deep-work capacity
 
-`deep_work.max_active` limits working and waiting items marked as deep work. A value of `0` prevents starting deep backlog work unless you pass `--force`.
+`deep_work.max_active` limits active items marked as deep work, waiting or not. A value of `0` prevents starting deep backlog work unless you pass `--force`.
 
 ## Default labels
 

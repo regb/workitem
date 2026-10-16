@@ -183,7 +183,7 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 	if !titled.Changed || titled.Title != "Clarified backlog objective" || titled.Manifest.Slug != agentCreated.Manifest.Slug || titled.Manifest.Checkout.Specification.Branch != agentCreated.Manifest.Checkout.Specification.Branch || titled.Manifest.PrimaryConversation != nil || titled.Manifest.Checkout.Claim != nil {
 		t.Fatalf("title edit changed identity or allocated resources: %+v", titled)
 	}
-	assertWiE2EFails(t, binary, repository, agentEnv, "state", "set", "working", "--item", agentCreated.WorkItemID)
+	assertWiE2EFails(t, binary, repository, agentEnv, "state", "set", "active", "--item", agentCreated.WorkItemID)
 	assertWiE2EFails(t, binary, repository, agentEnv, "new", "--start", "--untitled")
 	assertE2EState(t, binary, repository, env, agentCreated.WorkItemID, "backlog")
 
@@ -209,7 +209,7 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 		}
 	}
 
-	setState("working")
+	setState("active")
 	activityJSON := runWiE2E(t, binary, repository, env, "attention", "activity", "--item", created.WorkItemID, "--json")
 	var activity struct {
 		WorkItemID string `json:"work_item_id"`
@@ -261,9 +261,9 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 		t.Fatalf("events = %+v", events.Events)
 	}
 
-	setState("waiting")
-	setState("working")
-	setState("archived")
+	setState("backlog")
+	setState("active")
+	setState("closed")
 	setState("backlog")
 	assertE2EState(t, binary, repository, env, created.WorkItemID, "backlog")
 

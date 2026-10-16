@@ -1,6 +1,6 @@
 ---
 title: Everyday workflow
-description: Capture a bounded task, review its result, and archive it.
+description: Capture a bounded task, review its result, and close it.
 ---
 
 Choose one objective you can finish and review. These examples assume a [registered repository](../../concepts/repositories/) and current item context; outside an item, add `--repo NAME` when creating work.
@@ -29,8 +29,8 @@ wi next
 ## Pause
 
 ```bash
-wi state set waiting harden-token-refresh  # blocked on an external answer
-wi resume harden-token-refresh             # return to working
+wi wait --for "token spec answer" harden-token-refresh  # waiting for an external answer
+wi wait --clear harden-token-refresh                    # back in the attention queue
 wi shelve harden-token-refresh             # return to backlog and release safe resources
 ```
 
@@ -44,7 +44,7 @@ Once intended changes are committed and the checkout is clean:
 
 ```bash
 wi merge --item harden-token-refresh
-wi archive harden-token-refresh
+wi close harden-token-refresh
 ```
 
-Merge defaults to the registered integration branch and does not push or archive. Archive retains the completed task record. Delete only when you intend to permanently remove that archived record.
+Merge defaults to the registered integration branch and does not push or close. Closing retains the completed task record and its resolution. Delete only when you intend to permanently remove that closed record.

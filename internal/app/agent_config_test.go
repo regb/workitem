@@ -116,10 +116,10 @@ func TestInvalidAgentConfigFailsBeforeStartupEffects(t *testing.T) {
 					}
 					m := created.Manifest
 					if action == "ensure" {
-						m.State = model.StateWorking
+						m.State = model.StateActive
 					}
 					if action == "resume" {
-						m.State = model.StateWaiting
+						m.State = model.StateActive
 					}
 					if err := st.SaveManifest(ctx, m); err != nil {
 						t.Fatal(err)

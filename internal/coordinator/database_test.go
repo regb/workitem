@@ -60,7 +60,7 @@ func TestDatabaseRejectsPreReleaseSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := raw.Update(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketMeta).Put(keySchemaVersion, encodeUint64(SchemaVersion-1))
+		return tx.Bucket(bucketMeta).Put(keySchemaVersion, encodeUint64(4))
 	}); err != nil {
 		raw.Close()
 		t.Fatal(err)

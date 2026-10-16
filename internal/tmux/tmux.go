@@ -482,3 +482,51 @@ func isExitError(err error) bool {
 	}
 	return strings.Contains(err.Error(), "exit status")
 }
+
+// SetPaneInput enables or disables keyboard input to a pane for every
+// attached client. A disabled pane keeps rendering, so terminal clients can
+// still observe a runtime that another client controls.
+func (c Client) SetPaneInput(ctx context.Context, target string, enabled bool) error {
+	flag := "-d"
+	if enabled {
+		flag = "-e"
+	}
+	_, err := c.run(ctx, []string{"select-pane", flag, "-t", target}, nil)
+	return err
+}
+
+// PaneInputDisabled reports whether input to a pane is currently disabled.
+func (c Client) PaneInputDisabled(ctx context.Context, target string) (bool, error) {
+	out, err := c.run(ctx, []string{"display-message", "-p", "-t", target, "#{pane_input_off}"}, nil)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(string(out)) == "1", nil
+}
+
+// SessionClients lists the clients attached to a session. An absent server
+// or session has no clients.
+func (c Client) SessionClients(ctx context.Context, session string) ([]string, error) {
+	out, err := c.run(ctx, []string{"list-clients", "-t", session, "-F", "#{client_name}"}, nil)
+	if err != nil {
+		message := strings.ToLower(err.Error())
+		if isExitError(err) && (strings.Contains(message, "no server running") || strings.Contains(message, "can't find session") || strings.Contains(message, "no such session") || strings.Contains(message, "error connecting")) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	clients := []string{}
+	for _, line := range strings.Split(string(out), "\n") {
+		if name := strings.TrimSpace(line); name != "" {
+			clients = append(clients, name)
+		}
+	}
+	return clients, nil
+}
+
+// DisplayMessage shows a transient status-line message to the clients of a
+// session.
+func (c Client) DisplayMessage(ctx context.Context, target, message string) error {
+	_, err := c.run(ctx, []string{"display-message", "-t", target, message}, nil)
+	return err
+}

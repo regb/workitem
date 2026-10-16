@@ -11,7 +11,7 @@ Each item is one bounded task. `wi new` requires `--title TEXT` or `--untitled`.
 
 `new --start` creates and delegates; existing-item `start` opens a runtime without submitting a message. `resume` never sends a prompt. See the [Quick start](../../getting-started/quick-start/), [Delegation](../../guides/delegation/), and [Review workflow](../../guides/review-and-follow-up/) for examples.
 
-Finish and archive items rather than continually expanding them. Merge, archive, and push are separate decisions.
+Finish and close items rather than continually expanding them. Merge, close, and push are separate decisions.
 
 ## Initial setup
 
@@ -82,7 +82,7 @@ Use a JSON parser rather than matching serialized whitespace. A working lifecycl
 | `wi events` | Read append-only item history |
 | `wi state show\|set` | Inspect or mutate lifecycle only |
 
-`wi edit` defaults to the current item. Select another with `--item SELECTOR` or a positional selector; use IDs for archived items.
+`wi edit` defaults to the current item. Select another with `--item SELECTOR` or a positional selector; use IDs for closed items.
 
 ```bash
 wi edit --title "Clarified objective"
@@ -144,14 +144,16 @@ The former title, label, and deep metadata commands have been removed; there are
 | Command | Purpose |
 | --- | --- |
 | `wi start` | Activate an existing backlog item by active slug |
-| `wi resume` | Reactivate waiting work |
+| `wi resume` | Ensure an active item's agent runtime |
+| `wi wait` | Wait for a time, another item, or something external; `--clear` stops waiting |
+| `wi blocker` | Add, list, or clear individual typed blockers with metadata |
 | `wi shelve` | Clean up safely and return work to backlog |
-| `wi archive` | Clean up safely and retain inactive history |
-| `wi delete` | Permanently remove cleaned archived task records |
+| `wi close` | Clean up safely and retain history with a resolution |
+| `wi delete` | Permanently remove cleaned closed task records |
 | `wi shutdown` | Stop runtimes, terminals, and the daemon |
 | `wi merge [--local]` | Synchronize a configured upstream base, then integrate the item; `--local` skips remote preflight |
 
-`wi archive` retains the completed record. For unfinished work archived by mistake, see [restoration](../../concepts/lifecycle/#composed-workflow-commands). File a new objective as a new item.
+`wi close` retains the record and its resolution. For unfinished work closed by mistake, see [restoration](../../concepts/lifecycle/#composed-workflow-commands). File a new objective as a new item.
 
 ## Daemon and diagnostics
 

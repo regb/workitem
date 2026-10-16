@@ -11,9 +11,11 @@ import (
 
 func runAttention(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	if len(args) == 0 {
-		return usageErr{errors.New("usage: wi attention <activity|defer|queue> [options]")}
+		return usageErr{errors.New("usage: wi attention <activity|defer|queue|read|unread> [options]")}
 	}
 	switch args[0] {
+	case "read", "unread":
+		return runAttentionReadMarker(ctx, args[1:], cfg, jsonOut, args[0] == "unread")
 	case "activity":
 		return runAttentionActivity(ctx, args[1:], cfg, jsonOut)
 	case "defer":
@@ -50,6 +52,8 @@ func runAttentionActivity(ctx context.Context, args []string, cfg Config, jsonOu
 	fmt.Fprintf(cfg.Stdout, "last requested: %s\n", formatOptionalTime(res.Activity.LastRequestedAt))
 	fmt.Fprintf(cfg.Stdout, "last completed: %s\n", formatOptionalTime(res.Activity.LastCompletedAt))
 	fmt.Fprintf(cfg.Stdout, "last deferred: %s\n", formatOptionalTime(res.Activity.LastDeferredAt))
+	fmt.Fprintf(cfg.Stdout, "last read: %s\n", formatOptionalTime(res.Activity.LastReadAt))
+	fmt.Fprintf(cfg.Stdout, "unread: %t\n", res.Activity.Unread())
 	for _, warning := range res.Warnings {
 		fmt.Fprintf(cfg.Stdout, "warning: %s\n", warning)
 	}
@@ -119,4 +123,38 @@ func formatOptionalTime(value *time.Time) string {
 		return "(none)"
 	}
 	return value.Format(timeFormatHuman)
+}
+
+func runAttentionReadMarker(ctx context.Context, args []string, cfg Config, jsonOut, unread bool) error {
+	name := "attention read"
+	if unread {
+		name = "attention unread"
+	}
+	fs := newFlagSet(name, cfg.Stderr)
+	var item string
+	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
+	if err := fs.Parse(args); err != nil {
+		return usageErr{err}
+	}
+	selector, err := itemSelectorFromFlag(fs, item)
+	if err != nil {
+		return usageErr{err}
+	}
+	mark := cfg.App.MarkRead
+	if unread {
+		mark = cfg.App.MarkUnread
+	}
+	res, err := mark(ctx, app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env})
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		return writeJSON(cfg.Stdout, res)
+	}
+	if res.Unread {
+		fmt.Fprintf(cfg.Stdout, "%s: marked unread\n", res.WorkItemID)
+	} else {
+		fmt.Fprintf(cfg.Stdout, "%s: marked read\n", res.WorkItemID)
+	}
+	return nil
 }

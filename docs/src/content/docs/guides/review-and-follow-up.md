@@ -40,7 +40,7 @@ wi agent control send --item add-api-retries \
 
 Use `--file review.md` for longer feedback. Add `--follow-up` to wait for a busy run to settle; otherwise input uses steering semantics.
 
-Keep corrections within this task. File independent improvements as separate items instead of expanding its objective. Use `waiting` for an external dependency, or `shelve` to return work to backlog; see [Lifecycle](../../concepts/lifecycle/).
+Keep corrections within this task. File independent improvements as separate items instead of expanding its objective. Use `wi wait` for an external dependency, or `shelve` to return work to backlog; see [Lifecycle](../../concepts/lifecycle/).
 
 ## Finish
 
@@ -48,7 +48,7 @@ Commit intended changes and ensure the checkout is clean:
 
 ```bash
 wi merge --item add-api-retries
-wi archive add-api-retries
+wi close add-api-retries
 ```
 
-Merge uses the registered integration branch but does not push or archive. Archive preserves the description and conversation while removing the item from active work. A completed item is history, not a permanent place to send new tasks.
+Merge uses the registered integration branch but does not push or close. Closing preserves the description and conversation while removing the item from active work. A completed item is history, not a permanent place to send new tasks.

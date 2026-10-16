@@ -31,10 +31,10 @@ func (a *App) DeleteWorkItems(ctx context.Context, opts DeleteWorkItemsOptions) 
 	if opts.Archived {
 		manifests, errs := a.Store.ListManifests()
 		if len(errs) > 0 {
-			return DeleteWorkItemsResult{}, fmt.Errorf("inspect archived work items: %w", errs[0])
+			return DeleteWorkItemsResult{}, fmt.Errorf("inspect closed work items: %w", errs[0])
 		}
 		for _, manifest := range manifests {
-			if manifest.State == model.StateArchived {
+			if manifest.State == model.StateClosed {
 				items = append(items, manifest)
 			}
 		}
@@ -104,8 +104,8 @@ func (a *App) DeleteWorkItems(ctx context.Context, opts DeleteWorkItemsOptions) 
 }
 
 func (a *App) validateDeletableWorkItem(ctx context.Context, manifest model.Manifest) error {
-	if manifest.State != model.StateArchived {
-		return fmt.Errorf("work item %s is %s; delete requires archived state", manifest.ID, manifest.State)
+	if manifest.State != model.StateClosed {
+		return fmt.Errorf("work item %s is %s; delete requires closed state", manifest.ID, manifest.State)
 	}
 	if runtime, err := a.Store.LoadAgentRuntime(manifest.ID); err != nil {
 		return err

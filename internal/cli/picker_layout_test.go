@@ -145,7 +145,7 @@ func TestRealFZFFiltersFullTitleWithoutChangingSelectionIdentity(t *testing.T) {
 	if err := os.WriteFile(wrapper, []byte("#!/bin/sh\nexec \"$REAL_FZF\" --filter=\"$QUERY\" \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	candidate := pickerCandidate{Item: app.WorkListItem{ID: "stable-id", State: model.StateWorking, Repository: "search-repository", Title: strings.Repeat("Long title ", 15) + "title-suffix-needle", Slug: "hidden-slug"}}
+	candidate := pickerCandidate{Item: app.WorkListItem{ID: "stable-id", State: model.StateActive, Repository: "search-repository", Title: strings.Repeat("Long title ", 15) + "title-suffix-needle", Slug: "hidden-slug"}}
 	for _, query := range []string{"title-suffix-needle", "search-repository"} {
 		cfg := Config{Stderr: &bytes.Buffer{}, Env: map[string]string{"WI_FZF": wrapper, "REAL_FZF": executable, "QUERY": query, "FZF_DEFAULT_OPTS": "", "FZF_DEFAULT_OPTS_FILE": ""}}
 		selected, ok, err := selectWithFZF(context.Background(), cfg, []pickerCandidate{candidate}, true)

@@ -19,29 +19,30 @@ func (s *Service) State(ctx context.Context, opts contract.ResolveOptions) (Stat
 }
 
 func (s *Service) SetState(ctx context.Context, opts contract.ResolveOptions, target string, force bool, maxActive int) (StateTransitionResult, error) {
-	target = strings.TrimSpace(target)
+	target, err := model.NormalizeStateInput(target)
+	if err != nil {
+		return StateTransitionResult{}, err
+	}
 	switch target {
-	case model.StateWorking, model.StateWaiting:
+	case model.StateActive:
 		return s.TransitionState(ctx, opts, target, "work_item.state_set", force, maxActive)
 	case model.StateBacklog:
 		m, err := s.resolve(ctx, opts)
 		if err != nil {
 			return StateTransitionResult{}, err
 		}
-		if m.State == model.StateArchived {
+		if m.State == model.StateClosed {
 			return s.restoreArchived(ctx, m)
 		}
 		return s.TransitionState(ctx, opts, target, "work_item.state_set", force, maxActive)
-	case model.StateArchived:
-		return s.archiveState(ctx, opts)
 	default:
-		return StateTransitionResult{}, fmt.Errorf("invalid state %q; expected backlog, working, waiting, or archived", target)
+		return s.closeState(ctx, opts, model.ResolutionCompleted)
 	}
 }
 
 func (s *Service) restoreArchived(ctx context.Context, m model.Manifest) (StateTransitionResult, error) {
 	previous := m.State
-	if m.State != model.StateArchived {
+	if m.State != model.StateClosed {
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Manifest: m}, nil
 	}
 	slug, err := s.UniqueSlug(model.Slugify(m.Title))
@@ -49,7 +50,7 @@ func (s *Service) restoreArchived(ctx context.Context, m model.Manifest) (StateT
 		return StateTransitionResult{}, err
 	}
 	now := s.now()
-	m.Slug, m.State, m.StateChangedAt, m.UpdatedAt = slug, model.StateBacklog, now, now
+	m.Slug, m.State, m.Resolution, m.StateChangedAt, m.UpdatedAt = slug, model.StateBacklog, "", now, now
 	if err := s.store.SaveManifest(ctx, m); err != nil {
 		return StateTransitionResult{}, err
 	}
@@ -57,21 +58,21 @@ func (s *Service) restoreArchived(ctx context.Context, m model.Manifest) (StateT
 	return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Changed: true, Manifest: m}, nil
 }
 
-func (s *Service) archiveState(ctx context.Context, opts contract.ResolveOptions) (StateTransitionResult, error) {
+func (s *Service) closeState(ctx context.Context, opts contract.ResolveOptions, resolution string) (StateTransitionResult, error) {
 	m, err := s.resolve(ctx, opts)
 	if err != nil {
 		return StateTransitionResult{}, err
 	}
 	previous := m.State
-	if previous == model.StateArchived {
+	if previous == model.StateClosed {
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Manifest: m}, nil
 	}
 	now, previousSlug := s.now(), m.Slug
-	m.State, m.Slug, m.StateChangedAt, m.UpdatedAt = model.StateArchived, "", now, now
+	m.State, m.Slug, m.Resolution, m.Blockers, m.StateChangedAt, m.UpdatedAt = model.StateClosed, "", resolution, nil, now, now
 	if err := s.store.SaveManifest(ctx, m); err != nil {
 		return StateTransitionResult{}, err
 	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "work_item.state_set", "user", map[string]any{"previous_state": previous, "new_state": m.State, "previous_slug": previousSlug, "workspace_unchanged": true}))
+	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "work_item.state_set", "user", map[string]any{"previous_state": previous, "new_state": m.State, "previous_slug": previousSlug, "resolution": resolution, "workspace_unchanged": true}))
 	return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Changed: true, Manifest: m}, nil
 }
 
@@ -80,24 +81,23 @@ func (s *Service) TransitionState(ctx context.Context, opts contract.ResolveOpti
 	if err != nil {
 		return StateTransitionResult{}, err
 	}
-	if m.State == model.StateArchived {
-		return StateTransitionResult{}, fmt.Errorf("work item %s is archived; run `wi state set backlog --item %s` before changing it", m.ID, m.ID)
+	if m.State == model.StateClosed {
+		return StateTransitionResult{}, fmt.Errorf("work item %s is closed; run `wi state set backlog --item %s` before changing it", m.ID, m.ID)
 	}
 	previous := m.State
 	capacity := s.DeepWorkCapacity(maxActive)
 	if previous == target {
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Manifest: m, DeepWork: m.DeepWork, Capacity: &capacity}, nil
 	}
-	if previous == model.StateBacklog && target != model.StateWorking {
+	if previous == model.StateBacklog && target != model.StateActive {
 		return StateTransitionResult{}, fmt.Errorf("cannot move backlog item directly to %s; run `wi start` first", target)
 	}
-	valid := target == model.StateWorking && (previous == model.StateBacklog || previous == model.StateWaiting) ||
-		target == model.StateWaiting && previous == model.StateWorking ||
-		target == model.StateBacklog && (previous == model.StateWorking || previous == model.StateWaiting)
+	valid := target == model.StateActive && previous == model.StateBacklog ||
+		target == model.StateBacklog && previous == model.StateActive
 	if !valid {
 		return StateTransitionResult{}, fmt.Errorf("invalid state transition %s -> %s", previous, target)
 	}
-	if m.DeepWork && previous == model.StateBacklog && target == model.StateWorking && capacity.Active >= capacity.Limit && !force {
+	if m.DeepWork && previous == model.StateBacklog && target == model.StateActive && capacity.Active >= capacity.Limit && !force {
 		return StateTransitionResult{}, capacityError(m, capacity)
 	}
 	now := s.now()
@@ -127,7 +127,7 @@ func (s *Service) DeepWorkCapacity(maxActive int) Capacity {
 	capacity := Capacity{Limit: maxActive, ItemIDs: []string{}}
 	items, _ := s.store.ListManifests()
 	for _, m := range items {
-		if m.DeepWork && (m.State == model.StateWorking || m.State == model.StateWaiting) {
+		if m.DeepWork && m.State == model.StateActive {
 			capacity.Active++
 			capacity.ItemIDs = append(capacity.ItemIDs, m.ID)
 		}

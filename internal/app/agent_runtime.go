@@ -50,11 +50,11 @@ func (a *App) ensureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 		return EnsureAgentRuntimeResult{}, err
 	}
 	defer operation.Release()
-	if fresh && (m.State != model.StateWorking || m.PrimaryConversation != nil) {
+	if fresh && (m.State != model.StateActive || m.PrimaryConversation != nil) {
 		return EnsureAgentRuntimeResult{}, fmt.Errorf("work item %s changed while queued; startup was not applied", m.ID)
 	}
-	if m.State == model.StateArchived {
-		return EnsureAgentRuntimeResult{}, fmt.Errorf("work item %s is archived; set it to backlog before ensuring an agent runtime", m.ID)
+	if m.State == model.StateClosed {
+		return EnsureAgentRuntimeResult{}, fmt.Errorf("work item %s is closed; set it to backlog before ensuring an agent runtime", m.ID)
 	}
 	existing, err := a.Store.LoadAgentRuntime(m.ID)
 	if err != nil {

@@ -66,8 +66,8 @@ func TestServerStatusAndShutdown(t *testing.T) {
 		t.Fatalf("actionability snapshot = %+v, err = %v", snapshot, err)
 	}
 	revision := uint64(0)
-	_, err = client.ExecuteManifestCommandWithQueue(ctx, ManifestCommandQueueRequest{Command: ManifestCommand{ID: "invalid-queue", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: importTestID, ExpectedRevision: &revision, Actor: "user", TargetState: model.StateWorking, CreatedAt: time.Now().UTC()}})
-	if err == nil || !strings.Contains(err.Error(), "transition to waiting") {
+	_, err = client.ExecuteManifestCommandWithQueue(ctx, ManifestCommandQueueRequest{Command: ManifestCommand{ID: "invalid-queue", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: importTestID, ExpectedRevision: &revision, Actor: "user", TargetState: model.StateActive, CreatedAt: time.Now().UTC()}})
+	if err == nil || !strings.Contains(err.Error(), "requires adding a blocker") {
 		t.Fatalf("invalid manifest queue command err=%v", err)
 	}
 	info, err := os.Stat(socket)
@@ -178,7 +178,7 @@ func TestActivityBarrierIndexesPromptBeforeReturningSnapshot(t *testing.T) {
 	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	manifest := model.NewManifest(importTestID, "barrier", "Barrier", nil, false, now, model.Repository{}, model.Checkout{})
-	manifest.State = model.StateWorking
+	manifest.State = model.StateActive
 	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: "session-1", Locator: "sessions/pi/session-1.jsonl"}
 	if err := native.CreateItem(context.Background(), manifest); err != nil {
 		t.Fatal(err)

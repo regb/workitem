@@ -203,7 +203,7 @@ func startRuntimeTestDaemon(t *testing.T, itemID, runtimeID string) (string, *co
 	}
 	now := time.Now().UTC()
 	manifest := model.NewManifest(itemID, "rpc", "RPC", nil, false, now, model.Repository{}, model.Checkout{})
-	manifest.State = model.StateWorking
+	manifest.State = model.StateActive
 	if err := native.CreateItem(context.Background(), manifest); err != nil {
 		t.Fatal(err)
 	}

@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	SchemaVersion = 5
+	SchemaVersion = 7
 	DatabaseFile  = "wi.db"
 )
 
@@ -127,6 +127,10 @@ func OpenDatabase(dataRoot string) (*Database, error) {
 		return nil, fmt.Errorf("open coordinator database: %w", err)
 	}
 	result := &Database{path: path, db: db}
+	if err := result.backupBeforeUpgrade(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := result.initialize(); err != nil {
 		db.Close()
 		return nil, err
@@ -160,6 +164,24 @@ func (d *Database) initialize() error {
 		schema := decodeUint64(meta.Get(keySchemaVersion))
 		if schema > SchemaVersion {
 			return fmt.Errorf("coordinator database schema %d is newer than supported schema %d", schema, SchemaVersion)
+		}
+		if schema == 5 {
+			if err := upgradeSchema5To6(tx, time.Now().UTC()); err != nil {
+				return fmt.Errorf("upgrade coordinator database schema 5 to 6: %w", err)
+			}
+			if err := meta.Put(keySchemaVersion, encodeUint64(6)); err != nil {
+				return err
+			}
+			schema = 6
+		}
+		if schema == 6 {
+			if err := upgradeSchema6To7(tx); err != nil {
+				return fmt.Errorf("upgrade coordinator database schema 6 to 7: %w", err)
+			}
+			if err := meta.Put(keySchemaVersion, encodeUint64(7)); err != nil {
+				return err
+			}
+			schema = 7
 		}
 		if schema > 0 && schema < SchemaVersion {
 			return fmt.Errorf("coordinator database schema %d is older than supported schema %d", schema, SchemaVersion)

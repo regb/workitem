@@ -20,7 +20,7 @@ func TestUntitledCreationUsesIDDerivedSlug(t *testing.T) {
 		{name: "generated", want: base},
 		{name: "explicit override", explicit: "custom", want: "custom"},
 		{name: "generated collision", existing: []model.Manifest{{Slug: base, State: model.StateBacklog}}, want: base + "-2"},
-		{name: "archived slug reusable", existing: []model.Manifest{{Slug: base, State: model.StateArchived}}, want: base},
+		{name: "archived slug reusable", existing: []model.Manifest{{Slug: base, State: model.StateClosed}}, want: base},
 		{name: "explicit collision", explicit: "custom", existing: []model.Manifest{{Slug: "custom", State: model.StateBacklog}}, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -167,6 +167,8 @@ func (s *Server) Serve(ctx context.Context) error {
 	go s.reconcilePi(ctx)
 	s.wg.Add(1)
 	go s.reconcileExternal(ctx)
+	s.wg.Add(1)
+	go s.sweepBlockers(ctx)
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -235,6 +237,31 @@ func (s *Server) reconcilePi(ctx context.Context) {
 				s.lastConversationImport = conversationReport
 				s.importMu.Unlock()
 			}
+		}
+	}
+}
+
+// BlockerSweepInterval bounds how long a met time or item condition can leave
+// an item blocked. The open-blocker check itself treats expired time blockers
+// as cleared immediately; the sweep makes the clearance durable history.
+const BlockerSweepInterval = 5 * time.Second
+
+func (s *Server) sweepBlockers(ctx context.Context) {
+	defer s.wg.Done()
+	ticker := time.NewTicker(BlockerSweepInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-s.closed:
+			return
+		case <-ticker.C:
+			s.domainMu.Lock()
+			if _, err := s.database.SweepBlockers(time.Now()); err != nil {
+				fmt.Fprintf(os.Stderr, "wi: blocker sweep: %v\n", err)
+			}
+			s.domainMu.Unlock()
 		}
 	}
 }
@@ -651,8 +678,8 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			s.writeError(conn, request.ID, "invalid_request", "decode manifest queue command: "+err.Error())
 			return
 		}
-		if queueRequest.Command.Type != CommandStateSet || queueRequest.Command.TargetState != model.StateWaiting || queueRequest.Command.EventType != "work_item.state_set" || queueRequest.Command.Force {
-			s.writeError(conn, request.ID, "invalid_request", "manifest queue command requires an ordinary state transition to waiting")
+		if queueRequest.Command.Type != CommandBlockerAdd {
+			s.writeError(conn, request.ID, "invalid_request", "manifest queue command requires adding a blocker")
 			return
 		}
 		s.domainMu.Lock()

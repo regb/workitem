@@ -198,7 +198,8 @@ var helpDocs = map[string]helpDoc{
 		Usage:   []string{"wi list [options]"},
 		Description: []string{
 			"JSON preserves lifecycle-keyed sections and adds display_sections with key, title, and ordered item_ids matching text grouping. Full IDs and slugs remain available in sections. Empty display groups have empty arrays. JSON is an object, not an item array.",
-			"Shows active work grouped by actionability. Archived items are hidden by default. --archived selects archived-only, --all includes active and archived, and --state archived implies archived visibility. Live agent/worktree inspection adds AGENT and WORKTREE columns unless --no-agent is used.",
+			"Shows open work grouped by actionability. Closed items are hidden by default. --closed selects closed-only, --all includes open and closed, and --state closed implies closed visibility. Live agent/worktree inspection adds AGENT and WORKTREE columns unless --no-agent is used.",
+			"Active items with an open blocker appear under WAITING, outside the attention ranking, unless the agent responded since the item was last read: that unread response puts the item back in NEEDS ATTENTION until it is read. Unread titles are bold (or marked unread without color). What an item waits for follows its name in yellow (a blocker's label such as #1234, or a compact form like until Fri 09:00 or on api-schema), and closed items show their RESOLUTION.",
 			"Label rules are additive. A bare label or +label requires that label; -label excludes it. All positive labels must match and no negative label may match.",
 			"Global defaults use labels = [\"+team\", \"-personal\"] in the [list] section of config.toml. WI_LIST_LABELS accepts comma-separated rules. CLI rules use repeatable --label flags.",
 			"Rules merge by source precedence: config list.labels < WI_LIST_LABELS < CLI --label. A higher-precedence rule replaces only the same normalized label while unrelated inherited rules remain. Within one source, rules are processed left-to-right and the later rule wins for the same label. The token ! clears all inherited rules before subsequent tokens are applied.",
@@ -206,9 +207,9 @@ var helpDocs = map[string]helpDoc{
 		},
 		Options: []helpOption{
 			{"--label <rule>", "Apply a label rule; repeatable. Forms: label, +label, -label, !."},
-			{"--state <state>", "Filter by backlog, working, waiting, or archived."},
-			{"--archived", "Show archived items only."},
-			{"--all", "Show active and archived items."},
+			{"--state <state>", "Filter by backlog, active, or closed."},
+			{"--closed", "Show closed items only."},
+			{"--all", "Show open and closed items."},
 			{"--ids", "Show ID prefixes in active text output."},
 			{"--no-agent", "Skip live agent/worktree inspection."},
 		},
@@ -227,7 +228,7 @@ var helpDocs = map[string]helpDoc{
 		Summary: "Edit work item metadata together",
 		Usage:   []string{"wi edit [--item <selector>] [options] [item]"},
 		Description: []string{
-			"Edits title, description, labels, and deep-work classification in one validated request. With no edit flags, opens title and description in VISUAL, EDITOR, or vi. Defaults to the current item; archived items can be selected by ID. State, slug, branch, checkout, conversation, and runtime remain unchanged; no prompt is sent.",
+			"Edits title, description, labels, and deep-work classification in one validated request. With no edit flags, opens title and description in VISUAL, EDITOR, or vi. Defaults to the current item; closed items can be selected by ID. State, slug, branch, checkout, conversation, and runtime remain unchanged; no prompt is sent.",
 			"The editor uses a private draft with a Title: line, a blank line, then description text. Concurrent item or description changes refuse the edit rather than overwriting them; failed drafts are retained. Description content stays on disk and is staged for crash recovery. A post-commit filesystem failure reports the retained edit and pending description instead of claiming rollback.",
 		},
 		Options: []helpOption{
@@ -257,35 +258,35 @@ var helpDocs = map[string]helpDoc{
 	"state show": {
 		Summary:     "Show durable lifecycle state",
 		Usage:       []string{"wi state show [--item <selector>] [item]"},
-		Description: []string{"Reads backlog, working, waiting, or archived without inspecting workspace or agent resources."},
+		Description: []string{"Reads backlog, active, or closed without inspecting workspace or agent resources."},
 		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}},
 	},
 	"state set": {
 		Summary:     "Set durable lifecycle state without workspace effects",
-		Usage:       []string{"wi state set <backlog|working|waiting|archived> [--item <selector>] [--force] [item]"},
-		Description: []string{"Performs a legal state transition and appends a durable event. Workspace resources are deliberately left unchanged. Setting archived clears the active slug; setting an archived item to backlog allocates a fresh slug."},
+		Usage:       []string{"wi state set <backlog|active|closed> [--item <selector>] [--force] [item]"},
+		Description: []string{"Performs a legal state transition and appends a durable event. Workspace resources are deliberately left unchanged. Setting closed records the completed resolution and clears the active slug; setting a closed item to backlog allocates a fresh slug and clears its resolution. "},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
-			{"--force", "Override deep-work capacity only when setting backlog to working."},
+			{"--force", "Override deep-work capacity only when setting backlog to active."},
 		},
-		Examples: []string{`wi state set waiting`, `wi state set working --item auth`, `wi state set backlog auth`},
+		Examples: []string{`wi state set active --item auth`, `wi state set backlog auth`},
 	},
 	"delete": {
-		Summary:     "Irreversibly delete archived work-item case files",
-		Usage:       []string{"wi delete --yes [--item <selector>] [item]", "wi delete --archived --yes"},
-		Description: []string{"Deletes the complete work-item case file, including its description and conversations. Deletion requires archived state and refuses live agent runtimes, tmux terminals, or materialized checkouts. --archived validates every archived item before deleting any of them."},
+		Summary:     "Irreversibly delete closed work-item case files",
+		Usage:       []string{"wi delete --yes [--item <selector>] [item]", "wi delete --closed --yes"},
+		Description: []string{"Deletes the complete work-item case file, including its description and conversations. Deletion requires closed state and refuses live agent runtimes, tmux terminals, or materialized checkouts. --closed validates every closed item before deleting any of them."},
 		Options: []helpOption{
-			{"--item <selector>", "Select one archived item explicitly."},
-			{"--archived", "Delete all archived items after validating the complete set."},
+			{"--item <selector>", "Select one closed item explicitly."},
+			{"--closed", "Delete all closed items after validating the complete set."},
 			{"--yes", "Confirm irreversible deletion."},
 		},
-		Examples: []string{`wi delete --yes --item 01KZ39T`, `wi delete --archived --yes`},
+		Examples: []string{`wi delete --yes --item 01KZ39T`, `wi delete --closed --yes`},
 	},
 	"attention": {
-		Summary:     "Inspect attention activity, ranking, and deferral",
-		Usage:       []string{"wi attention <activity|defer|queue> [options]"},
+		Summary:     "Inspect attention activity, ranking, deferral, and read state",
+		Usage:       []string{"wi attention <activity|defer|queue|read|unread> [options]"},
 		Description: []string{"Attention facts and ranking are independent of lifecycle state mutation and workspace navigation."},
-		SeeAlso:     []string{"attention activity", "attention defer", "attention queue", "next"},
+		SeeAlso:     []string{"attention activity", "attention defer", "attention queue", "attention read", "attention unread", "next"},
 	},
 	"attention activity": {
 		Summary:     "Show prompt, completion, and defer timestamps",
@@ -296,8 +297,71 @@ var helpDocs = map[string]helpDoc{
 	"attention defer": {
 		Summary:     "Move a NEEDS ATTENTION item to the back of the queue",
 		Usage:       []string{"wi attention defer [--item <selector>] [item]"},
-		Description: []string{"Records attention.deferred for a working item without inspecting agent or workspace eligibility. It never changes lifecycle state or workspace resources. Most interactive navigation should use wi next --defer, which conditionally defers only a current NEEDS ATTENTION item."},
+		Description: []string{"Records attention.deferred for an active item without inspecting agent or workspace eligibility. It never changes lifecycle state or workspace resources. Most interactive navigation should use wi next --defer, which conditionally defers only a current NEEDS ATTENTION item."},
 		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}},
+	},
+	"attention read": {
+		Summary:     "Mark the agent's responses read",
+		Usage:       []string{"wi attention read [--item <selector>] [item]"},
+		Description: []string{"Records attention.read. Reading never moves an item that is not waiting; a waiting item with an unread response leaves NEEDS ATTENTION once read. wi switch, the picker, wi next, and opening a web conversation mark the item read."},
+		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}},
+	},
+	"attention unread": {
+		Summary:     "Mark the latest response unread again",
+		Usage:       []string{"wi attention unread [--item <selector>] [item]"},
+		Description: []string{"Records attention.unread, for example after opening a conversation without reading it. A waiting item returns to NEEDS ATTENTION."},
+		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}},
+	},
+	"wait": {
+		Summary: "Make an item wait for a time, another item, or something external",
+		Usage:   []string{"wi wait [--until WHEN] [--on ITEM] [--for TEXT] [--item <selector>] [item]", "wi wait --clear [--item <selector>] [item]"},
+		Description: []string{
+			"Adds one blocker per condition to a backlog or active item, in one atomic step; combining conditions waits for all of them. Lifecycle state and resources are unchanged; an active waiting item leaves the attention queue and is listed under WAITING with what it waits for.",
+			"A time blocker is a snooze: the daemon clears it when the time passes or when you next prompt the item, since prompting means you decided to work on it. Item blockers are cleared when the other item closes; each clearance is recorded in the item's history with its cause. --for events stay until cleared, by you or by automation that tagged them with metadata. --clear stops waiting by clearing every blocker. For structured metadata or clearing one blocker, use wi blocker.",
+			"Waiting marks the item's current responses read; a later unread response puts it back in NEEDS ATTENTION until it is read.",
+		},
+		Options: []helpOption{
+			{"--until <when>", "Snooze until a time: a duration such as 90m, 4h, or 2d; tomorrow or a weekday such as monday (the next one at 09:00); or a local date/time such as 2026-10-20 or 2026-10-20T09:00."},
+			{"--on <item>", "Wait until another work item closes; - chooses it in the picker. Dependency cycles are refused."},
+			{"--for <event>", "Wait for an external event, named by the text."},
+			{"--clear", "Clear every blocker."},
+			{"--item <selector>", "Select an item explicitly."},
+		},
+		Examples: []string{`wi wait --until 1d`, `wi wait --until monday`, `wi wait --on api-schema`, `wi wait --on -`, `wi wait --until 3d --on api-schema`, `wi wait --for "security review"`, `wi wait --clear`},
+	},
+	"blocker": {
+		Summary:     "Inspect and edit an item's blockers directly",
+		Usage:       []string{"wi blocker <add|list|clear> [options]"},
+		Description: []string{"This primitive operates on the blocker list behind wi wait. Each blocker has an ID (shown by wi blocker list), a kind with its condition (a time, another item, or an external event name), and optional structured key=value metadata that automation can match before clearing it."},
+		SeeAlso:     []string{"blocker add", "blocker list", "blocker clear", "wait"},
+	},
+	"blocker add": {
+		Summary: "Add one typed blocker",
+		Usage:   []string{"wi blocker add --kind <time|item|external> (--until WHEN | --on ITEM | --event NAME) [--label TEXT] [--meta key=value]... [--item <selector>] [item]"},
+		Options: []helpOption{
+			{"--kind <kind>", "time requires --until; item requires --on; external requires --event."},
+			{"--until <when>", "A duration or local date/time."},
+			{"--on <item>", "The work item that must close first."},
+			{"--event <name>", "The external event the item waits for."},
+			{"--label <text>", "Short display form for lists, such as #1234; up to 40 characters."},
+			{"--meta <key=value>", "Structured metadata; keys are lowercase letters, digits, '.', '_', or '-'; repeatable, up to 16."},
+			{"--item <selector>", "Select an item explicitly."},
+		},
+		Examples: []string{`wi blocker add --kind external --event "security review" --meta issue=SEC-12`, `wi blocker add --kind external --event "API review" --label "API #42" --meta ticket=API-42`},
+	},
+	"blocker list": {
+		Summary: "List an item's blockers",
+		Usage:   []string{"wi blocker list [--item <selector>] [item]"},
+		Options: []helpOption{{"--item <selector>", "Select an item explicitly."}},
+	},
+	"blocker clear": {
+		Summary: "Clear one blocker or all of them",
+		Usage:   []string{"wi blocker clear (--id ID | --all) [--item <selector>] [item]"},
+		Options: []helpOption{
+			{"--id <id>", "Clear one blocker."},
+			{"--all", "Clear every blocker."},
+			{"--item <selector>", "Select an item explicitly."},
+		},
 	},
 	"attention queue": {
 		Summary:     "Show the ranked NEEDS ATTENTION queue",
@@ -317,8 +381,8 @@ var helpDocs = map[string]helpDoc{
 		Summary: "Fast-forward a local target branch, rebasing when needed",
 		Usage:   []string{"wi merge [--item <selector>] [--target <branch>] [--local] [target]"},
 		Description: []string{
-			"Merges the current working/waiting item without switching checkouts: requires a completely clean source checkout, rebases its persisted implementation branch only if it does not already contain the target, atomically fast-forwards the local target ref, and synchronizes any worktree where the target is checked out.",
-			"The target defaults to the registered integration branch. With a configured upstream, wi fetches and fast-forward-synchronizes that base before integrating the item; divergence stops before rebasing. --local skips that remote preflight. Other explicitly selected target branches remain local-only. No push, squash, branch deletion, workspace cleanup, shelve, or archive is performed.",
+			"Merges the current active item without switching checkouts: requires a completely clean source checkout, rebases its persisted implementation branch only if it does not already contain the target, atomically fast-forwards the local target ref, and synchronizes any worktree where the target is checked out.",
+			"The target defaults to the registered integration branch. With a configured upstream, wi fetches and fast-forward-synchronizes that base before integrating the item; divergence stops before rebasing. --local skips that remote preflight. Other explicitly selected target branches remain local-only. No push, squash, branch deletion, workspace cleanup, shelve, or close is performed.",
 			"If item rebase, target advancement, or target-worktree synchronization fails, wi aborts/rolls back the item integration. An earlier successful upstream synchronization is deliberately retained and reported. Dirty non-integration target files are allowed only when they do not overlap incoming paths.",
 		},
 		Options: []helpOption{
@@ -333,7 +397,7 @@ var helpDocs = map[string]helpDoc{
 		Usage:   []string{"wi start [--agent-mode <tui|headless>] [--force] <slug>"},
 		Description: []string{
 			"Resolves an exact active slug or one unambiguous active-slug substring. Exact matches take precedence; ambiguous substrings fail with candidate IDs and slugs. IDs, title keywords, implicit current-item selection, and --item are not accepted.",
-			"Transitions backlog -> working, enforces deep-work capacity, materializes the worktree, and ensures the selected primary runtime. TUI mode attaches terminal access; headless mode remains tmux-independent. JSON never attaches. Starting an existing item does not send a message.",
+			"Transitions backlog -> active, enforces deep-work capacity, materializes the worktree, and ensures the selected primary runtime. TUI mode attaches terminal access; headless mode remains tmux-independent. JSON never attaches. Starting an existing item does not send a message.",
 			"To create and start an item, use wi new --title TEXT --start.",
 		},
 		Options: []helpOption{
@@ -350,8 +414,9 @@ var helpDocs = map[string]helpDoc{
 			"wi switch --current",
 		},
 		Description: []string{
-			"Without an item, opens an interactive fzf picker over working, waiting, and backlog items using the same actionability projection and label rules as wi list. Backlog items appear last in a distinct color. The picker initially selects the current item when present; changing the filter resets the cursor to the first match. Rows show status, title, then repository. Status and repository widths use the longest values in the full snapshot and stay fixed while filtering. The title uses the remaining list-pane width and truncates at the end, adapting on resize or preview toggles. Full titles remain searchable; slugs are available in the details preview. The preview uses 40% of the width on wide terminals and moves below the list on narrow terminals; Alt-P hides or shows it. Selecting a backlog item starts it, selecting a waiting item resumes it, and selecting a working item is state-neutral before entering its TUI. The daemon refreshes native activity before capturing candidates; the open picker is an explicitly marked frozen snapshot and can be reopened to refresh. A tmux key binding can host the complete operation in a popup so startup prompts and errors remain visible.",
+			"Without an item, opens an interactive fzf picker over active and backlog items using the same actionability projection and label rules as wi list. Backlog items appear last in a distinct color. The picker initially selects the current item when present; changing the filter resets the cursor to the first match. Rows show status, title, then repository. Status and repository widths use the longest values in the full snapshot and stay fixed while filtering. The title uses the remaining list-pane width and truncates at the end, adapting on resize or preview toggles. Full titles remain searchable; slugs are available in the details preview. The preview uses 40% of the width on wide terminals and moves below the list on narrow terminals; Alt-P hides or shows it. Selecting a backlog item starts it; selecting an active item is state-neutral before entering its TUI, including a waiting one. The daemon refreshes native activity before capturing candidates; the open picker is an explicitly marked frozen snapshot and can be reopened to refresh. A tmux key binding can host the complete operation in a popup so startup prompts and errors remain visible.",
 			"With an explicit item, or with --current, performs the existing state-neutral switch directly: enter a verified existing TUI terminal even when its checkout needs repair, otherwise ensure the worktree, primary TUI runtime, and tmux access, then attach or switch the client. JSON requires an explicit item or --current and never attaches.",
+			"Switching marks the conversation read.",
 		},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly instead of opening the picker."},
@@ -402,26 +467,27 @@ var helpDocs = map[string]helpDoc{
 	"terminal close":  {Summary: "Close optional terminal access", Usage: []string{"wi terminal close [--item <selector>] [item]"}, Description: []string{"Closes tmux only. A TUI agent runtime must be stopped explicitly first."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
 	"next": {
 		Summary: "Switch to the next item in the NEEDS ATTENTION ring",
-		Usage:   []string{"wi next [--defer | --wait | --archive] [--label <rule>]..."},
+		Usage:   []string{"wi next [--defer | --wait (--until WHEN | --on ITEM | --for TEXT)... | --close [--resolution R]] [--label <rule>]..."},
 		Description: []string{
-			"Builds the ranked NEEDS ATTENTION queue using the same config, WI_LIST_LABELS, and optional --label rules as wi list. If the current item is in that queue, selects its successor and wraps from the last item to the first. If the current item is busy, waiting, needs fixing, backlog, archived, or otherwise outside the queue, starts at the first NEEDS ATTENTION item.",
+			"Builds the ranked NEEDS ATTENTION queue using the same config, WI_LIST_LABELS, and optional --label rules as wi list. If the current item is in that queue, selects its successor and wraps from the last item to the first. If the current item is busy, waiting, needs fixing, backlog, closed, or otherwise outside the queue, starts at the first NEEDS ATTENTION item.",
 			"Plain navigation takes one synchronized daemon actionability snapshot, remains state-neutral, and performs the same TUI composition as wi switch. By default it records no defer, selection event, cursor, or ranking timestamp. With --defer, it first records attention.deferred only when the current item belongs to NEEDS ATTENTION; from busy, waiting, fixing, or other outside items it simply navigates.",
-			"With --wait, wi atomically moves the current working item to waiting and ranks the resulting daemon actionability snapshot, then navigates from the top. With --archive, wi validates clean-worktree safety and stops the previous runtime before switching, then durably releases its workspace claim and applies archived state before scheduling the previous tmux session for closure. --wait, --defer, and --archive are mutually exclusive. If switching succeeds but archiving fails, the new item remains selected and the error reports the partial outcome.",
-			"JSON mode selects and ensures the target workspace without attaching to tmux. Therefore --json next --archive invoked inside the previous item's tmux session refuses terminal cleanup rather than pretending the client switched.",
+			"With --wait, wi atomically adds the same blockers as wi wait to the current item (at least one of --until, --on, or --for is required) and ranks the resulting daemon actionability snapshot, then navigates from the top. With --close, wi validates clean-worktree safety and stops the previous runtime before switching, then durably releases its workspace claim and closes it with --resolution (completed by default) before scheduling the previous tmux session for closure. --wait, --defer, and --close are mutually exclusive. If switching succeeds but closing fails, the new item remains selected and the error reports the partial outcome.",
+			"JSON mode selects and ensures the target workspace without attaching to tmux. Therefore --json next --close invoked inside the previous item's tmux session refuses terminal cleanup rather than pretending the client switched.",
 		},
 		Options: []helpOption{
 			{"--defer", "Defer the current item if it is in NEEDS ATTENTION before navigating."},
-			{"--wait", "Set the current item to waiting before navigating."},
-			{"--archive", "Enter a distinct successor, then stop, clean up, and archive the previous item."},
+			{"--wait", "Make the current item wait before navigating; requires --until, --on, or --for like wi wait."},
+			{"--close", "Enter a distinct successor, then stop, clean up, and close the previous item."},
+			{"--resolution <name>", "With --close: completed (default), abandoned, or superseded."},
 			{"--label <rule>", "Apply the same repeatable additive label rules as wi list."},
 		},
 		Environment: []helpOption{{"WI_LIST_LABELS", "Comma-separated label rules overlaid on config."}},
-		Examples:    []string{`wi next`, `wi next --defer`, `wi next --wait`, `wi next --archive`, `wi next --label +backend --label -blocked`, `wi --json next --wait`},
+		Examples:    []string{`wi next`, `wi next --defer`, `wi next --wait --until tomorrow`, `wi next --wait --on -`, `wi next --close --resolution abandoned`, `wi next --label +backend --label -blocked`, `wi --json next --wait --until 4h`},
 	},
 	"resume": {
-		Summary:     "Move waiting work to working and resume its agent",
+		Summary:     "Ensure an active item's agent runtime",
 		Usage:       []string{"wi resume [--item <selector>] [--agent-mode <tui|headless>] [item]"},
-		Description: []string{"Transitions waiting -> working and ensures the selected primary-agent runtime like wi start. Backlog items must use wi start. JSON output never attaches."},
+		Description: []string{"Ensures the selected primary-agent runtime of an active item like wi start, without changing lifecycle state or waiting. Backlog items must use wi start. JSON output never attaches."},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
 			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless Headless mode."},
@@ -431,24 +497,37 @@ var helpDocs = map[string]helpDoc{
 	"shelve": {
 		Summary:     "Return active work to backlog",
 		Usage:       []string{"wi shelve [--item <selector>] [--force] [item]"},
-		Description: []string{"Transitions working/waiting -> backlog after inactive terminal/worktree cleanup. Active runtimes must be stopped explicitly; dirty or branch-mismatched worktrees remain protected."},
+		Description: []string{"Transitions active -> backlog after inactive terminal/worktree cleanup. Blockers are kept. Active runtimes must be stopped explicitly; dirty or branch-mismatched worktrees remain protected."},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
 			{"--force", "Allow the state transition while retaining an unclosable current terminal."},
 		},
 	},
-	"archive": {
-		Summary: "Archive a work item",
-		Usage:   []string{"wi archive [--item <selector>] [--force] [item]"},
+	"close": {
+		Summary: "Close a work item with a resolution",
+		Usage:   []string{"wi close [--resolution completed|abandoned|superseded] [--item <selector>] [--force] [item]"},
 		Description: []string{
-			"Gracefully stops an idle agent runtime, waits for it to exit, closes terminal access, releases the clean workspace claim, then transitions the item to archived and clears its active slug. Busy runtimes require --force, which aborts before shutdown.",
-			"To restore an archived item, run `wi state set backlog --item <item-id>`. Restoration retains its ID and history, assigns a fresh active slug, and does not recreate workspace or agent resources.",
+			"Gracefully stops an idle agent runtime, waits for it to exit, closes terminal access, releases the clean workspace claim, then closes the item, records its resolution, clears its blockers, and clears its active slug. Whether the work was completed is the resolution, independent of closing. Busy runtimes require --force, which aborts before shutdown. Items waiting on this one stop waiting on it; the daemon records this item's resolution in their history.",
+			"To reopen a closed item, run `wi state set backlog --item <item-id>`. Reopening retains its ID and history, assigns a fresh active slug, clears the resolution, and does not recreate workspace or agent resources.",
 		},
 		Options: []helpOption{
+			{"--resolution <name>", "completed (default), abandoned, or superseded."},
 			{"--item <selector>", "Select an item explicitly."},
-			{"--force", "Abort a busy runtime before shutdown and allow archiving while retaining an unclosable current terminal."},
+			{"--force", "Abort a busy runtime before shutdown and allow closing while retaining an unclosable current terminal."},
 		},
-		Examples: []string{`wi archive add-api-retries`, `wi state set backlog --item 01KZ39T`},
+		Examples: []string{`wi close add-api-retries`, `wi close --resolution abandoned spike`, `wi state set backlog --item 01KZ39T`},
+	},
+	"pick": {
+		Summary:     "Choose an item in the picker and print its ID",
+		Usage:       []string{"wi pick [--exclude-current] [--no-agent] [--no-preview] [--label <rule>]..."},
+		Description: []string{"Opens the same fzf picker as wi switch, without switching or starting anything, and prints the chosen item's ID for scripts and key bindings. JSON output adds the slug and title. Cancelling exits with an error."},
+		Options: []helpOption{
+			{"--exclude-current", "Leave out the current item."},
+			{"--no-agent", "Skip live agent/worktree inspection."},
+			{"--no-preview", "Disable the details preview."},
+			{"--label <rule>", "Apply the same repeatable label rules as wi list."},
+		},
+		Examples: []string{`wi wait --on "$(wi pick --exclude-current)"`},
 	},
 	"agent": {
 		Summary:     "Inspect, run, monitor, and communicate with the primary agent",
@@ -459,10 +538,10 @@ var helpDocs = map[string]helpDoc{
 	"agent status": {
 		Summary:     "Inspect derived agent and worktree status",
 		Usage:       []string{"wi agent status [--item <selector>] [--stale-after <duration>] [item]", "wi agent status --all [--stale-after <duration>]"},
-		Description: []string{"Shows busy, idle, or problem for one selected primary agent, separately from absent, clean, changed, or problem worktree status. --all explicitly returns the working/waiting overview, keeping JSON result shapes predictable."},
+		Description: []string{"Shows busy, idle, or problem for one selected primary agent, separately from absent, clean, changed, or problem worktree status. --all explicitly returns the active-item overview, keeping JSON result shapes predictable."},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
-			{"--all", "Show the working/waiting agent overview instead of one item."},
+			{"--all", "Show the active-item agent overview instead of one item."},
 			{"--stale-after <duration>", "Treat old incomplete activity as a problem (default 10m)."},
 		},
 	},
@@ -545,19 +624,19 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  wi help [command [subcommand]]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Work:")
-	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Resume waiting work"}, {"shelve", "Return active work to backlog"}, {"archive", "Archive completed work"}})
+	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
-	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"attention", "Inspect or defer attention"}})
+	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"attention", "Inspect, defer, or mark attention read"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Agent and checkout:")
 	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Administration:")
-	printCommandRows(w, [][2]string{{"init", "Set up agent profiles and select the default"}, {"config", "Inspect global settings and agent profiles"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete archived work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
+	printCommandRows(w, [][2]string{{"init", "Set up agent profiles and select the default"}, {"config", "Inspect global settings and agent profiles"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete closed work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "States:")
-	fmt.Fprintln(w, "  backlog | working | waiting | archived")
+	fmt.Fprintln(w, "  backlog | active | closed   (waiting active work stays out of the attention queue)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Item selection:")
 	fmt.Fprintln(w, "  Pass --item <selector>, an item argument, or run inside a claimed checkout.")

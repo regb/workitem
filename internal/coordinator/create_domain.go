@@ -178,7 +178,7 @@ func validateCanonicalCreateClaims(manifest model.Manifest, existing []model.Man
 		if other.ID == manifest.ID {
 			continue
 		}
-		if other.State != model.StateArchived && other.Slug == manifest.Slug {
+		if other.State != model.StateClosed && other.Slug == manifest.Slug {
 			return fmt.Errorf("slug %q is already taken by active work item %s", manifest.Slug, other.ID)
 		}
 	}

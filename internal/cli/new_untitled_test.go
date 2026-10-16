@@ -53,7 +53,7 @@ func TestNewUntitledCreatesEditableBacklogRecord(t *testing.T) {
 		t.Fatalf("title update=%+v err=%v", changed, err)
 	}
 	// Restore follows the existing current-title policy, not a durable untitled mode.
-	for _, state := range []string{model.StateArchived, model.StateBacklog} {
+	for _, state := range []string{model.StateClosed, model.StateBacklog} {
 		stdout.Reset()
 		stderr.Reset()
 		if code := cli.Run(context.Background(), []string{"state", "set", state, "--item", m.ID}, cfg); code != cli.ExitOK {
@@ -117,7 +117,7 @@ func TestNewUntitledStartPreservesPartialOutcome(t *testing.T) {
 				t.Fatalf("code=%d stderr=%s", code, stderr)
 			}
 			items, errs := a.Store.ListManifests()
-			if len(items) != 1 || len(errs) != 0 || items[0].State != model.StateWorking || items[0].Title != model.UntitledTitle || items[0].Slug != model.IDDerivedSlug(items[0].ID) {
+			if len(items) != 1 || len(errs) != 0 || items[0].State != model.StateActive || items[0].Title != model.UntitledTitle || items[0].Slug != model.IDDerivedSlug(items[0].ID) {
 				t.Fatalf("items=%+v errors=%v", items, errs)
 			}
 		})

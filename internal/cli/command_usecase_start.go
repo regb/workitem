@@ -50,7 +50,7 @@ func coordinatorStartWorkItem(ctx context.Context, cfg Config, selector string, 
 	if err := cfg.App.ValidateItemAgentConfig(ctx, app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env}); err != nil {
 		return app.StartResult{}, err
 	}
-	transition, err := coordinatorStateTransition(ctx, cfg, selector, model.StateWorking, eventType, force)
+	transition, err := coordinatorStateTransition(ctx, cfg, selector, model.StateActive, eventType, force)
 	if err != nil {
 		return app.StartResult{}, err
 	}

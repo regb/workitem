@@ -23,11 +23,13 @@ func TestCoordinatorWaitAndQueueReturnsAtomicPostTransitionSnapshot(t *testing.T
 	if err := native.Ensure(); err != nil {
 		t.Fatal(err)
 	}
-	now := time.Now().UTC().Truncate(time.Microsecond)
+	// Agent turns complete before the test blocks an item, so blocking marks
+	// every response read.
+	now := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
 	ids := []string{"01KZYHGDCECSFS4BJ2SNTQP49V", "01KZYHGDCECSFS4BJ2SNTQP49W", "01KZYHGDCECSFS4BJ2SNTQP49X"}
 	for index, id := range ids {
 		manifest := model.NewManifest(id, "atomic-"+string(rune('a'+index)), "Atomic", nil, false, now.Add(time.Duration(index)*time.Second), model.Repository{}, model.Checkout{})
-		manifest.State = model.StateWorking
+		manifest.State = model.StateActive
 		sessionID := "session-" + string(rune('a'+index))
 		manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: sessionID, Locator: filepath.Join("sessions", "pi", sessionID+".jsonl")}
 		if err := native.CreateItem(context.Background(), manifest); err != nil {
@@ -105,12 +107,13 @@ func TestCoordinatorWaitAndQueueReturnsAtomicPostTransitionSnapshot(t *testing.T
 	if err != nil || len(snapshot.Candidates) != 3 || snapshot.Candidates[0].Item.ID != ids[2] || snapshotSelection == nil || snapshotSelection.WorkItemID != ids[2] || !snapshotSelection.CurrentInQueue || !snapshotSelection.Wrapped {
 		t.Fatalf("snapshot=%+v selection=%+v err=%v", snapshot, snapshotSelection, err)
 	}
-	waited, queue, waitSelection, err := coordinatorWaitAndQueue(context.Background(), cfg, ids[0], nil)
-	if err != nil || waited.State != model.StateWaiting || len(queue.Candidates) != 2 || queue.Candidates[0].Item.ID != ids[2] || queue.Candidates[1].Item.ID != ids[1] || waitSelection == nil || waitSelection.WorkItemID != ids[2] {
+	waited, queue, waitSelection, err := coordinatorWaitAndQueue(context.Background(), cfg, ids[0], []model.Blocker{{Kind: model.BlockerExternal, Event: "waiting"}}, nil)
+	if err != nil || !waited.Waiting || len(waited.Added) != 1 || len(queue.Candidates) != 2 || queue.Candidates[0].Item.ID != ids[2] || queue.Candidates[1].Item.ID != ids[1] || waitSelection == nil || waitSelection.WorkItemID != ids[2] {
 		t.Fatalf("waited=%+v queue=%+v selection=%+v err=%v", waited, queue, waitSelection, err)
 	}
 	canonical, err := client.CanonicalManifest(context.Background(), ids[0])
-	if err != nil || canonical.Manifest.State != model.StateWaiting {
+	if err != nil || canonical.Manifest.State != model.StateActive || len(canonical.Manifest.Blockers) != 1 || canonical.Manifest.Blockers[0].Event != "waiting" {
 		t.Fatalf("canonical=%+v err=%v", canonical, err)
 	}
+	assertAppBlockerCommands(t, application, client, ids)
 }

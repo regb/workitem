@@ -13,7 +13,7 @@ import (
 
 func TestRetiredCheckoutKindCannotBeMaterializedOrReleased(t *testing.T) {
 	for _, present := range []bool{false, true} {
-		m := model.Manifest{ID: "item-1", State: model.StateWorking, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Kind: "repository-home", Executor: model.ExecutorLocal}}}
+		m := model.Manifest{ID: "item-1", State: model.StateActive, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Kind: "repository-home", Executor: model.ExecutorLocal}}}
 		path := t.TempDir()
 		file := filepath.Join(path, "user-file")
 		if err := os.WriteFile(file, []byte("user work\n"), 0600); err != nil {

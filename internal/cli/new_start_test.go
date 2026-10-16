@@ -54,7 +54,7 @@ func TestNewStartKeepsDescriptionIndependentOnPartialFailure(t *testing.T) {
 				t.Fatalf("code=%d output=%s error=%s", code, stdout, stderr)
 			}
 			items, errs := application.Store.ListManifests()
-			if len(errs) != 0 || len(items) != 1 || items[0].State != model.StateWorking {
+			if len(errs) != 0 || len(items) != 1 || items[0].State != model.StateActive {
 				t.Fatalf("items=%+v errors=%v", items, errs)
 			}
 			shown, err := application.ShowWorkItem(context.Background(), app.ResolveOptions{Selector: items[0].ID})

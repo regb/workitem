@@ -18,7 +18,7 @@ import (
 type rejectArchivedStore struct{ app.Store }
 
 func (s rejectArchivedStore) SaveManifest(ctx context.Context, m model.Manifest) error {
-	if m.State == model.StateArchived {
+	if m.State == model.StateClosed {
 		return fmt.Errorf("injected archive commit failure")
 	}
 	return s.Store.SaveManifest(ctx, m)
@@ -40,7 +40,7 @@ func TestArchiveReportsTerminalCleanupBeforeCommitFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	application.Store = rejectArchivedStore{st}
-	result, err := application.Archive(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, false)
+	result, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false)
 	if err == nil || !strings.Contains(err.Error(), "workspace cleanup completed") || result.WorkItemID != created.Manifest.ID || result.State != model.StateBacklog {
 		t.Fatalf("outcome %+v %v", result, err)
 	}
@@ -84,7 +84,7 @@ func TestArchiveTimeoutRetainsShutdownWarningAndLifecycle(t *testing.T) {
 		}
 		req.Respond(nil)
 	}()
-	result, err := application.Archive(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, false)
+	result, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false)
 	if err == nil || !strings.Contains(err.Error(), "did not exit") || !containsString(result.Warnings, "driver accepted runtime shutdown") || result.State != model.StateBacklog {
 		t.Fatalf("timeout outcome %+v %v", result, err)
 	}

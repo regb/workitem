@@ -29,7 +29,9 @@ Logs, control sockets, cached helper files, and terminal process records live un
 
 Do not edit `wi.db` or native conversation files manually. For a consistent backup, stop writers and keep the executable matching the database checkpoint. Moving a data root also requires repairing concrete Git worktree paths; copying `wi.db` alone is insufficient.
 
-The current repository layout uses schema 5. Older layouts require an explicit offline migration, not an automatic upgrade. Daemon replacement checks the advertised database schema, and daemon control requests must identify a matching supported schema. Older binaries cannot stop a newer writer. Health reads and fenced runtime events remain schema-independent.
+The current database uses schema 7. The daemon upgrades schema 5 or 6 on startup after publishing a complete, private, synced snapshot at `wi.db.schema-N.bak`. A backup left by an earlier attempt must match the current pre-upgrade database; incomplete, stale, symlinked, or non-private backups block the upgrade and remain untouched. Preserve such a file elsewhere before retrying. Other older schemas still require an explicit offline migration.
+
+Keep the old executable until the transition is complete. Stop the old daemon with its matching build before starting the schema-7 daemon. Daemon replacement checks the advertised database schema, and daemon control requests must identify a matching supported schema. Older binaries cannot stop a newer writer. Health reads and fenced runtime events remain schema-independent.
 
 ## Observation freshness
 

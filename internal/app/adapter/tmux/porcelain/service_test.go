@@ -11,8 +11,8 @@ import (
 
 func TestValidateSwitchTarget(t *testing.T) {
 	for _, tt := range []struct{ name, state, want string }{
-		{"working", model.StateWorking, ""}, {"waiting", model.StateWaiting, ""},
-		{"backlog", model.StateBacklog, "use `wi start`"}, {"archived", model.StateArchived, "state set backlog"},
+		{"active", model.StateActive, ""},
+		{"backlog", model.StateBacklog, "use `wi start`"}, {"closed", model.StateClosed, "state set backlog"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			s := New(func(context.Context, contract.ResolveOptions) (model.Manifest, error) {

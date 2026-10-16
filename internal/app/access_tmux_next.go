@@ -19,10 +19,13 @@ type NextQueueSelection struct {
 type NextWorkItemOptions struct {
 	ResolveOptions
 	WorkListOptions
-	DeferCurrent         bool
-	WaitCurrent          bool
-	ArchiveCurrent       bool
-	PreWaited            *StateTransitionResult
+	DeferCurrent bool
+	WaitCurrent  bool
+	WaitBlockers []model.Blocker
+	CloseCurrent bool
+	// CloseResolution records how the closed item ended; empty means completed.
+	CloseResolution      string
+	PreWaited            *BlockerResult
 	PrecomputedQueue     *AttentionQueueResult
 	PrecomputedSelection *NextQueueSelection
 }
@@ -32,8 +35,8 @@ type NextWorkItemResult struct {
 	CurrentInQueue    bool                   `json:"current_in_queue"`
 	Wrapped           bool                   `json:"wrapped"`
 	Deferred          *DeferResult           `json:"deferred,omitempty"`
-	Waited            *StateTransitionResult `json:"waited,omitempty"`
-	Archived          *StateTransitionResult `json:"archived,omitempty"`
+	Waited            *BlockerResult         `json:"waited,omitempty"`
+	Closed            *StateTransitionResult `json:"closed,omitempty"`
 	Selected          AttentionCandidate     `json:"selected"`
 	Workspace         CompositionResult      `json:"workspace"`
 	Warnings          []string               `json:"warnings"`
@@ -46,13 +49,16 @@ type NextWorkItemResult struct {
 func (a *App) NextWorkItem(ctx context.Context, opts NextWorkItemOptions, attach bool) (NextWorkItemResult, error) {
 	result := NextWorkItemResult{}
 	mutations := 0
-	for _, enabled := range []bool{opts.DeferCurrent, opts.WaitCurrent, opts.ArchiveCurrent} {
+	if opts.CloseResolution != "" && !model.ValidResolution(opts.CloseResolution) {
+		return result, fmt.Errorf("invalid resolution %q; expected completed, abandoned, or superseded", opts.CloseResolution)
+	}
+	for _, enabled := range []bool{opts.DeferCurrent, opts.WaitCurrent, opts.CloseCurrent} {
 		if enabled {
 			mutations++
 		}
 	}
 	if mutations > 1 {
-		return result, fmt.Errorf("next cannot defer, wait, and archive the current item at the same time")
+		return result, fmt.Errorf("next can only defer, wait on, or close the current item, not several at once")
 	}
 	currentID := ""
 	if current, err := a.ResolveItem(ctx, opts.ResolveOptions); err == nil {
@@ -80,12 +86,12 @@ func (a *App) NextWorkItem(ctx context.Context, opts NextWorkItemOptions, attach
 		if currentID == "" {
 			return result, fmt.Errorf("cannot wait before navigating: no current work item is selected")
 		}
-		waited, waitErr := a.SetWorkItemState(ctx, ResolveOptions{Selector: currentID, CWD: opts.CWD, Env: opts.Env}, model.StateWaiting, false)
-		if waitErr != nil {
-			return result, waitErr
+		blocked, blockErr := a.AddBlockers(ctx, ResolveOptions{Selector: currentID, CWD: opts.CWD, Env: opts.Env}, opts.WaitBlockers)
+		if blockErr != nil {
+			return result, blockErr
 		}
-		result.Waited = &waited
-		result.Warnings = append(result.Warnings, waited.Warnings...)
+		result.Waited = &blocked
+		result.Warnings = append(result.Warnings, blocked.Warnings...)
 	}
 
 	queue := AttentionQueueResult{}
@@ -99,7 +105,7 @@ func (a *App) NextWorkItem(ctx context.Context, opts NextWorkItemOptions, attach
 				return result, fmt.Errorf("deferred %s, but could not rebuild attention queue: %w", currentID, err)
 			}
 			if result.Waited != nil {
-				return result, fmt.Errorf("set %s to waiting, but could not rebuild attention queue: %w", currentID, err)
+				return result, fmt.Errorf("%s is waiting, but could not rebuild attention queue: %w", currentID, err)
 			}
 			return result, err
 		}
@@ -124,7 +130,7 @@ func (a *App) NextWorkItem(ctx context.Context, opts NextWorkItemOptions, attach
 			return result, fmt.Errorf("deferred %s, but no next item could be selected: %w", currentID, err)
 		}
 		if result.Waited != nil {
-			return result, fmt.Errorf("set %s to waiting, but no next item could be selected: %w", currentID, err)
+			return result, fmt.Errorf("%s is waiting, but no next item could be selected: %w", currentID, err)
 		}
 		return result, err
 	}
@@ -133,12 +139,12 @@ func (a *App) NextWorkItem(ctx context.Context, opts NextWorkItemOptions, attach
 	result.Selected = queue.Candidates[selection.Index]
 	var archiveManifest model.Manifest
 	archiveWarnings := []string{}
-	if opts.ArchiveCurrent {
+	if opts.CloseCurrent {
 		if currentID == "" {
-			return result, fmt.Errorf("cannot archive before navigating: no current work item is selected")
+			return result, fmt.Errorf("cannot close before navigating: no current work item is selected")
 		}
 		if result.Selected.Item.ID == currentID {
-			return result, fmt.Errorf("cannot archive current item %s: no distinct next item needs attention", currentID)
+			return result, fmt.Errorf("cannot close current item %s: no distinct next item needs attention", currentID)
 		}
 		archiveManifest, err = a.Store.LoadManifest(currentID)
 		if err != nil {
@@ -146,7 +152,7 @@ func (a *App) NextWorkItem(ctx context.Context, opts NextWorkItemOptions, attach
 		}
 		archiveWarnings, err = a.prepareArchive(ctx, archiveManifest, ResolveOptions{Selector: currentID, CWD: opts.CWD, Env: opts.Env}, false)
 		if err != nil {
-			return result, fmt.Errorf("could not prepare current item %s for archive before switching: %w", currentID, err)
+			return result, fmt.Errorf("could not prepare current item %s for close before switching: %w", currentID, err)
 		}
 	}
 
@@ -156,16 +162,16 @@ func (a *App) NextWorkItem(ctx context.Context, opts NextWorkItemOptions, attach
 			return result, fmt.Errorf("deferred %s, but could not switch to %s: %w", currentID, result.Selected.Item.ID, err)
 		}
 		if result.Waited != nil {
-			return result, fmt.Errorf("set %s to waiting, but could not switch to %s: %w", currentID, result.Selected.Item.ID, err)
+			return result, fmt.Errorf("%s is waiting, but could not switch to %s: %w", currentID, result.Selected.Item.ID, err)
 		}
-		if opts.ArchiveCurrent {
+		if opts.CloseCurrent {
 			result.Warnings = append(result.Warnings, archiveWarnings...)
-			return result, fmt.Errorf("prepared current item %s for archive, but could not switch to %s: %w", currentID, result.Selected.Item.ID, err)
+			return result, fmt.Errorf("prepared current item %s for close, but could not switch to %s: %w", currentID, result.Selected.Item.ID, err)
 		}
 		return result, err
 	}
 	result.Workspace = workspace
-	if opts.ArchiveCurrent {
+	if opts.CloseCurrent {
 		archiveEnv := make(map[string]string, len(opts.Env))
 		for key, value := range opts.Env {
 			archiveEnv[key] = value
@@ -174,11 +180,15 @@ func (a *App) NextWorkItem(ctx context.Context, opts NextWorkItemOptions, attach
 			delete(archiveEnv, "TMUX")
 			delete(archiveEnv, "TMUX_PANE")
 		}
-		archived, archiveErr := a.finishArchive(ctx, archiveManifest, archiveManifest.State, archiveEnv, false, archiveWarnings, attach)
-		if archiveErr != nil {
-			return result, fmt.Errorf("switched to %s, but could not archive previous item %s: %w", result.Selected.Item.ID, currentID, archiveErr)
+		resolution := opts.CloseResolution
+		if resolution == "" {
+			resolution = model.ResolutionCompleted
 		}
-		result.Archived = &archived
+		archived, archiveErr := a.finishArchive(ctx, archiveManifest, archiveManifest.State, resolution, archiveEnv, false, archiveWarnings, attach)
+		if archiveErr != nil {
+			return result, fmt.Errorf("switched to %s, but could not close previous item %s: %w", result.Selected.Item.ID, currentID, archiveErr)
+		}
+		result.Closed = &archived
 		result.Warnings = append(result.Warnings, archived.Warnings...)
 	}
 	return result, nil

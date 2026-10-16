@@ -20,7 +20,7 @@ func TestLiveAgentLoopDoesNotSettleOnIntermediateFailures(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	m := model.NewManifest(importTestID, "loop", "Loop", nil, false, now, model.Repository{}, model.Checkout{})
-	m.State = model.StateWorking
+	m.State = model.StateActive
 	if err := native.CreateItem(context.Background(), m); err != nil {
 		t.Fatal(err)
 	}

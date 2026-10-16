@@ -37,6 +37,14 @@ type DeferResult struct {
 	Warnings   []string          `json:"warnings"`
 }
 
+type ReadMarkerResult struct {
+	WorkItemID string            `json:"work_item_id"`
+	Unread     bool              `json:"unread"`
+	MarkedAt   time.Time         `json:"marked_at"`
+	Activity   AttentionActivity `json:"activity"`
+	Warnings   []string          `json:"warnings"`
+}
+
 type WorkItemActivityResult struct {
 	WorkItemID string            `json:"work_item_id"`
 	Activity   AttentionActivity `json:"activity"`
@@ -54,8 +62,8 @@ type NotNeedsAttentionError struct {
 }
 
 func (e *NotNeedsAttentionError) Error() string {
-	if e.State != model.StateWorking {
-		return fmt.Sprintf("work item %s is %s; attention defer requires working state", e.WorkItemID, e.State)
+	if e.State != model.StateActive {
+		return fmt.Sprintf("work item %s is %s; attention defer requires an active item", e.WorkItemID, e.State)
 	}
 	return fmt.Sprintf("work item %s is not in NEEDS ATTENTION (agent=%s, worktree=%s)", e.WorkItemID, e.Agent, e.Worktree)
 }

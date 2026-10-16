@@ -353,12 +353,12 @@ func TestItemFlagWorksForItemPrimaryCommands(t *testing.T) {
 		t.Fatalf("switch --item exit code = %d stderr=%s", code, stderr.String())
 	}
 	var switched app.CompositionResult
-	if err := json.Unmarshal(stdout.Bytes(), &switched); err != nil || switched.WorkItemID != newRes.Manifest.ID || switched.Manifest.State != model.StateWorking {
+	if err := json.Unmarshal(stdout.Bytes(), &switched); err != nil || switched.WorkItemID != newRes.Manifest.ID || switched.Manifest.State != model.StateActive {
 		t.Fatalf("switch = %+v err=%v", switched, err)
 	}
 }
 
-func TestPickerResumesSelectedWaitingItem(t *testing.T) {
+func TestPickerEntersSelectedBlockedItemWithoutUnblocking(t *testing.T) {
 	stdout, stderr, application := configuredApp(t)
 	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Waiting Picker Target", CWD: t.TempDir()})
 	if err != nil {
@@ -367,7 +367,7 @@ func TestPickerResumesSelectedWaitingItem(t *testing.T) {
 	if _, err := application.StartWorkItem(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, false, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.SetWorkItemState(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.StateWaiting, false); err != nil {
+	if _, err := application.AddBlockers(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, []model.Blocker{{Kind: model.BlockerExternal, Event: "review"}}); err != nil {
 		t.Fatal(err)
 	}
 	fzf := filepath.Join(t.TempDir(), "fake-fzf")
@@ -384,8 +384,8 @@ func TestPickerResumesSelectedWaitingItem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.State != model.StateWorking {
-		t.Fatalf("selected waiting item state = %s", manifest.State)
+	if manifest.State != model.StateActive || len(manifest.Blockers) != 1 {
+		t.Fatalf("selected blocked item state = %s blockers = %+v", manifest.State, manifest.Blockers)
 	}
 }
 
@@ -409,7 +409,7 @@ func TestPickerStartsSelectedBacklogItem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.State != model.StateWorking {
+	if manifest.State != model.StateActive {
 		t.Fatalf("selected backlog item state = %s", manifest.State)
 	}
 }
@@ -927,10 +927,10 @@ func runCLIGit(t *testing.T, dir string, args ...string) {
 }
 
 func TestNextRejectsMultipleCurrentItemMutations(t *testing.T) {
-	for _, args := range [][]string{{"next", "--wait", "--defer"}, {"next", "--archive", "--wait"}, {"next", "--archive", "--defer"}} {
+	for _, args := range [][]string{{"next", "--wait", "--defer"}, {"next", "--close", "--wait"}, {"next", "--close", "--defer"}} {
 		stdout, stderr, application := configuredApp(t)
 		code := cli.Run(context.Background(), args, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application})
-		if code != cli.ExitUsage || !strings.Contains(stderr.String(), "only one of --defer, --wait, or --archive") {
+		if code != cli.ExitUsage || !strings.Contains(stderr.String(), "only one of --defer, --wait, or --close") {
 			t.Fatalf("args=%v code=%d stdout=%s stderr=%s", args, code, stdout.String(), stderr.String())
 		}
 	}
@@ -970,21 +970,21 @@ func TestListArchivedStateAndConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.Archive(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, false); err != nil {
+	if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false); err != nil {
 		t.Fatal(err)
 	}
 	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}
-	if code := cli.Run(context.Background(), []string{"--json", "list", "--state", "archived"}, cfg); code != cli.ExitOK {
-		t.Fatalf("archived state code=%d stderr=%s", code, stderr.String())
+	if code := cli.Run(context.Background(), []string{"--json", "list", "--state", "closed"}, cfg); code != cli.ExitOK {
+		t.Fatalf("closed state code=%d stderr=%s", code, stderr.String())
 	}
 	var list app.WorkListResult
 	if err := json.Unmarshal(stdout.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
-	if len(list.Sections.Archived) != 1 || list.Sections.Archived[0].ID != created.Manifest.ID {
-		t.Fatalf("archived list = %+v", list.Sections.Archived)
+	if len(list.Sections.Closed) != 1 || list.Sections.Closed[0].ID != created.Manifest.ID {
+		t.Fatalf("closed list = %+v", list.Sections.Closed)
 	}
-	for _, args := range [][]string{{"list", "--all", "--archived"}, {"list", "--archived", "--state", "working"}, {"list", "--state", "invalid"}} {
+	for _, args := range [][]string{{"list", "--all", "--closed"}, {"list", "--closed", "--state", "active"}, {"list", "--state", "invalid"}, {"list", "--archived"}, {"list", "--state", "working"}} {
 		stdout.Reset()
 		stderr.Reset()
 		if code := cli.Run(context.Background(), args, cfg); code != cli.ExitUsage {
@@ -1000,17 +1000,17 @@ func TestDeleteArchivedRequiresConfirmationAndSupportsBulk(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := application.Archive(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, false); err != nil {
+		if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false); err != nil {
 			t.Fatal(err)
 		}
 	}
 	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}
-	if code := cli.Run(context.Background(), []string{"delete", "--archived"}, cfg); code != cli.ExitUsage {
+	if code := cli.Run(context.Background(), []string{"delete", "--closed"}, cfg); code != cli.ExitUsage {
 		t.Fatalf("delete without confirmation code=%d", code)
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := cli.Run(context.Background(), []string{"--json", "delete", "--archived", "--yes"}, cfg); code != cli.ExitOK {
+	if code := cli.Run(context.Background(), []string{"--json", "delete", "--closed", "--yes"}, cfg); code != cli.ExitOK {
 		t.Fatalf("bulk delete code=%d stderr=%s", code, stderr.String())
 	}
 	var result app.DeleteWorkItemsResult
@@ -1052,7 +1052,7 @@ func TestCoreStatePrimitiveLeavesWorkspaceUntouched(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}
-	for _, target := range []string{model.StateWorking, model.StateWaiting, model.StateWorking, model.StateArchived, model.StateBacklog} {
+	for _, target := range []string{model.StateActive, model.StateBacklog, model.StateActive, model.StateClosed, model.StateBacklog} {
 		stdout.Reset()
 		stderr.Reset()
 		if code := cli.Run(context.Background(), []string{"--json", "state", "set", target, "--item", created.Manifest.ID}, cfg); code != cli.ExitOK {
@@ -1118,14 +1118,14 @@ func TestCoreWorkspacePrimitiveLeavesLifecycleStateUntouched(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := cli.Run(context.Background(), []string{"--json", "state", "set", model.StateArchived, "--item", created.Manifest.ID}, cfg); code != cli.ExitOK {
+	if code := cli.Run(context.Background(), []string{"--json", "state", "set", model.StateClosed, "--item", created.Manifest.ID}, cfg); code != cli.ExitOK {
 		t.Fatalf("state archive code=%d stderr=%s", code, stderr.String())
 	}
 	manifest, err = application.Store.LoadManifest(created.Manifest.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.State != model.StateArchived || !manifest.Checkout.Present() || !application.Tmux.(*fakeTmux).sessions[manifest.TerminalSessionName()] {
+	if manifest.State != model.StateClosed || !manifest.Checkout.Present() || !application.Tmux.(*fakeTmux).sessions[manifest.TerminalSessionName()] {
 		t.Fatalf("state-only archive changed workspace = %+v", manifest)
 	}
 	stdout.Reset()
@@ -1142,13 +1142,13 @@ func TestCoreWorkspacePrimitiveLeavesLifecycleStateUntouched(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manifest.State != model.StateArchived || manifest.Checkout.Present() {
+	if manifest.State != model.StateClosed || manifest.Checkout.Present() {
 		t.Fatalf("released manifest = %+v; release result=%s", manifest, stdout.String())
 	}
 }
 
 func TestRemovedTopLevelPlumbingAliasesAreUnknown(t *testing.T) {
-	for _, command := range []string{"activity", "defer", "wait", "unarchive", "checkout"} {
+	for _, command := range []string{"activity", "defer", "unarchive", "checkout"} {
 		t.Run(command, func(t *testing.T) {
 			stdout, stderr, application := configuredApp(t)
 			if code := cli.Run(context.Background(), []string{command}, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}); code != cli.ExitUsage || !strings.Contains(stderr.String(), "unknown command") {
@@ -1236,4 +1236,20 @@ func configuredApp(t *testing.T) (*bytes.Buffer, *bytes.Buffer, *app.App) {
 		return id, nil
 	}
 	return stdout, stderr, application
+}
+
+func TestRemovedCommandNamesAreUnknown(t *testing.T) {
+	for _, args := range [][]string{{"archive"}, {"block", "--reason", "x"}, {"unblock"}, {"next", "--archive"}, {"next", "--block"}, {"delete", "--archived", "--yes"}, {"state", "set", "waiting"}, {"state", "set", "archived"}} {
+		stdout, stderr, application := configuredApp(t)
+		code := cli.Run(context.Background(), args, cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application})
+		if code != cli.ExitUsage {
+			t.Fatalf("%v code=%d stderr=%s", args, code, stderr.String())
+		}
+		message, _, _ := strings.Cut(stderr.String(), "\n")
+		for _, hint := range []string{"wi close", "wi wait", "no longer", "alias"} {
+			if strings.Contains(message, hint) {
+				t.Fatalf("%v points at a replacement: %s", args, stderr.String())
+			}
+		}
+	}
 }

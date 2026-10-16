@@ -89,7 +89,7 @@ func importConversations(ctx context.Context, database *Database, dataRoot strin
 		if err := ctx.Err(); err != nil {
 			return report, err
 		}
-		if manifest.PrimaryConversation == nil || activeOnly && manifest.State != model.StateWorking && manifest.State != model.StateWaiting {
+		if manifest.PrimaryConversation == nil || activeOnly && manifest.State != model.StateActive {
 			continue
 		}
 		relativeSession := filepath.Clean(manifest.PrimaryConversation.NativeLocator())

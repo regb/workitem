@@ -78,7 +78,7 @@ Registering a repository authorizes project-local agent resources in its verifie
 
 Inside a Wi item, repository selection is implicit. Outside one, pass a registered `--repo NAME`. External source checkouts are onboarding inputs, not ongoing dependencies. See [Repositories](https://regb.github.io/workitem/concepts/repositories/) and the [Quick start](https://regb.github.io/workitem/getting-started/quick-start/).
 
-Inspect, review, integrate, and archive the work:
+Inspect, review, integrate, and close the work:
 
 ```bash
 wi list
@@ -86,7 +86,7 @@ wi show add-api-retries
 wi agent status add-api-retries
 wi workspace status add-api-retries
 wi merge --item add-api-retries main
-wi archive add-api-retries
+wi close add-api-retries
 ```
 
 Use `wi help <command>` for current flags and safety rules.

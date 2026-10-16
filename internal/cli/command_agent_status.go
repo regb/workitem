@@ -18,7 +18,7 @@ func runAgentStatus(ctx context.Context, args []string, cfg Config, jsonOut bool
 	var all bool
 	var staleAfter time.Duration
 	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
-	fs.BoolVar(&all, "all", false, "show an overview for all working/waiting items")
+	fs.BoolVar(&all, "all", false, "show an overview for all active items")
 	fs.DurationVar(&staleAfter, "stale-after", 10*time.Minute, "mark incomplete native-history activity stale after this duration; active live loops are exempt")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
@@ -46,7 +46,7 @@ func runAgentStatus(ctx context.Context, args []string, cfg Config, jsonOut bool
 
 func runAgentStatusOverview(ctx context.Context, cfg Config, jsonOut bool, staleAfter time.Duration) error {
 	list := cfg.App.WorkList(app.WorkListOptions{})
-	items := append([]app.WorkListItem{}, list.Sections.Working...)
+	items := append([]app.WorkListItem{}, list.Sections.Active...)
 	items = append(items, list.Sections.Waiting...)
 	statuses := []app.AgentStatusResult{}
 	warnings := append([]string{}, list.Warnings...)
@@ -97,7 +97,7 @@ type agentStatusOverviewResult struct {
 
 func printAgentStatusOverview(w io.Writer, res agentStatusOverviewResult) {
 	if len(res.Statuses) == 0 {
-		fmt.Fprintln(w, "no working/waiting work items with agent status; pass an item selector for a specific work item")
+		fmt.Fprintln(w, "no active work items with agent status; pass an item selector for a specific work item")
 		return
 	}
 	ids := make([]string, 0, len(res.Statuses))

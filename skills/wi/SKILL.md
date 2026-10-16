@@ -83,12 +83,12 @@ wi merge
 to merge it to the default integration branch.
 This command synchronizes a configured upstream before merging, but does not push.
 
-Once an item is merged and all work scoped to the task is settled (or accounted for in follow-up items), an item can be archived.
-Never run the archive command without explicit instructions from the user.
+Once an item is merged and all work scoped to the task is settled (or accounted for in follow-up items), an item can be closed.
+Never close an item without explicit instructions from the user.
 Usually this is rather ran as part of review and management of items, not directly within an item, so use:
 
 ```bash
-wi archive --item ITEM_NAME
+wi close --item ITEM_NAME --resolution completed|abandonned|superseeded
 ```
 
 ## Update item state
@@ -98,16 +98,31 @@ Avoid updating wi items unless explicitly asked to do so.
 ```bash
 wi show --json
 wi edit --label backend --label reliability
-wi edit --remove-label blocked
+wi edit --remove-label reliability
 
 wi state show --json
-wi state set waiting
-wi state set working
 wi state set backlog
-wi state set archived
+wi state set active
+wi state set closed
 ```
 
-`state set` changes durable lifecycle only. It does not start/stop agents or clean terminal/workspace resources.
+Lifecycle is `backlog`, `active`, or `closed`. `state set` changes durable lifecycle only. It does not start/stop agents or clean terminal/workspace resources.
+
+`wi state set` changes durable lifecycle only. It does not start/stop agents or clean terminal/workspace resources.
+    
+## Waiting
+
+Waiting is separate from lifecycle. A waiting item leaves the user's attention queue until what it waits for happens. Only make an item wait when the user asks you to.
+    
+```bash
+wi wait --until tomorrow          # snooze; also ends when the user next prompts the item
+wi wait --on OTHER_ITEM           # until another item closes
+wi wait --for "security review"   # until an external event, cleared explicitly
+wi wait --clear                   # stop waiting
+wi blocker list --json
+```
+
+Time and item waits clear on their own; events are cleared explicitly, by the user or by automation.
 
 ## Review work items
 
@@ -115,7 +130,7 @@ Use when asked to inventory, review, or triage current work:
 
 ```bash
 wi list --json
-wi list --json --state working
+wi list --json --state active
 wi list --json --label +backend --label -blocked
 wi list --json --all # To include archived items
 ```

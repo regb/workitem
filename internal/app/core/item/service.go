@@ -284,7 +284,7 @@ func (s *Service) chooseSlug(explicit, title string) (string, error) {
 	}
 	used := map[string]bool{}
 	for _, m := range items {
-		if m.State != model.StateArchived && m.Slug != "" {
+		if m.State != model.StateClosed && m.Slug != "" {
 			used[m.Slug] = true
 		}
 	}

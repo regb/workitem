@@ -6,47 +6,66 @@ import (
 	"fmt"
 
 	"github.com/regb/workitem/internal/app"
+	"github.com/regb/workitem/internal/model"
 )
 
 func runNext(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("next", cfg.Stderr)
-	var deferCurrent, waitCurrent, archiveCurrent bool
+	var deferCurrent, waitCurrent, closeCurrent bool
+	var conditions waitConditions
 	var labels repeatFlag
 	fs.BoolVar(&deferCurrent, "defer", false, "defer the current item if it is in NEEDS ATTENTION before navigating")
-	fs.BoolVar(&waitCurrent, "wait", false, "set the current item to waiting before navigating")
-	fs.BoolVar(&archiveCurrent, "archive", false, "switch to the next item, then clean up and archive the previous item")
+	fs.BoolVar(&waitCurrent, "wait", false, "make the current item wait before navigating; requires --until, --on, or --for like wi wait")
+	conditions.register(fs)
+	fs.BoolVar(&closeCurrent, "close", false, "switch to the next item, then clean up and close the previous item")
+	var resolution string
+	fs.StringVar(&resolution, "resolution", "", "with --close: completed (default), abandoned, or superseded")
 	fs.Var(&labels, "label", "include/exclude label rule for the navigation ring; repeatable")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
 	}
 	if fs.NArg() != 0 {
-		return usageErr{errors.New("usage: wi next [--defer | --wait | --archive] [--label <rule>]")}
+		return usageErr{errors.New("usage: wi next [--defer | --wait (--until WHEN | --on ITEM | --for TEXT)... | --close [--resolution R]] [--label <rule>]")}
+	}
+	if resolution != "" && !closeCurrent {
+		return usageErr{errors.New("--resolution requires --close")}
+	}
+	if resolution != "" && !model.ValidResolution(resolution) {
+		return usageErr{fmt.Errorf("invalid resolution %q; expected completed, abandoned, or superseded", resolution)}
+	}
+	if !conditions.empty() && !waitCurrent {
+		return usageErr{errors.New("--until, --on, and --for require --wait")}
 	}
 	mutations := 0
-	for _, enabled := range []bool{deferCurrent, waitCurrent, archiveCurrent} {
+	for _, enabled := range []bool{deferCurrent, waitCurrent, closeCurrent} {
 		if enabled {
 			mutations++
 		}
 	}
 	if mutations > 1 {
-		return usageErr{errors.New("pass only one of --defer, --wait, or --archive")}
+		return usageErr{errors.New("pass only one of --defer, --wait, or --close")}
 	}
 	labelRules, err := effectiveListLabelRules(cfg.App.ListConfig.Labels, cfg.Env, labels)
 	if err != nil {
 		return usageErr{err}
 	}
-	if archiveCurrent && !jsonOut {
-		fmt.Fprintln(cfg.Stdout, "preparing current item for archive before switching...")
+	if closeCurrent && !jsonOut {
+		fmt.Fprintln(cfg.Stdout, "preparing current item for close before switching...")
 	}
-	var preWaited *app.StateTransitionResult
+	var preWaited *app.BlockerResult
 	var precomputedQueue *app.AttentionQueueResult
 	var precomputedSelection *app.NextQueueSelection
+	var waitBlockers []model.Blocker
 	if waitCurrent {
+		waitBlockers, err = conditions.blockers(ctx, cfg)
+		if err != nil {
+			return err
+		}
 		current, resolveErr := cfg.App.ResolveItem(ctx, app.ResolveOptions{CWD: cfg.CWD, Env: cfg.Env})
 		if resolveErr != nil {
 			return fmt.Errorf("cannot wait before navigating: no current work item is selected")
 		}
-		waited, queue, selection, waitErr := coordinatorWaitAndQueue(ctx, cfg, current.ID, labelRules)
+		waited, queue, selection, waitErr := coordinatorWaitAndQueue(ctx, cfg, current.ID, waitBlockers, labelRules)
 		if waitErr != nil {
 			return waitErr
 		}
@@ -67,7 +86,9 @@ func runNext(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 		WorkListOptions:      app.WorkListOptions{LabelRules: labelRules},
 		DeferCurrent:         deferCurrent,
 		WaitCurrent:          waitCurrent,
-		ArchiveCurrent:       archiveCurrent,
+		WaitBlockers:         waitBlockers,
+		CloseCurrent:         closeCurrent,
+		CloseResolution:      resolution,
 		PreWaited:            preWaited,
 		PrecomputedQueue:     precomputedQueue,
 		PrecomputedSelection: precomputedSelection,
@@ -84,13 +105,14 @@ func runNext(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	if res.Deferred != nil {
 		fmt.Fprintf(cfg.Stdout, "deferred current item: %s\n", res.Deferred.WorkItemID)
 	}
-	if res.Archived != nil {
-		fmt.Fprintf(cfg.Stdout, "archived previous item: %s\n", res.Archived.WorkItemID)
+	if res.Closed != nil {
+		fmt.Fprintf(cfg.Stdout, "closed previous item: %s\n", res.Closed.WorkItemID)
 	}
 	if res.Waited != nil {
-		if res.Waited.Changed {
-			fmt.Fprintf(cfg.Stdout, "set current item to waiting: %s\n", res.Waited.WorkItemID)
-		} else {
+		for _, blocker := range res.Waited.Added {
+			fmt.Fprintf(cfg.Stdout, "current item %s is waiting %s (blocker %s)\n", res.Waited.WorkItemID, blocker.Describe(), blocker.ID)
+		}
+		if len(res.Waited.Added) == 0 {
 			fmt.Fprintf(cfg.Stdout, "current item is already waiting: %s\n", res.Waited.WorkItemID)
 		}
 	}

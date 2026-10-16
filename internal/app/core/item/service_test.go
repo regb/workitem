@@ -29,7 +29,7 @@ func (itemStore) ReadEvents(string) ([]model.Event, error)                      
 func (s itemStore) ListManifests() ([]model.Manifest, []error)                     { return s.items, s.errs }
 func (itemStore) ItemDir(string) string                                            { return "" }
 func TestUniqueSlugUsesOnlyActiveAliases(t *testing.T) {
-	s := &Service{store: itemStore{items: []model.Manifest{{Slug: "topic", State: model.StateWorking}, {Slug: "topic-2", State: model.StateArchived}}}}
+	s := &Service{store: itemStore{items: []model.Manifest{{Slug: "topic", State: model.StateActive}, {Slug: "topic-2", State: model.StateClosed}}}}
 	got, err := s.UniqueSlug("topic")
 	if err != nil || got != "topic-2" {
 		t.Fatalf("slug=%q err=%v", got, err)

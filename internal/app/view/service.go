@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/priority"
 )
 
 type Store interface {
@@ -45,6 +46,10 @@ type Item struct {
 	Worktree         *WorktreeStatus `json:"worktree,omitempty"`
 	Attention        *Activity       `json:"attention,omitempty"`
 	AttentionRank    int             `json:"attention_rank,omitempty"`
+	Resolution       string          `json:"resolution,omitempty"`
+	Blockers         []model.Blocker `json:"blockers,omitempty"`
+	Waiting          bool            `json:"waiting,omitempty"`
+	Unread           bool            `json:"unread,omitempty"`
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`
 	ChangedAt        time.Time       `json:"state_changed_at"`
@@ -76,12 +81,22 @@ type Activity struct {
 	LastRequestedAt *time.Time `json:"last_requested_at,omitempty"`
 	LastCompletedAt *time.Time `json:"last_completed_at,omitempty"`
 	LastDeferredAt  *time.Time `json:"last_deferred_at,omitempty"`
+	LastReadAt      *time.Time `json:"last_read_at,omitempty"`
+	LastUnreadAt    *time.Time `json:"last_unread_at,omitempty"`
 }
+
+func (a Activity) Unread() bool {
+	return priority.Unread(a.LastCompletedAt, a.LastReadAt, a.LastUnreadAt)
+}
+
+// Sections group open work by what the operator can act on. Waiting holds
+// active items with at least one open blocker; waiting backlog items stay in
+// Backlog and carry their blockers.
 type Sections struct {
-	Working  []Item `json:"working"`
-	Backlog  []Item `json:"backlog"`
-	Waiting  []Item `json:"waiting"`
-	Archived []Item `json:"archived,omitempty"`
+	Active  []Item `json:"active"`
+	Waiting []Item `json:"waiting"`
+	Backlog []Item `json:"backlog"`
+	Closed  []Item `json:"closed,omitempty"`
 }
 type Result struct {
 	DeepWork Capacity `json:"deep_work"`
@@ -107,10 +122,11 @@ func (s *Service) WorkList(opts Options, limit, folders int) Result {
 			warnings = append(warnings, err.Error())
 		}
 	}
+	now := time.Now()
 	filtered := []model.Manifest{}
 	state := strings.TrimSpace(opts.State)
 	for _, item := range items {
-		if opts.ArchivedOnly && item.State != model.StateArchived || !opts.ArchivedOnly && !opts.IncludeArchived && item.State == model.StateArchived || state != "" && item.State != state || !matchesLabels(item.Labels, rules) {
+		if opts.ArchivedOnly && item.State != model.StateClosed || !opts.ArchivedOnly && !opts.IncludeArchived && item.State == model.StateClosed || state != "" && item.State != state || !matchesLabels(item.Labels, rules) {
 			continue
 		}
 		filtered = append(filtered, item)
@@ -118,26 +134,28 @@ func (s *Service) WorkList(opts Options, limit, folders int) Result {
 	res := Result{DeepWork: capacity, Warnings: warnings}
 	if opts.IncludeArchived || opts.ArchivedOnly {
 		for _, m := range filtered {
-			if m.State == model.StateArchived {
-				res.Sections.Archived = append(res.Sections.Archived, makeItem(m, false, folders))
+			if m.State == model.StateClosed {
+				res.Sections.Closed = append(res.Sections.Closed, makeItemAt(m, false, folders, now))
 			}
 		}
-		sort.SliceStable(res.Sections.Archived, func(i, j int) bool { return newer(res.Sections.Archived[i], res.Sections.Archived[j]) })
+		sort.SliceStable(res.Sections.Closed, func(i, j int) bool { return newer(res.Sections.Closed[i], res.Sections.Closed[j]) })
 		if opts.ArchivedOnly {
 			return res
 		}
 	}
 	working, waiting, deep, ordinary := []Item{}, []Item{}, []Item{}, []Item{}
 	for _, m := range filtered {
-		if m.State == model.StateArchived {
+		if m.State == model.StateClosed {
 			continue
 		}
-		item := makeItem(m, false, folders)
+		item := makeItemAt(m, false, folders, now)
 		switch m.State {
-		case model.StateWorking:
-			working = append(working, item)
-		case model.StateWaiting:
-			waiting = append(waiting, item)
+		case model.StateActive:
+			if item.Waiting {
+				waiting = append(waiting, item)
+			} else {
+				working = append(working, item)
+			}
 		case model.StateBacklog:
 			if m.DeepWork {
 				deep = append(deep, item)
@@ -183,7 +201,7 @@ func (s *Service) WorkList(opts Options, limit, folders int) Result {
 			excess = append(excess, item)
 		}
 	}
-	res.Sections.Working, res.Sections.Waiting, res.Sections.Backlog = working, waiting, append(append(fit, ordinary...), excess...)
+	res.Sections.Active, res.Sections.Waiting, res.Sections.Backlog = working, waiting, append(append(fit, ordinary...), excess...)
 	return res
 }
 
@@ -191,7 +209,7 @@ func (s *Service) DeepWorkCapacity(limit int) Capacity {
 	items, _ := s.store.ListManifests()
 	ids := []string{}
 	for _, m := range items {
-		if m.DeepWork && (m.State == model.StateWorking || m.State == model.StateWaiting) {
+		if m.DeepWork && m.State == model.StateActive {
 			ids = append(ids, m.ID)
 		}
 	}
@@ -215,7 +233,18 @@ func ProjectItem(m model.Manifest, folders int) Item {
 }
 
 func makeItem(m model.Manifest, full bool, folders int) Item {
-	return Item{ID: m.ID, Slug: m.Slug, Title: m.Title, State: m.State, Labels: append([]string{}, m.Labels...), DeepWork: m.DeepWork, CapacityFull: full, Repository: repositoryName(m.Repository, folders), RepositoryID: m.Repository.ID, RepositoryGitDir: m.Repository.OperationalRoot(), Manifest: m, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, ChangedAt: m.StateChangedAt}
+	return makeItemAt(m, full, folders, time.Now())
+}
+
+func makeItemAt(m model.Manifest, full bool, folders int, now time.Time) Item {
+	open := []model.Blocker(nil)
+	if m.State != model.StateClosed {
+		open = m.OpenBlockers(now)
+	}
+	if len(open) == 0 {
+		open = nil
+	}
+	return Item{ID: m.ID, Slug: m.Slug, Title: m.Title, State: m.State, Labels: append([]string{}, m.Labels...), DeepWork: m.DeepWork, CapacityFull: full, Repository: repositoryName(m.Repository, folders), RepositoryID: m.Repository.ID, RepositoryGitDir: m.Repository.OperationalRoot(), Manifest: m, CreatedAt: m.CreatedAt, UpdatedAt: m.UpdatedAt, ChangedAt: m.StateChangedAt, Resolution: m.Resolution, Blockers: open, Waiting: len(open) > 0}
 }
 func repositoryName(repo model.Repository, folders int) string {
 	if repo.Name != "" {

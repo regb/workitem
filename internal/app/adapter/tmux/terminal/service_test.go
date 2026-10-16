@@ -80,7 +80,7 @@ func TestEnsureForManifestAppliesEnvironmentBeforeSessionCreation(t *testing.T) 
 }
 
 func TestEnterExistingBypassesWorkspaceEnsureForRepairAccess(t *testing.T) {
-	manifest := model.Manifest{ID: "item-1", State: model.StateWorking, Checkout: model.Checkout{}}
+	manifest := model.Manifest{ID: "item-1", State: model.StateActive, Checkout: model.Checkout{}}
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }
 	workspace := func(context.Context, contract.ResolveOptions, model.Manifest, bool) (model.Manifest, []string, error) {
 		return model.Manifest{}, nil, errors.New("workspace ensure must not run")
@@ -114,7 +114,7 @@ func (boundTerminalStore) LoadTerminalRuntime(string) (*model.TerminalRuntime, e
 }
 
 func TestTerminalCannotEnterSupersededClaim(t *testing.T) {
-	manifest := model.Manifest{ID: "item-1", State: model.StateWorking, Checkout: model.Checkout{ClaimGeneration: 2, Claim: &model.WorkspaceClaim{ID: "claim-2", Generation: 2, Path: "/workspace"}}}
+	manifest := model.Manifest{ID: "item-1", State: model.StateActive, Checkout: model.Checkout{ClaimGeneration: 2, Claim: &model.WorkspaceClaim{ID: "claim-2", Generation: 2, Path: "/workspace"}}}
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }
 	workspace := func(context.Context, contract.ResolveOptions, model.Manifest, bool) (model.Manifest, []string, error) {
 		return manifest, nil, nil

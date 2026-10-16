@@ -14,7 +14,7 @@ import (
 )
 
 func TestEditTitleEditsMetadataInEveryLifecycleState(t *testing.T) {
-	for _, state := range []string{model.StateBacklog, model.StateWorking, model.StateWaiting, model.StateArchived} {
+	for _, state := range []string{model.StateBacklog, model.StateActive, model.StateClosed} {
 		t.Run(state, func(t *testing.T) {
 			stdout, stderr, a := configuredApp(t)
 			ctx := context.Background()
@@ -24,7 +24,7 @@ func TestEditTitleEditsMetadataInEveryLifecycleState(t *testing.T) {
 			}
 			m := created.Manifest
 			m.State = state
-			if state == model.StateArchived {
+			if state == model.StateClosed {
 				m.Slug = ""
 			}
 			if err := a.Store.SaveManifest(ctx, m); err != nil {
@@ -45,7 +45,7 @@ func TestEditTitleEditsMetadataInEveryLifecycleState(t *testing.T) {
 				stdout.Reset()
 				stderr.Reset()
 				args := []string{"edit", "--title", "  Clarified objective  ", "--json"}
-				if state == model.StateArchived {
+				if state == model.StateClosed {
 					args = append([]string{"edit", "--item", m.ID}, args[1:]...)
 				}
 				code := cli.Run(ctx, args, cfg)

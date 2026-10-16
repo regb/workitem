@@ -46,7 +46,7 @@ wi agent monitor --item fix-stale-runtime-ownership --limit 50
 
 `--follow-up` waits for the current run to settle; `--file` accepts multiline feedback. Delivery confirms handoff, not completion.
 
-Keep corrections within the original objective in this item. File independent discoveries as new backlog items, then finish and archive the original rather than growing it indefinitely.
+Keep corrections within the original objective in this item. File independent discoveries as new backlog items, then finish and close the original rather than growing it indefinitely.
 
 ## Agent authority
 

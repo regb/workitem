@@ -104,7 +104,7 @@ func (o *ExternalObserver) reconcile(ctx context.Context, includeWorktree bool) 
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if manifest.State != model.StateWorking && manifest.State != model.StateWaiting {
+		if manifest.State != model.StateActive {
 			continue
 		}
 		observation := o.observe(ctx, manifest, panesBySession[manifest.TerminalSessionName()], includeWorktree)
@@ -130,7 +130,7 @@ func (o *ExternalObserver) ReconcileActionability(ctx context.Context) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if manifest.State != model.StateWorking && manifest.State != model.StateWaiting {
+		if manifest.State != model.StateActive {
 			continue
 		}
 		observation := AgentObservation{WorkItemID: manifest.ID, Status: "problem", ObservedAt: time.Now().UTC(), Warnings: []string{}, Activity: AttentionActivity{WorkItemID: manifest.ID}}

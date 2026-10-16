@@ -15,7 +15,7 @@ import (
 func TestDeleteWorkItemsDeletesOnlyValidatedArchivedSet(t *testing.T) {
 	st := store.New(t.TempDir())
 	now := testutil.Time()
-	archived := coreManifest(t, testutil.ID(t, 61), "archived", model.StateArchived, false, now)
+	archived := coreManifest(t, testutil.ID(t, 61), "archived", model.StateClosed, false, now)
 	archived.Checkout = model.Checkout{Specification: model.CheckoutSpecification{Branch: model.ItemBranchName("item", archived.ID)}}
 	active := coreManifest(t, testutil.ID(t, 62), "active", model.StateBacklog, false, now)
 	active.Checkout = model.Checkout{Specification: model.CheckoutSpecification{Branch: model.ItemBranchName("item", active.ID)}}
@@ -63,9 +63,9 @@ func TestDeleteWorkItemsDeletesOnlyValidatedArchivedSet(t *testing.T) {
 func TestDeleteWorkItemsValidatesAllBeforeDeletingAny(t *testing.T) {
 	st := store.New(t.TempDir())
 	now := testutil.Time()
-	clean := coreManifest(t, testutil.ID(t, 63), "clean", model.StateArchived, false, now)
+	clean := coreManifest(t, testutil.ID(t, 63), "clean", model.StateClosed, false, now)
 	clean.Checkout = model.Checkout{Specification: model.CheckoutSpecification{Branch: model.ItemBranchName("item", clean.ID)}}
-	unsafe := coreManifest(t, testutil.ID(t, 64), "unsafe", model.StateArchived, false, now)
+	unsafe := coreManifest(t, testutil.ID(t, 64), "unsafe", model.StateClosed, false, now)
 	for _, manifest := range []model.Manifest{clean, unsafe} {
 		if err := st.CreateItem(context.Background(), manifest); err != nil {
 			t.Fatal(err)

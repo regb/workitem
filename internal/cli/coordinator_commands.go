@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/regb/workitem/internal/app"
+	itemcore "github.com/regb/workitem/internal/app/core/item"
 	viewapp "github.com/regb/workitem/internal/app/view"
 	"github.com/regb/workitem/internal/coordinator"
 	itemlock "github.com/regb/workitem/internal/lock"
@@ -38,6 +39,9 @@ type coordinatorManifestCommandOptions struct {
 	eventType   string
 	force       bool
 	maxActive   int
+	resolution  string
+	blockers    []model.Blocker
+	blockerID   string
 }
 
 func executeCoordinatorManifestCommand(ctx context.Context, cfg Config, selector string, options coordinatorManifestCommandOptions) (coordinator.CanonicalManifest, coordinator.ManifestCommandResult, error) {
@@ -61,7 +65,7 @@ func executeCoordinatorManifestCommand(ctx context.Context, cfg Config, selector
 		if err != nil {
 			return coordinator.CanonicalManifest{}, coordinator.ManifestCommandResult{}, err
 		}
-		command := coordinator.ManifestCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Type: options.commandType, ItemID: manifest.ID, ExpectedRevision: &canonical.Revision, Actor: "user", TargetState: options.targetState, EventType: options.eventType, Force: options.force, MaxActive: options.maxActive, CreatedAt: time.Now().UTC()}
+		command := coordinator.ManifestCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Type: options.commandType, ItemID: manifest.ID, ExpectedRevision: &canonical.Revision, Actor: "user", TargetState: options.targetState, EventType: options.eventType, Force: options.force, MaxActive: options.maxActive, Resolution: options.resolution, Blockers: options.blockers, BlockerID: options.blockerID, CreatedAt: time.Now().UTC()}
 		requestCtx, cancel = context.WithTimeout(ctx, 5*time.Second)
 		result, err := cfg.Coordinator.ExecuteManifestCommand(requestCtx, command)
 		cancel()
@@ -83,32 +87,57 @@ func coordinatorStateTransition(ctx context.Context, cfg Config, selector, targe
 		return app.StateTransitionResult{}, err
 	}
 	result := app.StateTransitionResult{WorkItemID: commandResult.Manifest.ID, PreviousState: before.Manifest.State, State: commandResult.Manifest.State, Changed: commandResult.Changed, Manifest: commandResult.Manifest, DeepWork: commandResult.Manifest.DeepWork, Warnings: []string{}}
-	if before.Manifest.State != model.StateArchived && target != model.StateArchived {
+	if before.Manifest.State != model.StateClosed && target != model.StateClosed {
 		result.Capacity = &capacity
 	}
 	return result, nil
 }
 
-func coordinatorWaitAndQueue(ctx context.Context, cfg Config, selector string, labelRules map[string]bool) (app.StateTransitionResult, app.AttentionQueueResult, *app.NextQueueSelection, error) {
+// coordinatorBlockerCommand adds blockers through the coordinator.
+func coordinatorBlockerCommand(ctx context.Context, cfg Config, selector string, blockers []model.Blocker) (app.BlockerResult, error) {
+	return runCoordinatorBlockerCommand(ctx, cfg, selector, coordinatorManifestCommandOptions{commandType: coordinator.CommandBlockerAdd, blockers: blockers})
+}
+
+// coordinatorClearBlockers clears one blocker by ID, or every blocker when
+// blockerID is empty.
+func coordinatorClearBlockers(ctx context.Context, cfg Config, selector, blockerID string) (app.BlockerResult, error) {
+	return runCoordinatorBlockerCommand(ctx, cfg, selector, coordinatorManifestCommandOptions{commandType: coordinator.CommandBlockerClear, blockerID: blockerID})
+}
+
+func runCoordinatorBlockerCommand(ctx context.Context, cfg Config, selector string, options coordinatorManifestCommandOptions) (app.BlockerResult, error) {
+	before, commandResult, err := executeCoordinatorManifestCommand(ctx, cfg, selector, options)
+	if err != nil {
+		return app.BlockerResult{}, err
+	}
+	return blockerResultFromCommand(before.Manifest, commandResult), nil
+}
+
+func blockerResultFromCommand(before model.Manifest, command coordinator.ManifestCommandResult) app.BlockerResult {
+	return itemcore.BlockerMutationResult(before, command.Manifest, command.Changed, time.Now())
+}
+
+// coordinatorWaitAndQueue adds blockers to the current item and rebuilds the
+// actionability queue in the same coordinator transaction, so navigation never
+// selects the item it just parked.
+func coordinatorWaitAndQueue(ctx context.Context, cfg Config, selector string, blockers []model.Blocker, labelRules map[string]bool) (app.BlockerResult, app.AttentionQueueResult, *app.NextQueueSelection, error) {
 	barrierCtx, barrierCancel := context.WithTimeout(ctx, 2500*time.Millisecond)
 	barrier, err := cfg.Coordinator.ActivityBarrier(barrierCtx)
 	barrierCancel()
 	if err != nil {
-		return app.StateTransitionResult{}, app.AttentionQueueResult{}, nil, fmt.Errorf("refresh attention before waiting: %w", err)
+		return app.BlockerResult{}, app.AttentionQueueResult{}, nil, fmt.Errorf("refresh attention before waiting: %w", err)
 	}
 	manifest, err := cfg.App.ResolveItem(ctx, app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env})
 	if err != nil {
-		return app.StateTransitionResult{}, app.AttentionQueueResult{}, nil, err
+		return app.BlockerResult{}, app.AttentionQueueResult{}, nil, err
 	}
 	operation, err := itemlock.AcquireOperation(ctx, cfg.App.Store.LockPath(manifest.ID))
 	if err != nil {
-		return app.StateTransitionResult{}, app.AttentionQueueResult{}, nil, err
+		return app.BlockerResult{}, app.AttentionQueueResult{}, nil, err
 	}
 	defer operation.Release()
-	capacity := cfg.App.DeepWorkCapacity()
 	commandID, err := model.NewID()
 	if err != nil {
-		return app.StateTransitionResult{}, app.AttentionQueueResult{}, nil, err
+		return app.BlockerResult{}, app.AttentionQueueResult{}, nil, err
 	}
 	createdAt := time.Now().UTC()
 	for attempt := 0; attempt < 8; attempt++ {
@@ -116,9 +145,9 @@ func coordinatorWaitAndQueue(ctx context.Context, cfg Config, selector string, l
 		canonical, err := cfg.Coordinator.CanonicalManifest(requestCtx, manifest.ID)
 		cancel()
 		if err != nil {
-			return app.StateTransitionResult{}, app.AttentionQueueResult{}, nil, err
+			return app.BlockerResult{}, app.AttentionQueueResult{}, nil, err
 		}
-		command := coordinator.ManifestCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandStateSet, ItemID: manifest.ID, ExpectedRevision: &canonical.Revision, Actor: "user", TargetState: model.StateWaiting, EventType: "work_item.state_set", MaxActive: cfg.App.DeepWorkConfig.MaxActive, CreatedAt: createdAt}
+		command := coordinator.ManifestCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandBlockerAdd, ItemID: manifest.ID, ExpectedRevision: &canonical.Revision, Actor: "user", Blockers: blockers, CreatedAt: createdAt}
 		request := coordinator.ManifestCommandQueueRequest{Command: command, Queue: coordinator.ActionabilityQueueOptions{Strategy: cfg.App.AttentionConfig.Priority, LabelRules: labelRules}}
 		requestCtx, cancel = context.WithTimeout(ctx, 5*time.Second)
 		result, err := cfg.Coordinator.ExecuteManifestCommandWithQueue(requestCtx, request)
@@ -127,13 +156,13 @@ func coordinatorWaitAndQueue(ctx context.Context, cfg Config, selector string, l
 			if attempt < 7 && stringsContainsRevisionConflict(err.Error()) {
 				continue
 			}
-			return app.StateTransitionResult{}, app.AttentionQueueResult{}, nil, err
+			return app.BlockerResult{}, app.AttentionQueueResult{}, nil, err
 		}
-		transition := app.StateTransitionResult{WorkItemID: result.Command.Manifest.ID, PreviousState: canonical.Manifest.State, State: result.Command.Manifest.State, Changed: result.Command.Changed, Manifest: result.Command.Manifest, DeepWork: result.Command.Manifest.DeepWork, Capacity: &capacity, Warnings: []string{}}
+		blocked := blockerResultFromCommand(canonical.Manifest, result.Command)
 		queue := coordinatorProjectedQueue(cfg, result.Queue, barrier.Projection.Warnings)
-		return transition, queue, coordinatorNextSelection(result.Selection), nil
+		return blocked, queue, coordinatorNextSelection(result.Selection), nil
 	}
-	return app.StateTransitionResult{}, app.AttentionQueueResult{}, nil, fmt.Errorf("wait-and-queue command retry exhausted")
+	return app.BlockerResult{}, app.AttentionQueueResult{}, nil, fmt.Errorf("wait-and-queue command retry exhausted")
 }
 
 func coordinatorActionabilitySnapshot(ctx context.Context, cfg Config, labelRules map[string]bool) (app.AttentionQueueResult, *app.NextQueueSelection, error) {
@@ -161,8 +190,9 @@ func coordinatorProjectedQueue(cfg Config, projected coordinator.ActionabilityQu
 	queue := app.AttentionQueueResult{Strategy: projected.Strategy, Candidates: make([]app.AttentionCandidate, 0, len(projected.Candidates)), Warnings: append([]string(nil), warnings...)}
 	for _, candidate := range projected.Candidates {
 		item := cfg.App.ProjectWorkListItem(candidate.Manifest)
-		activity := viewapp.Activity{LastRequestedAt: candidate.Activity.LastRequestedAt, LastCompletedAt: candidate.Activity.LastCompletedAt, LastDeferredAt: candidate.Activity.LastDeferredAt}
+		activity := viewapp.Activity{LastRequestedAt: candidate.Activity.LastRequestedAt, LastCompletedAt: candidate.Activity.LastCompletedAt, LastDeferredAt: candidate.Activity.LastDeferredAt, LastReadAt: candidate.Activity.LastReadAt, LastUnreadAt: candidate.Activity.LastUnreadAt}
 		item.Attention = &activity
+		item.Unread = activity.Unread()
 		item.AttentionRank = candidate.Rank
 		queue.Candidates = append(queue.Candidates, app.AttentionCandidate{Item: item, Activity: activity, Rank: candidate.Rank})
 	}

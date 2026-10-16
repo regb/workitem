@@ -202,7 +202,7 @@ func TestResolveByUniquePartialActiveSelector(t *testing.T) {
 	m2 := manifest(t, testutil.ID(t, 8), "Add Cache", now.Add(time.Minute))
 	m2.Labels = []string{"backend"}
 	m3 := manifest(t, testutil.ID(t, 9), "Old Scheduler Cron Job", now.Add(2*time.Minute))
-	m3.State = model.StateArchived
+	m3.State = model.StateClosed
 	m3.Slug = ""
 	for _, m := range []model.Manifest{m1, m2, m3} {
 		if err := st.CreateItem(context.Background(), m); err != nil {
@@ -266,7 +266,7 @@ func TestResolveActiveSlugAcceptsExactOrUniqueActiveSubstring(t *testing.T) {
 	active := manifest(t, testutil.ID(t, 17), "Exact Active", now)
 	similar := manifest(t, testutil.ID(t, 19), "Exact Action", now)
 	archived := manifest(t, testutil.ID(t, 18), "Old", now)
-	archived.State = model.StateArchived
+	archived.State = model.StateClosed
 	archived.Slug = ""
 	for _, item := range []model.Manifest{active, similar, archived} {
 		if err := st.CreateItem(context.Background(), item); err != nil {

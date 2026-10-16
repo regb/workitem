@@ -14,7 +14,10 @@ import (
 // This temporary, read-only snapshot belongs to one open picker, not the daemon.
 type pickerRenderItem struct {
 	ID, Title, Repository, Section string
-	Current                        bool
+	// Waiting is the compact label of what the item waits for, if anything.
+	Waiting string
+	Current bool
+	Unread  bool
 }
 type pickerRenderSnapshot struct {
 	Items                        []pickerRenderItem
@@ -24,12 +27,16 @@ type pickerRenderSnapshot struct {
 func pickerSnapshot(candidates []pickerCandidate) pickerRenderSnapshot {
 	status, repo := pickerColumnWidths(candidates)
 	snapshot := pickerRenderSnapshot{StatusWidth: status, RepositoryWidth: repo}
+	names := map[string]string{}
+	for _, candidate := range candidates {
+		names[candidate.Item.ID] = itemDisplayName(candidate.Item)
+	}
 	for _, candidate := range candidates {
 		title := pickerText(candidate.Item.Title)
 		if title == "" {
 			title = pickerText(candidate.Item.Slug)
 		}
-		snapshot.Items = append(snapshot.Items, pickerRenderItem{ID: candidate.Item.ID, Title: title, Repository: pickerText(candidate.Item.Repository), Section: candidate.Section, Current: candidate.Current})
+		snapshot.Items = append(snapshot.Items, pickerRenderItem{ID: candidate.Item.ID, Title: title, Repository: pickerText(candidate.Item.Repository), Section: candidate.Section, Current: candidate.Current, Unread: candidate.Item.Unread, Waiting: pickerText(strings.TrimPrefix(waitingSuffix(candidate.Item, names), "  · "))})
 	}
 	return snapshot
 }
@@ -69,11 +76,32 @@ func (snapshot pickerRenderSnapshot) rows(out io.Writer, columns int) error {
 		if item.Current {
 			marker = pickerBold + pickerMagenta + "● " + pickerReset
 		}
-		row := marker + pickerSectionBadge(item.Section, snapshot.StatusWidth) + "  " + pickerBold + pickerDisplayCell(item.Title, titleWidth) + pickerReset + "  " + pickerDim + pickerDisplayCell(item.Repository, snapshot.RepositoryWidth) + pickerReset
+		// Unread responses are bold, like unread mail; read titles use the
+		// normal weight.
+		// The waiting label follows the title in yellow; the title is truncated
+		// first so the label stays visible.
+		suffix := ""
+		if item.Waiting != "" {
+			suffix = "  · " + item.Waiting
+		}
+		suffixWidth := uniseg.StringWidth(suffix)
+		if suffixWidth > titleWidth/2 {
+			suffix, suffixWidth = "", 0
+		}
+		title := strings.TrimRight(pickerDisplayCell(item.Title, titleWidth-suffixWidth), " ")
+		padding := strings.Repeat(" ", max(0, titleWidth-uniseg.StringWidth(title)-suffixWidth))
+		if item.Unread {
+			title = pickerBold + title + pickerReset
+		}
+		if suffix != "" {
+			title += pickerYellow + suffix + pickerReset
+		}
+		title += padding
+		row := marker + pickerSectionBadge(item.Section, snapshot.StatusWidth) + "  " + title + "  " + pickerDim + pickerDisplayCell(item.Repository, snapshot.RepositoryWidth) + pickerReset
 		// The search-only field starts beyond the visible pane. --no-hscroll and
 		// --no-wrap keep it off-screen; --nth searches its complete native text.
 		label, _ := pickerSectionStyle(item.Section)
-		if _, err := fmt.Fprintf(out, "%s\t%s  \t%s %s %s %s\n", item.ID, row, item.Title, item.Repository, pickerText(item.Section), label); err != nil {
+		if _, err := fmt.Fprintf(out, "%s\t%s  \t%s %s %s %s %s\n", item.ID, row, item.Title, item.Repository, pickerText(item.Section), label, item.Waiting); err != nil {
 			return err
 		}
 	}

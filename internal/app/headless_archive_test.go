@@ -33,8 +33,8 @@ func TestHeadlessOnlyArchiveDoesNotInspectTmux(t *testing.T) {
 	if err := st.SaveAgentRuntime(context.Background(), id, runtime); err != nil {
 		t.Fatal(err)
 	}
-	result, err := application.Archive(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID, Env: map[string]string{"TMUX": "caller-pane"}}, false)
-	if err != nil || result.State != model.StateArchived {
+	result, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID, Env: map[string]string{"TMUX": "caller-pane"}}, model.ResolutionCompleted, false)
+	if err != nil || result.State != model.StateClosed {
 		t.Fatalf("archive %+v %v", result, err)
 	}
 }

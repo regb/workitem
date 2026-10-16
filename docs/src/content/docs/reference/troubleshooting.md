@@ -40,13 +40,13 @@ External source checkouts can move without affecting the independent owned store
 
 ## Deep-work capacity is full
 
-Working and waiting deep items consume configured capacity. Inspect them:
+Active deep items, waiting or not, consume configured capacity. Inspect them:
 
 ```bash
 wi list --all
 ```
 
-Finish, shelve, archive, or clear deep classification on another item. Use `--force` only when exceeding the configured limit is deliberate:
+Finish, shelve, close, or clear deep classification on another item. Use `--force` only when exceeding the configured limit is deliberate:
 
 ```bash
 wi start --force deep-item
@@ -74,7 +74,7 @@ wi start --agent-mode headless item-slug
 
 `wi start` starts or enters a runtime but does not submit `DESCRIPTION.md` as a prompt. In the TUI, ask the agent to run `wi show` and act on the description.
 
-For creation and immediate delivery, use `wi new --title "Task" --desc-file task.md --start`. `--prompt` implies `--start` and overrides only the startup message. Registered managed worktrees receive per-launch Pi project approval, while `.envrc` approval remains separate. A readiness timeout or refused prompt reports a retained partial outcome; it does not report successful delivery. For an existing working item, use:
+For creation and immediate delivery, use `wi new --title "Task" --desc-file task.md --start`. `--prompt` implies `--start` and overrides only the startup message. Registered managed worktrees receive per-launch Pi project approval, while `.envrc` approval remains separate. A readiness timeout or refused prompt reports a retained partial outcome; it does not report successful delivery. For an existing active item, use:
 
 ```bash
 wi agent control send --item ITEM 'Read the task with wi show, implement it, and report the result.'
@@ -92,7 +92,7 @@ The bundled extension still revokes stale approval on slot reuse. Checked-in `.c
 
 ## `wi next` says nothing needs attention
 
-The attention queue contains working items whose agents are idle and whose agent and worktree observations do not report a problem.
+The attention queue contains active items whose agents are idle, whose agent and worktree observations do not report a problem, and that are either not waiting or waiting with an unread response.
 
 ```bash
 wi attention queue
@@ -100,7 +100,7 @@ wi agent status --all
 wi list
 ```
 
-Busy, waiting, backlog, archived, label-filtered, and problem items are outside the queue. Resume waiting work or repair the reported problem rather than forcing navigation.
+Busy, waiting and read, backlog, closed, label-filtered, and problem items are outside the queue. Stop waiting with `wi wait --clear`, or repair the reported problem, rather than forcing navigation.
 
 ## TUI and headless mode will not switch
 
@@ -121,7 +121,7 @@ wi agent runtime ensure --mode headless ITEM
 
 Use `--force` to abort a busy runtime before shutdown.
 
-## Shelve or archive refuses cleanup
+## Shelve or close refuses cleanup
 
 These operations protect dirty, branch-mismatched, active, or currently attached resources.
 
@@ -133,9 +133,9 @@ wi terminal status ITEM
 wi workspace status ITEM
 ```
 
-Review and commit, stash, or otherwise resolve worktree changes with Git. Stop an active runtime before shelving. `archive --force` may abort a busy runtime, but it does not discard a dirty checkout.
+Review and commit, stash, or otherwise resolve worktree changes with Git. Stop an active runtime before shelving. `close --force` may abort a busy runtime, but it does not discard a dirty checkout.
 
-Do not use `wi state set archived` as a cleanup shortcut. That primitive changes lifecycle only and can leave resources present.
+Do not use `wi state set closed` as a cleanup shortcut. That primitive changes lifecycle only and can leave resources present.
 
 ## Merge refuses the source checkout
 
@@ -207,7 +207,7 @@ Commands stop safely when the daemon is unavailable. Resolve the reported daemon
 ```bash
 wi help start
 wi help agent runtime stop
-wi archive --help
+wi close --help
 ```
 
 Command help lists the accepted flags and current safety rules.

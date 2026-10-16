@@ -13,7 +13,7 @@ import (
 )
 
 func TestNamingPolicyKeepsActiveSlugAndBranchButAllowsTitles(t *testing.T) {
-	for _, state := range []string{model.StateBacklog, model.StateWorking, model.StateWaiting, model.StateArchived} {
+	for _, state := range []string{model.StateBacklog, model.StateActive, model.StateClosed} {
 		t.Run(state, func(t *testing.T) {
 			root := t.TempDir()
 			native := store.New(root)
@@ -22,7 +22,7 @@ func TestNamingPolicyKeepsActiveSlugAndBranchButAllowsTitles(t *testing.T) {
 			}
 			m := model.NewManifest(importTestID, "task", "Original", nil, false, time.Now(), model.Repository{}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, "wi/task-original"))
 			m.State = state
-			if state == model.StateArchived {
+			if state == model.StateClosed {
 				m.Slug = ""
 			}
 			m.Checkout.ClaimGeneration = 1
@@ -46,7 +46,7 @@ func TestNamingPolicyKeepsActiveSlugAndBranchButAllowsTitles(t *testing.T) {
 				canonical, _ := db.CanonicalManifest(m.ID)
 				changed := canonical.Manifest
 				if field == "slug" {
-					if state == model.StateArchived {
+					if state == model.StateClosed {
 						continue
 					}
 					changed.Slug = "new-name"
@@ -94,7 +94,7 @@ func TestArchiveRestoreAllocatesSlugWithoutRenamingBranch(t *testing.T) {
 		}
 		return result
 	}
-	archived := command("archive", CommandStateSet, "", model.StateArchived)
+	archived := command("archive", CommandStateSet, "", model.StateClosed)
 	if archived.Manifest.Slug != "" {
 		t.Fatal("archive retained an active slug")
 	}

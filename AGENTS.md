@@ -2,21 +2,21 @@
 
 ## Task scope
 
-Each work item should have one bounded objective and a clear completion condition. Review, integrate where appropriate, and archive it when done. File unrelated work as a new item rather than turning an item or its conversation into a permanent project workspace.
+Each work item should have one bounded objective and a clear completion condition. Review, integrate where appropriate, and close it when done. File unrelated work as a new item rather than turning an item or its conversation into a permanent project workspace.
 
-Short-lived work has a durable record: restarting an agent, releasing a worktree, or archiving the item does not erase its description, conversation, or history.
+Short-lived work has a durable record: restarting an agent, releasing a worktree, or closing the item does not erase its description, conversation, or history.
 
 ## Core model
 
 - A work item owns a stable ID, title, description, lifecycle, labels, deep-work classification, repository reference, checkout specification, and primary conversation identity.
 - Repositories are explicitly registered independent bare Git stores. Items retain the repository ID and immutable created-from commit. External onboarding checkouts are not operational dependencies.
-- IDs and branch specifications are immutable. Active slugs stay fixed until archive clears them; restore allocates a new slug without renaming the branch. Titles and descriptions remain editable without implicit prompts.
+- IDs and branch specifications are immutable. Active slugs stay fixed until close clears them; reopening allocates a new slug without renaming the branch. Titles and descriptions remain editable without implicit prompts.
 - Drivers validate merged profile config through stateless `config.validate` before new runtime startup. Plain backlog capture is driver-independent; existing owners are not reconfigured.
-- Lifecycle is `backlog|working|waiting|archived`. Deep work is a capacity-controlled classification, not a label.
+- Lifecycle is `backlog|active|closed` and describes resources only; closing records a resolution (`completed|abandoned|superseded`). Typed blockers (`time|item|external`) are durable intent on backlog or active items; the coordinator clears time and item blockers, external ones are cleared explicitly. Deep work is a capacity-controlled classification, not a label.
 - A workspace is a generation-fenced checkout claim. Managed slots are reusable wi-owned worktrees; release preserves the branch and warm slot. A workspace is not an agent process or terminal.
 - Each item has at most one durable primary conversation and one active runtime owner. Successive runtimes may resume the conversation; drivers own its native format and content.
 - TUI runtimes use tmux. Headless runtimes must remain tmux-independent. Terminal metadata is rebuildable access information, not item or conversation identity.
-- Agent status `busy|idle|problem` and worktree status `absent|clean|changed|problem` are separate observations. Attention ranks actionable working items; it does not choose an access mechanism.
+- Agent status `busy|idle|problem` and worktree status `absent|clean|changed|problem` are separate observations. Attention ranks actionable active items: waiting items (with an open blocker) stay out of the queue unless they have an unread response. It does not choose an access mechanism.
 - One coordinator daemon per data root owns structured writes, revisions, compact append-only events, and projections in the private bbolt `wi.db`. Descriptions and native conversations remain canonical filesystem content outside that database.
 - Observations can become stale and must not replace durable intent. Runtime and terminal caches are rebuildable. Logs live under XDG state; sockets under XDG runtime.
 - The operator endpoint exposes the local API. The restricted agent endpoint allows safe backlog creation but rejects lifecycle, workspace, runtime, terminal, delete, and shutdown control.

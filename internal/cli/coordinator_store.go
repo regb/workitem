@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/regb/workitem/internal/app"
+	itemcore "github.com/regb/workitem/internal/app/core/item"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 	storepkg "github.com/regb/workitem/internal/store"
@@ -166,7 +167,69 @@ func (s *coordinatorStore) CreateItem(ctx context.Context, manifest model.Manife
 }
 
 func (s *coordinatorStore) SaveManifest(ctx context.Context, manifest model.Manifest) error {
+	if manifest.State == model.StateClosed {
+		if len(manifest.Blockers) > 0 {
+			return fmt.Errorf("closed items cannot retain blockers")
+		}
+		current, err := s.client.CanonicalManifest(ctx, manifest.ID)
+		if err != nil {
+			return err
+		}
+		if current.Manifest.State != model.StateClosed {
+			// Closing clears blockers through the same typed transaction, including
+			// clearance history. Other manifest edits must already be committed.
+			comparable := manifest
+			comparable.State = current.Manifest.State
+			comparable.Slug = current.Manifest.Slug
+			comparable.Resolution = current.Manifest.Resolution
+			comparable.Blockers = current.Manifest.Blockers
+			comparable.StateChangedAt = current.Manifest.StateChangedAt
+			comparable.UpdatedAt = current.Manifest.UpdatedAt
+			a, _ := json.Marshal(comparable)
+			b, _ := json.Marshal(current.Manifest)
+			if string(a) != string(b) {
+				return fmt.Errorf("close must not include unrelated manifest changes")
+			}
+			_, _, err = s.mutateManifest(ctx, coordinator.ManifestCommand{Type: coordinator.CommandStateSet, ItemID: manifest.ID, TargetState: model.StateClosed, Resolution: manifest.Resolution, CreatedAt: manifest.UpdatedAt})
+			return err
+		}
+	}
 	return s.execute(ctx, coordinator.StoreManifestSave, manifest.ID, manifest)
+}
+
+func (s *coordinatorStore) mutateManifest(ctx context.Context, command coordinator.ManifestCommand) (model.Manifest, coordinator.ManifestCommandResult, error) {
+	id, err := model.NewID()
+	if err != nil {
+		return model.Manifest{}, coordinator.ManifestCommandResult{}, err
+	}
+	command.ID = id
+	command.Actor = "user"
+	command.ProtocolVersion = coordinator.ProtocolVersion
+	for attempt := 0; attempt < 8; attempt++ {
+		requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		before, err := s.client.CanonicalManifest(requestCtx, command.ItemID)
+		cancel()
+		if err != nil {
+			return model.Manifest{}, coordinator.ManifestCommandResult{}, err
+		}
+		command.ExpectedRevision = &before.Revision
+		requestCtx, cancel = context.WithTimeout(ctx, 5*time.Second)
+		result, err := s.client.ExecuteManifestCommand(requestCtx, command)
+		cancel()
+		if err != nil && stringsContainsRevisionConflict(err.Error()) {
+			continue
+		}
+		return before.Manifest, result, err
+	}
+	return model.Manifest{}, coordinator.ManifestCommandResult{}, fmt.Errorf("manifest command revision retries exhausted")
+}
+
+func (s *coordinatorStore) AddBlockers(ctx context.Context, id string, blockers []model.Blocker, at time.Time) (itemcore.BlockerResult, error) {
+	before, result, err := s.mutateManifest(ctx, coordinator.ManifestCommand{Type: coordinator.CommandBlockerAdd, ItemID: id, Blockers: blockers, CreatedAt: at})
+	if err != nil {
+		return itemcore.BlockerResult{}, err
+	}
+	return itemcore.BlockerMutationResult(before, result.Manifest, result.Changed, at), nil
 }
 func (s *coordinatorStore) AppendEvent(ctx context.Context, id string, event model.Event) error {
 	return s.execute(ctx, coordinator.StoreEventAppend, id, event)

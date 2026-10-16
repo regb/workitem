@@ -71,8 +71,8 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (MergeResult
 	}
 	defer operation.Release()
 	res := MergeResult{WorkItemID: m.ID, SourceBranch: expectedCheckoutBranch(m), Warnings: []string{}}
-	if m.State != model.StateWorking && m.State != model.StateWaiting {
-		return res, fmt.Errorf("work item %s is %s; merge requires a working or waiting item", m.ID, m.State)
+	if m.State != model.StateActive {
+		return res, fmt.Errorf("work item %s is %s; merge requires an active item", m.ID, m.State)
 	}
 	if !m.Checkout.Present() || m.Checkout.Claim == nil || strings.TrimSpace(m.Checkout.Claim.Path) == "" {
 		return res, fmt.Errorf("work item %s has no checkout; start it before merging", m.ID)

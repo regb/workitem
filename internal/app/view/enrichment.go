@@ -39,15 +39,15 @@ type QueueResult struct {
 
 func (s *Service) Enrich(ctx context.Context, result *Result, observe Observe, activity ResolveActivity, markers Markers, strategy string) []string {
 	warnings := []string{}
-	targets := make([]*Item, 0, len(result.Sections.Working)+len(result.Sections.Waiting))
+	targets := make([]*Item, 0, len(result.Sections.Active)+len(result.Sections.Waiting))
 	collect := func(items []Item) {
 		for i := range items {
-			if items[i].State == model.StateWorking || items[i].State == model.StateWaiting {
+			if items[i].State == model.StateActive {
 				targets = append(targets, &items[i])
 			}
 		}
 	}
-	collect(result.Sections.Working)
+	collect(result.Sections.Active)
 	collect(result.Sections.Waiting)
 	type observationResult struct {
 		status Observation
@@ -85,16 +85,17 @@ func (s *Service) Enrich(ctx context.Context, result *Result, observe Observe, a
 		item.Agent = &agentStatus
 		item.Worktree = status.Worktree
 		warnings = append(warnings, status.Warnings...)
-		if item.State == model.StateWorking && agentStatus.Bucket == "needs_attention" && (item.Worktree == nil || item.Worktree.Status != "problem") {
-			value, extra := activity(item.ID, status)
+		value, extra := activity(item.ID, status)
+		item.Unread = value.Unread()
+		if item.State == model.StateActive && agentStatus.Bucket == "needs_attention" && (item.Worktree == nil || item.Worktree.Status != "problem") && priority.Eligible(item.Waiting, item.Unread) {
 			item.Attention = &value
 			warnings = append(warnings, extra...)
 		}
 	}
 	candidates := []priority.Candidate{}
-	for i, item := range result.Sections.Working {
+	for i, item := range append(append([]Item{}, result.Sections.Active...), result.Sections.Waiting...) {
 		if item.Attention != nil {
-			candidates = append(candidates, priority.Candidate{ID: item.ID, DeepWork: item.DeepWork, BaseOrder: i, StateChangedAt: item.ChangedAt, LastRequestedAt: item.Attention.LastRequestedAt, LastCompletedAt: item.Attention.LastCompletedAt, LastDeferredAt: item.Attention.LastDeferredAt})
+			candidates = append(candidates, priority.Candidate{ID: item.ID, DeepWork: item.DeepWork, BaseOrder: i, StateChangedAt: item.ChangedAt, LastRequestedAt: item.Attention.LastRequestedAt, LastCompletedAt: item.Attention.LastCompletedAt, LastDeferredAt: item.Attention.LastDeferredAt, Waiting: item.Waiting, Unread: item.Unread})
 		}
 	}
 	ranked, err := priority.Rank(strategy, candidates)
@@ -106,15 +107,17 @@ func (s *Service) Enrich(ctx context.Context, result *Result, observe Observe, a
 	for i, c := range ranked {
 		ranks[c.ID] = i + 1
 	}
-	for i := range result.Sections.Working {
-		result.Sections.Working[i].AttentionRank = ranks[result.Sections.Working[i].ID]
+	for _, section := range [][]Item{result.Sections.Active, result.Sections.Waiting} {
+		for i := range section {
+			section[i].AttentionRank = ranks[section[i].ID]
+		}
 	}
 	return warnings
 }
 
 func Queue(result Result, strategy string) QueueResult {
 	candidates := []AttentionCandidate{}
-	for _, item := range result.Sections.Working {
+	for _, item := range append(append([]Item{}, result.Sections.Active...), result.Sections.Waiting...) {
 		if item.Attention != nil && item.AttentionRank > 0 {
 			candidates = append(candidates, AttentionCandidate{Item: item, Activity: *item.Attention, Rank: item.AttentionRank})
 		}

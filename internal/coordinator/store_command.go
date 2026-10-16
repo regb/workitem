@@ -159,11 +159,16 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		if err != nil {
 			return "", nil, err
 		}
-		if err := validateRepositoryReference(tx, normalized); err != nil {
-			return "", nil, err
-		}
 		var previous model.Manifest
 		if err := json.Unmarshal(projection.Get([]byte(command.ItemID)), &previous); err != nil {
+			return "", nil, err
+		}
+		oldBlockers, _ := json.Marshal(previous.Blockers)
+		newBlockers, _ := json.Marshal(normalized.Blockers)
+		if (len(previous.Blockers) > 0 || len(normalized.Blockers) > 0) && string(oldBlockers) != string(newBlockers) {
+			return "", nil, errors.New("blocker changes require a typed manifest command")
+		}
+		if err := validateRepositoryReference(tx, normalized); err != nil {
 			return "", nil, err
 		}
 		if previous.Repository.ID != "" && (previous.Repository.ID != normalized.Repository.ID || previous.Repository.CreatedFromCommit != normalized.Repository.CreatedFromCommit) {
@@ -172,7 +177,7 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		if previous.Checkout.Specification.Branch != normalized.Checkout.Specification.Branch {
 			return "", nil, errors.New("implementation branch specification is immutable")
 		}
-		if previous.State != model.StateArchived && normalized.State != model.StateArchived && previous.Slug != normalized.Slug {
+		if previous.State != model.StateClosed && normalized.State != model.StateClosed && previous.Slug != normalized.Slug {
 			return "", nil, errors.New("active slug is immutable; archive and restore to allocate a new slug")
 		}
 		if normalized.ID != command.ItemID {
@@ -204,12 +209,20 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 			return "", nil, errors.New("event type is required")
 		}
 		compact, _ = json.Marshal(map[string]any{"event_type": typeName})
-		if typeName == "attention.deferred" {
-			activity := AttentionActivity{WorkItemID: command.ItemID, LastDeferredAt: ptrTime(event.Time.UTC())}
+		if typeName == "attention.deferred" || typeName == "attention.read" || typeName == "attention.unread" {
+			at := ptrTime(event.Time.UTC())
+			activity := AttentionActivity{WorkItemID: command.ItemID}
 			if bucket, err := tx.Bucket(bucketProjections).CreateBucketIfNotExists([]byte(AttentionActivityProjection)); err == nil {
 				if current := bucket.Get([]byte(command.ItemID)); current != nil {
 					_ = json.Unmarshal(current, &activity)
-					activity.LastDeferredAt = ptrTime(event.Time.UTC())
+				}
+				switch typeName {
+				case "attention.deferred":
+					activity.LastDeferredAt = at
+				case "attention.read":
+					activity.LastReadAt = laterTime(activity.LastReadAt, at)
+				case "attention.unread":
+					activity.LastUnreadAt = laterTime(activity.LastUnreadAt, at)
 				}
 				encoded, _ := json.Marshal(activity)
 				_ = bucket.Put([]byte(command.ItemID), encoded)
@@ -263,8 +276,8 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		if err := json.Unmarshal(projection.Get([]byte(command.ItemID)), &manifest); err != nil {
 			return "", nil, err
 		}
-		if manifest.State != model.StateArchived {
-			return "", nil, fmt.Errorf("work item %s is %s; delete requires archived state", manifest.ID, manifest.State)
+		if manifest.State != model.StateClosed {
+			return "", nil, fmt.Errorf("work item %s is %s; delete requires closed state", manifest.ID, manifest.State)
 		}
 		if err := projection.Delete([]byte(command.ItemID)); err != nil {
 			return "", nil, err

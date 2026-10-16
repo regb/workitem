@@ -12,10 +12,12 @@ import (
 const (
 	DescriptionFilename = "DESCRIPTION.md"
 
-	StateBacklog  = "backlog"
-	StateWorking  = "working"
-	StateWaiting  = "waiting"
-	StateArchived = "archived"
+	// Lifecycle states describe resource ownership only. Whether an active
+	// item can make progress is expressed by blockers, and how it ended by a
+	// resolution recorded when it closes.
+	StateBacklog = "backlog"
+	StateActive  = "active"
+	StateClosed  = "closed"
 
 	CheckoutPresent = "present"
 	CheckoutAbsent  = "absent"
@@ -42,6 +44,8 @@ type Manifest struct {
 	Agent               string        `json:"agent,omitempty"`
 	Labels              []string      `json:"labels"`
 	DeepWork            bool          `json:"deep_work"`
+	Resolution          string        `json:"resolution,omitempty"`
+	Blockers            []Blocker     `json:"blockers,omitempty"`
 }
 
 func (m Manifest) TerminalSessionName() string {

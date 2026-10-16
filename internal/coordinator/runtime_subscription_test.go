@@ -20,7 +20,7 @@ func TestRuntimeEventLongPollWakesAfterCommittedEvent(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	manifest := model.NewManifest(importTestID, "subscription", "Subscription", nil, false, now, model.Repository{}, model.Checkout{})
-	manifest.State = model.StateWorking
+	manifest.State = model.StateActive
 	if err := native.CreateItem(context.Background(), manifest); err != nil {
 		t.Fatal(err)
 	}

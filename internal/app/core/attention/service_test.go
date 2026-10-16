@@ -21,7 +21,7 @@ func (s *eventStore) ReadEvents(string) ([]model.Event, error) { return s.events
 
 func TestRecordDeferPreservesManifestAndEventContract(t *testing.T) {
 	now := time.Date(2026, 4, 1, 2, 3, 4, 0, time.UTC)
-	manifest := model.Manifest{ID: "item-1", State: model.StateWorking, UpdatedAt: now.Add(-time.Hour)}
+	manifest := model.Manifest{ID: "item-1", State: model.StateActive, UpdatedAt: now.Add(-time.Hour)}
 	store := &eventStore{}
 	service := New(store, func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }, func() time.Time { return now })
 	result, err := service.RecordDefer(context.Background(), contract.ResolveOptions{})
@@ -48,11 +48,11 @@ func TestRecordDeferPreservesManifestAndEventContract(t *testing.T) {
 func TestRecordDeferRejectsNonWorkingWithoutWrite(t *testing.T) {
 	store := &eventStore{}
 	service := New(store, func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1", State: model.StateWaiting}, nil
+		return model.Manifest{ID: "item-1", State: model.StateBacklog}, nil
 	}, time.Now)
 	_, err := service.RecordDefer(context.Background(), contract.ResolveOptions{})
 	var stateErr *StateError
-	if !errors.As(err, &stateErr) || stateErr.WorkItemID != "item-1" || stateErr.State != model.StateWaiting {
+	if !errors.As(err, &stateErr) || stateErr.WorkItemID != "item-1" || stateErr.State != model.StateBacklog {
 		t.Fatalf("error = %v", err)
 	}
 	if len(store.events) != 0 {

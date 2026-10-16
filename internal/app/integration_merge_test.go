@@ -11,6 +11,7 @@ import (
 
 	"github.com/regb/workitem/internal/app"
 	gitpkg "github.com/regb/workitem/internal/git"
+	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
 	"github.com/regb/workitem/internal/testutil"
 )
@@ -42,7 +43,7 @@ func TestMergeWorkItemRebasesFastForwardsAndSyncsTargetWorktree(t *testing.T) {
 		t.Fatalf("main=%s source=%s", mainSHA, sourceSHA)
 	}
 	manifest, err := application.Store.LoadManifest(itemID)
-	if err != nil || manifest.State != "working" || manifest.Checkout.Claim == nil {
+	if err != nil || manifest.State != model.StateActive || manifest.Checkout.Claim == nil {
 		t.Fatalf("manifest changed unexpectedly: %+v err=%v", manifest, err)
 	}
 	events, err := application.Store.(*store.Store).ReadEvents(itemID)

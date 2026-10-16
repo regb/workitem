@@ -16,7 +16,19 @@ const orphanRuntimeStopTimeout = 5 * time.Second
 
 // SwitchWorkItem is state-neutral porcelain. It composes required worktree
 // materialization, a TUI agent runtime, and optional terminal attachment.
+// Entering an item marks its conversation read.
 func (a *App) SwitchWorkItem(ctx context.Context, opts ResolveOptions, attach bool) (CompositionResult, error) {
+	result, err := a.switchWorkItem(ctx, opts, attach)
+	if err != nil {
+		return result, err
+	}
+	if _, markErr := a.MarkRead(ctx, ResolveOptions{Selector: result.WorkItemID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
+		result.Warnings = append(result.Warnings, "could not mark the conversation read: "+markErr.Error())
+	}
+	return result, nil
+}
+
+func (a *App) switchWorkItem(ctx context.Context, opts ResolveOptions, attach bool) (CompositionResult, error) {
 	m, err := a.resolveWorkspaceEntryItem(ctx, opts)
 	if err != nil {
 		return CompositionResult{}, err

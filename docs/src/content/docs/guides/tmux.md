@@ -11,7 +11,7 @@ Tmux is optional. `wi` uses it as the human-access layer for native Pi TUI sessi
 wi switch auth
 ```
 
-With an explicit item, `switch` validates active work, ensures its worktree and TUI runtime, then enters its wi-owned tmux session.
+With an explicit item, `switch` validates active work, ensures its worktree and TUI runtime, then enters its wi-owned tmux session. Switching marks the conversation read.
 
 Without an item, `switch` opens an `fzf` picker:
 
@@ -19,17 +19,19 @@ Without an item, `switch` opens an `fzf` picker:
 wi switch
 ```
 
-The picker shows working and waiting items first, followed by backlog items in a distinct color. It initially selects the current item when that item is present. Typing a filter moves the cursor to the first match. Rows show **status, title, repository**, in that order. Status and repository widths come from the longest values in the full candidate snapshot and stay stable while filtering. The title takes the remaining list-pane width and truncates at the end rather than wrapping. Resizing the terminal or toggling the preview recalculates the title width without refreshing candidates or changing the selected item. Full titles remain searchable even when truncated. The slug stays in the details preview; older items without a title use it as a fallback. The preview uses 40% of the width on wide terminals and moves below the list on narrower terminals, adapting when resized. Press `Alt-P` to hide or show it and give the list the full window. Selecting a waiting item resumes it; selecting a backlog item starts it. Either choice then enters the item's TUI.
+The picker shows active items first (including waiting ones), followed by backlog items in a distinct color. It initially selects the current item when that item is present. Typing a filter moves the cursor to the first match. Rows show **status, title, repository**, in that order. Status and repository widths come from the longest values in the full candidate snapshot and stay stable while filtering. The title takes the remaining list-pane width and truncates at the end rather than wrapping. Resizing the terminal or toggling the preview recalculates the title width without refreshing candidates or changing the selected item. Full titles remain searchable even when truncated. The slug stays in the details preview; older items without a title use it as a fallback. The preview uses 40% of the width on wide terminals and moves below the list on narrower terminals, adapting when resized. Press `Alt-P` to hide or show it and give the list the full window. Selecting a backlog item starts it; selecting an active item, waiting or not, is state-neutral. Unread titles are bold, and what a waiting item waits for follows its title in yellow. Either choice then enters the item's TUI.
 
 ## Navigate by attention
 
 ```bash
 wi next
 wi next --defer
-wi next --wait
+wi next --wait --until tomorrow
+wi next --wait --on -
+wi next --close --resolution abandoned
 ```
 
-`next` chooses from work that currently needs attention. It is not a static tmux window rotation.
+`next` chooses from work that currently needs attention. It is not a static tmux window rotation. `--wait` makes the current item wait first, with the same conditions as `wi wait`; `--on -` picks the other item interactively. `--close` closes the current item once a distinct successor is open.
 
 ## Low-level terminal commands
 
@@ -49,20 +51,49 @@ wi terminal close --item auth
 Add the commands you want directly to `~/.tmux.conf`:
 
 ```text
-# Open the picker in a popup.
-bind-key O run-shell -b \
-  'tmux display-popup -EE -c #{q:client_name} -d #{q:pane_current_path} -w 90% -h 80% -e WI_TMUX_CLIENT=#{q:client_name} -T "wi work items" "wi switch"'
+# Work-item navigation. Each binding runs in the current pane's directory so
+# wi resolves the current item; WI_TMUX_CLIENT names the client to switch.
+# Preserve tmux's built-in prefix+w and prefix+n actions.
 
-# Run navigation silently. On failure, -E opens stderr in tmux view mode.
-bind-key N run-shell -b -E -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next >/dev/null'
-bind-key P run-shell -b -E -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --defer >/dev/null'
-bind-key W run-shell -b -E -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --wait >/dev/null'
-bind-key A run-shell -b -E -c '#{pane_current_path}' \
-  'WI_TMUX_CLIENT="#{client_name}" wi next --archive >/dev/null'
+# Pick an item in a popup.
+bind-key O display-popup -EE -d "#{pane_current_path}" -w 90% -h 80% \
+  -T "wi work items" "WI_TMUX_CLIENT=#{client_name} wi switch"
+
+# Next item that needs attention; defer the current one first.
+# Navigation stays silent on success; tmux shows stderr on failure.
+bind-key N run-shell -b -E -c "#{pane_current_path}" \
+  "WI_TMUX_CLIENT=#{client_name} wi next >/dev/null"
+bind-key P run-shell -b -E -c "#{pane_current_path}" \
+  "WI_TMUX_CLIENT=#{client_name} wi next --defer >/dev/null"
+
+# Wait menu: snooze, or wait on another item, then go to the next item.
+# A snooze ends on its own when the time passes or when you next prompt the item.
+bind-key W display-menu -T "Wait, then go to next" \
+  "Snooze 1 hour"           1 "run-shell -b -E -c '#{pane_current_path}' 'WI_TMUX_CLIENT=#{client_name} wi next --wait --until 1h >/dev/null'" \
+  "Snooze 4 hours"          4 "run-shell -b -E -c '#{pane_current_path}' 'WI_TMUX_CLIENT=#{client_name} wi next --wait --until 4h >/dev/null'" \
+  "Snooze until tomorrow"   t "run-shell -b -E -c '#{pane_current_path}' 'WI_TMUX_CLIENT=#{client_name} wi next --wait --until tomorrow >/dev/null'" \
+  "Snooze until Monday"     m "run-shell -b -E -c '#{pane_current_path}' 'WI_TMUX_CLIENT=#{client_name} wi next --wait --until monday >/dev/null'" \
+  "" \
+  "Wait on another item…"   i "display-popup -EE -d '#{pane_current_path}' -w 90% -h 80% -T 'Wait on another item' 'WI_TMUX_CLIENT=#{client_name} wi next --wait --on -'" \
+  "" \
+  "Stop waiting"            c "run-shell -b -E -c '#{pane_current_path}' 'WI_TMUX_CLIENT=#{client_name} wi wait --clear >/dev/null'"
+
+# Close menu: close the current item with a resolution, then go to the next item.
+bind-key X display-menu -T "Close, then go to next" \
+  "Completed"   c "run-shell -b -E -c '#{pane_current_path}' 'WI_TMUX_CLIENT=#{client_name} wi next --close --resolution completed >/dev/null'" \
+  "Abandoned"   a "run-shell -b -E -c '#{pane_current_path}' 'WI_TMUX_CLIENT=#{client_name} wi next --close --resolution abandoned >/dev/null'" \
+  "Superseded"  s "run-shell -b -E -c '#{pane_current_path}' 'WI_TMUX_CLIENT=#{client_name} wi next --close --resolution superseded >/dev/null'"
 ```
+
+| Key | Action |
+| --- | --- |
+| `prefix O` | Item picker |
+| `prefix N` | Next item needing attention |
+| `prefix P` | Defer the current item, then next |
+| `prefix W` | Wait menu: `1` snooze 1 hour, `4` 4 hours, `t` until tomorrow 09:00, `m` until Monday 09:00, `i` wait on another item (picker), `c` stop waiting |
+| `prefix X` | Close menu: `c` completed, `a` abandoned, `s` superseded, then next |
+
+The wait and close entries use tmux menus (`display-menu`, tmux 3.0 or later): press the key, then the letter shown. A snooze ends on its own when its time passes or when you next prompt the item. Waiting on an event or a pull request is left to the CLI and to agents, for example `wi wait --for` or `wi github wait`.
 
 Reload tmux:
 
@@ -72,7 +103,7 @@ tmux source-file ~/.tmux.conf
 
 These are ordinary tmux bindings, not a plugin. Change the keys, popup dimensions, or commands directly in your configuration. `WI_TMUX_CLIENT` tells `wi` which client initiated the command when more than one client is attached.
 
-For `run-shell`, `-E` redirects stderr to stdout so tmux displays failures in view mode. Redirecting ordinary stdout keeps successful navigation silent. The picker uses `display-popup -EE`; two `-E` flags close that popup on success but leave it open when selection or startup fails.
+For `run-shell`, `-E` redirects stderr to stdout so tmux displays failures in view mode. Redirecting ordinary stdout keeps successful navigation silent. Pickers use `display-popup -EE`; two `-E` flags close the popup on success but leave it open when selection or startup fails.
 
 `wi` reads `WI_LIST_LABELS` and `WI_ITEM_DEFAULT_LABELS` from an allowed `.envrc` in the command's working directory. Tmux bindings do not need to invoke `direnv`. Explicit caller values still take precedence, and `wi` does not import paths, socket locations, or identity variables from `.envrc` into CLI configuration.
 

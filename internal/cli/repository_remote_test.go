@@ -166,7 +166,7 @@ func newRemoteMergeItem(t *testing.T, cfg Config) (model.Manifest, string) {
 		t.Fatalf("workspace code=%d stderr=%v", code, cfg.Stderr)
 	}
 	out.Reset()
-	if code := Run(context.Background(), []string{"state", "set", "working", "--item", result.Manifest.ID}, cfg); code != ExitOK {
+	if code := Run(context.Background(), []string{"state", "set", "active", "--item", result.Manifest.ID}, cfg); code != ExitOK {
 		t.Fatalf("state code=%d stderr=%v", code, cfg.Stderr)
 	}
 	manifest, err := cfg.App.Store.LoadManifest(result.Manifest.ID)

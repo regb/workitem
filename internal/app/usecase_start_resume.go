@@ -29,7 +29,7 @@ func (a *App) StartWorkItemInMode(ctx context.Context, opts ResolveOptions, forc
 	if err := a.ValidateItemAgentConfig(ctx, opts); err != nil {
 		return StartResult{}, err
 	}
-	transition, err := a.transitionState(ctx, opts, model.StateWorking, "work_item.started", force)
+	transition, err := a.transitionState(ctx, opts, model.StateActive, "work_item.started", force)
 	if err != nil {
 		return StartResult{}, err
 	}
@@ -59,7 +59,7 @@ func (a *App) ResumeWorkItemInMode(ctx context.Context, opts ResolveOptions, att
 	if err := a.ValidateItemAgentConfig(ctx, opts); err != nil {
 		return StartResult{}, err
 	}
-	transition, err := a.transitionState(ctx, opts, model.StateWorking, "work_item.resumed", false)
+	transition, err := a.transitionState(ctx, opts, model.StateActive, "work_item.resumed", false)
 	if err != nil {
 		return StartResult{}, err
 	}

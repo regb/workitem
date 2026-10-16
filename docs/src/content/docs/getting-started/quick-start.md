@@ -3,7 +3,7 @@ title: Quick start
 description: Create a work item, give its agent a task, and complete the work.
 ---
 
-Pick one small task with an observable definition of done. This walkthrough implements and verifies API retries, then archives the completed task.
+Pick one small task with an observable definition of done. This walkthrough implements and verifies API retries, then closes the completed task.
 
 First [register a repository](../../concepts/repositories/):
 
@@ -38,7 +38,7 @@ Start the slug printed by `wi new`:
 wi start add-api-retries
 ```
 
-This moves the item to `working`, materializes a managed worktree, starts the primary Pi TUI, and enters its tmux session.
+This moves the item to `active`, materializes a managed worktree, starts the primary Pi TUI, and enters its tmux session.
 
 :::caution[Starting does not submit the description]
 `wi start` opens the agent runtime, but it does not turn `DESCRIPTION.md` into a prompt. At the Pi prompt, ask the agent to read the durable context and do the work:
@@ -59,7 +59,7 @@ wi new --title "Add API retries" --repo project \
   --desc-file /tmp/task.md --start --agent-mode headless
 ```
 
-This creates the item, moves it to `working`, starts a headless runtime, and asks the agent to read the task with `wi show`. Pass `--prompt TEXT` to start with your own message; it implies `--start` and it does not change the description. Omit `--agent-mode headless` to start an unattached TUI runtime that you can enter later.
+This creates the item, moves it to `active`, starts a headless runtime, and asks the agent to read the task with `wi show`. Pass `--prompt TEXT` to start with your own message; it implies `--start` and it does not change the description. Omit `--agent-mode headless` to start an unattached TUI runtime that you can enter later.
 
 Watch the delegated item:
 
@@ -96,8 +96,8 @@ See [Review agent work](../../guides/review-and-follow-up/) for the full review 
 Use the operation that matches your intent:
 
 ```bash
-wi state set waiting add-api-retries  # blocked on an external answer
-wi resume add-api-retries             # return waiting work to working
+wi wait --for "API owner answer" add-api-retries  # waiting for an external answer
+wi wait --clear add-api-retries                   # back in the attention queue
 wi shelve add-api-retries             # clean up and return it to backlog
 ```
 
@@ -105,12 +105,12 @@ Once the task meets its completion criteria, intended changes are committed, and
 
 ```bash
 wi merge --item add-api-retries main
-wi archive add-api-retries
+wi close add-api-retries
 ```
 
 File unrelated discoveries as separate items; do not keep adding objectives to the completed retries task.
 
-Read [Lifecycle](../../concepts/lifecycle/) before using primitive state changes for cleanup. `wi state set` changes durable state only. `shelve` and `archive` coordinate cleanup.
+Read [Lifecycle](../../concepts/lifecycle/) before using primitive state changes for cleanup. `wi state set` changes durable state only. `shelve` and `close` coordinate cleanup.
 
 ## Where to go next
 

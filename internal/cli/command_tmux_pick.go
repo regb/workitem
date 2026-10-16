@@ -28,12 +28,28 @@ type pickerCandidate struct {
 }
 
 func runPicker(ctx context.Context, cfg Config, labels []string, noAgent, noPreview bool) error {
+	selected, ok, err := pickItem(ctx, cfg, labels, noAgent, noPreview, false)
+	if err != nil || !ok {
+		return err
+	}
+	switch selected.Item.State {
+	case model.StateBacklog:
+		return startPickerItem(ctx, cfg, selected.Item.ID, "work_item.started")
+	default:
+		return switchSelectedItem(ctx, cfg, selected.Item.ID, false)
+	}
+}
+
+// pickItem shows the interactive item picker and returns the selection
+// without acting on it. excludeCurrent leaves out the caller's own item, for
+// example when choosing what it should wait on.
+func pickItem(ctx context.Context, cfg Config, labels []string, noAgent, noPreview, excludeCurrent bool) (pickerCandidate, bool, error) {
 	if !noAgent {
 		barrierCtx, cancel := context.WithTimeout(ctx, 2500*time.Millisecond)
 		barrier, err := cfg.Coordinator.ActivityBarrier(barrierCtx)
 		cancel()
 		if err != nil {
-			return fmt.Errorf("refresh picker activity: %w", err)
+			return pickerCandidate{}, false, fmt.Errorf("refresh picker activity: %w", err)
 		}
 		for _, warning := range barrier.Projection.Warnings {
 			fmt.Fprintf(cfg.Stderr, "warning: %s\n", warning)
@@ -41,11 +57,11 @@ func runPicker(ctx context.Context, cfg Config, labels []string, noAgent, noPrev
 	}
 	labelRules, err := effectiveListLabelRules(cfg.App.ListConfig.Labels, cfg.Env, labels)
 	if err != nil {
-		return usageErr{err}
+		return pickerCandidate{}, false, usageErr{err}
 	}
 	res, err := daemonWorkList(ctx, cfg, app.WorkListOptions{LabelRules: labelRules})
 	if err != nil {
-		return fmt.Errorf("load picker candidates: %w", err)
+		return pickerCandidate{}, false, fmt.Errorf("load picker candidates: %w", err)
 	}
 	agents := map[string]string(nil)
 	if !noAgent {
@@ -61,21 +77,49 @@ func runPicker(ctx context.Context, cfg Config, labels []string, noAgent, noPrev
 		currentID = current.ID
 	}
 	candidates := pickerCandidates(res, agents, currentID)
-	if len(candidates) == 0 {
-		return fmt.Errorf("no selectable work items")
+	if excludeCurrent {
+		kept := candidates[:0]
+		for _, candidate := range candidates {
+			if !candidate.Current {
+				kept = append(kept, candidate)
+			}
+		}
+		candidates = kept
 	}
-	selected, ok, err := selectWithFZF(ctx, cfg, candidates, noPreview)
-	if err != nil || !ok {
+	if len(candidates) == 0 {
+		return pickerCandidate{}, false, fmt.Errorf("no selectable work items")
+	}
+	return selectWithFZF(ctx, cfg, candidates, noPreview)
+}
+
+// runPick prints the ID of the item chosen in the picker, for scripts and
+// tmux bindings that need an item without switching to it.
+func runPick(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
+	fs := newFlagSet("pick", cfg.Stderr)
+	var noAgent, noPreview, excludeCurrent bool
+	var labels repeatFlag
+	fs.BoolVar(&noAgent, "no-agent", false, "skip live agent/worktree inspection")
+	fs.BoolVar(&noPreview, "no-preview", false, "disable the details preview")
+	fs.BoolVar(&excludeCurrent, "exclude-current", false, "leave out the current item")
+	fs.Var(&labels, "label", "include/exclude label rule; repeatable")
+	if err := fs.Parse(args); err != nil {
+		return usageErr{err}
+	}
+	if fs.NArg() != 0 {
+		return usageErr{errors.New("usage: wi pick [--exclude-current] [--no-agent] [--no-preview] [--label <rule>]...")}
+	}
+	selected, ok, err := pickItem(ctx, cfg, labels, noAgent, noPreview, excludeCurrent)
+	if err != nil {
 		return err
 	}
-	switch selected.Item.State {
-	case model.StateWaiting:
-		return startPickerItem(ctx, cfg, selected.Item.ID, "work_item.resumed")
-	case model.StateBacklog:
-		return startPickerItem(ctx, cfg, selected.Item.ID, "work_item.started")
-	default:
-		return switchSelectedItem(ctx, cfg, selected.Item.ID, false)
+	if !ok {
+		return errors.New("no item selected")
 	}
+	if jsonOut {
+		return writeJSON(cfg.Stdout, map[string]string{"id": selected.Item.ID, "slug": selected.Item.Slug, "title": selected.Item.Title})
+	}
+	fmt.Fprintln(cfg.Stdout, selected.Item.ID)
+	return nil
 }
 
 func startPickerItem(ctx context.Context, cfg Config, selector, eventType string) error {
@@ -91,7 +135,7 @@ func pickerCandidates(res app.WorkListResult, agents map[string]string, currentI
 	out := []pickerCandidate{}
 	for _, section := range workDisplaySections(res, "active", agents) {
 		for _, item := range section.Items {
-			if item.State != model.StateWorking && item.State != model.StateWaiting && item.State != model.StateBacklog {
+			if item.State != model.StateActive && item.State != model.StateBacklog {
 				continue
 			}
 			out = append(out, pickerCandidate{Item: item, Section: section.Name, Current: item.ID == currentID})

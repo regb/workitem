@@ -18,6 +18,26 @@ type Candidate struct {
 	LastRequestedAt *time.Time `json:"last_requested_at,omitempty"`
 	LastCompletedAt *time.Time `json:"last_completed_at,omitempty"`
 	LastDeferredAt  *time.Time `json:"last_deferred_at,omitempty"`
+	// Waiting candidates only reach the queue while they have an unread
+	// response; strategies may use both facts.
+	Waiting bool `json:"waiting,omitempty"`
+	Unread  bool `json:"unread,omitempty"`
+}
+
+// Unread reports whether the last completed agent turn, or an explicit
+// mark-unread, is newer than the operator's last read marker.
+func Unread(lastCompletedAt, lastReadAt, lastUnreadAt *time.Time) bool {
+	newer := func(value *time.Time) bool {
+		return value != nil && (lastReadAt == nil || value.After(*lastReadAt))
+	}
+	return newer(lastCompletedAt) || newer(lastUnreadAt)
+}
+
+// Eligible applies the queue admission rule shared by every attention view:
+// waiting work stays out of the queue unless the agent responded since the
+// operator last read it.
+func Eligible(waiting, unread bool) bool {
+	return !waiting || unread
 }
 
 type Strategy interface {

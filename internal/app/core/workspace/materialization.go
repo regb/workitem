@@ -64,8 +64,8 @@ func (s *Service) CheckoutCreate(ctx context.Context, opts contract.ResolveOptio
 	if executor := m.Checkout.Specification.Executor; executor != "" && executor != model.ExecutorLocal {
 		return CheckoutCreateResult{}, fmt.Errorf("checkout executor %q is not supported by this local build", executor)
 	}
-	if m.State == model.StateArchived {
-		return CheckoutCreateResult{}, fmt.Errorf("work item %s is archived; run `wi state set backlog --item %s` before creating workspace resources", m.ID, m.ID)
+	if m.State == model.StateClosed {
+		return CheckoutCreateResult{}, fmt.Errorf("work item %s is closed; run `wi state set backlog --item %s` before creating workspace resources", m.ID, m.ID)
 	}
 	warnings := []string{}
 	if m.Checkout.Present() && m.Checkout.Claim != nil && m.Checkout.Claim.Path != "" {
@@ -166,8 +166,8 @@ func (s *Service) Ensure(ctx context.Context, opts contract.ResolveOptions) (Ens
 	if err != nil {
 		return EnsureResult{}, err
 	}
-	if m.State == model.StateArchived {
-		return EnsureResult{}, fmt.Errorf("work item %s is archived; set it to backlog before ensuring a workspace", m.ID)
+	if m.State == model.StateClosed {
+		return EnsureResult{}, fmt.Errorf("work item %s is closed; set it to backlog before ensuring a workspace", m.ID)
 	}
 	m, warnings, err := s.EnsureCheckout(ctx, opts, m, true)
 	return EnsureResult{WorkItemID: m.ID, Manifest: m, Warnings: warnings}, err

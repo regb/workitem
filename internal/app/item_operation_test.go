@@ -41,11 +41,14 @@ func TestResourceAndLifecycleOperationsShareTheItemLock(t *testing.T) {
 			_, err := a.AgentControl(ctx, AgentControlOptions{ResolveOptions: opts, CommandType: agent.CommandPrompt, Message: "work"})
 			return err
 		},
-		"stop":    func(ctx context.Context) error { _, err := a.StopAgentRuntime(ctx, opts, false); return err },
-		"archive": func(ctx context.Context) error { _, err := a.Archive(ctx, opts, false); return err },
-		"shelve":  func(ctx context.Context) error { _, err := a.Shelve(ctx, opts, false); return err },
+		"stop": func(ctx context.Context) error { _, err := a.StopAgentRuntime(ctx, opts, false); return err },
+		"archive": func(ctx context.Context) error {
+			_, err := a.Close(ctx, opts, model.ResolutionCompleted, false)
+			return err
+		},
+		"shelve": func(ctx context.Context) error { _, err := a.Shelve(ctx, opts, false); return err },
 		"state": func(ctx context.Context) error {
-			_, err := a.SetWorkItemState(ctx, opts, model.StateArchived, false)
+			_, err := a.SetWorkItemState(ctx, opts, model.StateClosed, false)
 			return err
 		},
 		"ensure":         func(ctx context.Context) error { _, err := a.EnsureWorkItemWorkspace(ctx, opts); return err },

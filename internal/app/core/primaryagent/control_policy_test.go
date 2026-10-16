@@ -15,7 +15,7 @@ import (
 func TestArchivedOwnerRefusesMessagesButAllowsEmergencyControls(t *testing.T) {
 	root := testutil.ShortTempDir(t)
 	runtime := &model.AgentRuntime{ID: "owner", WorkItemID: "item", Mode: "headless", HostPID: 42, HostProcessGroup: 42, HostStartTime: 42, Capabilities: model.RuntimeCapabilities{Prompt: true, Cancel: true, IdleGuard: true}}
-	manifest := model.Manifest{ID: "item", State: model.StateArchived}
+	manifest := model.Manifest{ID: "item", State: model.StateClosed}
 	st := &runtimeStore{itemDir: root, runtime: runtime}
 	service := New(st, process(true), nil, nil, func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }, func() (string, error) { return "command", nil }, time.Now, nil)
 	server, err := agent.ListenControlSocket(service.ControlSocketPath("item", runtime))
@@ -44,7 +44,7 @@ func TestArchivedOwnerRefusesMessagesButAllowsEmergencyControls(t *testing.T) {
 			t.Fatalf("command=%s", actual)
 		}
 	}
-	manifest.State = model.StateWorking
+	manifest.State = model.StateActive
 	opts.CommandType = agent.CommandPrompt
 	opts.Message = "work"
 	opts.ExpectedRuntimeID = "superseded"

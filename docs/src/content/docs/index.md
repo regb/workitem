@@ -3,9 +3,9 @@ title: wi documentation
 description: Capture, delegate, review, and finish short-lived development tasks.
 ---
 
-`wi` is a Linux-first CLI for bounded, AI-assisted development tasks. Create an item with a clear objective, supervise its agent, review the result, and archive it when done. Use another item for a different objective.
+`wi` is a Linux-first CLI for bounded, AI-assisted development tasks. Create an item with a clear objective, supervise its agent, review the result, and close it when done. Use another item for a different objective.
 
-The active task is short-lived; its record is durable. Descriptions, branches, conversations, and history survive restarts and remain after archiving. Worktrees, runtimes, and terminals are replaceable resources.
+The active task is short-lived; its record is durable. Descriptions, branches, conversations, and history survive restarts and remain after closing. Worktrees, runtimes, and terminals are replaceable resources.
 
 :::note[Start here]
 Follow [Installation](getting-started/installation/) and the [Quick start](getting-started/quick-start/) for interactive and headless workflows.
@@ -25,7 +25,7 @@ After reviewing, testing, and committing the changes:
 
 ```bash
 wi merge --item add-request-retries
-wi archive add-request-retries
+wi close add-request-retries
 ```
 
 `new --start` sends the configured startup message. Existing-item `start` and `resume` open a runtime without sending one. Descriptions and prompts are separate; see [Delegate work](guides/delegation/).

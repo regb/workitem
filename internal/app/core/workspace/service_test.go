@@ -66,7 +66,7 @@ func TestStatusReportsAbsentCheckout(t *testing.T) {
 func TestStatusReportsUnavailableCheckout(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing")
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1", State: model.StateWorking, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Branch: "wi/item-1"}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, nil
+		return model.Manifest{ID: "item-1", State: model.StateActive, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Branch: "wi/item-1"}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, nil
 	}
 	res, err := New(nil, fakeGit{}, nil, nil, resolve, nil, nil).Status(context.Background(), contract.ResolveOptions{})
 	if err != nil || len(res.Warnings) != 1 || res.Git.CurrentHead != "" {
@@ -78,7 +78,7 @@ func TestStatusInspectsPresentCheckout(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Clean(dir)
 	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1", State: model.StateWorking, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Branch: "wi/item-1"}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, nil
+		return model.Manifest{ID: "item-1", State: model.StateActive, Checkout: model.Checkout{Specification: model.CheckoutSpecification{Branch: "wi/item-1"}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, nil
 	}
 	res, err := New(nil, fakeGit{}, nil, nil, resolve, nil, nil).Status(context.Background(), contract.ResolveOptions{})
 	if err != nil || !res.Git.BranchMatches || !res.Git.Dirty || res.Git.CurrentHead != "abc" {

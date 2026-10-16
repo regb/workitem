@@ -28,16 +28,13 @@ func TestSetWorkItemStateTransitionsWithoutWorkspaceAdapters(t *testing.T) {
 		to    string
 		valid bool
 	}{
-		{"backlog to working", model.StateBacklog, model.StateWorking, true},
-		{"working to waiting", model.StateWorking, model.StateWaiting, true},
-		{"waiting to working", model.StateWaiting, model.StateWorking, true},
-		{"working to backlog", model.StateWorking, model.StateBacklog, true},
-		{"waiting to backlog", model.StateWaiting, model.StateBacklog, true},
-		{"backlog to archived", model.StateBacklog, model.StateArchived, true},
-		{"working to archived", model.StateWorking, model.StateArchived, true},
-		{"archived to backlog", model.StateArchived, model.StateBacklog, true},
-		{"backlog to waiting", model.StateBacklog, model.StateWaiting, false},
-		{"archived to working", model.StateArchived, model.StateWorking, false},
+		{"backlog to active", model.StateBacklog, model.StateActive, true},
+		{"active to backlog", model.StateActive, model.StateBacklog, true},
+		{"backlog to closed", model.StateBacklog, model.StateClosed, true},
+		{"active to closed", model.StateActive, model.StateClosed, true},
+		{"closed to backlog", model.StateClosed, model.StateBacklog, true},
+		{"active to waiting", model.StateActive, model.LegacyStateWaiting, false},
+		{"closed to active", model.StateClosed, model.StateActive, false},
 	}
 
 	for i, tc := range tests {
@@ -81,10 +78,10 @@ func TestSetWorkItemStateTransitionsWithoutWorkspaceAdapters(t *testing.T) {
 			if !reflect.DeepEqual(persisted.Checkout, originalCheckout) || !reflect.DeepEqual(persisted.PrimaryConversation, originalPi) {
 				t.Fatalf("state transition changed workspace fields: before=%+v/%+v after=%+v/%+v", originalCheckout, originalPi, persisted.Checkout, persisted.PrimaryConversation)
 			}
-			if tc.to == model.StateArchived && persisted.Slug != "" {
+			if tc.to == model.StateClosed && persisted.Slug != "" {
 				t.Fatalf("archived slug = %q", persisted.Slug)
 			}
-			if tc.from == model.StateArchived && tc.to == model.StateBacklog && persisted.Slug == "" {
+			if tc.from == model.StateClosed && tc.to == model.StateBacklog && persisted.Slug == "" {
 				t.Fatal("restored backlog item did not receive a slug")
 			}
 			events, err := st.ReadEvents(manifest.ID)
@@ -103,12 +100,12 @@ func TestSetWorkItemStateEnforcesDeepWorkCapacity(t *testing.T) {
 	now := testutil.Time()
 	application, st, target := newCoreTestApp(t, now, model.StateBacklog, true)
 	application.DeepWorkConfig = config.DeepWorkConfig{MaxActive: 1}
-	active := coreManifest(t, testutil.ID(t, 31), "active-deep", model.StateWorking, true, now)
+	active := coreManifest(t, testutil.ID(t, 31), "active-deep", model.StateActive, true, now)
 	if err := st.CreateItem(context.Background(), active); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := application.SetWorkItemState(context.Background(), ResolveOptions{Selector: target.ID}, model.StateWorking, false); err == nil || !strings.Contains(err.Error(), "Deep work active limit reached") {
+	if _, err := application.SetWorkItemState(context.Background(), ResolveOptions{Selector: target.ID}, model.StateActive, false); err == nil || !strings.Contains(err.Error(), "Deep work active limit reached") {
 		t.Fatalf("capacity error = %v", err)
 	}
 	persisted, err := st.LoadManifest(target.ID)
@@ -119,11 +116,11 @@ func TestSetWorkItemStateEnforcesDeepWorkCapacity(t *testing.T) {
 		t.Fatalf("failed capacity transition persisted %q", persisted.State)
 	}
 
-	result, err := application.SetWorkItemState(context.Background(), ResolveOptions{Selector: target.ID}, model.StateWorking, true)
+	result, err := application.SetWorkItemState(context.Background(), ResolveOptions{Selector: target.ID}, model.StateActive, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.State != model.StateWorking || !result.Changed {
+	if result.State != model.StateActive || !result.Changed {
 		t.Fatalf("forced transition = %+v", result)
 	}
 	events, err := st.ReadEvents(target.ID)
@@ -141,7 +138,7 @@ func TestSetWorkItemStateEnforcesDeepWorkCapacity(t *testing.T) {
 
 func TestAttentionFactsUseOnlyDurableFiles(t *testing.T) {
 	base := testutil.Time()
-	application, st, manifest := newCoreTestApp(t, base.Add(3*time.Minute), model.StateWorking, false)
+	application, st, manifest := newCoreTestApp(t, base.Add(3*time.Minute), model.StateActive, false)
 	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: testutil.ID(t, 41), Locator: filepath.Join("sessions", "pi", "root.jsonl")}
 	if err := st.SaveManifest(context.Background(), manifest); err != nil {
 		t.Fatal(err)
@@ -183,7 +180,7 @@ func TestAttentionFactsUseOnlyDurableFiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if persisted.State != model.StateWorking || !reflect.DeepEqual(persisted.Checkout, manifest.Checkout) {
+	if persisted.State != model.StateActive || !reflect.DeepEqual(persisted.Checkout, manifest.Checkout) {
 		t.Fatalf("attention mutation changed item/workspace state: %+v", persisted)
 	}
 }
@@ -229,7 +226,7 @@ func coreManifest(t *testing.T, id, slug, state string, deep bool, now time.Time
 		model.Checkout{Specification: model.CheckoutSpecification{Branch: model.ItemBranchName("item", id)}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: checkoutPath}},
 	)
 	manifest.State = state
-	if state == model.StateArchived {
+	if state == model.StateClosed {
 		manifest.Slug = ""
 	}
 	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: testutil.ID(t, 40), Locator: filepath.Join("sessions", "pi", "existing.jsonl")}

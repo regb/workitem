@@ -167,7 +167,7 @@ func runCoordinatorNewAgent(ctx context.Context, cfg Config, opts app.NewWorkIte
 	}
 	result := app.NewAgentWorkItemResult{New: created}
 	resolve := app.ResolveOptions{Selector: created.Manifest.ID, CWD: opts.CWD, Env: opts.Env}
-	transition, err := coordinatorStateTransition(ctx, cfg, created.Manifest.ID, model.StateWorking, "work_item.started", false)
+	transition, err := coordinatorStateTransition(ctx, cfg, created.Manifest.ID, model.StateActive, "work_item.started", false)
 	if err != nil {
 		return result, fmt.Errorf("created work item %s (%s), but could not start its agent: %w", created.Manifest.Slug, created.Manifest.ID, err)
 	}

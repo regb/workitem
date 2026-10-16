@@ -22,7 +22,7 @@ func TestExternalObserverVerifiesRuntimeAndBuildsAgentProjection(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	manifest := model.NewManifest(itemID, "observer", "Observer", nil, false, now, model.Repository{}, model.Checkout{})
-	manifest.State = model.StateWorking
+	manifest.State = model.StateActive
 	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: "session-1", Locator: "sessions/pi/session-1.jsonl"}
 	if err := native.CreateItem(context.Background(), manifest); err != nil {
 		t.Fatal(err)

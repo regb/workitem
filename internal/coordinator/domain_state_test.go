@@ -21,7 +21,7 @@ func TestStateSetCommandEnforcesCapacityAndAllocatesRestoreSlug(t *testing.T) {
 	candidate := model.NewManifest(importTestID, "domain", "Domain", nil, true, now, model.Repository{}, model.Checkout{})
 	activeID := "01KZYHGDCECSFS4BJ2SNTQP49W"
 	active := model.NewManifest(activeID, "active", "Active", nil, true, now, model.Repository{}, model.Checkout{})
-	active.State = model.StateWorking
+	active.State = model.StateActive
 	for _, manifest := range []model.Manifest{candidate, active} {
 		if err := native.CreateItem(context.Background(), manifest); err != nil {
 			t.Fatal(err)
@@ -36,7 +36,7 @@ func TestStateSetCommandEnforcesCapacityAndAllocatesRestoreSlug(t *testing.T) {
 		t.Fatal(err)
 	}
 	canonical, _ := db.CanonicalManifest(candidate.ID)
-	working := ManifestCommand{ID: "state-working", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &canonical.Revision, Actor: "user", TargetState: model.StateWorking, EventType: "work_item.started", MaxActive: 1, CreatedAt: now.Add(time.Second)}
+	working := ManifestCommand{ID: "state-working", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &canonical.Revision, Actor: "user", TargetState: model.StateActive, EventType: "work_item.started", MaxActive: 1, CreatedAt: now.Add(time.Second)}
 	if _, err := db.ExecuteManifestCommand(working); err == nil || !strings.Contains(err.Error(), "limit reached") {
 		t.Fatalf("expected capacity error, got %v", err)
 	}
@@ -46,19 +46,19 @@ func TestStateSetCommandEnforcesCapacityAndAllocatesRestoreSlug(t *testing.T) {
 	}
 	working.Force = true
 	result, err := db.ExecuteManifestCommand(working)
-	if err != nil || result.Manifest.State != model.StateWorking || result.Revision != canonical.Revision+2 || len(result.Events) != 2 || result.Events[1].Type != "work_item.started" {
+	if err != nil || result.Manifest.State != model.StateActive || result.Revision != canonical.Revision+2 || len(result.Events) != 2 || result.Events[1].Type != "work_item.started" {
 		t.Fatalf("forced result=%+v err=%v", result, err)
 	}
 	archiveRevision := result.Revision
-	archive, err := db.ExecuteManifestCommand(ManifestCommand{ID: "state-archive", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &archiveRevision, Actor: "user", TargetState: model.StateArchived, MaxActive: 1, CreatedAt: now.Add(2 * time.Second)})
-	if err != nil || archive.Manifest.State != model.StateArchived || archive.Manifest.Slug != "" {
+	archive, err := db.ExecuteManifestCommand(ManifestCommand{ID: "state-archive", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &archiveRevision, Actor: "user", TargetState: model.StateClosed, MaxActive: 1, CreatedAt: now.Add(2 * time.Second)})
+	if err != nil || archive.Manifest.State != model.StateClosed || archive.Manifest.Slug != "" {
 		t.Fatalf("archive=%+v err=%v", archive, err)
 	}
 	// Once the original slug is active on another item, restore must allocate a
 	// unique canonical alias in the same transaction.
 	activeCanonical, _ := db.CanonicalManifest(activeID)
 	renameRevision := activeCanonical.Revision
-	if _, err := db.ExecuteManifestCommand(ManifestCommand{ID: "active-archive", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: activeID, ExpectedRevision: &renameRevision, Actor: "user", TargetState: model.StateArchived, CreatedAt: now.Add(3 * time.Second)}); err != nil {
+	if _, err := db.ExecuteManifestCommand(ManifestCommand{ID: "active-archive", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: activeID, ExpectedRevision: &renameRevision, Actor: "user", TargetState: model.StateClosed, CreatedAt: now.Add(3 * time.Second)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := MaterializeNativeWrites(context.Background(), db, native); err != nil {
@@ -91,7 +91,7 @@ func TestWaitCommandComputesAndStoresResultingQueueAtomically(t *testing.T) {
 	ids := []string{importTestID, "01KZYHGDCECSFS4BJ2SNTQP49W", "01KZYHGDCECSFS4BJ2SNTQP49X"}
 	for index, id := range ids {
 		manifest := model.NewManifest(id, "queue-"+string(rune('a'+index)), "Queue", nil, false, now.Add(time.Duration(index)*time.Second), model.Repository{}, model.Checkout{})
-		manifest.State = model.StateWorking
+		manifest.State = model.StateActive
 		if err := native.CreateItem(context.Background(), manifest); err != nil {
 			t.Fatal(err)
 		}
@@ -116,9 +116,9 @@ func TestWaitCommandComputesAndStoresResultingQueueAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := ManifestCommand{ID: "wait-and-queue", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: ids[0], ExpectedRevision: &canonical.Revision, Actor: "user", TargetState: model.StateWaiting, EventType: "work_item.state_set", MaxActive: 2, CreatedAt: now.Add(5 * time.Minute)}
+	command := ManifestCommand{ID: "wait-and-queue", ProtocolVersion: ProtocolVersion, Type: CommandBlockerAdd, ItemID: ids[0], ExpectedRevision: &canonical.Revision, Actor: "user", Blockers: []model.Blocker{{Kind: model.BlockerExternal, Event: "review"}}, CreatedAt: now.Add(5 * time.Minute)}
 	result, err := db.ExecuteManifestCommandWithQueue(command, ActionabilityQueueOptions{})
-	if err != nil || result.Command.Manifest.State != model.StateWaiting || result.Queue.Strategy != "recent-request" || len(result.Queue.Candidates) != 2 || result.Queue.Candidates[0].Manifest.ID != ids[2] || result.Queue.Candidates[1].Manifest.ID != ids[1] || !result.Selection.Found || result.Selection.WorkItemID != ids[2] || result.Selection.CurrentInQueue {
+	if err != nil || result.Command.Manifest.State != model.StateActive || len(result.Command.Manifest.Blockers) != 1 || result.Queue.Strategy != "recent-request" || len(result.Queue.Candidates) != 2 || result.Queue.Candidates[0].Manifest.ID != ids[2] || result.Queue.Candidates[1].Manifest.ID != ids[1] || !result.Selection.Found || result.Selection.WorkItemID != ids[2] || result.Selection.CurrentInQueue {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
 	// A retry returns the queue committed with the transition, even if the live
