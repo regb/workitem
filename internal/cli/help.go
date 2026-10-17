@@ -485,7 +485,18 @@ var helpDocs = map[string]helpDoc{
 		Environment: []helpOption{{"WI_LIST_LABELS", "Comma-separated label rules overlaid on config."}},
 		Examples:    []string{`wi next`, `wi next --defer`, `wi next --wait --until tomorrow`, `wi next --wait --on -`, `wi next --close --resolution abandoned`, `wi next --label +backend --label -blocked`, `wi --json next --wait --until 4h`},
 	},
-
+	"web": {
+		Summary:     "Serve a local work list and primary-agent chat",
+		Usage:       []string{"wi web [--port PORT] [--access-url ORIGIN] [--token-file PATH | --no-token]"},
+		Description: []string{"Prints a private access URL while always binding the server to loopback. Existing chat never starts or replaces an owner. New saves and starts headless work in the background. Close runs safety checks without force. Stopping the server leaves primary agents running."},
+		Options: []helpOption{
+			{Flag: "--port PORT", Text: "Bind 127.0.0.1 on this port; default chooses an available port"},
+			{Flag: "--access-url ORIGIN", Text: "Trust this exact browser-facing http:// or https:// origin when a private reverse proxy forwards to the loopback port"},
+			{Flag: "--token-file PATH", Text: "Reuse the access secret stored in this owner-only file, creating it when missing, so the access URL survives restarts"},
+			{Flag: "--no-token", Text: "With --access-url, require no access secret and rely on the private proxy (for example a Tailnet) for access control"},
+		},
+		SeeAlso: []string{"list", "new", "repo", "close"},
+	},
 	"resume": {
 		Summary:     "Ensure an active item's agent runtime",
 		Usage:       []string{"wi resume [--item <selector>] [--agent-mode <tui|headless>] [item]"},
@@ -636,7 +647,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  wi help [command [subcommand]]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Work:")
-	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}})
+	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"web", "Open local browser access"}, {"show", "Show an item"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
 	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"attention", "Inspect, defer, or mark attention read"}})

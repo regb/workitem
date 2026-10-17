@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wi</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script>
+</head>
+<body>
+  <header><button id="list">Dashboard</button><h1 id="title"></h1><button id="new">New</button><button id="attention" class="attention-clear" disabled>Nothing needs attention</button><details id="chat-menu" hidden><summary aria-label="Conversation actions">☰</summary><div class="chat-menu-items"><button id="menu-details" type="button">Details</button><button id="mark-unread" type="button">Mark unread</button><button id="shelve" type="button">Shelve</button><button id="close-completed" type="button">Close as completed</button><button id="close-abandoned" type="button">Close as abandoned</button></div></details></header>
+  <p id="notice" role="status"></p>
+  <div id="started-toast" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+  <main id="items">
+    <div class="list-toolbar">
+      <span id="capacity" class="meta"></span>
+      <details id="project-filter">
+        <summary id="project-summary">Projects · All projects</summary>
+        <fieldset><legend>Filter projects</legend>
+          <div class="filter-actions"><button id="projects-all" type="button">Select all</button><button id="projects-none" type="button">Clear all</button></div>
+          <div id="project-options"></div>
+        </fieldset>
+      </details>
+    </div>
+    <div id="work-list"></div>
+  </main>
+  <section id="new-page" hidden aria-label="New conversation">
+    <form id="new-form">
+      <h2>What do you want to work on?</h2>
+      <div class="launch-options">
+        <div class="launch-option">
+          <label for="new-project">Repository</label>
+          <select id="new-project" required aria-describedby="new-project-error"><option value="">Choose a repo</option></select>
+          <p id="new-project-error" role="alert" hidden>Repository is required.</p>
+        </div>
+      </div>
+      <div class="launch-composer">
+        <label for="new-prompt" class="sr-only">Message</label>
+        <textarea id="new-prompt" required rows="4" placeholder="Describe the task…"></textarea>
+        <div class="launch-controls">
+          <select id="new-agent" required aria-label="Agent profile"><option value="">Choose an agent</option></select>
+          <button id="create" type="submit" aria-label="Send" title="Send" disabled>↑</button>
+        </div>
+      </div>
+      <p class="launch-hint">Send it and keep going. The agent works in the background.</p>
+      <div id="creation-result" role="status"></div>
+      <div id="launch-updates" aria-live="polite"></div>
+    </form>
+  </section>
+  <section id="chat-loading" hidden role="status" aria-label="Starting conversation" aria-live="polite" aria-busy="true">
+    <div class="loading-wheel" aria-hidden="true"></div><span class="sr-only">Starting conversation</span>
+  </section>
+  <section id="chat" hidden aria-label="Primary-agent chat">
+    <div id="conversation">
+      <div id="scroller">
+        <div id="history" aria-label="Conversation history"></div>
+        <div id="live" aria-live="polite"></div>
+      </div>
+      <div id="owner" class="meta"></div>
+      <div id="control-bar" hidden role="status"><span id="control-text"></span><button id="take-control" type="button">Take control</button></div>
+      <form id="composer"><div id="attachments" hidden aria-label="Image attachments"></div><label for="message" class="sr-only">Message</label><textarea id="message" rows="1" placeholder="Message agent"></textarea><div class="actions"><input id="image-input" class="sr-only" type="file" accept="image/jpeg,image/png,image/gif,image/webp" multiple><button id="attach" type="button" aria-label="Attach images" title="Attach images">＋</button><select id="delivery" aria-label="Message delivery"><option value="prompt">Send now</option><option value="follow_up">Queue next</option></select><button id="send" type="submit" aria-label="Send message">↑</button></div></form>
+    </div>
+    <button id="ticket-backdrop" type="button" aria-label="Close ticket details" hidden></button>
+    <aside id="ticket" aria-label="Ticket details" aria-hidden="true">
+      <div class="ticket-heading"><h2>Ticket details</h2><button id="ticket-close" type="button" aria-label="Close ticket details">×</button></div><h3 id="ticket-title"></h3>
+      <div id="ticket-status"></div>
+      <section class="description"><h3>Description</h3><div id="ticket-description"></div></section>
+      <dl id="ticket-info"></dl>
+      <section><h3>Labels</h3><div id="ticket-labels"></div></section>
+      <section class="blockers"><h3>Waiting</h3><ul id="ticket-blockers"></ul>
+        <form id="block-form">
+          <label for="block-kind" class="sr-only">Wait for</label>
+          <select id="block-kind"><option value="1h">Wait 1 hour</option><option value="4h">Wait 4 hours</option><option value="1d">Wait 1 day</option><option value="7d">Wait 1 week</option><option value="external">Wait for an external event</option><option value="item">Wait on another item</option></select>
+          <select id="block-item" hidden aria-label="Blocking item"></select>
+          <input id="block-event" type="text" maxlength="200" placeholder="Event, e.g. API review or a PR URL" aria-label="Event it waits for" hidden>
+          <button id="block-add" type="submit">Wait</button>
+        </form>
+      </section>
+    </aside>
+  </section>
+</body>
+</html>
