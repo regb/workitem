@@ -30,7 +30,7 @@ Setup refuses to overwrite an existing config and does not start agents or the c
 | `wi config get KEY [--json]` | Query a scalar or section by dot-separated key |
 | `wi config agents [--json]` | List configured agent profiles and mark the default |
 | `wi config drivers [--json]` | Inspect driver definitions and defaults |
-| `wi config extensions` | Inspect registered extension options, defaults, types, and scopes |
+| `wi config plugins` | Inspect registered plugin options, defaults, types, and scopes |
 | `wi config get KEY [--origins]` | Inspect a global value and optional extension-default provenance |
 
 These commands are read-only and do not start a daemon, agent, or extension, load checked-in project overrides, or discover installations. Config queries are local. Repository policy is managed separately through `wi repo settings`. Opaque driver settings, custom commands, and sensitive extension values are redacted unless `--show-sensitive` is supplied. See [Configuration](../configuration/) for examples.
@@ -46,8 +46,8 @@ Single-repository commands default to the current item's registered repository w
 | `wi repo show [NAME]` | Read registry metadata, live Git tracking, store path, and integration commit |
 | `wi repo rename [OLD] NEW` | Change a unique name without moving resources |
 | `wi repo settings show [NAME] [--json] [--show-sensitive]` | Inspect stored repository overrides and effective extension settings |
-| `wi repo settings set [NAME] extensions.EXTENSION.OPTION VALUE` | Set a registered repository-scoped option through the daemon |
-| `wi repo settings unset [NAME] extensions.EXTENSION.OPTION` | Remove an override and restore global/default inheritance |
+| `wi repo settings set [NAME] plugins.PLUGIN.OPTION VALUE` | Set a registered repository-scoped option through the daemon |
+| `wi repo settings unset [NAME] plugins.PLUGIN.OPTION` | Remove an override and restore global/default inheritance |
 | `wi repo upstream [NAME] URL [--branch BRANCH]` | Edit origin and integration branch tracking in Git; `--clear` removes tracking but keeps origin |
 | `wi repo status [NAME] [--fetch]` | Inspect cached ahead/behind history, optionally fetching without integrating |
 | `wi repo sync [NAME]` | Fetch and fast-forward integration, refusing divergence; defaults to the current item’s repository |

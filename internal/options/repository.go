@@ -12,8 +12,8 @@ import (
 
 func SplitRepositoryKey(path string) (string, string, error) {
 	parts := strings.Split(path, ".")
-	if len(parts) != 3 || parts[0] != "extensions" || !validName(parts[1]) || !validName(parts[2]) || len(parts[1]) > 64 || len(parts[2]) > 64 {
-		return "", "", fmt.Errorf("setting key must be extensions.EXTENSION.OPTION")
+	if len(parts) != 3 || parts[0] != "plugins" || !validName(parts[1]) || !validName(parts[2]) || len(parts[1]) > 64 || len(parts[2]) > 64 {
+		return "", "", fmt.Errorf("setting key must be plugins.PLUGIN.OPTION")
 	}
 	return strings.Join(parts[:2], "."), parts[2], nil
 }
@@ -21,7 +21,7 @@ func (r *Registry) repositoryOption(namespace, key string) (Option, error) {
 	if _, _, err := SplitRepositoryKey(namespace + "." + key); err != nil {
 		return Option{}, err
 	}
-	name := strings.TrimPrefix(namespace, "extensions.")
+	name := strings.TrimPrefix(namespace, "plugins.")
 	if r != nil {
 		if d, ok := r.definitions[name]; ok {
 			for _, o := range d.Options {
@@ -99,12 +99,12 @@ func (r *Registry) ResolveRepository(global map[string]map[string]any, stored ma
 	overrides := map[string]map[string]any{}
 	warnings := []string{}
 	for namespace, entries := range stored {
-		name := strings.TrimPrefix(namespace, "extensions.")
+		name := strings.TrimPrefix(namespace, "plugins.")
 		available := false
 		if r != nil {
 			_, available = r.definitions[name]
 		}
-		if !available || namespace != "extensions."+name {
+		if !available || namespace != "plugins."+name {
 			warnings = append(warnings, "preserved inactive settings for unavailable namespace "+namespace)
 			continue
 		}

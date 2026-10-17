@@ -314,7 +314,7 @@ func exerciseRepositorySettingsE2E(t *testing.T, binary, repository string, env 
 		Changed  bool   `json:"changed"`
 		Revision uint64 `json:"revision"`
 	}
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "set", "test", "extensions.direnv.trust", "always", "--json"), &changed)
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "set", "test", "plugins.direnv.trust", "always", "--json"), &changed)
 	if !changed.Changed || changed.Revision != 1 {
 		t.Fatal(changed)
 	}
@@ -325,18 +325,18 @@ func exerciseRepositorySettingsE2E(t *testing.T, binary, repository string, env 
 		Origins   map[string]string                     `json:"origins"`
 	}
 	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "show", "test", "--json"), &shown)
-	if shown.Revision != 1 || shown.Effective["extensions.direnv"]["trust"] != "always" || string(shown.Overrides["extensions.direnv"]["trust"]) != `"always"` {
+	if shown.Revision != 1 || shown.Effective["plugins.direnv"]["trust"] != "always" || string(shown.Overrides["plugins.direnv"]["trust"]) != `"always"` {
 		t.Fatalf("settings=%+v", shown)
 	}
-	assertWiE2EFails(t, binary, repository, env, "repo", "settings", "set", "test", "extensions.direnv.trust", "typo", "--json")
-	assertWiE2EFails(t, binary, repository, env, "repo", "settings", "set", "test", "extensions.missing.trust", "always", "--json")
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "unset", "test", "extensions.direnv.trust", "--json"), &changed)
+	assertWiE2EFails(t, binary, repository, env, "repo", "settings", "set", "test", "plugins.direnv.trust", "typo", "--json")
+	assertWiE2EFails(t, binary, repository, env, "repo", "settings", "set", "test", "plugins.missing.trust", "always", "--json")
+	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "unset", "test", "plugins.direnv.trust", "--json"), &changed)
 	if !changed.Changed || changed.Revision != 2 {
 		t.Fatal(changed)
 	}
 	shown.Overrides = nil
 	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "show", "test", "--json"), &shown)
-	if shown.Revision != 2 || shown.Effective["extensions.direnv"]["trust"] != "prompt" || len(shown.Overrides) != 0 {
+	if shown.Revision != 2 || shown.Effective["plugins.direnv"]["trust"] != "prompt" || len(shown.Overrides) != 0 {
 		t.Fatalf("unset did not restore defaults: %+v", shown)
 	}
 }

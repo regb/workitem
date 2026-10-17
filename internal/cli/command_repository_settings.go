@@ -51,7 +51,7 @@ func runRepositorySettings(ctx context.Context, args []string, cfg Config, jsonO
 			positional = positional[1:]
 		}
 		if len(positional) != 2 {
-			return usageErr{fmt.Errorf("usage: wi repo settings set [NAME] extensions.EXTENSION.OPTION VALUE")}
+			return usageErr{fmt.Errorf("usage: wi repo settings set [NAME] plugins.PLUGIN.OPTION VALUE")}
 		}
 		key, text = positional[0], positional[1]
 	case "unset":
@@ -60,7 +60,7 @@ func runRepositorySettings(ctx context.Context, args []string, cfg Config, jsonO
 			positional = positional[1:]
 		}
 		if len(positional) != 1 {
-			return usageErr{fmt.Errorf("usage: wi repo settings unset [NAME] extensions.EXTENSION.OPTION")}
+			return usageErr{fmt.Errorf("usage: wi repo settings unset [NAME] plugins.PLUGIN.OPTION")}
 		}
 		key = positional[0]
 	default:
@@ -86,16 +86,16 @@ func runRepositorySettings(ctx context.Context, args []string, cfg Config, jsonO
 		if cfg.GlobalConfig != nil {
 			global = *cfg.GlobalConfig
 		}
-		effective, warnings, resolveErr := registry.ResolveRepository(global.Extensions, current.Settings.Namespaces)
+		effective, warnings, resolveErr := registry.ResolveRepository(global.PluginSettings, current.Settings.Namespaces)
 		if resolveErr != nil {
 			warnings = append(warnings, resolveErr.Error())
 			effective = map[string]map[string]any{}
 		}
-		origins := global.ExtensionOrigins()
+		origins := global.PluginOrigins()
 		for _, d := range registry.Definitions() {
 			for _, o := range d.Options {
-				if origins["extensions."+d.Name+"."+o.Name] == "" {
-					origins["extensions."+d.Name+"."+o.Name] = "default"
+				if origins["plugins."+d.Name+"."+o.Name] == "" {
+					origins["plugins."+d.Name+"."+o.Name] = "default"
 				}
 			}
 		}
@@ -116,7 +116,7 @@ func runRepositorySettings(ctx context.Context, args []string, cfg Config, jsonO
 		}
 		namespacedEffective := map[string]map[string]any{}
 		for name, values := range effective {
-			namespacedEffective["extensions."+name] = values
+			namespacedEffective["plugins."+name] = values
 		}
 		result := struct {
 			Repository model.OwnedRepository                 `json:"repository"`
@@ -149,10 +149,10 @@ func runRepositorySettings(ctx context.Context, args []string, cfg Config, jsonO
 		} else if err := printConfigTree(cfg.Stdout, "", raw); err != nil {
 			return err
 		}
-		fmt.Fprintln(cfg.Stdout, "Effective extension settings:")
+		fmt.Fprintln(cfg.Stdout, "Effective plugin settings:")
 		tree := map[string]any{}
 		for name, entries := range effective {
-			tree["extensions."+name] = entries
+			tree["plugins."+name] = entries
 		}
 		return printConfigTree(cfg.Stdout, "", tree)
 	}

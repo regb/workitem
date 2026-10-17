@@ -75,8 +75,8 @@ func TestInitBootstrapsThroughBundledDrivers(t *testing.T) {
 		{[]string{"config", "get", "agents.pi.config.executable"}, "[redacted]\n"},
 		{[]string{"config", "get", "agents.pi.config.executable", "--show-sensitive"}, filepath.Join(tools, "pi") + "\n"},
 		{[]string{"config", "drivers", "--json"}, `"defaults"`},
-		{[]string{"config", "extensions", "--json"}, `"direnv"`},
-		{[]string{"config", "get", "extensions.direnv.trust", "--json"}, "\"prompt\"\n"},
+		{[]string{"config", "plugins", "--json"}, `"direnv"`},
+		{[]string{"config", "get", "plugins.direnv.trust", "--json"}, "\"prompt\"\n"},
 		{[]string{"config", "--help"}, "Read-only"},
 	} {
 		if out, err := run(query.args...); err != nil || !strings.Contains(out, query.want) {

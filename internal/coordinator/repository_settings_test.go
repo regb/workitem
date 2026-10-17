@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/regb/workitem/internal/testutil"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -24,7 +25,7 @@ func settingsRegistry(t *testing.T) *options.Registry {
 	return r
 }
 func settingCommand(id string, rev uint64, key string, value json.RawMessage) SetRepositorySettingCommand {
-	return SetRepositorySettingCommand{ID: "setting:" + id, ProtocolVersion: ProtocolVersion, RepositoryID: importTestID, ExpectedRevision: rev, Namespace: "extensions.direnv", Key: key, Value: value, CreatedAt: time.Now().UTC()}
+	return SetRepositorySettingCommand{ID: "setting:" + id, ProtocolVersion: ProtocolVersion, RepositoryID: importTestID, ExpectedRevision: rev, Namespace: "plugins.direnv", Key: key, Value: value, CreatedAt: time.Now().UTC()}
 }
 func TestRepositorySettingsAreDurableIdempotentAndFollowIdentity(t *testing.T) {
 	root := t.TempDir()
@@ -81,7 +82,7 @@ func TestRepositorySettingsAreDurableIdempotentAndFollowIdentity(t *testing.T) {
 	}
 	defer db.Close()
 	stored, err := db.RepositorySettings("new-name")
-	if err != nil || !stored.Repository.Archived || string(stored.Settings.Namespaces["extensions.direnv"]["trust"]) != `"always"` {
+	if err != nil || !stored.Repository.Archived || string(stored.Settings.Namespaces["plugins.direnv"]["trust"]) != `"always"` {
 		t.Fatal(stored, err)
 	}
 	if _, err := db.RegisterRepository(repositoryTestCommand("01KZYHGDCECSFS4BJ2SNTQP49W", "old-name")); err != nil {
@@ -113,7 +114,7 @@ func TestSettingsValidateAtWriterAndKeepValuesOutOfHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	for i, mutate := range []func(*SetRepositorySettingCommand){
-		func(c *SetRepositorySettingCommand) { c.Value = json.RawMessage(`"typo"`) }, func(c *SetRepositorySettingCommand) { c.Value = json.RawMessage(`true`) }, func(c *SetRepositorySettingCommand) { c.Key = "missing" }, func(c *SetRepositorySettingCommand) { c.Key = "command" }, func(c *SetRepositorySettingCommand) { c.Namespace = "extensions.missing" }, func(c *SetRepositorySettingCommand) { c.Value = json.RawMessage(`"x" "y"`) }, func(c *SetRepositorySettingCommand) {
+		func(c *SetRepositorySettingCommand) { c.Value = json.RawMessage(`"typo"`) }, func(c *SetRepositorySettingCommand) { c.Value = json.RawMessage(`true`) }, func(c *SetRepositorySettingCommand) { c.Key = "missing" }, func(c *SetRepositorySettingCommand) { c.Key = "command" }, func(c *SetRepositorySettingCommand) { c.Namespace = "plugins.missing" }, func(c *SetRepositorySettingCommand) { c.Value = json.RawMessage(`"x" "y"`) }, func(c *SetRepositorySettingCommand) {
 			c.Value = json.RawMessage(`"` + strings.Repeat("x", 9<<10) + `"`)
 		}, func(c *SetRepositorySettingCommand) { c.Unset = true }, func(c *SetRepositorySettingCommand) { c.RepositoryID = "../escape" },
 	} {
@@ -144,7 +145,7 @@ func TestSettingsValidateAtWriterAndKeepValuesOutOfHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 	stored, err := db.RepositorySettings(importTestID)
-	if err != nil || !strings.Contains(string(stored.Settings.Namespaces["extensions.direnv"]["secret"]), secret) {
+	if err != nil || !strings.Contains(string(stored.Settings.Namespaces["plugins.direnv"]["secret"]), secret) {
 		t.Fatal("canonical value missing", err)
 	}
 }
@@ -199,7 +200,7 @@ func TestRepositorySettingsAggregateLimitIsAtomic(t *testing.T) {
 	}
 	for i := 0; i < 9; i++ {
 		command := settingCommand("limit:"+string(rune('a'+i)), uint64(i), string(rune('a'+i)), json.RawMessage(`"`+strings.Repeat("x", 7900)+`"`))
-		command.Namespace = "extensions.sample"
+		command.Namespace = "plugins.sample"
 		_, err := db.SetRepositorySetting(command, registry)
 		if i < 8 && err != nil {
 			t.Fatal(err)
@@ -209,7 +210,7 @@ func TestRepositorySettingsAggregateLimitIsAtomic(t *testing.T) {
 		}
 	}
 	stored, err := db.RepositorySettings(importTestID)
-	if err != nil || stored.Settings.Revision != 8 || len(stored.Settings.Namespaces["extensions.sample"]) != 8 {
+	if err != nil || stored.Settings.Revision != 8 || len(stored.Settings.Namespaces["plugins.sample"]) != 8 {
 		t.Fatal("oversize write partially applied", err)
 	}
 }
@@ -251,7 +252,7 @@ func TestMalformedRepositorySettingsDoNotFallBackToDefaults(t *testing.T) {
 	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
 		t.Fatal(err)
 	}
-	for _, raw := range []string{`{`, `{"repository_id":"wrong","revision":1,"namespaces":{}}`, `{"repository_id":"` + importTestID + `","revision":0,"namespaces":{}}`, `{"repository_id":"` + importTestID + `","revision":1,"namespaces":{"extensions.direnv":null}}`} {
+	for _, raw := range []string{`{`, `{"repository_id":"wrong","revision":1,"namespaces":{}}`, `{"repository_id":"` + importTestID + `","revision":0,"namespaces":{}}`, `{"repository_id":"` + importTestID + `","revision":1,"namespaces":{"plugins.direnv":null}}`} {
 		if err := db.db.Update(func(tx *bolt.Tx) error {
 			bucket, err := tx.Bucket(bucketProjections).CreateBucketIfNotExists([]byte(RepositorySettingsProjection))
 			if err != nil {
@@ -294,5 +295,75 @@ func TestSettingsEndpointIsOperatorOnly(t *testing.T) {
 	}
 	if _, err := restricted.SetRepositorySetting(context.Background(), settingCommand("agent", 1, "trust", json.RawMessage(`"never"`))); err == nil || !strings.Contains(err.Error(), "agent endpoint") {
 		t.Fatal("agent could modify trust", err)
+	}
+}
+
+func TestSchema8MovesRepositorySettingsToPluginNamespaces(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		namespaces string
+		fails      bool
+	}{
+		{"renamed", `{"extensions.direnv":{"trust":"\"always\""},"extensions.retired":{"flag":"true"}}`, false},
+		{"collision", `{"extensions.direnv":{"trust":"\"always\""},"plugins.direnv":{"load":"false"}}`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			db, err := OpenDatabase(root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
+				t.Fatal(err)
+			}
+			var namespaces map[string]map[string]string
+			if err := json.Unmarshal([]byte(tc.namespaces), &namespaces); err != nil {
+				t.Fatal(err)
+			}
+			stored := map[string]map[string]json.RawMessage{}
+			for namespace, entries := range namespaces {
+				stored[namespace] = map[string]json.RawMessage{}
+				for key, value := range entries {
+					stored[namespace][key] = json.RawMessage(value)
+				}
+			}
+			legacy, _ := json.Marshal(map[string]any{"repository_id": importTestID, "revision": 3, "namespaces": stored})
+			if err := db.db.Update(func(tx *bolt.Tx) error {
+				bucket, err := tx.Bucket(bucketProjections).CreateBucketIfNotExists([]byte(RepositorySettingsProjection))
+				if err != nil {
+					return err
+				}
+				if err := bucket.Put([]byte(importTestID), legacy); err != nil {
+					return err
+				}
+				return tx.Bucket(bucketMeta).Put(keySchemaVersion, encodeUint64(7))
+			}); err != nil {
+				t.Fatal(err)
+			}
+			db.Close()
+			upgraded, err := OpenDatabase(root)
+			if tc.fails {
+				if err == nil {
+					upgraded.Close()
+					t.Fatal("colliding namespaces were merged silently")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer upgraded.Close()
+			if _, err := os.Stat(DatabasePath(root) + ".schema-7.bak"); err != nil {
+				t.Fatalf("pre-upgrade backup missing: %v", err)
+			}
+			settings, err := upgraded.RepositorySettings(importTestID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := settings.Settings.Namespaces
+			if settings.Settings.Revision != 3 || len(got) != 2 || string(got["plugins.direnv"]["trust"]) != `"always"` || string(got["plugins.retired"]["flag"]) != "true" {
+				t.Fatalf("settings = %+v", settings.Settings)
+			}
+		})
 	}
 }

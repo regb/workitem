@@ -156,3 +156,26 @@ func TestSkillTeachesWaitingOnAPullRequest(t *testing.T) {
 		}
 	}
 }
+
+func TestSyncSkipsGitHubWhenNothingInScopeWaitsOnAPullRequest(t *testing.T) {
+	listing, _ := json.Marshal(map[string]any{"sections": map[string]any{
+		"waiting": []map[string]any{
+			{"id": "item-a", "slug": "a", "repository_id": "repo-1", "blockers": []Blocker{{ID: "b1", Kind: "external", Event: "security review"}}},
+			{"id": "item-b", "slug": "b", "repository_id": "repo-2", "blockers": []Blocker{{ID: "b2", Kind: "external", Event: "PR", Meta: map[string]string{MetaPR: "acme/api#42"}}}},
+		},
+	}})
+	run := func(_ context.Context, name string, args ...string) ([]byte, error) {
+		if name == "wi" && args[1] == "list" {
+			return listing, nil
+		}
+		t.Fatalf("unexpected command %s %v", name, args)
+		return nil, nil
+	}
+	var out bytes.Buffer
+	if err := (Plugin{Wi: "wi", Gh: "gh", Run: run, Out: &out, RepositoryID: "repo-1"}).Sync(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), "checked 0 pull request blocker(s)") {
+		t.Fatalf("output = %s", out.String())
+	}
+}

@@ -123,7 +123,7 @@ built on this API.
 Native hooks and executable plugins use the [same catalog and settings model](unified-plugins.md).
 Direnv supplies native preparation hooks. GitHub supplies declared executable
 commands, repository-scoped polling jobs, and static instruction assets. Both
-use registered `extensions.NAME` options and daemon-owned repository overrides.
+use registered options in their `[plugins.NAME]` table and daemon-owned repository overrides.
 
 Plugins are fully trusted operator code and use Wi’s normal CLI/API. There is
 no per-plugin permission broker. Jobs receive a fresh effective settings snapshot
@@ -138,7 +138,8 @@ on first daemon start, keeping a complete pre-upgrade snapshot next to the datab
 named `waiting`; existing responses are marked read so the upgrade does not
 surface every waiting item at once. (Schema 6 was a short-lived intermediate
 format with free-form blocker reasons; schema 7 converts those to event
-names.) A daemon from before schema 6 rejects requests from newer clients, so
+names. Schema 8 renames stored repository overrides from `extensions.NAME` to
+`plugins.NAME`.) A daemon from before schema 6 rejects requests from newer clients, so
 the first upgrade needs a manual `wi daemon stop` with the old build.
 
 The backup is written to a private temporary file, synced, and published

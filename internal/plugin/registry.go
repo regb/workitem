@@ -15,12 +15,19 @@ import (
 	"github.com/regb/workitem/internal/options"
 )
 
+// RegistrationKeys are the installation fields of a [plugins.NAME] table.
+// Every other key in that table is one of the plugin's registered options.
+var RegistrationKeys = map[string]bool{"enabled": true, "command": true, "manifest": true}
+
 // Registration contains installation metadata only. Behavior belongs to the
-// shared option schema, never an opaque second configuration table.
+// shared option schema in the same table, never an opaque nested table.
 type Registration struct {
 	Enabled  bool     `json:"enabled"`
 	Command  []string `json:"command,omitempty"`
 	Manifest string   `json:"manifest,omitempty"`
+	// EnabledSet records an explicit enabled key, so a required plugin can
+	// reject enabled = false instead of silently ignoring it.
+	EnabledSet bool `json:"-"`
 }
 
 func (r *Registration) UnmarshalJSON(data []byte) error {
@@ -35,6 +42,7 @@ func (r *Registration) UnmarshalJSON(data []byte) error {
 			if err := json.Unmarshal(v, &r.Enabled); err != nil {
 				return fmt.Errorf("enabled must be boolean")
 			}
+			r.EnabledSet = true
 		case "manifest":
 			if err := json.Unmarshal(v, &r.Manifest); err != nil {
 				return fmt.Errorf("manifest must be a path")
@@ -46,10 +54,8 @@ func (r *Registration) UnmarshalJSON(data []byte) error {
 			} else if err := json.Unmarshal(v, &r.Command); err != nil {
 				return fmt.Errorf("command must be a string or array of strings")
 			}
-		case "config", "interval":
-			return fmt.Errorf("plugin behavior settings belong in registered [extensions.NAME] options, not plugins.NAME.%s", key)
 		default:
-			return fmt.Errorf("unknown plugin registration field %q", key)
+			// Behavior options are validated against the registered schema.
 		}
 	}
 	return nil
@@ -102,6 +108,11 @@ func NewRegistry(definitions ...Definition) (*Registry, error) {
 		}
 		if len(d.Instructions) > MaxSkillBytes {
 			return nil, fmt.Errorf("plugin instructions exceed %d bytes", MaxSkillBytes)
+		}
+		for _, o := range d.Options {
+			if RegistrationKeys[o.Name] {
+				return nil, fmt.Errorf("plugin %s option %q collides with a [plugins.%s] registration field", d.Name, o.Name, d.Name)
+			}
 		}
 		seen := map[string]bool{}
 		for _, cmd := range d.Commands {

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/regb/workitem/internal/plugin"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/regb/workitem/internal/config"
@@ -16,17 +18,17 @@ func fixturePreparation(cfg config.Config, read plugin.RepositoryReader) plugin.
 	if err != nil {
 		panic(err)
 	}
-	return plugin.NewHost(catalog, cfg.Plugins, cfg.Extensions, "wi", read).Preparation(nil)
+	return plugin.NewHost(catalog, cfg.Plugins, cfg.PluginSettings, "wi", read).Preparation(nil)
 }
 
 func TestHostResolvesFrozenRepositoryOptionsWithoutPluginDatabaseAccess(t *testing.T) {
 	cfg := config.Default()
-	cfg.Extensions = map[string]map[string]any{"direnv": {"load": true, "trust": "prompt"}}
+	cfg.PluginSettings = map[string]map[string]any{"direnv": {"load": true, "trust": "prompt"}}
 	reads := 0
 	trust := `"always"`
 	read := func(ctx context.Context, id string) (model.RepositorySettings, error) {
 		reads++
-		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"extensions.direnv": {"load": json.RawMessage(`false`), "trust": json.RawMessage(trust)}}}, nil
+		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"plugins.direnv": {"load": json.RawMessage(`false`), "trust": json.RawMessage(trust)}}}, nil
 	}
 	p := fixturePreparation(cfg, read)
 	first, err := p.Options(context.Background(), "repo-id", "direnv")
@@ -51,7 +53,7 @@ func TestHostResolvesFrozenRepositoryOptionsWithoutPluginDatabaseAccess(t *testi
 }
 func TestUnavailableRepositoryStateCannotFallBackToBroadGlobalTrust(t *testing.T) {
 	cfg := config.Default()
-	cfg.Extensions = map[string]map[string]any{"direnv": {"trust": "always"}}
+	cfg.PluginSettings = map[string]map[string]any{"direnv": {"trust": "always"}}
 	for _, read := range []plugin.RepositoryReader{nil, func(context.Context, string) (model.RepositorySettings, error) {
 		return model.RepositorySettings{}, errors.New("unavailable")
 	}, func(context.Context, string) (model.RepositorySettings, error) {
@@ -60,6 +62,28 @@ func TestUnavailableRepositoryStateCannotFallBackToBroadGlobalTrust(t *testing.T
 		p := fixturePreparation(cfg, read)
 		if _, err := p.Options(context.Background(), "repo-id", "direnv"); err == nil {
 			t.Fatal("lookup failure silently applied global auto-trust")
+		}
+	}
+}
+
+func TestDirenvTableTakesOptionsButCannotBeDisabledOrReplaced(t *testing.T) {
+	dir := t.TempDir()
+	for body, ok := range map[string]bool{
+		"[plugins.direnv]\nload = false\n":                 true,
+		"[plugins.direnv]\nenabled = true\nload = false\n": true,
+		"[plugins.direnv]\nenabled = false\n":              false,
+		"[plugins.direnv]\ncommand = \"direnv-wrapper\"\n": false,
+	} {
+		path := filepath.Join(dir, "config.toml")
+		if err := os.WriteFile(path, []byte("default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n"+body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		cfg, _, _, err := Load(path, "wi")
+		if (err == nil) != ok {
+			t.Fatalf("%q: err = %v", body, err)
+		}
+		if ok && cfg.PluginSettings["direnv"]["load"] != false {
+			t.Fatalf("%q: settings = %v", body, cfg.PluginSettings)
 		}
 	}
 }

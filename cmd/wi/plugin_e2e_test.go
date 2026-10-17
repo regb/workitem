@@ -31,11 +31,11 @@ func exercisePluginCatalogE2E(t *testing.T, binary, repository string, env []str
 		t.Fatal(err)
 	}
 	quoted, _ := json.Marshal(manifest)
-	if err := os.WriteFile(configPath, []byte(base+"[plugins.demo]\nenabled = true\nmanifest = "+string(quoted)+"\n[extensions.demo]\nmessage = \"global\"\n"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(base+"[plugins.demo]\nenabled = true\nmanifest = "+string(quoted)+"\nmessage = \"global\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = os.WriteFile(configPath, []byte(base), 0600) }()
-	schemas := runWiE2E(t, binary, repository, env, "config", "extensions", "--json")
+	schemas := runWiE2E(t, binary, repository, env, "config", "plugins", "--json")
 	if !strings.Contains(string(schemas), `"demo"`) || !strings.Contains(string(schemas), `"direnv"`) {
 		t.Fatal("common catalog omitted native or external schemas")
 	}
@@ -50,13 +50,13 @@ func exercisePluginCatalogE2E(t *testing.T, binary, repository string, env []str
 		ID string `json:"work_item_id"`
 	}
 	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "new", "--repo", "test", "--title", "Plugin fixture", "--json"), &item)
-	runWiE2E(t, binary, repository, env, "repo", "settings", "set", "test", "extensions.demo.message", "repository", "--json")
+	runWiE2E(t, binary, repository, env, "repo", "settings", "set", "test", "plugins.demo.message", "repository", "--json")
 	var settings map[string]any
 	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "demo", "greet", "--item", item.ID), &settings)
 	if settings["message"] != "repository" {
 		t.Fatal("executable command did not receive daemon-owned repository policy")
 	}
-	runWiE2E(t, binary, repository, env, "repo", "settings", "unset", "test", "extensions.demo.message", "--json")
+	runWiE2E(t, binary, repository, env, "repo", "settings", "unset", "test", "plugins.demo.message", "--json")
 	runWiE2E(t, binary, repository, env, "state", "set", "closed", "--item", item.ID)
 	runWiE2E(t, binary, repository, env, "daemon", "stop")
 	if err := os.WriteFile(configPath, []byte(base), 0600); err != nil {

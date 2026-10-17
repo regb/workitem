@@ -26,7 +26,7 @@ func pluginConfigFixture(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = file.WriteString("\n[plugins.demo]\nmanifest = " + quote(manifest) + "\ncommand = [\"demo\",\"--token\",\"command-private\"]\n[extensions.demo]\napi_token = \"plugin-private\"\n")
+	_, err = file.WriteString("\n[plugins.demo]\nmanifest = " + quote(manifest) + "\ncommand = [\"demo\",\"--token\",\"command-private\"]\napi_token = \"plugin-private\"\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func pluginConfigFixture(t *testing.T) string {
 func quote(s string) string { raw, _ := json.Marshal(s); return string(raw) }
 func TestPluginSecretsUseSharedSchemaAndInspectionOptIn(t *testing.T) {
 	path := pluginConfigFixture(t)
-	for _, args := range [][]string{{"show"}, {"get", "extensions.demo"}} {
+	for _, args := range [][]string{{"show"}, {"get", "plugins.demo"}} {
 		for _, jsonOut := range []bool{false, true} {
 			var out, stderr bytes.Buffer
 			if code := runConfigMain(args, path, &out, &stderr, jsonOut); code != ExitOK {

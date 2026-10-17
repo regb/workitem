@@ -33,6 +33,8 @@ func TestCatalogValidatesContributionsAndProtectsItsSnapshot(t *testing.T) {
 		{Name: "demo", Command: []string{"x"}, Commands: []string{"wait", "wait"}},
 		{Name: "demo", Command: []string{"x"}, Jobs: []Job{{Name: "check", IntervalOption: "missing"}}},
 		{Name: "demo", Command: []string{"x"}, Instructions: strings.Repeat("x", MaxSkillBytes+1)},
+		{Name: "demo", Command: []string{"x"}, Options: []options.Option{{Name: "enabled", Type: "bool", Default: false}}},
+		{Name: "demo", Command: []string{"x"}, Options: []options.Option{{Name: "manifest", Type: "string", Default: ""}}},
 	} {
 		if _, err := NewRegistry(bad); err == nil {
 			t.Fatalf("accepted malformed definition %s", bad.Name)
@@ -108,7 +110,7 @@ func TestNativeAndExecutableUseOneSettingsResolver(t *testing.T) {
 	reads := 0
 	reader := func(_ context.Context, id string) (model.RepositorySettings, error) {
 		reads++
-		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"extensions.native": {"load": json.RawMessage(`false`)}, "extensions.external": {"labels": json.RawMessage(`[]`)}}}, nil
+		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"plugins.native": {"load": json.RawMessage(`false`)}, "plugins.external": {"labels": json.RawMessage(`[]`)}}}, nil
 	}
 	h := NewHost(r, map[string]Registration{"external": {Enabled: true}}, nil, "wi", reader)
 	env, _, _, err := h.Preparation(nil).Environment(context.Background(), "sanitize", EnvironmentRequest{Subject: Subject{RepositoryID: "repo"}, Values: map[string]string{"OLD_SECRET": "private"}})
@@ -145,7 +147,7 @@ func TestJobsRefreshPerRepositorySettings(t *testing.T) {
 	flag := false
 	h := NewHost(r, map[string]Registration{"demo": {Enabled: true}}, nil, "wi", func(_ context.Context, id string) (model.RepositorySettings, error) {
 		raw, _ := json.Marshal(flag)
-		return model.RepositorySettings{RepositoryID: id, Namespaces: map[string]map[string]json.RawMessage{"extensions.demo": {"flag": raw}}}, nil
+		return model.RepositorySettings{RepositoryID: id, Namespaces: map[string]map[string]json.RawMessage{"plugins.demo": {"flag": raw}}}, nil
 	})
 	h.ListRepositories = func(context.Context) ([]string, error) { return []string{"repo-a"}, nil }
 	jobs, err := h.JobSpecs(context.Background(), "")
