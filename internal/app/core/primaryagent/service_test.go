@@ -142,15 +142,15 @@ func TestSubmitControlPopulatesProtocolIdentity(t *testing.T) {
 func TestPortableControlSocketPathKeepsDataRootsIsolated(t *testing.T) {
 	relative := runtimepath.ControlSocket("item-1", "runtime-1")
 	candidate := filepath.Join("/private/var/folders", strings.Repeat("long-runtime-root", 8), filepath.FromSlash(relative))
-	first := portableRuntimeSocketPath("darwin", candidate, "/data/root-one", relative)
-	second := portableRuntimeSocketPath("darwin", candidate, "/data/root-two", relative)
+	first := runtimepath.PortableSocketPath("darwin", candidate, "/data/root-one", relative)
+	second := runtimepath.PortableSocketPath("darwin", candidate, "/data/root-two", relative)
 	if first == candidate || second == candidate {
 		t.Fatalf("long Darwin path did not use fallback: first=%q second=%q", first, second)
 	}
 	if first == second {
 		t.Fatalf("different data roots share fallback path %q", first)
 	}
-	if again := portableRuntimeSocketPath("darwin", candidate, "/data/root-one", relative); again != first {
+	if again := runtimepath.PortableSocketPath("darwin", candidate, "/data/root-one", relative); again != first {
 		t.Fatalf("fallback path is unstable: %q != %q", again, first)
 	}
 	if len(first) >= 100 || len(second) >= 100 {

@@ -143,7 +143,7 @@ export default function wiBridge(pi: ExtensionAPI) {
       response += chunk.toString();
       const newline = response.indexOf("\n");
       if (newline < 0 || finished) return;
-      let decoded: { accepted?: boolean; error?: string };
+      let decoded: { accepted?: boolean; error?: string; retryable?: boolean };
       try {
         decoded = JSON.parse(response.slice(0, newline));
       } catch { retry(); return; }
@@ -155,6 +155,7 @@ export default function wiBridge(pi: ExtensionAPI) {
           rejectionLogCooldown = now;
           console.error(`wi rejected runtime event ${String(event.type)}: ${message}`);
         }
+        if (decoded.retryable === true) { retry(); return; }
         finished = true;
         socket.destroy();
         runtimeQueue.length = 0;

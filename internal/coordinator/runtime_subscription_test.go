@@ -40,6 +40,7 @@ func TestRuntimeEventLongPollWakesAfterCommittedEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = server.Close() })
 	done := make(chan error, 1)
 	go func() { done <- server.Serve(context.Background()) }()
 	client := &Client{SocketPath: socket}
@@ -97,6 +98,32 @@ func TestRuntimeEventLongPollWakesAfterCommittedEvent(t *testing.T) {
 	if !errors.As(err, &protocolErr) || protocolErr.Code != "runtime_owner_mismatch" {
 		t.Fatalf("stale runtime error = %v", err)
 	}
+	// Validation and ownership rejection are permanent. Persistence/read errors
+	// must not tell a live producer to disable its event feed.
+	invalid := RuntimeSemanticEvent{ID: "runtime-sub:invalid", RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "unknown", Timestamp: now}
+	_, err = client.IngestRuntimeEvent(ctx, invalid)
+	if !errors.As(err, &protocolErr) || protocolErr.Code != "runtime_event_error" {
+		t.Fatalf("invalid event error = %v", err)
+	}
+	var saved RuntimeActivity
+	if _, err := server.database.ReadProjection(RuntimeActivityProjection, importTestID, &saved); err != nil {
+		t.Fatal(err)
+	}
+	if err := server.database.UpdateProjections([]ProjectionUpdate{{Projection: RuntimeActivityProjection, Key: importTestID, Value: []byte("{broken")}}); err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.IngestRuntimeEvent(ctx, RuntimeSemanticEvent{ID: "runtime-sub:retry", RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "agent.settled", Timestamp: now.Add(4 * time.Second)})
+	if !errors.As(err, &protocolErr) || protocolErr.Code != "database_error" {
+		t.Fatalf("database failure became definitive rejection: %v", err)
+	}
+	restored, _ := json.Marshal(saved)
+	if err := server.database.UpdateProjections([]ProjectionUpdate{{Projection: RuntimeActivityProjection, Key: importTestID, Value: restored}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.IngestRuntimeEvent(ctx, RuntimeSemanticEvent{ID: "runtime-sub:retry", RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "agent.settled", Timestamp: now.Add(4 * time.Second)}); err != nil {
+		t.Fatalf("repaired event could not be retried: %v", err)
+	}
+
 	if err := client.Shutdown(ctx); err != nil {
 		t.Fatal(err)
 	}

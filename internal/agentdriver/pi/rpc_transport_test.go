@@ -45,6 +45,56 @@ func TestNativeRPCTransportRetriesLiveEventUntilEventSocketAcknowledges(t *testi
 	}
 }
 
+func TestNativeRPCTransportRetriesRejectedRelayWithoutLosingSettlement(t *testing.T) {
+	root := testutil.ShortTempDir(t)
+	socket := filepath.Join(root, "events.sock")
+	server, err := driverprotocol.ListenEvents(socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "retry-owner", WorkItemID: "item", EventSocketPath: socket}, liveQueue: make(chan queuedLiveEvent, 4), liveContext: ctx, liveNonce: "nonce"}
+	go transport.runLiveSender(ctx)
+	transport.queueLiveEvent(agent.RuntimeEvent{Type: agent.EventAgentStarted, Timestamp: time.Now()}, nil)
+	first := <-server.Requests()
+	first.Respond(nil)
+	settled := agent.RuntimeEvent{Type: agent.EventAgentSettled, Outcome: "completed", Timestamp: time.Now()}
+	ack := make(chan struct{})
+	transport.queueLiveEvent(settled, ack)
+	var id string
+	for attempt := 0; attempt < 2; attempt++ {
+		select {
+		case request := <-server.Requests():
+			if id != "" && request.Event.EventID != id {
+				t.Fatal("retry changed event identity")
+			}
+			id = request.Event.EventID
+			request.Respond(&driverprotocol.EventRejectedError{Message: "coordinator unavailable", Retryable: true})
+		case <-ctx.Done():
+			t.Fatal("retryable relay rejection stopped delivery")
+		}
+	}
+	select {
+	case request := <-server.Requests():
+		if request.Event.EventID != id || request.Event.Type != agent.EventAgentSettled || request.Event.Outcome != "completed" {
+			t.Fatal("settlement changed during retry")
+		}
+		request.Respond(nil)
+	case <-ctx.Done():
+		t.Fatal("settlement lost")
+	}
+	select {
+	case <-ack:
+	case <-ctx.Done():
+		t.Fatal("delivery acknowledgement lost")
+	}
+	if transport.liveDisabled.Load() {
+		t.Fatal("temporary failure disabled the event feed")
+	}
+}
+
 func TestNativeRPCTransportStopsAfterEventRejection(t *testing.T) {
 	dir := testutil.ShortTempDir(t)
 	socket := filepath.Join(dir, "events.sock")

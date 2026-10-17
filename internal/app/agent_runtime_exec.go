@@ -2,9 +2,11 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
@@ -64,8 +66,10 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 					request.Respond(fmt.Errorf("runtime event identity does not match its launch"))
 					continue
 				}
-				_, err := client.IngestRuntimeEvent(ctx, coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState})
-				request.Respond(err)
+				forwardCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
+				_, err := client.IngestRuntimeEvent(forwardCtx, coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState})
+				cancel()
+				request.Respond(runtimeRelayError(err))
 			}
 		}()
 		environment := map[string]string{"WI_ID": spec.WorkItemID, "WI_DIR": a.Store.ItemDir(spec.WorkItemID), "WI_WORKTREE": spec.CWD, "WI_AGENT_RUNTIME_ID": spec.RuntimeID, "WI_AGENT_MODE": string(spec.Mode), "WI_AGENT_CONTROL_SOCKET": spec.ControlSocketPath, "WI_AGENT_EVENT_SOCKET": spec.EventSocketPath, "WI_AGENT_CONVERSATION_DIR": spec.ConversationDir}
@@ -90,6 +94,20 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 		<-relayDone
 		return runErr
 	})
+}
+
+// Runtime event producers must not mistake a coordinator transport failure for
+// rejection of their ownership. Definitive daemon errors still fence old owners.
+func runtimeRelayError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var protocol *coordinator.ProtocolError
+	var compatibility *coordinator.CompatibilityError
+	if (errors.As(err, &protocol) && protocol.Code != "database_error") || errors.As(err, &compatibility) {
+		return err
+	}
+	return &driverprotocol.EventRejectedError{Message: err.Error(), Retryable: true}
 }
 
 func driverProcessEnvironment(environment []string) []string {

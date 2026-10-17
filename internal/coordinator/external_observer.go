@@ -4,15 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
+	"github.com/regb/workitem/internal/dataroot"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
+	"github.com/regb/workitem/internal/runtimepath"
 	tmuxpkg "github.com/regb/workitem/internal/tmux"
+	"github.com/regb/workitem/internal/xdg"
 )
 
 const AgentObservationProjection = "agent_observations"
@@ -70,14 +75,21 @@ type AgentObservationResult struct {
 }
 
 type ExternalObserver struct {
-	database *Database
-	process  processpkg.Inspector
-	git      gitpkg.Client
-	tmux     tmuxpkg.Client
+	database          *Database
+	process           processpkg.Inspector
+	git               gitpkg.Client
+	tmux              tmuxpkg.Client
+	runtimeSocketRoot string
 }
 
-func NewExternalObserver(database *Database, _ string) *ExternalObserver {
-	return &ExternalObserver{database: database, process: processpkg.New(), git: gitpkg.New("git"), tmux: tmuxpkg.New("tmux")}
+func NewExternalObserver(database *Database, dataRoot string) *ExternalObserver {
+	observer := &ExternalObserver{database: database, process: processpkg.New(), git: gitpkg.New("git"), tmux: tmuxpkg.New("tmux")}
+	paths, err := xdg.FromEnv()
+	key, keyErr := dataroot.Key(dataRoot)
+	if err == nil && keyErr == nil {
+		observer.runtimeSocketRoot = filepath.Join(paths.RuntimeDir, "wi", key)
+	}
+	return observer
 }
 
 func (o *ExternalObserver) Reconcile(ctx context.Context) error {
@@ -219,6 +231,12 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && live.AgentState == "active" && !observation.ProcessOnline:
 		observation.Status = "problem"
 		observation.Reason = "live agent loop was active but runtime ownership is offline"
+	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && live.AgentState == "active" && observation.ProcessOnline && o.runtimeControlUnavailable(itemID, owner):
+		// PID liveness does not prove the bridge that reported this run still
+		// exists. Do not invent settlement from history or from elapsed time.
+		observation.AgentLoopState = ""
+		observation.Status = "problem"
+		observation.Reason = "runtime control channel is unavailable; live agent activity cannot be confirmed"
 	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && live.AgentState == "active" && observation.ProcessOnline:
 		observation.Status = "busy"
 		observation.Reason = "live agent loop is active"
@@ -260,6 +278,23 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 		observation.Reason = "latest conversation activity is incomplete and runtime ownership is offline"
 	}
 	return nil
+}
+
+func (o *ExternalObserver) runtimeControlUnavailable(itemID string, owner model.AgentRuntime) bool {
+	if o.runtimeSocketRoot == "" || (!owner.Capabilities.Prompt && !owner.Capabilities.Cancel) {
+		return false
+	}
+	path := runtimepath.SocketPath(o.runtimeSocketRoot, "", itemID, owner.ID, false)
+	info, err := os.Stat(path)
+	if err != nil || info.Mode()&os.ModeSocket == 0 {
+		return true
+	}
+	connection, err := net.DialTimeout("unix", path, 100*time.Millisecond)
+	if err != nil {
+		return true
+	}
+	_ = connection.Close()
+	return false
 }
 
 func laterTime(left, right *time.Time) *time.Time {

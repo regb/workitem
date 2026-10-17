@@ -605,10 +605,14 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		s.domainMu.Unlock()
 		if err != nil {
 			var ownerMismatch *RuntimeOwnerMismatchError
-			if errors.As(err, &ownerMismatch) {
+			var rejected *RuntimeEventRejection
+			switch {
+			case errors.As(err, &ownerMismatch):
 				s.writeError(conn, request.ID, "runtime_owner_mismatch", err.Error())
-			} else {
+			case errors.As(err, &rejected) || errors.Is(err, store.ErrNotFound):
 				s.writeError(conn, request.ID, "runtime_event_error", err.Error())
+			default:
+				s.writeError(conn, request.ID, "database_error", err.Error())
 			}
 			return
 		}

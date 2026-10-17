@@ -77,6 +77,23 @@ func TestEventServerCloseInterruptsPartialRequest(t *testing.T) {
 	}
 }
 
+func TestEventTransportReportsRetryableRelayFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.sock")
+	server, err := ListenEvents(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	done := make(chan error, 1)
+	go func() { done <- SubmitEvent(context.Background(), path, RuntimeEvent{EventID: "event-1"}) }()
+	request := <-server.Requests()
+	request.Respond(&EventRejectedError{Message: "coordinator temporarily unavailable", Retryable: true})
+	var rejected *EventRejectedError
+	if err := <-done; !errors.As(err, &rejected) || !rejected.Retryable {
+		t.Fatal("transport lost retryable classification", err)
+	}
+}
+
 func TestEventTransportReportsRejection(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "events.sock")
 	server, err := ListenEvents(path)

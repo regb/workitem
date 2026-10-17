@@ -441,7 +441,7 @@ func (t *nativeRPCTransport) runLiveSender(ctx context.Context) {
 				break
 			}
 			var rejected *driverprotocol.EventRejectedError
-			if errors.As(err, &rejected) {
+			if errors.As(err, &rejected) && !rejected.Retryable {
 				t.liveDisabled.Store(true)
 				if queued.ack != nil {
 					close(queued.ack)

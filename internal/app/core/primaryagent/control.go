@@ -2,12 +2,9 @@ package primaryagent
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
-	goruntime "runtime"
 	"strings"
 
 	"github.com/regb/workitem/internal/agent"
@@ -138,41 +135,13 @@ func (s *Service) ControlSocketPath(itemID string, runtime *model.AgentRuntime) 
 	if runtime == nil || strings.TrimSpace(runtime.ID) == "" {
 		return ""
 	}
-	relative := runtimepath.ControlSocket(itemID, runtime.ID)
-	namespace := strings.TrimSpace(s.RuntimeSocketRoot)
-	var socketPath string
-	if namespace != "" {
-		socketPath = filepath.Join(namespace, filepath.FromSlash(relative))
-	} else {
-		namespace = s.store.ItemDir(itemID)
-		socketPath = filepath.Join(namespace, "agent", "control.sock")
-	}
-	return portableRuntimeSocketPath(goruntime.GOOS, socketPath, namespace, relative)
+	return runtimepath.SocketPath(strings.TrimSpace(s.RuntimeSocketRoot), s.store.ItemDir(itemID), itemID, runtime.ID, false)
 }
-
 func (s *Service) EventSocketPath(itemID string, runtime *model.AgentRuntime) string {
 	if runtime == nil || strings.TrimSpace(runtime.ID) == "" {
 		return ""
 	}
-	relative := runtimepath.EventSocket(itemID, runtime.ID)
-	namespace := strings.TrimSpace(s.RuntimeSocketRoot)
-	var socketPath string
-	if namespace != "" {
-		socketPath = filepath.Join(namespace, filepath.FromSlash(relative))
-	} else {
-		namespace = s.store.ItemDir(itemID)
-		socketPath = filepath.Join(namespace, "agent", "events.sock")
-	}
-	return portableRuntimeSocketPath(goruntime.GOOS, socketPath, namespace, relative)
-}
-
-func portableRuntimeSocketPath(goos, candidate, namespace, relative string) string {
-	if goos != "darwin" || len(candidate) < 100 {
-		return candidate
-	}
-	digest := sha256.Sum256([]byte(filepath.Clean(namespace)))
-	rootKey := fmt.Sprintf("%x", digest[:6])
-	return filepath.Join("/tmp", fmt.Sprintf("wi-%d", os.Getuid()), "runtime", rootKey, filepath.FromSlash(relative))
+	return runtimepath.SocketPath(strings.TrimSpace(s.RuntimeSocketRoot), s.store.ItemDir(itemID), itemID, runtime.ID, true)
 }
 
 func (s *Service) LogPath(itemID string, runtime *model.AgentRuntime) string {

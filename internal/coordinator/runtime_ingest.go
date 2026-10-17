@@ -3,7 +3,6 @@ package coordinator
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -34,6 +33,12 @@ type RuntimeSemanticEvent struct {
 	Outcome       string    `json:"outcome,omitempty"`
 }
 
+// RuntimeEventRejection is a definitive validation or workspace-fence error,
+// not a failure to persist an otherwise valid event.
+type RuntimeEventRejection struct{ Reason string }
+
+func (e *RuntimeEventRejection) Error() string { return e.Reason }
+
 type RuntimeOwnerMismatchError struct {
 	WorkItemID       string
 	EventRuntimeID   string
@@ -59,22 +64,22 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 		return RuntimeIngestResult{}, err
 	}
 	if event.ID == "" || compactIdentifier(event.ID, 200) != event.ID || !safeRuntimeID(event.RuntimeID) || !model.ValidID(event.WorkItemID) {
-		return RuntimeIngestResult{}, errors.New("valid event, runtime, and work-item ids are required")
+		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "valid event, runtime, and work-item ids are required"}
 	}
 	if event.Timestamp.IsZero() {
-		return RuntimeIngestResult{}, errors.New("runtime event timestamp is required")
+		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "runtime event timestamp is required"}
 	}
 	if !allowedLiveRuntimeEvent(event.Type) {
-		return RuntimeIngestResult{}, fmt.Errorf("runtime event type %q is not retained", event.Type)
+		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: fmt.Sprintf("runtime event type %q is not retained", event.Type)}
 	}
 	if !driverprotocol.ValidReadiness(event.Readiness) || !driverprotocol.ValidReasonCode(event.ReasonCode) || !driverprotocol.ValidDeliveryState(event.DeliveryState) {
-		return RuntimeIngestResult{}, errors.New("invalid compact runtime status facts")
+		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "invalid compact runtime status facts"}
 	}
 	if event.Type == agent.EventRuntimeStatus && event.Readiness == "" {
-		return RuntimeIngestResult{}, errors.New("runtime.status requires readiness")
+		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "runtime.status requires readiness"}
 	}
 	if event.Outcome != "" && (event.Type != agent.EventAgentSettled || (event.Outcome != "completed" && event.Outcome != "failed") || (event.Outcome == "completed" && event.Failed)) {
-		return RuntimeIngestResult{}, errors.New("invalid agent settlement outcome")
+		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "invalid agent settlement outcome"}
 	}
 	canonical, err := database.CanonicalManifest(event.WorkItemID)
 	if err != nil {
@@ -92,7 +97,7 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if owner.WorkspaceClaimID != "" {
 		claim := canonical.Manifest.Checkout.Claim
 		if claim == nil || claim.ID != owner.WorkspaceClaimID || claim.Generation != owner.WorkspaceClaimGeneration {
-			return RuntimeIngestResult{}, fmt.Errorf("runtime %s belongs to a superseded workspace claim", owner.ID)
+			return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: fmt.Sprintf("runtime %s belongs to a superseded workspace claim", owner.ID)}
 		}
 	}
 

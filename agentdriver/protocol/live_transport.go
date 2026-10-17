@@ -168,13 +168,20 @@ func SubmitControl(ctx context.Context, path string, command ControlCommand) err
 	return nil
 }
 
-type EventRejectedError struct{ Message string }
+// EventRejectedError distinguishes retryable relay/transport failures from
+// definitive ownership or validation rejection. Missing Retryable stays fatal
+// for older event hosts.
+type EventRejectedError struct {
+	Message   string
+	Retryable bool
+}
 
 func (e *EventRejectedError) Error() string { return e.Message }
 
 type EventResponse struct {
-	Accepted bool   `json:"accepted"`
-	Error    string `json:"error,omitempty"`
+	Accepted  bool   `json:"accepted"`
+	Error     string `json:"error,omitempty"`
+	Retryable bool   `json:"retryable,omitempty"`
 }
 
 type EventRequest struct {
@@ -272,6 +279,10 @@ func (s *EventServer) accept() {
 				response := EventResponse{Accepted: result.err == nil}
 				if result.err != nil {
 					response.Error = result.err.Error()
+					var rejected *EventRejectedError
+					if errors.As(result.err, &rejected) {
+						response.Retryable = rejected.Retryable
+					}
 				}
 				_ = json.NewEncoder(conn).Encode(response)
 				close(result.sent)
@@ -298,7 +309,7 @@ func SubmitEvent(ctx context.Context, path string, event RuntimeEvent) error {
 		if response.Error == "" {
 			response.Error = "runtime event was rejected"
 		}
-		return &EventRejectedError{Message: response.Error}
+		return &EventRejectedError{Message: response.Error, Retryable: response.Retryable}
 	}
 	return nil
 }
