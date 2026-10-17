@@ -86,7 +86,7 @@ Interactive startup asks before trusting an unapproved `.envrc`. Declining, JSON
 
 Approve the checkout's `.envrc` with `direnv allow /path/to/checkout/.envrc`, or use interactive startup when a new runtime is needed. Existing runtime environments are not changed in place.
 
-For automatic approval, run `wi repo settings set NAME extensions.direnv.trust always`. This is operator-owned repository policy and also approves changed contents. Inspect stored overrides and effective policy with `wi repo settings show NAME`. Use `wi repo settings unset NAME extensions.direnv.trust` to restore global/default inheritance.
+For automatic approval, run `wi repo settings set NAME plugins.direnv.trust always`. This is operator-owned repository policy and also approves changed contents. Inspect stored overrides and effective policy with `wi repo settings show NAME`. Use `wi repo settings unset NAME plugins.direnv.trust` to restore global/default inheritance.
 
 The bundled extension still revokes stale approval on slot reuse. Checked-in `.config/wi.toml` cannot grant approval. See [Configuration](../configuration/#direnv-trust) for loading and trust options.
 

@@ -1,4 +1,4 @@
-// Package options describes extension configuration without loading extension code.
+// Package options describes plugin configuration without loading plugin code.
 package options
 
 import (
@@ -30,10 +30,10 @@ func New(definitions ...Definition) (*Registry, error) {
 	r := &Registry{definitions: map[string]Definition{}}
 	for _, d := range definitions {
 		if !validName(d.Name) {
-			return nil, fmt.Errorf("invalid extension name %q", d.Name)
+			return nil, fmt.Errorf("invalid plugin name %q", d.Name)
 		}
 		if _, ok := r.definitions[d.Name]; ok {
-			return nil, fmt.Errorf("duplicate extension %q", d.Name)
+			return nil, fmt.Errorf("duplicate plugin %q", d.Name)
 		}
 		seen := map[string]bool{}
 		for _, o := range d.Options {
@@ -99,9 +99,9 @@ func (r *Registry) Validate(settings map[string]map[string]any, repository bool)
 		}
 		if !found {
 			if values["load"] == true || values["enabled"] == true {
-				return warnings, fmt.Errorf("extension %q is not registered", name)
+				return warnings, fmt.Errorf("plugin %q is not registered", name)
 			}
-			warnings = append(warnings, "unregistered extension settings: "+name)
+			warnings = append(warnings, "unregistered plugin settings: "+name)
 			continue
 		}
 		known := map[string]Option{}
@@ -111,13 +111,13 @@ func (r *Registry) Validate(settings map[string]map[string]any, repository bool)
 		for key, value := range values {
 			o, ok := known[key]
 			if !ok {
-				return warnings, fmt.Errorf("unknown extension option %s.%s", name, key)
+				return warnings, fmt.Errorf("unknown plugin option plugins.%s.%s", name, key)
 			}
 			if repository && !o.Repository {
-				return warnings, fmt.Errorf("extension option %s.%s is global-only", name, key)
+				return warnings, fmt.Errorf("plugin option plugins.%s.%s is global-only", name, key)
 			}
 			if err := validate(o, value); err != nil {
-				return warnings, fmt.Errorf("extension option %s.%s: %w", name, key, err)
+				return warnings, fmt.Errorf("plugin option plugins.%s.%s: %w", name, key, err)
 			}
 		}
 	}

@@ -26,7 +26,7 @@ func pluginConfigFixture(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = file.WriteString("\n[plugins.demo]\nmanifest = " + quote(manifest) + "\ncommand = [\"demo\",\"--token\",\"command-private\"]\n[extensions.demo]\napi_token = \"plugin-private\"\n")
+	_, err = file.WriteString("\n[plugins.demo]\nmanifest = " + quote(manifest) + "\ncommand = [\"demo\",\"--token\",\"command-private\"]\napi_token = \"plugin-private\"\n")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func pluginConfigFixture(t *testing.T) string {
 func quote(s string) string { raw, _ := json.Marshal(s); return string(raw) }
 func TestPluginSecretsUseSharedSchemaAndInspectionOptIn(t *testing.T) {
 	path := pluginConfigFixture(t)
-	for _, args := range [][]string{{"show"}, {"get", "extensions.demo"}} {
+	for _, args := range [][]string{{"show"}, {"get", "plugins.demo"}} {
 		for _, jsonOut := range []bool{false, true} {
 			var out, stderr bytes.Buffer
 			if code := runConfigMain(args, path, &out, &stderr, jsonOut); code != ExitOK {
@@ -68,6 +68,40 @@ func TestPluginSecretsUseSharedSchemaAndInspectionOptIn(t *testing.T) {
 		t.Fatal("inspection mutated execution settings", err)
 	}
 }
+func TestUnavailablePluginOptionsRemainInspectableAndRedacted(t *testing.T) {
+	path := configQueryFixture(t)
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = file.WriteString("\n[plugins.future]\nload = false\napi_key = \"inactive-private\"\n")
+	closeErr := file.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if closeErr != nil {
+		t.Fatal(closeErr)
+	}
+	for _, jsonOut := range []bool{false, true} {
+		for _, sensitive := range []bool{false, true} {
+			args := []string{"get", "plugins.future"}
+			if sensitive {
+				args = append(args, "--show-sensitive")
+			}
+			var out, stderr bytes.Buffer
+			if code := runConfigMain(args, path, &out, &stderr, jsonOut); code != ExitOK {
+				t.Fatal(code, stderr.String())
+			}
+			if strings.Contains(out.String(), "inactive-private") != sensitive {
+				t.Fatal("unavailable settings inspection ignored redaction")
+			}
+			if !strings.Contains(stderr.String(), "unregistered plugin settings") {
+				t.Fatal("inactive namespace did not produce a warning")
+			}
+		}
+	}
+}
+
 func TestAgentCannotManuallyRunScheduledPlugin(t *testing.T) {
 	registry, err := plugin.NewRegistry(plugin.Definition{Name: "demo", Command: []string{"must-not-execute"}})
 	if err != nil {

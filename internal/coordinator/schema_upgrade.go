@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/sys/unix"
@@ -266,6 +267,67 @@ func upgradeSchema6To7(tx *bolt.Tx) error {
 		}
 		digest := sha256.Sum256(item.value)
 		if err := tx.Bucket(bucketImportSources).Put(item.key, []byte(hex.EncodeToString(digest[:]))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// upgradeSchema7To8 moves repository setting overrides from the former
+// extensions.NAME namespaces to plugins.NAME, matching the merged
+// [plugins.NAME] configuration table. Values and revisions are unchanged.
+func upgradeSchema7To8(tx *bolt.Tx) error {
+	settings := tx.Bucket(bucketProjections).Bucket([]byte(RepositorySettingsProjection))
+	if settings == nil {
+		return nil
+	}
+	type update struct {
+		key   []byte
+		value []byte
+	}
+	updates := []update{}
+	err := settings.ForEach(func(key, value []byte) error {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(value, &fields); err != nil {
+			return fmt.Errorf("decode repository settings %s: %w", key, err)
+		}
+		var namespaces map[string]json.RawMessage
+		if raw, ok := fields["namespaces"]; ok {
+			if err := json.Unmarshal(raw, &namespaces); err != nil {
+				return fmt.Errorf("decode repository settings namespaces of %s: %w", key, err)
+			}
+		}
+		renamed := map[string]json.RawMessage{}
+		changed := false
+		for namespace, entries := range namespaces {
+			if name, ok := strings.CutPrefix(namespace, "extensions."); ok {
+				namespace, changed = "plugins."+name, true
+			}
+			if _, exists := renamed[namespace]; exists {
+				return fmt.Errorf("repository settings %s has duplicate namespace %s", key, namespace)
+			}
+			renamed[namespace] = entries
+		}
+		if !changed {
+			return nil
+		}
+		encoded, err := json.Marshal(renamed)
+		if err != nil {
+			return err
+		}
+		fields["namespaces"] = encoded
+		record, err := json.Marshal(fields)
+		if err != nil {
+			return err
+		}
+		updates = append(updates, update{key: append([]byte(nil), key...), value: record})
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, item := range updates {
+		if err := settings.Put(item.key, item.value); err != nil {
 			return err
 		}
 	}

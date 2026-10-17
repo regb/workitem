@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	SchemaVersion = 7
+	SchemaVersion = 8
 	DatabaseFile  = "wi.db"
 )
 
@@ -182,6 +182,15 @@ func (d *Database) initialize() error {
 				return err
 			}
 			schema = 7
+		}
+		if schema == 7 {
+			if err := upgradeSchema7To8(tx); err != nil {
+				return fmt.Errorf("upgrade coordinator database schema 7 to 8: %w", err)
+			}
+			if err := meta.Put(keySchemaVersion, encodeUint64(8)); err != nil {
+				return err
+			}
+			schema = 8
 		}
 		if schema > 0 && schema < SchemaVersion {
 			return fmt.Errorf("coordinator database schema %d is older than supported schema %d", schema, SchemaVersion)

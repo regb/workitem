@@ -23,18 +23,20 @@ const (
 )
 
 type Config struct {
-	DefaultAgent  string                            `json:"default_agent"`
-	DeepWork      DeepWorkConfig                    `json:"deep_work"`
-	Item          ItemConfig                        `json:"item"`
-	List          ListConfig                        `json:"list"`
-	Agent         AgentConfig                       `json:"agent"`
-	AgentStatus   AgentStatusConfig                 `json:"agent_status"`
-	Attention     AttentionConfig                   `json:"attention"`
-	Agents        map[string]AgentDefinitionConfig  `json:"agents"`
-	Drivers       map[string]DriverDefinitionConfig `json:"drivers"`
-	Extensions    map[string]map[string]any         `json:"extensions"`
-	Plugins       map[string]plugin.Registration    `json:"plugins,omitempty"`
-	optionOrigins map[string]string
+	DefaultAgent string                            `json:"default_agent"`
+	DeepWork     DeepWorkConfig                    `json:"deep_work"`
+	Item         ItemConfig                        `json:"item"`
+	List         ListConfig                        `json:"list"`
+	Agent        AgentConfig                       `json:"agent"`
+	AgentStatus  AgentStatusConfig                 `json:"agent_status"`
+	Attention    AttentionConfig                   `json:"attention"`
+	Agents       map[string]AgentDefinitionConfig  `json:"agents"`
+	Drivers      map[string]DriverDefinitionConfig `json:"drivers"`
+	Plugins      map[string]plugin.Registration    `json:"plugins,omitempty"`
+	// PluginSettings holds the registered options from [plugins.NAME] tables,
+	// resolved with schema defaults. Registration fields are in Plugins.
+	PluginSettings map[string]map[string]any `json:"-"`
+	optionOrigins  map[string]string
 }
 
 type AgentConfig struct {
@@ -79,7 +81,7 @@ type AgentStatusMarkersConfig struct {
 }
 
 func Default() Config {
-	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, Extensions: map[string]map[string]any{}}
+	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, PluginSettings: map[string]map[string]any{}}
 }
 
 // PluginRegistrations reads only installation metadata to build a declarative
@@ -126,11 +128,14 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 	for _, definition := range registry.Definitions() {
 		for _, section := range definition.RetiredSections {
 			if _, exists := root[section]; exists {
-				return cfg, warnings, fmt.Errorf("[%s] is no longer supported; configure [extensions.%s] global defaults and wi repo settings explicitly", section, definition.Name)
+				return cfg, warnings, fmt.Errorf("[%s] is no longer supported; configure [plugins.%s] global defaults and wi repo settings explicitly", section, definition.Name)
 			}
 		}
 	}
-	// Validate the typed core and preserve extension tables for registered schemas.
+	if _, exists := root["extensions"]; exists {
+		return cfg, warnings, fmt.Errorf("[extensions.NAME] has been merged into [plugins.NAME]; move those options into the plugin's table")
+	}
+	// Validate the typed core and preserve plugin options for registered schemas.
 	known := map[string]map[string]bool{
 		"deep_work": {"max_active": true}, "item": {"defaults": true}, "list": {"repository_folders": true, "labels": true}, "agent": {"startup_message": true, "append_system_prompt": true}, "agent_status": {"markers": true}, "attention": {"priority": true},
 	}
@@ -146,13 +151,13 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 			continue
 		}
 		switch section {
-		case "default_agent", "agents", "drivers", "extensions", "plugins", "repositories":
+		case "default_agent", "agents", "drivers", "plugins", "repositories":
 		default:
 			warnings = append(warnings, "ignored unknown key "+section)
 		}
 	}
 	if _, exists := root["repositories"]; exists {
-		return cfg, warnings, fmt.Errorf("repository overrides no longer belong in config.toml; use wi repo settings set NAME extensions.EXTENSION.OPTION VALUE explicitly")
+		return cfg, warnings, fmt.Errorf("repository overrides no longer belong in config.toml; use wi repo settings set NAME plugins.PLUGIN.OPTION VALUE explicitly")
 	}
 	data, err := json.Marshal(root)
 	if err != nil {
@@ -178,7 +183,11 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 	if err := Validate(cfg); err != nil {
 		return cfg, warnings, err
 	}
-	w, err := registry.Validate(cfg.Extensions, false)
+	cfg.PluginSettings, err = pluginSettings(root["plugins"])
+	if err != nil {
+		return cfg, warnings, err
+	}
+	w, err := registry.Validate(cfg.PluginSettings, false)
 	warnings = append(warnings, w...)
 	if err != nil {
 		return cfg, warnings, err
@@ -186,19 +195,60 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 	cfg.optionOrigins = map[string]string{}
 	for _, d := range registry.Definitions() {
 		for _, o := range d.Options {
-			cfg.optionOrigins["extensions."+d.Name+"."+o.Name] = "default"
+			cfg.optionOrigins["plugins."+d.Name+"."+o.Name] = "default"
 		}
 	}
-	for name, values := range cfg.Extensions {
+	for name, values := range cfg.PluginSettings {
 		for key := range values {
-			cfg.optionOrigins["extensions."+name+"."+key] = "user"
+			cfg.optionOrigins["plugins."+name+"."+key] = "user"
 		}
 	}
-	cfg.Extensions = registry.Resolve(cfg.Extensions, nil)
+	cfg.PluginSettings = registry.Resolve(cfg.PluginSettings, nil)
 	sort.Strings(warnings)
 	return cfg, warnings, nil
 }
-func (cfg Config) ExtensionOrigins() map[string]string {
+
+// pluginSettings takes the option keys of each [plugins.NAME] table, leaving
+// the registration fields to plugin.Registration.
+func pluginSettings(raw any) (map[string]map[string]any, error) {
+	settings := map[string]map[string]any{}
+	if raw == nil {
+		return settings, nil
+	}
+	tables, ok := raw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("plugins must be a table of [plugins.NAME] tables")
+	}
+	for name, value := range tables {
+		table, ok := value.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("plugins.%s must be a table", name)
+		}
+		for key, option := range table {
+			if plugin.RegistrationKeys[key] {
+				continue
+			}
+			if settings[name] == nil {
+				settings[name] = map[string]any{}
+			}
+			settings[name][key] = option
+		}
+	}
+	// Decode like the rest of the configuration, keeping JSON numbers.
+	data, err := json.Marshal(settings)
+	if err != nil {
+		return nil, err
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	settings = map[string]map[string]any{}
+	if err := decoder.Decode(&settings); err != nil {
+		return nil, err
+	}
+	return settings, nil
+}
+
+func (cfg Config) PluginOrigins() map[string]string {
 	result := map[string]string{}
 	for key, value := range cfg.optionOrigins {
 		result[key] = value
@@ -221,8 +271,8 @@ func normalizeArray(value any) any {
 	return value
 }
 
-func (cfg Config) ExtensionSettings(registry *options.Registry) map[string]map[string]any {
-	return registry.Resolve(cfg.Extensions, nil)
+func (cfg Config) ResolvedPluginSettings(registry *options.Registry) map[string]map[string]any {
+	return registry.Resolve(cfg.PluginSettings, nil)
 }
 func Validate(cfg Config) error {
 	if strings.ContainsRune(cfg.Agent.AppendSystemPrompt, 0) {

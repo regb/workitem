@@ -50,7 +50,7 @@ type Plugin struct {
 	RepositoryID  string
 }
 
-// Settings are effective registered extensions.github values passed as JSON.
+// Settings are the effective registered plugins.github options passed as JSON.
 type Settings struct {
 	IgnoreAuthors []string `json:"ignore_authors"`
 }
@@ -221,6 +221,11 @@ func (p Plugin) Sync(ctx context.Context) error {
 	if err := json.Unmarshal(output, &listed); err != nil {
 		return fmt.Errorf("decode wi list: %w", err)
 	}
+	if !p.hasTaggedBlockers(listed) {
+		// Most repositories have nothing to check; skip GitHub entirely.
+		fmt.Fprintln(p.Out, "checked 0 pull request blocker(s) across 0 pull request(s)")
+		return nil
+	}
 	authors := Authors{Ignored: p.IgnoreAuthors}
 	login, err := p.Run(ctx, p.Gh, "api", "user", "--jq", ".login")
 	if err != nil {
@@ -273,6 +278,24 @@ func (p Plugin) Sync(ctx context.Context) error {
 		return fmt.Errorf("%d pull request check(s) failed", failures)
 	}
 	return nil
+}
+
+// hasTaggedBlockers reports whether any item in this run's scope waits on a
+// pull request, before the run spends GitHub API calls.
+func (p Plugin) hasTaggedBlockers(listed list) bool {
+	for _, section := range []string{"active", "waiting", "backlog"} {
+		for _, entry := range listed.Sections[section] {
+			if p.RepositoryID != "" && entry.RepositoryID != p.RepositoryID {
+				continue
+			}
+			for _, blocker := range entry.Blockers {
+				if len(PullRequests(blocker)) > 0 {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func (p Plugin) view(ctx context.Context, pr PullRequest) (*State, error) {

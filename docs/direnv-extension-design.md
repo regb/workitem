@@ -4,7 +4,7 @@ Direnv is the native preparation implementation in the [unified plugin system](d
 
 ## Package boundaries
 
-- `internal/options` provides declarative registration, type/scope validation, resolution, and redaction. It does not execute extensions.
+- `internal/options` provides declarative registration, type/scope validation, resolution, and redaction. It does not execute plugins.
 - `internal/plugin` provides synchronous preparation ports and ordered dispatch. Hooks have no application service or coordinator client.
 - `internal/plugins/direnv` owns direnv commands, formats, policy, inherited-state cleanup, approval requests, and slot-reuse revocation.
 - `internal/plugins/bundled` is host composition. It resolves settings through a supplied repository reader before invoking hooks.
@@ -15,10 +15,10 @@ Core retains repository identity, lifecycle, checkout generations, runtime owner
 
 ## Global defaults versus entity policy
 
-The manually maintained user config contains extension defaults:
+The manually maintained user config contains plugin defaults:
 
 ```toml
-[extensions.direnv]
+[plugins.direnv]
 load = true
 trust = "prompt"
 ```
@@ -27,20 +27,20 @@ Repository-specific policy belongs to the registered repository:
 
 ```sh
 wi repo settings show biskoui
-wi repo settings set biskoui extensions.direnv.trust always
-wi repo settings set biskoui extensions.direnv.load false
-wi repo settings unset biskoui extensions.direnv.trust
+wi repo settings set biskoui plugins.direnv.trust always
+wi repo settings set biskoui plugins.direnv.load false
+wi repo settings unset biskoui plugins.direnv.trust
 ```
 
 Names and IDs select the repository. Internally settings are keyed by immutable repository ID in a separate canonical record in `wi.db`; they are not copied into Git configuration or onboarding checkouts. Rename and archive preserve settings. Name reuse cannot transfer authorization.
 
-Each setting uses a namespace such as `extensions.direnv` and a registered key such as `trust`. The option definition declares type, default, repository-scope permission, sensitivity, description, and optional closed choices.
+Each setting uses a namespace such as `plugins.direnv` and a registered key such as `trust`. The option definition declares type, default, repository-scope permission, sensitivity, description, and optional closed choices.
 
 The daemon validates set operations against trusted schemas supplied at composition. A client cannot register a schema in a mutation request. Global-only, unknown, incorrectly typed, and invalid enum values are rejected. Unset also permits cleanup of an existing unavailable setting.
 
 Values resolve as registered default, global user default, then repository override. Explicit false, zero, and empty values are distinct from omission. Arrays replace rather than append. Unsetting restores inheritance.
 
-Checked-in `.config/wi.toml` remains a safe label-default subset. It cannot register code, configure extensions, or grant trust. User-config repository tables and the old direnv path allowlist are rejected with actionable instructions, not silently migrated.
+Checked-in `.config/wi.toml` remains a safe label-default subset. It cannot register code, configure plugins, or grant trust. User-config repository tables and the old direnv path allowlist are rejected with actionable instructions, not silently migrated.
 
 ## Canonical storage and writes
 
@@ -50,15 +50,15 @@ Values are limited to 8 KiB per option and 64 KiB per repository. Acknowledgemen
 
 Reads atomically resolve repository identity and settings. Missing optional settings mean revision zero with no overrides; malformed stored data is an error, not permission to fall back to broader trust. Failed history writes roll back settings and acknowledgement updates with the same bbolt transaction.
 
-Settings read/write endpoints are operator-only. An unavailable extension does not erase its stored namespace. Operators can inspect it with redaction or remove it. Unknown namespaces are inactive; invalid values for installed extensions prevent their application.
+Settings read/write endpoints are operator-only. An unavailable plugin does not erase its stored namespace. Operators can inspect it with redaction or remove it. Unknown namespaces are inactive; invalid values for installed plugins prevent their application.
 
 ## Host resolution and inspection
 
-The host supplies a repository reader to bundled extension composition. Settings are read lazily and frozen per repository for the CLI operation. Hooks receive copied, validated, resolved option values. They never access the database or merge configuration themselves.
+The host supplies a repository reader to bundled plugin composition. Settings are read lazily and frozen per repository for the CLI operation. Hooks receive copied, validated, resolved option values. They never access the database or merge configuration themselves.
 
 Repository lookup failure, identity mismatch, or invalid known settings fails preparation. It must not silently substitute global policy, which might grant broader trust. A later operation gets a fresh snapshot. Existing runtime environments remain unchanged.
 
-`wi repo settings show --json` exposes stored overrides, effective values, origins, revision, and warnings. Namespace keys use `extensions.NAME`. Sensitive and unavailable settings are redacted unless explicitly revealed. `wi config` remains a local, global-default inspection command and never contacts the daemon.
+`wi repo settings show --json` exposes stored overrides, effective values, origins, revision, and warnings. Namespace keys use `plugins.NAME`. Sensitive and unavailable settings are redacted unless explicitly revealed. `wi config` remains a local, global-default inspection command and never contacts the daemon.
 
 ## Preparation ports
 

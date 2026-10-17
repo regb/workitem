@@ -72,14 +72,16 @@ registered defaults -> global user defaults -> repository overrides
   validation rather than silently changing behavior.
 - Inspection hides sensitive and unknown values unless explicitly requested.
 
-Keep `extensions.direnv` as its existing canonical namespace. For the first
-implementation, use `extensions.NAME` for the other plugins too. A historical
-word in a configuration key is less costly than two settings systems or an
-unnecessary migration. There must not be two writable aliases for the same policy.
+Each plugin has one `[plugins.NAME]` table. Its registration fields (`enabled`,
+`command`, `manifest`) describe installation and activation; every other key is a
+registered behavior option. No option may take a registration field's name.
+Repository overrides use the same namespace, `plugins.NAME.OPTION`. There are no
+aliases: the former `[extensions.NAME]` tables are rejected with guidance, and
+the schema 8 database upgrade renames stored `extensions.NAME` overrides once.
+Renaming early is cheaper than carrying two words for one concept.
 
-Replace the pending opaque `[plugins.NAME.config]` behavior settings with this
-registered model. Implementation paths and activation remain installation
-configuration, distinct from the plugin's behavior options.
+There is no opaque `[plugins.NAME.config]` table; unknown keys and nested tables
+fail validation.
 
 Read repository settings again for subsequent operations and job runs. Global
 registration and scheduler changes take effect on host reload or restart. Do not
@@ -188,7 +190,7 @@ operator-installed tool, not granting a limited Wi-specific permission token.
 3. `internal/plugins/direnv` implements native hooks. Its schema, trust settings
    and cleanup behavior are unchanged; the old parallel extension packages are gone.
 4. CLI composition uses this host for preparation, commands, jobs, instructions
-   and daemon settings validation. `config extensions` remains the schema query.
+   and daemon settings validation. `config plugins` is the schema query.
 5. GitHub uses registered `ignore_authors` and `interval_seconds` options, refreshes
    policy per repository/job run and retains its normal CLI-based implementation.
 
@@ -198,14 +200,16 @@ collisions, malformed metadata, removed plugins, rename/name reuse, false/empty
 values, redaction, stale revisions, partial outcomes, process cancellation, output
 bounds, and TUI/headless preparation using isolated roots.
 
-No operator configuration or trust is migrated implicitly. The former uncommitted
-opaque external settings and interval fields are rejected with guidance. This
+No operator configuration or trust is migrated implicitly. Former
+`[extensions.NAME]` tables are rejected with guidance; only stored repository
+override keys are renamed by the schema upgrade, with values unchanged. This
 integration does not activate plugins, restart a daemon, or edit native conversations.
 
 ## Scope decisions
 
 1. Keep the historical `extensions.NAME` settings keys during unification?
-   Retained; a rename would be a separate explicit change.
+   No. Settings moved into `[plugins.NAME]` and `plugins.NAME.OPTION`; stored
+   repository overrides are renamed by the schema 8 upgrade.
 2. Keep short namespaced commands such as `wi github ...`?
    Retained, with collision checks in the common registry.
 3. Add executable preparation hooks now?

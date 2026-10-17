@@ -28,13 +28,18 @@ func Catalog(self string, registrations map[string]plugin.Registration, configDi
 				return nil, fmt.Errorf("bundled plugin %s cannot be replaced by a manifest", name)
 			}
 			if name == "direnv" {
-				if !registration.Enabled || len(registration.Command) > 0 {
-					return nil, fmt.Errorf("direnv cleanup must stay registered; use extensions.direnv.load=false to disable evaluation")
+				if registration.EnabledSet && !registration.Enabled || len(registration.Command) > 0 {
+					return nil, fmt.Errorf("direnv cleanup must stay registered; use plugins.direnv.load = false to disable evaluation")
 				}
 			}
 			continue
 		}
 		if registration.Manifest == "" {
+			// A settings-only table does not install a plugin. Preserve its
+			// inactive options for inspection without inventing a definition.
+			if !registration.Enabled && len(registration.Command) == 0 {
+				continue
+			}
 			return nil, fmt.Errorf("plugin %s requires an explicit declarative manifest", name)
 		}
 		path := registration.Manifest
@@ -80,5 +85,5 @@ func Load(path, self string) (config.Config, *plugin.Host, []string, error) {
 	if string(a) != string(b) {
 		return cfg, nil, warnings, fmt.Errorf("plugin registration changed while loading configuration; retry")
 	}
-	return cfg, plugin.NewHost(catalog, cfg.Plugins, cfg.Extensions, self, nil), warnings, nil
+	return cfg, plugin.NewHost(catalog, cfg.Plugins, cfg.PluginSettings, self, nil), warnings, nil
 }

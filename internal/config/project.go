@@ -29,7 +29,7 @@ func LoadProject(path string) (ProjectConfig, []string, error) {
 }
 
 // Project files contain declarative defaults only. They cannot register code,
-// grant execution trust, or override operator-owned extension policy.
+// grant execution trust, or override operator-owned plugin policy.
 func ReadProject(reader io.Reader) (ProjectConfig, []string, error) {
 	var cfg ProjectConfig
 	data, err := io.ReadAll(io.LimitReader(reader, 1<<20+1))
@@ -43,7 +43,7 @@ func ReadProject(reader io.Reader) (ProjectConfig, []string, error) {
 	if err := toml.Unmarshal(data, &root); err != nil {
 		return cfg, nil, fmt.Errorf("parse project config: %w", err)
 	}
-	for _, key := range []string{"extensions", "repositories"} {
+	for _, key := range []string{"plugins", "extensions", "repositories"} {
 		if _, ok := root[key]; ok {
 			return cfg, nil, fmt.Errorf("project configuration cannot set operator-owned %s", key)
 		}
