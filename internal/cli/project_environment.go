@@ -4,7 +4,7 @@ import (
 	"context"
 	"maps"
 
-	"github.com/regb/workitem/internal/extension"
+	"github.com/regb/workitem/internal/plugin"
 )
 
 var cliProjectVariables = []string{"WI_LIST_LABELS", "WI_ITEM_DEFAULT_LABELS"}
@@ -20,8 +20,8 @@ func commandUsesCLIProjectEnvironment(args []string) bool {
 	}
 	return false
 }
-func loadCLIProjectEnvironment(ctx context.Context, pipeline extension.Pipeline, cwd, boundary, repositoryID string, source map[string]string) (map[string]string, []string, error) {
-	values, _, warnings, err := pipeline.Environment(ctx, "command", extension.EnvironmentRequest{Subject: extension.Subject{CheckoutPath: cwd, BoundaryPath: boundary, RepositoryID: repositoryID}, Values: source, Source: source, AllowedKeys: cliProjectVariables})
+func loadCLIProjectEnvironment(ctx context.Context, pipeline plugin.Pipeline, cwd, boundary, repositoryID string, source map[string]string) (map[string]string, []string, error) {
+	values, _, warnings, err := pipeline.Environment(ctx, "command", plugin.EnvironmentRequest{Subject: plugin.Subject{CheckoutPath: cwd, BoundaryPath: boundary, RepositoryID: repositoryID}, Values: source, Source: source, AllowedKeys: cliProjectVariables})
 	return values, warnings, err
 }
 func cloneEnvironment(env map[string]string) map[string]string { return maps.Clone(env) }

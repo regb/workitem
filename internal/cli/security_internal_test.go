@@ -10,14 +10,14 @@ import (
 
 	"github.com/regb/workitem/internal/app"
 	viewapp "github.com/regb/workitem/internal/app/view"
-	"github.com/regb/workitem/internal/extension"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/plugin"
 )
 
 func TestPromptDirenvApprovalDefaultsToNo(t *testing.T) {
 	for _, input := range []string{"\n", "no\n", "unexpected\n"} {
 		var output bytes.Buffer
-		approved, err := promptExtensionApproval(bytes.NewBufferString(input), &output, extension.Approval{ItemID: "item", Path: "/repo/.envrc", Question: "Allow?"})
+		approved, err := promptExtensionApproval(bytes.NewBufferString(input), &output, plugin.Approval{ItemID: "item", Path: "/repo/.envrc", Question: "Allow?"})
 		if err != nil || approved {
 			t.Fatalf("input=%q approved=%v err=%v", input, approved, err)
 		}
@@ -26,7 +26,7 @@ func TestPromptDirenvApprovalDefaultsToNo(t *testing.T) {
 
 func TestPromptDirenvApprovalAcceptsExplicitYes(t *testing.T) {
 	var output bytes.Buffer
-	approved, err := promptExtensionApproval(bytes.NewBufferString("yes\n"), &output, extension.Approval{ItemID: "item", Path: "/repo/.envrc", Question: "Allow?"})
+	approved, err := promptExtensionApproval(bytes.NewBufferString("yes\n"), &output, plugin.Approval{ItemID: "item", Path: "/repo/.envrc", Question: "Allow?"})
 	if err != nil || !approved {
 		t.Fatalf("approved=%v err=%v", approved, err)
 	}

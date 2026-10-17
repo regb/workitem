@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	adapter "github.com/regb/workitem/internal/direnv"
-	"github.com/regb/workitem/internal/extension"
+	"github.com/regb/workitem/internal/plugin"
 	"maps"
 	"os"
 	"path/filepath"
@@ -102,7 +102,7 @@ func loadCLIProjectEnvironment(ctx context.Context, client *fakeCLIDirenv, _ str
 			return nil, err
 		}
 	}
-	p := extension.Pipeline{Hooks: []extension.Hooks{New(client, nil)}}
-	result, _, _, err := p.Environment(ctx, "command", extension.EnvironmentRequest{Subject: extension.Subject{CheckoutPath: root}, Values: source, Source: source, AllowedKeys: []string{"WI_LIST_LABELS", "WI_ITEM_DEFAULT_LABELS"}})
+	p := plugin.Pipeline{Hooks: []plugin.Hooks{New(client, nil)}}
+	result, _, _, err := p.Environment(ctx, "command", plugin.EnvironmentRequest{Subject: plugin.Subject{CheckoutPath: root}, Values: source, Source: source, AllowedKeys: []string{"WI_LIST_LABELS", "WI_ITEM_DEFAULT_LABELS"}})
 	return result, err
 }

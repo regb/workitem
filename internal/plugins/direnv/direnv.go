@@ -1,4 +1,4 @@
-// Package direnv supplies the bundled environment extension. All direnv
+// Package direnv supplies the bundled environment plugin. All direnv
 // commands, formats, and trust policy belong here, not in workspace/agent core.
 package direnv
 
@@ -11,8 +11,8 @@ import (
 
 	"github.com/regb/workitem/internal/app/contract"
 	adapter "github.com/regb/workitem/internal/direnv"
-	"github.com/regb/workitem/internal/extension"
 	"github.com/regb/workitem/internal/options"
+	"github.com/regb/workitem/internal/plugin"
 )
 
 func Definition() options.Definition {
@@ -29,29 +29,29 @@ type Client interface {
 	Environment(context.Context, string, map[string]string) (map[string]string, error)
 }
 
-func New(client Client, approve extension.Approver) extension.Hooks {
+func New(client Client, approve plugin.Approver) plugin.Hooks {
 	d := &implementation{client: client, approve: approve}
-	return extension.Hooks{Name: "direnv", Sanitize: d.sanitize, CommandEnvironment: d.command, RuntimeEnvironment: d.runtime, PrepareCheckout: d.checkout}
+	return plugin.Hooks{Name: "direnv", Sanitize: d.sanitize, CommandEnvironment: d.command, RuntimeEnvironment: d.runtime, PrepareCheckout: d.checkout}
 }
 
 type implementation struct {
 	client  Client
-	approve extension.Approver
+	approve plugin.Approver
 }
 
 func enabled(settings map[string]any) bool { load, ok := settings["load"].(bool); return !ok || load }
 func absent(err error) bool {
 	return err != nil && (strings.Contains(err.Error(), "executable file not found") || strings.Contains(err.Error(), "no such file or directory"))
 }
-func managed(request extension.EnvironmentRequest) map[string]bool {
+func managed(request plugin.EnvironmentRequest) map[string]bool {
 	result := adapter.ManagedVariables(request.Values["DIRENV_DIFF"])
 	for key := range adapter.ManagedVariables(request.Source["DIRENV_DIFF"]) {
 		result[key] = true
 	}
 	return result
 }
-func (d *implementation) sanitize(ctx context.Context, r extension.EnvironmentRequest, _ map[string]any) (extension.Patch, error) {
-	patch := extension.Patch{}
+func (d *implementation) sanitize(ctx context.Context, r plugin.EnvironmentRequest, _ map[string]any) (plugin.Patch, error) {
+	patch := plugin.Patch{}
 	owned := managed(r)
 	for key := range r.Values {
 		if strings.HasPrefix(key, "DIRENV_") || (owned[key] && key != "PATH" && key != "HOME" && !shellVariable(key)) {
@@ -89,8 +89,8 @@ func contained(root, path string) bool {
 	canonical, err := filepath.EvalSymlinks(root)
 	return err == nil && resolved == filepath.Join(canonical, ".envrc")
 }
-func (d *implementation) runtime(ctx context.Context, r extension.EnvironmentRequest, settings map[string]any) (extension.Patch, error) {
-	patch := extension.Patch{}
+func (d *implementation) runtime(ctx context.Context, r plugin.EnvironmentRequest, settings map[string]any) (plugin.Patch, error) {
+	patch := plugin.Patch{}
 	if d.client == nil || !enabled(settings) || r.Subject.CheckoutPath == "" {
 		return patch, nil
 	}
@@ -116,7 +116,7 @@ func (d *implementation) runtime(ctx context.Context, r extension.EnvironmentReq
 		policy, _ := settings["trust"].(string)
 		approved := policy == "always"
 		if !approved && policy != "never" && d.approve != nil {
-			approved, err = d.approve(ctx, extension.Approval{ItemID: r.Subject.ItemID, Path: status.RCPath, Question: "Allow worktree .envrc?"})
+			approved, err = d.approve(ctx, plugin.Approval{ItemID: r.Subject.ItemID, Path: status.RCPath, Question: "Allow worktree .envrc?"})
 			if err != nil {
 				return patch, fmt.Errorf("request direnv approval: %w", err)
 			}
@@ -172,8 +172,8 @@ func (d *implementation) checkout(ctx context.Context, r contract.CheckoutPrepar
 	}
 	return []string{"revoked prior direnv trust for reused slot; runtime startup will request approval again"}, nil
 }
-func (d *implementation) command(ctx context.Context, r extension.EnvironmentRequest, settings map[string]any) (extension.Patch, error) {
-	patch := extension.Patch{Set: map[string]string{}}
+func (d *implementation) command(ctx context.Context, r plugin.EnvironmentRequest, settings map[string]any) (plugin.Patch, error) {
+	patch := plugin.Patch{Set: map[string]string{}}
 	owned := managed(r)
 	for _, key := range r.AllowedKeys {
 		if owned[key] {

@@ -12,10 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/extensions/bundled"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/plugin"
+	"github.com/regb/workitem/internal/plugins/bundled"
 	"github.com/regb/workitem/internal/xdg"
 )
 
@@ -149,12 +149,12 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 		}
 		signalCtx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 		defer cancel()
-		cfgFile, _, err := config.LoadWithRegistry(paths.ConfigFile, bundled.Registry())
+		self, _ := os.Executable()
+		cfgFile, pluginHost, _, err := bundled.Load(paths.ConfigFile, self)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return ExitError
 		}
-		self, _ := os.Executable()
 		decoders := coordinator.ConversationDecoders{}
 		for name, configured := range configuredDriverClients(cfgFile, self, environMap(os.Environ())) {
 			client := configured
@@ -180,10 +180,31 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 			return ExitError
 		}
 		defer server.Close()
-		server.ConfigureRepositorySettings(bundled.Registry())
+		server.ConfigureRepositorySettings(pluginHost.Registry.Options())
+		pluginClient := &coordinator.Client{SocketPath: socketPath}
+		pluginHost.ReadRepository = func(ctx context.Context, id string) (model.RepositorySettings, error) {
+			result, err := pluginClient.RepositorySettings(ctx, id)
+			return result.Settings, err
+		}
+		pluginHost.ListRepositories = func(ctx context.Context) ([]string, error) {
+			repos, err := pluginClient.ListRepositories(ctx)
+			ids := []string{}
+			for _, repo := range repos {
+				ids = append(ids, repo.ID)
+			}
+			return ids, err
+		}
 		if !jsonOut {
 			fmt.Fprintf(stderr, "wi daemon listening on %s (agent endpoint %s)\n", socketPath, agentSocketPath)
 		}
+		// Enabled plugins run beside the daemon and act only through the wi CLI.
+		pluginCtx, cancelPlugins := context.WithCancel(signalCtx)
+		pluginsDone := make(chan struct{})
+		go func() {
+			defer close(pluginsDone)
+			plugin.Runner{Host: pluginHost, WiPath: self, LogDir: filepath.Join(paths.DataStateRoot, "plugins")}.Run(pluginCtx)
+		}()
+		defer func() { cancelPlugins(); <-pluginsDone }()
 		if err := server.Serve(signalCtx); err != nil {
 			fmt.Fprintln(stderr, err)
 			return ExitError

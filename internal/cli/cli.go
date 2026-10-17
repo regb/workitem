@@ -17,10 +17,10 @@ import (
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/extension"
-	"github.com/regb/workitem/internal/extensions/bundled"
 	"github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/plugin"
+	"github.com/regb/workitem/internal/plugins/bundled"
 	"github.com/regb/workitem/internal/store"
 	"github.com/regb/workitem/internal/tmux"
 	"github.com/regb/workitem/internal/xdg"
@@ -46,6 +46,7 @@ type Config struct {
 	Coordinator            *coordinator.Client
 	GlobalConfig           *config.Config
 	ControlAccess          string
+	Plugins                *plugin.Host
 }
 
 func Main(ctx context.Context, args []string) int {
@@ -85,7 +86,8 @@ func Main(ctx context.Context, args []string) int {
 		filtered, jsonOut := extractGlobals(args)
 		return runDaemonMain(ctx, filtered[1:], paths, os.Stdout, os.Stderr, jsonOut)
 	}
-	cfgFile, warnings, err := config.LoadWithRegistry(paths.ConfigFile, bundled.Registry())
+	self, _ := os.Executable()
+	cfgFile, pluginHost, warnings, err := bundled.Load(paths.ConfigFile, self)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%s: %v\n", paths.ConfigFile, err)
 		return ExitError
@@ -108,9 +110,10 @@ func Main(ctx context.Context, args []string) int {
 	application.DefaultAgent = cfgFile.DefaultAgent
 	application.AgentsConfig = cfgFile.Agents
 	application.DriversConfig = cfgFile.Drivers
-	var approve extension.Approver
+	var approve plugin.Approver
+	application.Plugins = pluginHost
 	if !jsonOut && inputIsTerminal(os.Stdin) {
-		approve = func(ctx context.Context, request extension.Approval) (bool, error) {
+		approve = func(ctx context.Context, request plugin.Approval) (bool, error) {
 			return promptExtensionApproval(os.Stdin, os.Stderr, request)
 		}
 	}
@@ -128,7 +131,7 @@ func Main(ctx context.Context, args []string) int {
 	cwd, _ := os.Getwd()
 	application.AgentRuntimeStateRoot = paths.DataStateRoot
 	application.AgentRuntimeSocketRoot = paths.DataRuntimeRoot
-	runConfig := Config{RequireOwnedRepository: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, CWD: cwd, Env: env, StateRoot: paths.DataStateRoot, App: application, GlobalConfig: &cfgFile}
+	runConfig := Config{RequireOwnedRepository: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, CWD: cwd, Env: env, StateRoot: paths.DataStateRoot, App: application, GlobalConfig: &cfgFile, Plugins: pluginHost}
 	defaultSocketPath, err := coordinator.SocketPath(paths.RuntimeDir, paths.DataRoot)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "daemon is required for this command: %s\n", err)
@@ -167,10 +170,19 @@ func Main(ctx context.Context, args []string) int {
 		return ExitError
 	}
 	BindCoordinatorApp(application, st, runConfig.Coordinator)
-	application.Extensions = bundled.New(cfgFile, approve, func(ctx context.Context, id string) (model.RepositorySettings, error) {
+	pluginHost.ReadRepository = func(ctx context.Context, id string) (model.RepositorySettings, error) {
 		result, err := client.RepositorySettings(ctx, id)
 		return result.Settings, err
-	})
+	}
+	pluginHost.ListRepositories = func(ctx context.Context) ([]string, error) {
+		repos, err := client.ListRepositories(ctx)
+		ids := []string{}
+		for _, repo := range repos {
+			ids = append(ids, repo.ID)
+		}
+		return ids, err
+	}
+	application.Preparation = pluginHost.Preparation(approve)
 	if commandUsesCLIProjectEnvironment(args) {
 		repositoryID, boundary := "", ""
 		if current, findErr := application.Store.FindByWorktree(cwd); findErr == nil {
@@ -180,7 +192,7 @@ func Main(ctx context.Context, args []string) int {
 			}
 		}
 		var projectWarnings []string
-		env, projectWarnings, err = loadCLIProjectEnvironment(ctx, application.Extensions, cwd, boundary, repositoryID, env)
+		env, projectWarnings, err = loadCLIProjectEnvironment(ctx, application.Preparation, cwd, boundary, repositoryID, env)
 		for _, warning := range projectWarnings {
 			fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
 		}
@@ -289,6 +301,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = runPick(ctx, args[1:], cfg, jsonOut)
 	case "blocker":
 		err = runBlocker(ctx, args[1:], cfg, jsonOut)
+	case "plugin":
+		err = runPlugin(ctx, args[1:], cfg, jsonOut)
 	case "delete":
 		err = runDelete(ctx, args[1:], cfg, jsonOut)
 	case "shutdown":
@@ -298,6 +312,11 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 	case "agent":
 		err = runAgent(ctx, args[1:], cfg, jsonOut)
 	default:
+		// Enabled plugins provide their own subcommands, like git's git-<name>
+		// extensions; they can never shadow a built-in command.
+		if code, ok := runPluginCommand(ctx, cmd, args[1:], cfg, jsonOut); ok {
+			return code
+		}
 		fmt.Fprintf(cfg.Stderr, "unknown command %q\n", cmd)
 		return ExitUsage
 	}
@@ -486,7 +505,7 @@ func inputIsTerminal(input *os.File) bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-func promptExtensionApproval(input io.Reader, output io.Writer, request extension.Approval) (bool, error) {
+func promptExtensionApproval(input io.Reader, output io.Writer, request plugin.Approval) (bool, error) {
 	fmt.Fprintf(output, "%s\nPath: %s\nItem: %s [y/N] ", request.Question, request.Path, request.ItemID)
 	line, err := bufio.NewReader(input).ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {

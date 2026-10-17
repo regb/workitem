@@ -25,7 +25,7 @@ func TestAgentRuntimeEnvironmentKeepsWiOnPath(t *testing.T) {
 			t.Setenv("PATH", "/other-item/bin")
 			path := t.TempDir()
 			d := &runtimeDirenv{status: direnvpkg.Status{Found: tt.project != "", Allowed: true, RCPath: filepath.Join(path, ".envrc")}, env: map[string]string{"PATH": tt.project}}
-			a := &App{SelfPath: tt.self, Extensions: runtimeHooks(t, d), Tmux: fakeBaseTmux{global: map[string]string{"PATH": tt.path, "HOME": "/home/user"}}}
+			a := &App{SelfPath: tt.self, Preparation: runtimeHooks(t, d), Tmux: fakeBaseTmux{global: map[string]string{"PATH": tt.path, "HOME": "/home/user"}}}
 			m := model.Manifest{Checkout: model.Checkout{ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}
 			env, _, _, err := a.agentRuntimeEnvironment(context.Background(), m, agent.ModeTUI)
 			if err != nil || env["PATH"] != tt.want {

@@ -19,6 +19,7 @@ import (
 	"github.com/regb/workitem/internal/coordinator"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/plugin"
 	"github.com/regb/workitem/internal/store"
 	"github.com/regb/workitem/internal/testutil"
 	tmuxpkg "github.com/regb/workitem/internal/tmux"
@@ -1251,5 +1252,32 @@ func TestRemovedCommandNamesAreUnknown(t *testing.T) {
 				t.Fatalf("%v points at a replacement: %s", args, stderr.String())
 			}
 		}
+	}
+}
+
+func TestEnabledPluginsProvideSubcommandsWithoutShadowingBuiltins(t *testing.T) {
+	stdout, stderr, application := configuredApp(t)
+	dir := t.TempDir()
+	script := filepath.Join(dir, "wi-demo")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho \"args=$* item=$WI_ID plugin=$WI_PLUGIN cwd=$(pwd -P)\"\nexit 4\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := plugin.NewRegistry(plugin.Definition{Name: "demo", Command: []string{script}, Commands: []string{"wait"}}, plugin.Definition{Name: "off", Command: []string{script}, Commands: []string{"wait"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plugins := plugin.NewHost(registry, map[string]plugin.Registration{"demo": {Enabled: true}}, nil, "wi", nil)
+	cwd, _ := filepath.EvalSymlinks(dir)
+	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: cwd, Env: map[string]string{"WI_ID": "01KZ"}, App: application, Plugins: plugins}
+	if code := cli.Run(context.Background(), []string{"--json", "demo", "wait", "acme/api#1"}, cfg); code != 4 || stdout.String() != "args=--json wait acme/api#1 item=01KZ plugin=demo cwd="+cwd+"\n" {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	stdout.Reset()
+	if code := cli.Run(context.Background(), []string{"off"}, cfg); code != cli.ExitUsage || stdout.Len() != 0 {
+		t.Fatalf("disabled plugin ran: code=%d stdout=%q", code, stdout.String())
+	}
+	stdout.Reset()
+	if code := cli.Run(context.Background(), []string{"--json", "list", "--no-agent"}, cfg); code != cli.ExitOK || strings.Contains(stdout.String(), "plugin=") {
+		t.Fatalf("plugin shadowed a built-in: code=%d stdout=%q", code, stdout.String())
 	}
 }

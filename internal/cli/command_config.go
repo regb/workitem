@@ -5,12 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"sort"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/regb/workitem/internal/config"
-	"github.com/regb/workitem/internal/extensions/bundled"
+	"github.com/regb/workitem/internal/plugins/bundled"
 )
 
 type configKeyNotFoundError struct{ key string }
@@ -61,7 +62,8 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 	if command != "show" && command != "get" && command != "agents" && command != "drivers" && command != "extensions" {
 		return usageErr{fmt.Errorf("unknown config command %q", command)}
 	}
-	cfg, warnings, err := config.LoadWithRegistry(path, bundled.Registry())
+	self, _ := os.Executable()
+	cfg, pluginHost, warnings, err := bundled.Load(path, self)
 	if err != nil {
 		return fmt.Errorf("%s: %w", path, err)
 	}
@@ -75,7 +77,7 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 		return printConfigAgents(stdout, cfg, jsonOut)
 	}
 	if command == "extensions" {
-		definitions := bundled.Registry().Definitions()
+		definitions := pluginHost.Registry.Options().Definitions()
 		if !showSensitive {
 			for i := range definitions {
 				for j := range definitions[i].Options {
@@ -115,7 +117,7 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 	}
 	if !showSensitive {
 		redactConfigDriverSettings(tree)
-		registry := bundled.Registry()
+		registry := pluginHost.Registry.Options()
 		registry.Redact(tree["extensions"].(map[string]any))
 	}
 	var value any = tree
@@ -162,10 +164,10 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 	return writeJSON(stdout, value)
 }
 
-// Driver settings are opaque: key-name heuristics cannot safely identify
-// secrets. Keep their structure, but hide every value unless explicitly asked.
+// Driver settings and executable command lines are opaque. Plugin behavior
+// options are redacted separately through their shared registered schemas.
 func redactConfigDriverSettings(tree map[string]any) {
-	for _, section := range []string{"agents", "drivers"} {
+	for _, section := range []string{"agents", "drivers", "plugins"} {
 		definitions, _ := tree[section].(map[string]any)
 		for _, value := range definitions {
 			definition, _ := value.(map[string]any)
@@ -175,6 +177,12 @@ func redactConfigDriverSettings(tree map[string]any) {
 				if command, ok := definition["command"].(string); ok && command != "" {
 					definition["command"] = "[redacted]"
 				}
+			}
+			if section == "plugins" {
+				if command, ok := definition["command"]; ok {
+					definition["command"] = redactConfigValue(command)
+				}
+				continue
 			}
 			if settings, ok := definition[field]; ok {
 				definition[field] = redactConfigValue(settings)

@@ -147,6 +147,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi resume` | Ensure an active item's agent runtime |
 | `wi wait` | Wait for a time, another item, or something external; `--clear` stops waiting |
 | `wi blocker` | Add, list, or clear individual typed blockers with metadata |
+| `wi plugin` | List configured plugins or run one once |
 | `wi shelve` | Clean up safely and return work to backlog |
 | `wi close` | Clean up safely and retain history with a resolution |
 | `wi delete` | Permanently remove cleaned closed task records |

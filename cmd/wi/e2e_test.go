@@ -123,6 +123,7 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 		t.Fatalf("repository configuration lookup=%s", output)
 	}
 	exerciseRepositorySettingsE2E(t, binary, repository, env)
+	exercisePluginCatalogE2E(t, binary, repository, env, configDir, defaultProfile)
 	// Validate through the real bundled driver process, with neither Pi nor
 	// tmux on PATH. Invalid settings must fail before any item is created.
 	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(defaultProfile+"[agents.invalid]\ndriver = \"pi\"\n[agents.invalid.config]\nthinking = \"extreme\"\n"), 0600); err != nil {

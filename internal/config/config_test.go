@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/regb/workitem/internal/config"
-	"github.com/regb/workitem/internal/extensions/bundled"
+	"github.com/regb/workitem/internal/plugins/bundled"
 )
 
 func TestMissingDefaultProfileIsConfigurationError(t *testing.T) {
@@ -158,4 +158,27 @@ func writeFile(t *testing.T, path, content string) {
 
 var osWriteFile = func(path string, b []byte) error {
 	return os.WriteFile(path, b, 0o600)
+}
+
+func TestPluginInstallationConfigRejectsOpaqueBehavior(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	base := "default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n"
+	if err := os.WriteFile(path, []byte(base+"[plugins.github]\nenabled = true\n[plugins.jira]\nmanifest = \"jira/plugin.json\"\ncommand = [\"jira-sync\",\"--quiet\"]\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _, err := config.Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Plugins["github"].Enabled || cfg.Plugins["jira"].Manifest != "jira/plugin.json" || len(cfg.Plugins["jira"].Command) != 2 {
+		t.Fatal(cfg.Plugins)
+	}
+	for _, bad := range []string{"[plugins.github]\ninterval = \"5s\"\n", "[plugins.github.config]\nvalue = 1\n", "[plugins.github]\nenabled = 5\n", "[plugins.GitHub]\nenabled = true\n"} {
+		if err := os.WriteFile(path, []byte(base+bad), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, _, err := config.Load(path); err == nil {
+			t.Fatalf("accepted %s", bad)
+		}
+	}
 }

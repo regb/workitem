@@ -12,6 +12,7 @@ import (
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/skills"
+	"sort"
 )
 
 func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID string, mode agent.Mode) error {
@@ -72,7 +73,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 		if manifest.PrimaryConversation != nil {
 			format = manifest.PrimaryConversation.Format
 		}
-		request := driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: definition.Driver, Agent: agentName, Config: configJSON, Skills: skills.Bundled(), AppendSystemPrompt: a.AgentConfig.AppendSystemPrompt, ProjectTrusted: projectTrusted, Runtime: driverprotocol.Runtime{ID: spec.RuntimeID, WorkItemID: spec.WorkItemID, Mode: driverprotocol.Mode(spec.Mode), CWD: spec.CWD, ControlSocketPath: spec.ControlSocketPath, EventSocketPath: spec.EventSocketPath, LogPath: spec.LogPath}, Conversation: driverprotocol.Conversation{ID: conversationID, Locator: spec.ConversationLocator, Format: format}, Environment: environment}
+		request := driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: definition.Driver, Agent: agentName, Config: configJSON, Skills: a.agentSkills(ctx, manifest.Repository.ID), AppendSystemPrompt: a.AgentConfig.AppendSystemPrompt, ProjectTrusted: projectTrusted, Runtime: driverprotocol.Runtime{ID: spec.RuntimeID, WorkItemID: spec.WorkItemID, Mode: driverprotocol.Mode(spec.Mode), CWD: spec.CWD, ControlSocketPath: spec.ControlSocketPath, EventSocketPath: spec.EventSocketPath, LogPath: spec.LogPath}, Conversation: driverprotocol.Conversation{ID: conversationID, Locator: spec.ConversationLocator, Format: format}, Environment: environment}
 		runErr := a.RunAgentDriver(ctx, driverPath, driverArgs, request, driverProcessEnvironment(os.Environ()), func(ready driverprotocol.Ready) error {
 			runtime, err := a.Store.LoadAgentRuntime(spec.WorkItemID)
 			if err != nil {
@@ -102,4 +103,26 @@ func driverProcessEnvironment(environment []string) []string {
 		result = append(result, entry)
 	}
 	return result
+}
+
+// agentSkills adds static registered assets without running plugin executables.
+func (a *App) agentSkills(ctx context.Context, repositoryID string) []driverprotocol.Skill {
+	if a.Plugins == nil {
+		return skills.Bundled()
+	}
+	instructions, err := a.Plugins.Instructions(ctx, repositoryID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "wi: plugin instructions unavailable: %v\n", err)
+		return skills.Bundled()
+	}
+	names := []string{}
+	for name := range instructions {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	sections := []skills.PluginSection{}
+	for _, name := range names {
+		sections = append(sections, skills.PluginSection{Name: name, Markdown: instructions[name]})
+	}
+	return skills.WithPluginSections(skills.Bundled(), sections)
 }

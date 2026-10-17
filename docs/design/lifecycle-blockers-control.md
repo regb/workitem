@@ -1,7 +1,7 @@
-# Lifecycle, waiting, attention, and runtime control
+# Lifecycle, waiting, attention, runtime control, and plugins
 
 This records the design decisions behind wi's work-item lifecycle, waiting,
-attention, and runtime control, and the questions still open.
+attention, runtime control, and plugin model, and the questions still open.
 
 ## Lifecycle describes resources
 
@@ -118,6 +118,17 @@ are reported rather than presenting a writable terminal as read-only.
 The browser client that motivates the lease (a web UI) is a separate change
 built on this API.
 
+## Plugins
+
+Native hooks and executable plugins use the [same catalog and settings model](unified-plugins.md).
+Direnv supplies native preparation hooks. GitHub supplies declared executable
+commands, repository-scoped polling jobs, and static instruction assets. Both
+use registered `extensions.NAME` options and daemon-owned repository overrides.
+
+Plugins are fully trusted operator code and use Wi’s normal CLI/API. There is
+no per-plugin permission broker. Jobs receive a fresh effective settings snapshot
+per repository, and static instruction inspection does not launch code.
+
 ## Upgrading stored data
 
 Schema 7 replaces the former `working | waiting | archived` lifecycle in place
@@ -157,3 +168,6 @@ elsewhere before retrying; Wi never silently overwrites recovery data.
    whether they should rank first is a strategy choice.
 7. Event names: `work_item.archived` is now `work_item.closed`; older history
    keeps its original names.
+8. The restricted agent endpoint rejects blocker changes, so sandboxed agents
+   cannot make their own item wait on a pull request; allowing an agent to add
+   blockers to its own item only is undecided.

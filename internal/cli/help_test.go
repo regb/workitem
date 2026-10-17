@@ -37,7 +37,7 @@ func TestCloseHelpExplainsReopening(t *testing.T) {
 
 func TestAllPublicHelpTopicsAreDocumented(t *testing.T) {
 	topics := []string{
-		"config", "config show", "config get", "config agents", "config drivers", "config extensions", "version", "new", "list", "show", "events", "start", "switch", "next", "resume", "merge", "shelve", "close", "wait", "blocker", "blocker add", "blocker list", "blocker clear", "pick", "delete", "shutdown", "edit",
+		"config", "config show", "config get", "config agents", "config drivers", "config extensions", "version", "new", "list", "show", "events", "start", "switch", "next", "resume", "merge", "shelve", "close", "wait", "blocker", "blocker add", "blocker list", "blocker clear", "pick", "plugin", "delete", "shutdown", "edit",
 		"repo", "repo list", "repo rename", "repo archive", "repo restore", "repo settings", "repo settings show", "repo settings set", "repo settings unset",
 		"state", "state show", "state set",
 		"attention", "attention activity", "attention defer", "attention queue", "attention read", "attention unread",

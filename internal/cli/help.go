@@ -144,7 +144,7 @@ var helpDocs = map[string]helpDoc{
 	},
 	"config show":       {Summary: "Show global settings with built-in defaults", Usage: []string{"wi config show [--show-sensitive]"}, Description: []string{"Outputs sorted dotted settings in text or a configuration object with --json. Driver-specific values and commands are redacted unless --show-sensitive is supplied. Repository entity settings are separate; project files and environment rules are not evaluated."}, SeeAlso: []string{"config"}},
 	"config get":        {Summary: "Query one configuration key or section", Usage: []string{"wi config get KEY [--show-sensitive]"}, Description: []string{"Use dot-separated JSON keys, such as default_agent, deep_work.max_active, item.defaults.labels, agent.startup_message, agents.pi.config, or drivers.pi.defaults. Unknown keys exit 3. Scalars print directly in text; --json always emits the selected value as JSON."}, SeeAlso: []string{"config"}},
-	"config extensions": {Summary: "Inspect registered extension option schemas", Usage: []string{"wi config extensions [--json]"}, Description: []string{"Returns JSON metadata for statically registered extensions, including option types, defaults, descriptions, sensitivity, and repository-scope permission. Does not launch extension processes."}, SeeAlso: []string{"config"}},
+	"config extensions": {Summary: "Inspect registered extension option schemas", Usage: []string{"wi config extensions [--json]"}, Description: []string{"Returns option schemas from the common native/executable plugin catalog, including declarative third-party manifests. Includes defaults, types, bounds, sensitivity and repository scope. Never executes plugin code."}, SeeAlso: []string{"config"}},
 	"config agents":     {Summary: "List configured agent profiles and the default", Usage: []string{"wi config agents"}, Description: []string{"Lists profiles sorted by name, with driver, optional label, and a default marker. JSON returns default_agent and an agents array containing name, driver, label when set, and default. Does not discover installations, check authentication, or inspect runtime availability."}, SeeAlso: []string{"config", "agent", "init"}},
 	"config drivers":    {Summary: "Inspect configured drivers and their defaults", Usage: []string{"wi config drivers [--show-sensitive]"}, Description: []string{"Queries the drivers section, including built-in drivers. Custom commands and opaque defaults are redacted unless --show-sensitive is supplied. No driver executable is resolved or launched."}, SeeAlso: []string{"config"}},
 	"info": {
@@ -530,6 +530,16 @@ var helpDocs = map[string]helpDoc{
 		},
 		Examples: []string{`wi wait --on "$(wi pick --exclude-current)"`},
 	},
+	"plugin": {
+		Summary: "List and run optional plugins",
+		Usage:   []string{"wi plugin list [--show-sensitive]", "wi plugin run <name>", "wi plugin skill <name>"},
+		Description: []string{
+			"Native preparation hooks and executable plugins share one catalog and option registry. [plugins.NAME] contains installation metadata: enabled, an optional command override, and a third-party manifest path. Registered [extensions.NAME] options supply global defaults and repository overrides. Plugins are fully trusted operator code.",
+			"Only declared commands are dispatched, without shadowing built-ins. Jobs resolve fresh repository settings and use normal Wi CLI/API calls. GitHub checks external blockers tagged github.pr; its interval_seconds defaults to 300, bounded to 30 through 86400, and ignore_authors is repository-scoped.",
+			"wi plugin skill reads bounded static assets without launching code. wi plugin list includes native and executable entries, redacts sensitive values and executable commands, and accepts --show-sensitive. wi plugin run executes declared jobs even while disabled, but is rejected on the restricted agent endpoint. Explicit endpoint routing is preserved.",
+		},
+		Examples: []string{`wi plugin list`, `wi plugin run github`, `wi plugin skill github`, `wi github wait https://github.com/acme/api/pull/42`, `wi github wait acme/api#42 --item auth`},
+	},
 	"agent": {
 		Summary:     "Inspect, run, monitor, and communicate with the primary agent",
 		Usage:       []string{"wi agent <status|control|runtime|monitor> [options]"},
@@ -634,7 +644,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Administration:")
-	printCommandRows(w, [][2]string{{"init", "Set up agent profiles and select the default"}, {"config", "Inspect global settings and agent profiles"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete closed work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
+	printCommandRows(w, [][2]string{{"init", "Set up agent profiles and select the default"}, {"config", "Inspect global settings and agent profiles"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete closed work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"plugin", "List and run optional plugins"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "States:")
 	fmt.Fprintln(w, "  backlog | active | closed   (waiting active work stays out of the attention queue)")

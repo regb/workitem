@@ -29,3 +29,28 @@ func TestBundledSkillMatchesSource(t *testing.T) {
 	}
 	t.Fatal("no SKILL.md")
 }
+
+func TestPluginSectionsExtendOnlyTheWiSkill(t *testing.T) {
+	base := Bundled()
+	extended := WithPluginSections(base, []PluginSection{{Name: "github", Markdown: "Use `wi wait --for <PR URL>`.\n"}})
+	if err := protocol.ValidateSkills(extended); err != nil {
+		t.Fatal(err)
+	}
+	var skill []byte
+	for _, f := range extended[0].Files {
+		if f.Path == "SKILL.md" {
+			skill = f.Data
+		}
+	}
+	if !bytes.Contains(skill, []byte("### Plugin: github\n\nUse `wi wait --for <PR URL>`.\n")) {
+		t.Fatalf("plugin section missing:\n%s", skill)
+	}
+	for _, f := range base[0].Files {
+		if f.Path == "SKILL.md" && bytes.Contains(f.Data, []byte("Plugin: github")) {
+			t.Fatal("composition mutated the embedded skill")
+		}
+	}
+	if got := WithPluginSections(base, nil); len(got) != len(base) {
+		t.Fatal("no sections changed the skill set")
+	}
+}

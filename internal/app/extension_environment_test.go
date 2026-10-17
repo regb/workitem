@@ -5,8 +5,8 @@ import (
 	"testing"
 
 	"github.com/regb/workitem/internal/agent"
-	"github.com/regb/workitem/internal/extension"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/plugin"
 )
 
 func TestRuntimeEnvironmentHooksReceiveIdentityInBothModes(t *testing.T) {
@@ -14,14 +14,14 @@ func TestRuntimeEnvironmentHooksReceiveIdentityInBothModes(t *testing.T) {
 	for _, mode := range []agent.Mode{agent.ModeTUI, agent.ModeHeadless} {
 		calls := 0
 		a := &App{Tmux: fakeBaseTmux{global: map[string]string{"PATH": "/bin", "HOME": "/home/operator", "EXTENSION_TEST_REMOVE": "stale"}}}
-		a.Extensions = extension.Pipeline{Hooks: []extension.Hooks{{Name: "fixture", Sanitize: func(context.Context, extension.EnvironmentRequest, map[string]any) (extension.Patch, error) {
-			return extension.Patch{Warnings: []string{"sanitizer warning"}}, nil
-		}, RuntimeEnvironment: func(ctx context.Context, r extension.EnvironmentRequest, _ map[string]any) (extension.Patch, error) {
+		a.Preparation = plugin.Pipeline{Hooks: []plugin.Hooks{{Name: "fixture", Sanitize: func(context.Context, plugin.EnvironmentRequest, map[string]any) (plugin.Patch, error) {
+			return plugin.Patch{Warnings: []string{"sanitizer warning"}}, nil
+		}, RuntimeEnvironment: func(ctx context.Context, r plugin.EnvironmentRequest, _ map[string]any) (plugin.Patch, error) {
 			calls++
 			if r.Subject.RepositoryID != "repo" || r.Subject.ItemID != "item" || r.Subject.Mode != string(mode) || r.Subject.ClaimID != "claim" || r.Subject.Generation != 7 {
 				t.Fatal(r.Subject)
 			}
-			return extension.Patch{Set: map[string]string{"HOOK_VALUE": "ready"}, Unset: []string{"EXTENSION_TEST_REMOVE"}}, nil
+			return plugin.Patch{Set: map[string]string{"HOOK_VALUE": "ready"}, Unset: []string{"EXTENSION_TEST_REMOVE"}}, nil
 		}}}}
 		m := model.Manifest{ID: "item", Repository: model.Repository{ID: "repo"}, Checkout: model.Checkout{ClaimGeneration: 7, Claim: &model.WorkspaceClaim{ID: "claim", Generation: 7, Path: t.TempDir()}}}
 		env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), m, mode)

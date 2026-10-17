@@ -16,6 +16,8 @@ type Option struct {
 	Secret      bool     `json:"secret"`
 	Description string   `json:"description"`
 	Choices     []string `json:"choices,omitempty"`
+	Min         *int64   `json:"min,omitempty"`
+	Max         *int64   `json:"max,omitempty"`
 }
 type Definition struct {
 	RetiredSections []string `json:"retired_sections,omitempty"`
@@ -64,6 +66,14 @@ func clone(d Definition) Definition {
 	out.RetiredSections = append([]string(nil), d.RetiredSections...)
 	for i := range out.Options {
 		out.Options[i].Choices = append([]string(nil), out.Options[i].Choices...)
+		if d.Options[i].Min != nil {
+			v := *d.Options[i].Min
+			out.Options[i].Min = &v
+		}
+		if d.Options[i].Max != nil {
+			v := *d.Options[i].Max
+			out.Options[i].Max = &v
+		}
 		out.Options[i].Default = CloneValues(map[string]any{"value": d.Options[i].Default})["value"]
 	}
 	return out
@@ -145,6 +155,22 @@ func validate(o Option, value any) error {
 	}
 	if !valid {
 		return fmt.Errorf("expected %s", o.Type)
+	}
+	if o.Type == "integer" && (o.Min != nil || o.Max != nil) {
+		var n int64
+		switch v := value.(type) {
+		case int:
+			n = int64(v)
+		case int64:
+			n = v
+		case json.Number:
+			n, _ = v.Int64()
+		case float64:
+			n = int64(v)
+		}
+		if o.Min != nil && n < *o.Min || o.Max != nil && n > *o.Max {
+			return fmt.Errorf("integer is outside the registered bounds")
+		}
 	}
 	if len(o.Choices) > 0 {
 		for _, choice := range o.Choices {

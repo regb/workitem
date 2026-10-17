@@ -39,7 +39,7 @@ wi config show --json
 
 `get KEY` accepts dot-separated configuration keys or sections. Text scalars print directly; sections print sorted dotted settings. `--json` emits the selected JSON value, without a wrapper. An unknown key exits with code 3; invalid arguments exit with code 2.
 
-Driver-specific profile settings, driver defaults, and custom driver commands may contain secrets. Wi hides their values by default, retaining the setting names. Use `--show-sensitive` only when you intend to reveal them, including in JSON output:
+Driver-specific profile settings, driver defaults, plugin settings, and custom commands may contain secrets. Wi hides their values by default, retaining the setting names. Use `--show-sensitive` only when you intend to reveal them, including in JSON output:
 
 ```bash
 wi config get agents.pi.config --show-sensitive --json
@@ -275,6 +275,95 @@ Completed transcript records still refresh every 250 ms for final history and to
 Title generation uses a separate Claude print request with tools, skills, hooks, MCP servers, and session persistence disabled. It runs outside the checkout, inherits normal user authentication, strips Wi runtime identity, and bounds the request and output. It does not acquire an item's conversation.
 
 Claude writes its native JSONL directly into the item's `sessions/claude/` directory. A Wi-specific project namespace under the normal Claude configuration directory points there; it does not redirect unrelated Claude sessions or copy credentials. The adapter relies on Claude's project-directory namespace support, tested with Claude Code 2.1.296 for TUI and 2.1.299 for headless. TUI observations use lifecycle hooks; headless observations use native JSON frames. Disabling TUI hooks removes timely activity reporting; idle-required shutdown is refused until the runtime has reported readiness. A reported namespace mismatch stops startup rather than silently writing conversation history elsewhere.
+
+## Plugins
+
+Native hooks and executable plugins share one catalog and typed option registry. Plugins are fully trusted operator code, not a sandbox. They use Wi's CLI/API normally; structured writes still go through the daemon.
+
+Installation and activation belong under `[plugins.NAME]`. Behavior belongs under `[extensions.NAME]`, using registered schemas, defaults, redaction and repository overrides:
+
+```toml
+[plugins.github]
+enabled = true
+# command = ["/path/to/wi-github"] # optional executable override
+
+[extensions.github]
+interval_seconds = 300             # global only, 30 through 86400
+ignore_authors = ["codecov"]        # repository overrides allowed
+```
+
+`extensions.*` is the retained settings namespace for all plugins. There is no opaque `[plugins.NAME.config]` fallback. Plugin-level `interval` and `config` fields are rejected with guidance. Nothing is migrated or enabled implicitly.
+
+```bash
+wi config extensions
+wi plugin list
+wi repo settings set biskoui extensions.github.ignore_authors '["codecov","vercel"]'
+wi plugin skill github
+wi plugin run github
+```
+
+Direnv remains registered for required cleanup. Set `extensions.direnv.load = false` to disable evaluation without removing sanitation or reused-slot approval revocation.
+
+The scheduler consumes declared jobs from the catalog. Repository jobs receive fresh effective settings per repository on each run, plus `WI_PLUGIN_REPOSITORY_ID`. GitHub filters its listing to that ID. Jobs do not overlap within a job/scope; at most four jobs run concurrently, and each run is limited to two minutes. Shutdown cancels and joins workers. Global registration and interval changes require an explicit daemon restart; repository policy is read on subsequent runs. Existing agents are unchanged.
+
+Commands must be declared and cannot shadow built-ins. `wi NAME SUBCOMMAND` preserves caller context and resolves repository settings from the selected item, including an explicit `--item`. Executable jobs and commands receive `WI_EXECUTABLE`, `WI_PLUGIN`, and effective JSON settings in `WI_PLUGIN_CONFIG`. Explicit restricted endpoint routing is preserved. Manual scheduled-job runs remain operator-only.
+
+`wi plugin list` shows native and executable entries together. Schema-sensitive options, unknown values and commands are hidden unless `--show-sensitive` is supplied. Instructions come from static assets, never an executable `skill` lookup during startup. Enabled plugin instructions are added only to new runtimes.
+
+### Third-party registration
+
+Register a declarative JSON manifest explicitly. Wi does not launch programs to discover metadata:
+
+```toml
+[plugins.example]
+enabled = true
+manifest = "/home/me/tools/example/plugin.json"
+
+[extensions.example]
+message = "hello"
+```
+
+A minimal manifest:
+
+```json
+{
+  "version": 1,
+  "name": "example",
+  "command": ["bin/example"],
+  "commands": ["greet"],
+  "options": [
+    {"name": "message", "type": "string", "default": "hello", "repository": true}
+  ],
+  "instructions": "instructions.md"
+}
+```
+
+Names must match registrations. Relative executables and assets resolve against the manifest directory. Instruction assets must be regular UTF-8 files inside the package without symlinks, at most 16 KiB. Manifests are limited to 64 KiB and reject unknown fields. Inspection never launches code.
+
+Optional `jobs` entries declare `name`, `args`, `interval_option` and `repository`. The interval option must be a registered global integer; the catalog enforces 30 through 86400 seconds. External preparation hooks are deferred; direnv uses the native adapter.
+
+### GitHub
+
+`wi-github`, installed next to `wi`, makes items wait on GitHub pull requests. It needs the [`gh` CLI](https://cli.github.com) and its login.
+
+```bash
+wi github wait https://github.com/acme/api/pull/42
+wi github wait acme/api#42 --item auth
+```
+
+`wi github wait` checks that the pull request exists and is open, then adds one external blocker named `activity on acme/api#42`, labelled `#42` in lists, with `github.pr` metadata. Every scheduled run checks each tagged pull request once and clears its blockers on the first activity after the item started waiting:
+
+- a comment or a review, approvals included, by anyone other than you (your `gh` login), bots included;
+- a merge or close.
+
+Commits, labels, and CI status do not count. To ignore noisy authors, such as a coverage bot, list them in the plugin config; a `[bot]` suffix is optional:
+
+```toml
+[extensions.github]
+ignore_authors = ["codecov", "vercel"]
+```
+
+The plugin acts only on blockers carrying `github.pr` metadata, never on event text, so a plain `wi wait --for` event that mentions a pull request is left alone. `wi wait --clear` stops waiting early. Each clearance is recorded in the item's history, and the plugin log names the post, merge, or close that cleared it. While enabled, the plugin also teaches agents to use `wi github wait`, only when you ask them to make an item wait.
 
 ## Environment variables
 

@@ -9,9 +9,9 @@ import (
 
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/extensions/bundled"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/options"
+	"github.com/regb/workitem/internal/plugins/bundled"
 )
 
 func runRepositorySettings(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
@@ -78,6 +78,9 @@ func runRepositorySettings(ctx context.Context, args []string, cfg Config, jsonO
 		return err
 	}
 	registry := bundled.Registry()
+	if cfg.Plugins != nil {
+		registry = cfg.Plugins.Registry.Options()
+	}
 	if action == "show" {
 		global := config.Default()
 		if cfg.GlobalConfig != nil {

@@ -1,6 +1,6 @@
-// Package extension defines synchronous host preparation ports. It does not
+// Preparation hooks are contributions in the common plugin catalog. This pipeline does not
 // start runtimes, select work, write structured state, or load plugins.
-package extension
+package plugin
 
 import (
 	"context"

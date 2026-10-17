@@ -55,7 +55,7 @@ The daemon checks blockers every few seconds and records each clearance in the i
 
 ### Blockers
 
-`wi blocker` is the primitive behind `wi wait`. Each blocker has an ID, a kind with its condition (a time, another item, or an external event name), an optional short display label (such as `#1234`), and optional structured `key=value` metadata. wi stores metadata without interpreting it, so automation can find the blockers it created and clear them:
+`wi blocker` is the primitive behind `wi wait`. Each blocker has an ID, a kind with its condition (a time, another item, or an external event name), an optional short display label (such as `#1234`), and optional structured `key=value` metadata. wi stores metadata without interpreting it, so [plugins](../../reference/configuration/#plugins) can find the blockers they understand and clear them:
 
 ```bash
 wi blocker add --kind external --event "API review" --label "API #42" --meta github.pr=acme/api#42 auth

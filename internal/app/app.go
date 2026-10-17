@@ -20,9 +20,9 @@ import (
 	workspacecore "github.com/regb/workitem/internal/app/core/workspace"
 	viewapp "github.com/regb/workitem/internal/app/view"
 	"github.com/regb/workitem/internal/config"
-	"github.com/regb/workitem/internal/extension"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/plugin"
 	processpkg "github.com/regb/workitem/internal/process"
 	"github.com/regb/workitem/internal/store"
 	tmuxpkg "github.com/regb/workitem/internal/tmux"
@@ -109,7 +109,7 @@ type App struct {
 	Git                            Git
 	Tmux                           Tmux
 	ConversationBackends           map[string]ConversationBackend
-	Extensions                     extension.Pipeline
+	Preparation                    plugin.Pipeline
 	Process                        ProcessInspector
 	Clock                          Clock
 	NewID                          func() (string, error)
@@ -138,6 +138,8 @@ type App struct {
 	// Leases is the coordinator's controller lease table; nil disables
 	// single-controller enforcement.
 	Leases ControlLeases
+	// Plugins is the common catalog/host for native and executable contributions.
+	Plugins *plugin.Host
 }
 
 func New(st Store, git Git) *App {
@@ -185,7 +187,7 @@ func (a *App) itemService() *itemcore.Service {
 	})
 }
 func (a *App) workspaceService() *workspacecore.Service {
-	return workspacecore.New(a.Store, a.Git, a.Tmux, a.Extensions.PrepareCheckout, a.ResolveItem, func(runtime *model.AgentRuntime) bool {
+	return workspacecore.New(a.Store, a.Git, a.Tmux, a.Preparation.PrepareCheckout, a.ResolveItem, func(runtime *model.AgentRuntime) bool {
 		return a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive
 	}, a.now)
 }

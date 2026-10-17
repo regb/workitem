@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/regb/workitem/internal/config"
-	"github.com/regb/workitem/internal/extensions/bundled"
 	"github.com/regb/workitem/internal/options"
+	"github.com/regb/workitem/internal/plugins/bundled"
 )
 
 const configRepoID = "01KZYHGDCECSFS4BJ2SNTQP49V"

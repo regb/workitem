@@ -11,6 +11,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/options"
+	"github.com/regb/workitem/internal/plugin"
 	"github.com/regb/workitem/internal/priority"
 )
 
@@ -32,6 +33,7 @@ type Config struct {
 	Agents        map[string]AgentDefinitionConfig  `json:"agents"`
 	Drivers       map[string]DriverDefinitionConfig `json:"drivers"`
 	Extensions    map[string]map[string]any         `json:"extensions"`
+	Plugins       map[string]plugin.Registration    `json:"plugins,omitempty"`
 	optionOrigins map[string]string
 }
 
@@ -79,6 +81,32 @@ type AgentStatusMarkersConfig struct {
 func Default() Config {
 	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, Extensions: map[string]map[string]any{}}
 }
+
+// PluginRegistrations reads only installation metadata to build a declarative
+// catalog before validating behavior settings. It never launches plugin code.
+func PluginRegistrations(path string) (map[string]plugin.Registration, error) {
+	root := map[string]any{}
+	if strings.TrimSpace(path) != "" {
+		data, err := os.ReadFile(path)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		if err == nil {
+			if err := toml.Unmarshal(data, &root); err != nil {
+				return nil, err
+			}
+		}
+	}
+	raw, err := json.Marshal(root["plugins"])
+	if err != nil {
+		return nil, err
+	}
+	var registrations map[string]plugin.Registration
+	if err := json.Unmarshal(raw, &registrations); err != nil {
+		return nil, err
+	}
+	return registrations, nil
+}
 func Load(path string) (Config, []string, error) { return LoadWithRegistry(path, nil) }
 func LoadWithRegistry(path string, registry *options.Registry) (Config, []string, error) {
 	cfg := Default()
@@ -118,7 +146,7 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 			continue
 		}
 		switch section {
-		case "default_agent", "agents", "drivers", "extensions", "repositories":
+		case "default_agent", "agents", "drivers", "extensions", "plugins", "repositories":
 		default:
 			warnings = append(warnings, "ignored unknown key "+section)
 		}
@@ -236,6 +264,14 @@ func Validate(cfg Config) error {
 		}
 		if _, ok := cfg.Drivers[d.Driver]; !ok {
 			return fmt.Errorf("agent %q selects unconfigured driver %q", name, d.Driver)
+		}
+	}
+	for name, plugin := range cfg.Plugins {
+		if _, err := options.New(options.Definition{Name: name}); err != nil {
+			return fmt.Errorf("plugin name %q must be lowercase letters, digits, or '-'", name)
+		}
+		if len(plugin.Command) > 0 && strings.TrimSpace(plugin.Command[0]) == "" {
+			return fmt.Errorf("plugins.%s.command must name an executable", name)
 		}
 	}
 	return nil

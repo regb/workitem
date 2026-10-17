@@ -1,13 +1,13 @@
 # Bundled extensions and repository settings
 
-Direnv is the first bundled, in-process extension. Repository overrides are daemon-owned entity settings, not tables or generated files in user configuration. There is no dynamic loader, external extension protocol, or approval sharing.
+Direnv is the native preparation implementation in the [unified plugin system](design/unified-plugins.md). Repository overrides remain daemon-owned entity settings. The common catalog also supports executable jobs and commands; executable preparation hooks and approval sharing remain deferred.
 
 ## Package boundaries
 
 - `internal/options` provides declarative registration, type/scope validation, resolution, and redaction. It does not execute extensions.
-- `internal/extension` provides synchronous preparation ports and ordered dispatch. Hooks have no application service or coordinator client.
-- `internal/extensions/direnv` owns direnv commands, formats, policy, inherited-state cleanup, approval requests, and slot-reuse revocation.
-- `internal/extensions/bundled` is host composition. It resolves settings through a supplied repository reader before invoking hooks.
+- `internal/plugin` provides synchronous preparation ports and ordered dispatch. Hooks have no application service or coordinator client.
+- `internal/plugins/direnv` owns direnv commands, formats, policy, inherited-state cleanup, approval requests, and slot-reuse revocation.
+- `internal/plugins/bundled` is host composition. It resolves settings through a supplied repository reader before invoking hooks.
 - `internal/direnv` remains the system adapter.
 - Workspace and primary-agent core contain no direnv-specific ports, parser, commands, or configuration.
 
@@ -95,7 +95,7 @@ Slot reuse still revokes approval before publishing the new claim. Identical `.e
 
 ## Deferred work
 
-- External-process discovery, manifests, and versioned transport.
+- External-process preparation hooks and approval transport. Jobs/commands already use explicit declarative manifests through the common catalog.
 - Dynamic CLI flag registration.
 - Additional registered core entity settings and safe checked-in extension options.
 - Dependency-aware approval sharing and revocation records.

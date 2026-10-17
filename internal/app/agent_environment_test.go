@@ -12,9 +12,9 @@ import (
 
 	"github.com/regb/workitem/internal/agent"
 	direnvpkg "github.com/regb/workitem/internal/direnv"
-	"github.com/regb/workitem/internal/extension"
-	direnvext "github.com/regb/workitem/internal/extensions/direnv"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/plugin"
+	direnvext "github.com/regb/workitem/internal/plugins/direnv"
 	tmuxpkg "github.com/regb/workitem/internal/tmux"
 )
 
@@ -77,23 +77,23 @@ func encodeTestDirenvDiff(t *testing.T) string {
 	return base64.URLEncoding.EncodeToString(buf.Bytes())
 }
 
-func runtimeHooks(t *testing.T, d *runtimeDirenv) extension.Pipeline {
+func runtimeHooks(t *testing.T, d *runtimeDirenv) plugin.Pipeline {
 	t.Helper()
 	if d == nil {
-		return extension.Pipeline{Hooks: []extension.Hooks{direnvext.New(nil, nil)}}
+		return plugin.Pipeline{Hooks: []plugin.Hooks{direnvext.New(nil, nil)}}
 	}
 	if d != nil && d.status.Found {
 		if err := os.WriteFile(d.status.RCPath, []byte("fixture"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return extension.Pipeline{Hooks: []extension.Hooks{direnvext.New(d, nil)}}
+	return plugin.Pipeline{Hooks: []plugin.Hooks{direnvext.New(d, nil)}}
 }
 
 func TestAgentRuntimeEnvironmentLoadsOnlyTrustedEnvrc(t *testing.T) {
 	path := t.TempDir()
 	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, Allowed: true, RCPath: path + "/.envrc"}, env: map[string]string{"TOKEN": "value"}}
-	a := &App{Extensions: runtimeHooks(t, d)}
+	a := &App{Preparation: runtimeHooks(t, d)}
 	env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, agent.ModeTUI)
 	if err != nil || env["TOKEN"] != "value" || len(warnings) != 0 || d.envCalls != 1 {
 		t.Fatalf("env=%v warnings=%v calls=%d", env, warnings, d.envCalls)
@@ -103,8 +103,8 @@ func TestAgentRuntimeEnvironmentPromptsBeforeAllowingUntrustedEnvrc(t *testing.T
 	path := t.TempDir()
 	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, RCPath: path + "/.envrc"}, env: map[string]string{"TOKEN": "value"}}
 	hooks := runtimeHooks(t, d)
-	hooks.Hooks = []extension.Hooks{direnvext.New(d, func(context.Context, extension.Approval) (bool, error) { return true, nil })}
-	a := &App{Extensions: hooks}
+	hooks.Hooks = []plugin.Hooks{direnvext.New(d, func(context.Context, plugin.Approval) (bool, error) { return true, nil })}
+	a := &App{Preparation: hooks}
 	env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, agent.ModeTUI)
 	if err != nil || env["TOKEN"] != "value" || d.allowCalls != 1 || d.envCalls != 1 || len(warnings) != 1 || !strings.Contains(warnings[0], "operator approval") {
 		t.Fatalf("env=%v warnings=%v allow=%d environment=%d", env, warnings, d.allowCalls, d.envCalls)
@@ -123,7 +123,7 @@ func TestAgentRuntimeEnvironmentAutoTrustsOnlyConfiguredRepository(t *testing.T)
 		}
 		return map[string]any{"trust": policy}, nil
 	}
-	a := &App{Extensions: hooks}
+	a := &App{Preparation: hooks}
 	env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Repository: model.Repository{ID: repository}, Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: checkout}}}, agent.ModeTUI)
 	if err != nil || env["TOKEN"] != "value" || d.allowCalls != 1 || len(warnings) != 1 || !strings.Contains(warnings[0], "configuration") {
 		t.Fatalf("env=%v warnings=%v allow=%d", env, warnings, d.allowCalls)
@@ -133,7 +133,7 @@ func TestAgentRuntimeEnvironmentAutoTrustsOnlyConfiguredRepository(t *testing.T)
 func TestAgentRuntimeEnvironmentIgnoresReservedControlVariables(t *testing.T) {
 	path := t.TempDir()
 	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, Allowed: true, RCPath: path + "/.envrc"}, env: map[string]string{"WI_ID": "wrong", "WI_AGENT_CONVERSATION_DIR": "/wrong", "WI_LIST_LABELS": "+project", "WI_ITEM_DEFAULT_LABELS": "project", "SAFE": "value", "TMUX": "/stale", "TMUX_PANE": "%9", "DIRENV_DIFF": "internal"}}
-	a := &App{Extensions: runtimeHooks(t, d)}
+	a := &App{Preparation: runtimeHooks(t, d)}
 	env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, agent.ModeTUI)
 	if err != nil || env["SAFE"] != "value" || env["WI_LIST_LABELS"] != "+project" || env["WI_ITEM_DEFAULT_LABELS"] != "project" || env["WI_ID"] != "" || env["WI_AGENT_CONVERSATION_DIR"] != "" || env["TMUX"] != "" || env["TMUX_PANE"] != "" || env["DIRENV_DIFF"] != "" || len(warnings) != 2 {
 		t.Fatalf("env=%v warnings=%v err=%v", env, warnings, err)
@@ -144,7 +144,7 @@ func TestAgentRuntimeEnvironmentUsesGlobalTmuxEnvironmentAsBase(t *testing.T) {
 	path := t.TempDir()
 	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, Allowed: true, RCPath: path + "/.envrc"}, env: map[string]string{"TOKEN": "value"}}
 	tmuxClient := fakeBaseTmux{global: map[string]string{"PATH": "/clean/bin", "HOME": "/home/user"}}
-	a := &App{Extensions: runtimeHooks(t, d), Tmux: tmuxClient}
+	a := &App{Preparation: runtimeHooks(t, d), Tmux: tmuxClient}
 	env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, agent.ModeTUI)
 	if err != nil || env["TOKEN"] != "value" || len(warnings) != 0 || d.base["PATH"] != "/clean/bin" || d.base["HOME"] != "/home/user" {
 		t.Fatalf("env=%v warnings=%v base=%v err=%v", env, warnings, d.base, err)
@@ -164,9 +164,9 @@ func TestDirenvBaseEnvironmentScrubsServerAndPanePollution(t *testing.T) {
 		"WI_AGENT_CONVERSATION_DIR": "/stale/conversations",
 	}
 	tmuxClient := fakeBaseTmux{global: global}
-	a := &App{Extensions: runtimeHooks(t, nil), Tmux: tmuxClient}
+	a := &App{Preparation: runtimeHooks(t, nil), Tmux: tmuxClient}
 	t.Setenv("DIRENV_DIFF", "")
-	base, scrub, _, err := a.baseRuntimeEnvironment(context.Background(), agent.ModeTUI, extension.Subject{Mode: string(agent.ModeTUI)})
+	base, scrub, _, err := a.baseRuntimeEnvironment(context.Background(), agent.ModeTUI, plugin.Subject{Mode: string(agent.ModeTUI)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +190,7 @@ func TestDirenvBaseEnvironmentScrubsServerAndPanePollution(t *testing.T) {
 func TestAgentRuntimeEnvironmentRemovesValuesLeftByEarlierLaunch(t *testing.T) {
 	path := t.TempDir()
 	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, Allowed: true, RCPath: path + "/.envrc"}, env: map[string]string{"PI_CODING_AGENT_DIR": "/profiles/target"}}
-	a := &App{Extensions: runtimeHooks(t, d), Tmux: fakeBaseTmux{global: map[string]string{"HOME": "/home/user", "PATH": "/bin"}, session: map[string]string{"OLD_PROJECT_TOKEN": "secret", "PI_CODING_AGENT_DIR": "/profiles/old"}}}
+	a := &App{Preparation: runtimeHooks(t, d), Tmux: fakeBaseTmux{global: map[string]string{"HOME": "/home/user", "PATH": "/bin"}, session: map[string]string{"OLD_PROJECT_TOKEN": "secret", "PI_CODING_AGENT_DIR": "/profiles/old"}}}
 	env, scrub, _, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{ID: "01KZYHGDCECSFS4BJ2SNTQP49V", Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, agent.ModeTUI)
 	if err != nil {
 		t.Fatal(err)
@@ -206,7 +206,7 @@ func TestAgentRuntimeEnvironmentRemovesValuesLeftByEarlierLaunch(t *testing.T) {
 func TestAgentRuntimeEnvironmentWarnsWithoutEvaluatingUntrustedEnvrc(t *testing.T) {
 	path := t.TempDir()
 	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, Allowed: false, RCPath: path + "/.envrc"}}
-	a := &App{Extensions: runtimeHooks(t, d)}
+	a := &App{Preparation: runtimeHooks(t, d)}
 	env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, agent.ModeTUI)
 	if err != nil || env["PATH"] == "" || env["TOKEN"] != "" || len(warnings) != 1 || !strings.Contains(warnings[0], "not trusted") || d.envCalls != 0 {
 		t.Fatalf("token=%q warnings=%v calls=%d", env["TOKEN"], warnings, d.envCalls)

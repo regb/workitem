@@ -9,8 +9,8 @@ import (
 
 	"github.com/regb/workitem/internal/agent"
 	agentcore "github.com/regb/workitem/internal/app/core/primaryagent"
-	"github.com/regb/workitem/internal/extension"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/plugin"
 )
 
 func exactRuntimeEnvironment(environment map[string]string) []string {
@@ -19,7 +19,7 @@ func exactRuntimeEnvironment(environment map[string]string) []string {
 
 // baseRuntimeEnvironment selects the caller/server base, then lets registered
 // sanitizers remove inherited project values before enforcing host identity.
-func (a *App) baseRuntimeEnvironment(ctx context.Context, mode agent.Mode, subject extension.Subject) (map[string]string, []string, []string, error) {
+func (a *App) baseRuntimeEnvironment(ctx context.Context, mode agent.Mode, subject plugin.Subject) (map[string]string, []string, []string, error) {
 	var global map[string]string
 	if mode == agent.ModeTUI && a.Tmux != nil {
 		if candidate, err := a.Tmux.GlobalEnvironment(ctx); err == nil && len(candidate) > 0 {
@@ -29,7 +29,7 @@ func (a *App) baseRuntimeEnvironment(ctx context.Context, mode agent.Mode, subje
 	if len(global) == 0 {
 		global = envFromSlice(os.Environ())
 	}
-	global, scrub, warnings, err := a.Extensions.Environment(ctx, "sanitize", extension.EnvironmentRequest{Subject: subject, Values: global, Source: envFromSlice(os.Environ())})
+	global, scrub, warnings, err := a.Preparation.Environment(ctx, "sanitize", plugin.EnvironmentRequest{Subject: subject, Values: global, Source: envFromSlice(os.Environ())})
 	if err != nil {
 		return nil, nil, warnings, err
 	}
@@ -59,7 +59,7 @@ func envFromSlice(entries []string) map[string]string {
 // Launchers must use it as a replacement, never as an overlay on their own
 // process environment.
 func (a *App) agentRuntimeEnvironment(ctx context.Context, m model.Manifest, mode agent.Mode) (map[string]string, []string, []string, error) {
-	subject := extension.Subject{ItemID: m.ID, RepositoryID: m.Repository.ID, Mode: string(mode)}
+	subject := plugin.Subject{ItemID: m.ID, RepositoryID: m.Repository.ID, Mode: string(mode)}
 	if claim := m.Checkout.Claim; claim != nil {
 		subject.CheckoutPath = claim.Path
 		subject.ClaimID = claim.ID
@@ -69,7 +69,7 @@ func (a *App) agentRuntimeEnvironment(ctx context.Context, m model.Manifest, mod
 	if err != nil {
 		return nil, scrub, warnings, err
 	}
-	overrides, removed, runtimeWarnings, err := a.Extensions.Environment(ctx, "runtime", extension.EnvironmentRequest{Subject: subject, Values: base})
+	overrides, removed, runtimeWarnings, err := a.Preparation.Environment(ctx, "runtime", plugin.EnvironmentRequest{Subject: subject, Values: base})
 	warnings = append(warnings, runtimeWarnings...)
 	scrub = append(scrub, removed...)
 	if err != nil {
