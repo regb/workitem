@@ -79,6 +79,7 @@ func (a *App) prepareArchive(ctx context.Context, m model.Manifest, opts Resolve
 }
 
 func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, resolution string, env map[string]string, force bool, warnings []string, deferTerminalClose ...bool) (StateTransitionResult, error) {
+	previousClaim := m.Checkout.Claim
 	workspaceChanged := false
 	deferredSession := ""
 	var workspaceWarnings []string
@@ -94,13 +95,27 @@ func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, re
 	retained := m
 	now := a.now()
 	previousSlug := m.Slug
+	// Commit workspace release separately from the typed lifecycle transition.
+	// The typed close command accepts lifecycle, resolution, slug, and blocker
+	// changes, not checkout edits. Retain a successful release if closing fails.
+	var saveErr error
+	if previousClaim != nil && m.Checkout.Claim == nil {
+		m.UpdatedAt = now
+		saveErr = a.Store.SaveManifest(ctx, m)
+		if saveErr == nil {
+			_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(now, "workspace.released", "user", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "state": m.State}))
+		}
+	}
 	m.State = model.StateClosed
 	m.Slug = ""
 	m.Resolution = resolution
 	m.Blockers = nil
 	m.StateChangedAt = now
 	m.UpdatedAt = now
-	if err := a.Store.SaveManifest(ctx, m); err != nil {
+	if saveErr == nil {
+		saveErr = a.Store.SaveManifest(ctx, m)
+	}
+	if saveErr != nil {
 		warnings = append(warnings, workspaceWarnings...)
 		// Saving can fail before commit or after a lost acknowledgement. Report
 		// canonical state, not the locally released claim or assumed lifecycle.
@@ -109,7 +124,7 @@ func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, re
 		} else {
 			warnings = append(warnings, "could not refresh retained close state: "+inspectErr.Error())
 		}
-		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: retained.State, Changed: retained.State != prevState, Manifest: retained, Warnings: warnings}, fmt.Errorf("workspace cleanup completed, but closed state could not be saved: %w", err)
+		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: retained.State, Changed: retained.State != prevState, Manifest: retained, Warnings: warnings}, fmt.Errorf("workspace cleanup completed, but closed state could not be saved: %w", saveErr)
 	}
 	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(now, "work_item.closed", "user", map[string]any{"previous_state": prevState, "new_state": m.State, "resolution": resolution, "previous_slug": previousSlug, "workspace_closed": workspaceChanged, "forced": force}))
 	warnings = append(warnings, workspaceWarnings...)

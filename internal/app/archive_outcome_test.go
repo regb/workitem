@@ -48,13 +48,71 @@ func TestArchiveReportsTerminalCleanupBeforeCommitFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Manifest.State != retained.State || result.Manifest.Checkout.Claim == nil {
-		t.Fatalf("returned inferred cleanup instead of retained claim: %+v", result.Manifest)
+	if result.Manifest.State != retained.State || result.Manifest.Checkout.Claim != nil {
+		t.Fatalf("returned state differs from durable workspace release: %+v", result.Manifest)
 	}
-	if retained.State != model.StateBacklog || retained.Checkout.Claim == nil || len(mux.killed) != 1 || !containsString(result.Warnings, "closed terminal session "+retained.TerminalSessionName()) {
+	if retained.State != model.StateBacklog || retained.Checkout.Claim != nil || len(mux.killed) != 1 || !containsString(result.Warnings, "closed terminal session "+retained.TerminalSessionName()) {
 		t.Fatalf("partial was rolled back or archived %+v", retained)
 	}
 }
+
+type failWorkspaceReleaseStore struct {
+	app.Store
+	commit bool
+}
+
+func (s failWorkspaceReleaseStore) SaveManifest(ctx context.Context, m model.Manifest) error {
+	before, err := s.Store.LoadManifest(m.ID)
+	if err != nil {
+		return err
+	}
+	if before.Checkout.Claim != nil && m.Checkout.Claim == nil {
+		if s.commit {
+			if err := s.Store.SaveManifest(ctx, m); err != nil {
+				return err
+			}
+		}
+		return fmt.Errorf("injected workspace release failure")
+	}
+	return s.Store.SaveManifest(ctx, m)
+}
+func TestArchiveReleaseFailureReportsCanonicalClaimAndDoesNotClose(t *testing.T) {
+	for _, committed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("committed=%t", committed), func(t *testing.T) {
+			st := store.New(t.TempDir())
+			a := newTestApp(st, newFakeGit(t))
+			ctx := context.Background()
+			created, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "Release partial", CWD: t.TempDir()})
+			if err != nil {
+				t.Fatal(err)
+			}
+			opts := app.ResolveOptions{Selector: created.Manifest.ID}
+			workspace, err := a.EnsureWorkItemWorkspace(ctx, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			a.Store = failWorkspaceReleaseStore{Store: st, commit: committed}
+			result, err := a.Close(ctx, opts, model.ResolutionCompleted, false)
+			if err == nil || !strings.Contains(err.Error(), "injected workspace release failure") {
+				t.Fatal("release failure was hidden", err)
+			}
+			retained, err := st.LoadManifest(created.Manifest.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if retained.State != created.Manifest.State || result.State != retained.State || result.Manifest.State != retained.State || result.Changed {
+				t.Fatal("release failure closed the item")
+			}
+			if (retained.Checkout.Claim == nil) != committed || (result.Manifest.Checkout.Claim == nil) != committed {
+				t.Fatal("partial outcome did not report canonical claim")
+			}
+			if retained.Checkout.ClaimGeneration != workspace.Manifest.Checkout.ClaimGeneration || retained.Checkout.Specification.Branch != workspace.Manifest.Checkout.Specification.Branch {
+				t.Fatal("release failure changed checkout identity")
+			}
+		})
+	}
+}
+
 func TestArchiveTimeoutRetainsShutdownWarningAndLifecycle(t *testing.T) {
 	st := store.New(testutil.ShortTempDir(t))
 	application := newTestApp(st, newFakeGit(t))
