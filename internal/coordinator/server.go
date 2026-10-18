@@ -546,6 +546,18 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			return
 		}
 		result = snapshot
+	case MethodAttentionActivity:
+		var itemRequest ItemRequest
+		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
+			s.writeError(conn, request.ID, "invalid_request", "valid item_id is required")
+			return
+		}
+		activity, err := s.database.AttentionActivity(itemRequest.ItemID)
+		if err != nil {
+			s.writeError(conn, request.ID, "database_error", err.Error())
+			return
+		}
+		result = activity
 	case MethodItemEvents:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {

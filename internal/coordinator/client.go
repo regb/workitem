@@ -164,6 +164,12 @@ func (c *Client) EditItem(ctx context.Context, request EditItemRequest) (Manifes
 	return result, err
 }
 
+func (c *Client) AttentionActivity(ctx context.Context, itemID string) (AttentionActivityResult, error) {
+	var result AttentionActivityResult
+	err := c.Call(ctx, MethodAttentionActivity, ItemRequest{ItemID: itemID}, &result)
+	return result, err
+}
+
 func (c *Client) ItemEvents(ctx context.Context, itemID string) ([]model.Event, error) {
 	var result ItemEventsResult
 	err := c.Call(ctx, MethodItemEvents, ItemRequest{ItemID: itemID}, &result)

@@ -46,7 +46,34 @@ func enableFixtureBlockerCommands(application *app.App) {
 
 // Native-file fixtures use the real coordinator policy in a temporary database.
 // Production has no native-file fallback for blocker mutations.
-type fixtureBlockerStore struct{ *store.Store }
+type fixtureBlockerStore struct {
+	*store.Store
+	activities map[string]app.AttentionActivity
+}
+
+// File-based fixtures model the daemon projection at the event write boundary.
+func (s *fixtureBlockerStore) AppendEvent(ctx context.Context, id string, event model.Event) error {
+	if err := s.Store.AppendEvent(ctx, id, event); err != nil {
+		return err
+	}
+	if s.activities == nil {
+		return nil
+	}
+	activity := s.activities[id]
+	at := event.Time
+	switch event.Type {
+	case "attention.read":
+		activity.LastReadAt = &at
+	case "attention.unread":
+		activity.LastUnreadAt = &at
+	case "attention.deferred":
+		activity.LastDeferredAt = &at
+	default:
+		return nil
+	}
+	s.activities[id] = activity
+	return nil
+}
 
 func (s *fixtureBlockerStore) AddBlockers(ctx context.Context, id string, blocks []model.Blocker, at time.Time) (itemcore.BlockerResult, error) {
 	root, err := os.MkdirTemp("", "wi-blocker-fixture-")
@@ -1377,9 +1404,14 @@ func TestAttentionQueueRanksRecentRequestsBeforeDeferredItems(t *testing.T) {
 		}
 		items[name] = createdItem{id: created.Manifest.ID, sessionPath: filepath.Join(st.ItemDir(created.Manifest.ID), started.Workspace.Manifest.PrimaryConversation.NativeLocator())}
 	}
+	projected := map[string]app.AttentionActivity{}
+	application.Store = &fixtureBlockerStore{Store: st, activities: projected}
+	application.AttentionActivityReader = func(_ context.Context, id string) (app.AttentionActivity, error) { return projected[id], nil }
 	minutes := map[string]int{"A": 1, "E": 3, "F": 2, "B": 8}
 	for name, item := range items {
 		requested := base.Add(time.Duration(minutes[name]) * time.Minute)
+		completed := requested.Add(time.Second)
+		projected[item.id] = app.AttentionActivity{LastRequestedAt: &requested, LastCompletedAt: &completed}
 		appendPiJSONL(t, item.sessionPath,
 			piMessage(requested, "user", []map[string]any{{"type": "text", "text": "work"}}),
 			piMessage(requested.Add(time.Second), "assistant", []map[string]any{{"type": "text", "text": "done"}}),
@@ -1390,6 +1422,7 @@ func TestAttentionQueueRanksRecentRequestsBeforeDeferredItems(t *testing.T) {
 	if err != nil || deferred.Activity.LastDeferredAt == nil {
 		t.Fatalf("defer result=%+v err=%v", deferred, err)
 	}
+	projected[items["A"].id] = deferred.Activity
 	queue, err := application.AttentionQueue(context.Background(), app.AttentionQueueOptions{})
 	if err != nil {
 		t.Fatal(err)
@@ -1405,6 +1438,10 @@ func TestAttentionQueueRanksRecentRequestsBeforeDeferredItems(t *testing.T) {
 		piMessage(base.Add(11*time.Minute), "user", []map[string]any{{"type": "text", "text": "more work"}}),
 		piMessage(base.Add(11*time.Minute+time.Second), "assistant", []map[string]any{{"type": "text", "text": "more done"}}),
 	)
+	latest := projected[items["A"].id]
+	requestedAt, completedAt := base.Add(11*time.Minute), base.Add(11*time.Minute+time.Second)
+	latest.LastRequestedAt, latest.LastCompletedAt = &requestedAt, &completedAt
+	projected[items["A"].id] = latest
 	application.Clock = fixedClock{base.Add(12 * time.Minute)}
 	queue, err = application.AttentionQueue(context.Background(), app.AttentionQueueOptions{})
 	if err != nil {

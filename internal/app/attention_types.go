@@ -8,8 +8,6 @@ import (
 	"github.com/regb/workitem/internal/model"
 )
 
-const attentionDeferredEvent = "attention.deferred"
-
 type AttentionActivity = viewapp.Activity
 
 type AttentionCandidate struct {

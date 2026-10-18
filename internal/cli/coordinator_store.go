@@ -20,6 +20,16 @@ func BindCoordinatorApp(application *app.App, native *storepkg.Store, client *co
 	application.DaemonSocketPath = client.SocketPath
 	application.ConversationProjectionObserver = coordinatorConversationObserver(client)
 	application.WorkListObserver = coordinatorWorkListObserver(client)
+	application.AttentionActivityReader = func(ctx context.Context, itemID string) (app.AttentionActivity, error) {
+		requestCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		snapshot, err := client.AttentionActivity(requestCtx, itemID)
+		if err != nil {
+			return app.AttentionActivity{}, err
+		}
+		a := snapshot.Activity
+		return app.AttentionActivity{LastRequestedAt: a.LastRequestedAt, LastCompletedAt: a.LastCompletedAt, LastDeferredAt: a.LastDeferredAt, LastReadAt: a.LastReadAt, LastUnreadAt: a.LastUnreadAt}, nil
+	}
 	application.Leases = client
 }
 

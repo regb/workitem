@@ -50,7 +50,10 @@ func (a *App) SwitchWorkItemWithControl(ctx context.Context, opts ResolveOptions
 	if control != nil {
 		result.Warnings = append(result.Warnings, control.Warnings...)
 	}
-	if _, markErr := a.MarkRead(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
+	// Navigation needs the durable marker, not MarkRead's enriched activity
+	// result. Fetching the complete event history here keeps a picker popup
+	// covering the target terminal after switch-client has already completed.
+	if _, _, markErr := a.attentionService().RecordRead(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
 		result.Warnings = append(result.Warnings, "could not mark the conversation read: "+markErr.Error())
 	}
 	return result, nil
@@ -107,7 +110,7 @@ func (a *App) enterTerminalReadOnly(ctx context.Context, m model.Manifest, opts 
 	if panes := a.paneControl(); panes != nil {
 		_ = panes.DisplayMessage(ctx, agentPaneTarget(m), "wi: read-only, controlled by "+holder+". Run `wi switch --take` to take over.")
 	}
-	if _, markErr := a.MarkRead(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
+	if _, _, markErr := a.attentionService().RecordRead(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
 		warnings = append(warnings, "could not mark the conversation read: "+markErr.Error())
 	}
 	return CompositionResult{WorkItemID: m.ID, Checkout: m.Checkout, Terminal: &terminal, Conversation: m.PrimaryConversation, AgentRuntime: existing, Manifest: m, ReadOnly: true, Warnings: warnings}, nil

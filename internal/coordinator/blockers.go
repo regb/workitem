@@ -315,17 +315,7 @@ func commitManifestEvents(tx *bolt.Tx, manifest model.Manifest, causationID, act
 		if event.Type != "attention.read" {
 			continue
 		}
-		bucket, err := tx.Bucket(bucketProjections).CreateBucketIfNotExists([]byte(AttentionActivityProjection))
-		if err != nil {
-			return nil, 0, err
-		}
-		activity := AttentionActivity{WorkItemID: manifest.ID}
-		if current := bucket.Get([]byte(manifest.ID)); current != nil {
-			_ = json.Unmarshal(current, &activity)
-		}
-		activity.LastReadAt = laterTime(activity.LastReadAt, ptrTime(event.Timestamp.UTC()))
-		encoded, _ := json.Marshal(activity)
-		if err := bucket.Put([]byte(manifest.ID), encoded); err != nil {
+		if err := recordAttentionMarkerTx(tx, manifest.ID, event.Type, event.Timestamp); err != nil {
 			return nil, 0, err
 		}
 	}

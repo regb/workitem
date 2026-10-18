@@ -20,11 +20,9 @@ func (a *App) RecordAttentionDefer(ctx context.Context, opts ResolveOptions) (De
 		}
 		return DeferResult{}, err
 	}
-	conversation, warnings := a.inspectConversation(ctx, res.Manifest, a.now())
-	activity, activityWarnings := a.attentionActivity(res.WorkItemID, AgentStatusResult{Conversation: conversation})
-	warnings = append(warnings, activityWarnings...)
+	activity, warnings := a.attentionActivity(ctx, res.WorkItemID)
 	warnings = append(warnings, res.Warnings...)
-	activity.LastDeferredAt = timePointer(res.DeferredAt)
+	activity.LastDeferredAt = latestAttentionTime(activity.LastDeferredAt, res.DeferredAt)
 	return DeferResult{WorkItemID: res.WorkItemID, DeferredAt: res.DeferredAt,
 		Activity: activity, Manifest: res.Manifest, Warnings: warnings}, nil
 }
@@ -48,18 +46,7 @@ func (a *App) DeferWorkItem(ctx context.Context, opts ResolveOptions) (DeferResu
 	if agent.Bucket != "needs_attention" || (status.Worktree != nil && status.Worktree.Status == "problem") {
 		return DeferResult{}, &NotNeedsAttentionError{WorkItemID: m.ID, State: m.State, Agent: status.Status, Worktree: worktreeStatusName(status.Worktree)}
 	}
-	return a.recordAttentionDefer(ctx, m, status, nil)
-}
-
-func (a *App) recordAttentionDefer(ctx context.Context, m model.Manifest, status AgentStatusResult, warnings []string) (DeferResult, error) {
-	now := a.now()
-	if err := a.Store.AppendEvent(ctx, m.ID, model.NewEvent(now, attentionDeferredEvent, "user", map[string]any{"deferred_at": now})); err != nil {
-		return DeferResult{}, err
-	}
-	activity, activityWarnings := a.attentionActivity(m.ID, status)
-	warnings = append(warnings, activityWarnings...)
-	activity.LastDeferredAt = timePointer(now)
-	return DeferResult{WorkItemID: m.ID, DeferredAt: now, Activity: activity, Manifest: m, Warnings: warnings}, nil
+	return a.RecordAttentionDefer(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env})
 }
 
 // MarkRead records that the operator has seen the agent's responses so far.
@@ -83,13 +70,11 @@ func (a *App) recordReadMarker(ctx context.Context, opts ResolveOptions, unread 
 	if err != nil {
 		return ReadMarkerResult{}, err
 	}
-	conversation, warnings := a.inspectConversation(ctx, m, a.now())
-	activity, activityWarnings := a.attentionActivity(m.ID, AgentStatusResult{Conversation: conversation})
-	warnings = append(warnings, activityWarnings...)
+	activity, warnings := a.attentionActivity(ctx, m.ID)
 	if unread {
-		activity.LastUnreadAt = timePointer(at)
+		activity.LastUnreadAt = latestAttentionTime(activity.LastUnreadAt, at)
 	} else {
-		activity.LastReadAt = timePointer(at)
+		activity.LastReadAt = latestAttentionTime(activity.LastReadAt, at)
 	}
 	return ReadMarkerResult{WorkItemID: m.ID, Unread: activity.Unread(), MarkedAt: at, Activity: activity, Warnings: warnings}, nil
 }

@@ -167,8 +167,11 @@ func importConversationFile(ctx context.Context, database *Database, path, sourc
 			checkpoint = SourceCheckpoint{Source: source, Fingerprint: fingerprint, FingerprintSize: fingerprintSize}
 		}
 	}
-	attention := AttentionActivity{WorkItemID: itemID}
-	_, _ = database.ReadProjection(AttentionActivityProjection, itemID, &attention)
+	attentionSnapshot, err := database.AttentionActivity(itemID)
+	if err != nil {
+		return report, err
+	}
+	attention := attentionSnapshot.Activity
 	if _, err := file.Seek(checkpoint.Offset, io.SeekStart); err != nil {
 		return report, err
 	}

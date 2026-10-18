@@ -15,7 +15,7 @@ func (a *App) EnrichWorkList(ctx context.Context, result *WorkListResult, resolv
 			if err != nil {
 				return viewapp.Observation{}, err
 			}
-			activity, activityWarnings := a.attentionActivity(itemID, status)
+			activity, activityWarnings := a.attentionActivity(ctx, itemID)
 			return viewapp.Observation{Status: status.Status, Reason: status.Reason, ProcessOnline: status.Process.Online, TurnState: status.Conversation.InferredTurnState, LastActivityAgeSeconds: status.Conversation.LastActivityAgeSeconds, Worktree: viewWorktreeStatus(status.Worktree), Activity: activity, ActivityWarnings: activityWarnings, Warnings: status.Warnings}, nil
 		}
 	}
@@ -40,21 +40,28 @@ func (a *App) WorkItemActivity(ctx context.Context, opts ResolveOptions) (WorkIt
 	if err != nil {
 		return WorkItemActivityResult{}, err
 	}
-	session, warnings := a.inspectConversation(ctx, m, a.now())
-	activity, extra := a.attentionActivity(m.ID, AgentStatusResult{Conversation: session})
-	return WorkItemActivityResult{WorkItemID: m.ID, Activity: activity, Warnings: append(warnings, extra...)}, nil
+	activity, warnings := a.attentionActivity(ctx, m.ID)
+	return WorkItemActivityResult{WorkItemID: m.ID, Activity: activity, Warnings: warnings}, nil
 }
 
-func (a *App) attentionActivity(itemID string, status AgentStatusResult) (AttentionActivity, []string) {
-	var requested, completed *time.Time
-	if status.Conversation.LastUserPrompt != nil && !status.Conversation.LastUserPrompt.Timestamp.IsZero() {
-		requested = timePointer(status.Conversation.LastUserPrompt.Timestamp)
+// Activity queries use the coordinator snapshot. Event replay belongs to
+// projection rebuilds, not interactive commands or navigation.
+func (a *App) attentionActivity(ctx context.Context, itemID string) (AttentionActivity, []string) {
+	if a.AttentionActivityReader == nil {
+		return AttentionActivity{}, []string{"attention activity projection is unavailable"}
 	}
-	if status.Conversation.LastTerminalAssistant != nil && !status.Conversation.LastTerminalAssistant.Timestamp.IsZero() {
-		completed = timePointer(status.Conversation.LastTerminalAssistant.Timestamp)
+	activity, err := a.AttentionActivityReader(ctx, itemID)
+	if err != nil {
+		return AttentionActivity{}, []string{"could not read attention activity projection: " + err.Error()}
 	}
-	activity, warnings := a.attentionService().FoldActivity(itemID, requested, completed)
-	return AttentionActivity(activity), warnings
+	return activity, []string{}
+}
+
+func latestAttentionTime(current *time.Time, at time.Time) *time.Time {
+	if current != nil && !current.Before(at) {
+		return current
+	}
+	return timePointer(at)
 }
 
 func (a *App) workAgentStatus(status AgentStatusResult) WorkAgentStatus {

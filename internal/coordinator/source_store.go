@@ -126,6 +126,12 @@ func (d *Database) CommitSourceBatch(checkpoint SourceCheckpoint, pending []Pend
 			result.Imported++
 		}
 		for _, update := range updates {
+			if update.Projection == AttentionActivityProjection && !update.Delete {
+				if err := mergeImportedAttentionTx(tx, update.Key, update.Value); err != nil {
+					return err
+				}
+				continue
+			}
 			if update.Projection == "" || update.Key == "" {
 				return errors.New("projection and key are required")
 			}

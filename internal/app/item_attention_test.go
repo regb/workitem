@@ -136,20 +136,17 @@ func TestSetWorkItemStateEnforcesDeepWorkCapacity(t *testing.T) {
 	}
 }
 
-func TestAttentionFactsUseOnlyDurableFiles(t *testing.T) {
+func TestAttentionFactsUseProjectionWithoutResourceAdapters(t *testing.T) {
 	base := testutil.Time()
 	application, st, manifest := newCoreTestApp(t, base.Add(3*time.Minute), model.StateActive, false)
-	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: testutil.ID(t, 41), Locator: filepath.Join("sessions", "pi", "root.jsonl")}
-	if err := st.SaveManifest(context.Background(), manifest); err != nil {
-		t.Fatal(err)
+	requested, completed := base.Add(time.Minute), base.Add(2*time.Minute)
+	projected := AttentionActivity{LastRequestedAt: &requested, LastCompletedAt: &completed}
+	reads := 0
+	application.AttentionActivityReader = func(context.Context, string) (AttentionActivity, error) { reads++; return projected, nil }
+	application.ConversationProjectionObserver = func(context.Context, model.Manifest, time.Time) (ConversationStatus, []string) {
+		t.Error("activity query inspected the native conversation")
+		return ConversationStatus{}, nil
 	}
-	piPath := filepath.Join(st.ItemDir(manifest.ID), filepath.FromSlash(manifest.PrimaryConversation.NativeLocator()))
-	if err := os.MkdirAll(filepath.Dir(piPath), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	appendCorePiMessage(t, piPath, base.Add(time.Minute), "user", "please inspect")
-	appendCorePiMessage(t, piPath, base.Add(2*time.Minute), "assistant", "done")
-
 	deferred, err := application.RecordAttentionDefer(context.Background(), ResolveOptions{Selector: manifest.ID})
 	if err != nil {
 		t.Fatal(err)
@@ -157,31 +154,21 @@ func TestAttentionFactsUseOnlyDurableFiles(t *testing.T) {
 	if deferred.Activity.LastDeferredAt == nil || !deferred.DeferredAt.Equal(base.Add(3*time.Minute)) {
 		t.Fatalf("defer result = %+v", deferred)
 	}
+	// The real writer updates this snapshot in the marker transaction.
+	projected.LastDeferredAt = &deferred.DeferredAt
 	activity, err := application.WorkItemActivity(context.Background(), ResolveOptions{Selector: manifest.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if activity.Activity.LastRequestedAt == nil || !activity.Activity.LastRequestedAt.Equal(base.Add(time.Minute)) {
-		t.Fatalf("requested activity = %+v", activity.Activity)
+	if reads != 2 || !reflect.DeepEqual(activity.Activity, projected) || len(activity.Warnings) != 0 {
+		t.Fatalf("activity = %+v, reads = %d", activity, reads)
 	}
-	if activity.Activity.LastCompletedAt == nil || !activity.Activity.LastCompletedAt.Equal(base.Add(2*time.Minute)) {
-		t.Fatalf("completed activity = %+v", activity.Activity)
-	}
-	if activity.Activity.LastDeferredAt == nil || !activity.Activity.LastDeferredAt.Equal(base.Add(3*time.Minute)) {
-		t.Fatalf("deferred activity = %+v", activity.Activity)
-	}
-	for _, warning := range append(activity.Warnings, deferred.Warnings...) {
-		if strings.Contains(strings.ToLower(warning), "tmux") || strings.Contains(strings.ToLower(warning), "process") {
-			t.Fatalf("durable attention inspection touched runtime adapters: %q", warning)
-		}
-	}
-
 	persisted, err := st.LoadManifest(manifest.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if persisted.State != model.StateActive || !reflect.DeepEqual(persisted.Checkout, manifest.Checkout) {
-		t.Fatalf("attention mutation changed item/workspace state: %+v", persisted)
+		t.Fatal("attention mutation changed workspace state")
 	}
 }
 
@@ -195,7 +182,7 @@ func TestRecordAttentionDeferRejectsNonWorkingState(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, event := range events {
-		if event.Type == attentionDeferredEvent {
+		if event.Type == "attention.deferred" {
 			t.Fatalf("failed defer appended event: %+v", event)
 		}
 	}

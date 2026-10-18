@@ -45,7 +45,9 @@ wi attention activity auth
 wi list
 ```
 
-The activity view shows the latest prompt, completion, defer, and read timestamps used to rank the queue. The `attention.priority` setting selects the ranking strategy; see [Configuration](../../reference/configuration/#attention-ranking).
+The activity view reads the daemon's compact projection of prompt, completion, defer, read, and unread timestamps. It does not scan event history or inspect a native conversation. Read/unread and defer commands return this snapshot in JSON; navigation records the read marker without fetching an activity result. Marker writes update their projection in the same transaction as their history event.
+
+The `attention.priority` setting selects the ranking strategy; see [Configuration](../../reference/configuration/#attention-ranking).
 
 ## Move through ready work
 

@@ -210,22 +210,8 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		}
 		compact, _ = json.Marshal(map[string]any{"event_type": typeName})
 		if typeName == "attention.deferred" || typeName == "attention.read" || typeName == "attention.unread" {
-			at := ptrTime(event.Time.UTC())
-			activity := AttentionActivity{WorkItemID: command.ItemID}
-			if bucket, err := tx.Bucket(bucketProjections).CreateBucketIfNotExists([]byte(AttentionActivityProjection)); err == nil {
-				if current := bucket.Get([]byte(command.ItemID)); current != nil {
-					_ = json.Unmarshal(current, &activity)
-				}
-				switch typeName {
-				case "attention.deferred":
-					activity.LastDeferredAt = at
-				case "attention.read":
-					activity.LastReadAt = laterTime(activity.LastReadAt, at)
-				case "attention.unread":
-					activity.LastUnreadAt = laterTime(activity.LastUnreadAt, at)
-				}
-				encoded, _ := json.Marshal(activity)
-				_ = bucket.Put([]byte(command.ItemID), encoded)
+			if err := recordAttentionMarkerTx(tx, command.ItemID, typeName, event.Time); err != nil {
+				return "", nil, err
 			}
 		}
 		return typeName, compact, nil

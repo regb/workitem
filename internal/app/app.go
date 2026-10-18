@@ -135,6 +135,7 @@ type App struct {
 	RunAgentDriver                 AgentDriverRunner
 	ConversationProjectionObserver agentcore.ConversationObserver
 	WorkListObserver               viewapp.Observe
+	AttentionActivityReader        func(context.Context, string) (AttentionActivity, error)
 	// Leases is the coordinator's controller lease table; nil disables
 	// single-controller enforcement.
 	Leases ControlLeases

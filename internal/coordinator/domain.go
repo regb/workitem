@@ -407,7 +407,6 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 	projection := tx.Bucket(bucketProjections)
 	manifestsBucket := projection.Bucket([]byte(ManifestProjection))
 	observationsBucket := projection.Bucket([]byte(AgentObservationProjection))
-	attentionBucket := projection.Bucket([]byte(AttentionActivityProjection))
 	if manifestsBucket == nil {
 		return ActionabilityQueueResult{}, errors.New("manifest projection is unavailable")
 	}
@@ -444,16 +443,13 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 		}
 		// Read markers are written by commands in this transaction; the
 		// observation copy only catches up on the next reconcile.
-		if attentionBucket != nil {
-			if encoded := attentionBucket.Get([]byte(manifest.ID)); encoded != nil {
-				var markers AttentionActivity
-				if json.Unmarshal(encoded, &markers) == nil {
-					observation.Activity.LastReadAt = laterTime(observation.Activity.LastReadAt, markers.LastReadAt)
-					observation.Activity.LastUnreadAt = laterTime(observation.Activity.LastUnreadAt, markers.LastUnreadAt)
-					observation.Activity.LastDeferredAt = laterTime(observation.Activity.LastDeferredAt, markers.LastDeferredAt)
-				}
-			}
+		markers, _, err := readAttentionActivityTx(tx, manifest.ID)
+		if err != nil {
+			return ActionabilityQueueResult{}, err
 		}
+		observation.Activity.LastReadAt = laterTime(observation.Activity.LastReadAt, markers.LastReadAt)
+		observation.Activity.LastUnreadAt = laterTime(observation.Activity.LastUnreadAt, markers.LastUnreadAt)
+		observation.Activity.LastDeferredAt = laterTime(observation.Activity.LastDeferredAt, markers.LastDeferredAt)
 		blocked := manifest.Waiting(now)
 		unread := priority.Unread(observation.Activity.LastCompletedAt, observation.Activity.LastReadAt, observation.Activity.LastUnreadAt)
 		if !priority.Eligible(blocked, unread) {

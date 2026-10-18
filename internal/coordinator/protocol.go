@@ -41,6 +41,7 @@ const (
 	MethodListManifests         = "list_manifests"
 	MethodConversation          = "conversation"
 	MethodAgentObservation      = "agent_observation"
+	MethodAttentionActivity     = "attention_activity"
 	MethodCanonicalManifest     = "canonical_manifest"
 	MethodManifestCommand       = "manifest_command"
 	MethodEditItem              = "edit_item"

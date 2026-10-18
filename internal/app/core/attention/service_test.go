@@ -17,7 +17,6 @@ func (s *eventStore) AppendEvent(_ context.Context, _ string, event model.Event)
 	s.events = append(s.events, event)
 	return nil
 }
-func (s *eventStore) ReadEvents(string) ([]model.Event, error) { return s.events, nil }
 
 func TestRecordDeferPreservesManifestAndEventContract(t *testing.T) {
 	now := time.Date(2026, 4, 1, 2, 3, 4, 0, time.UTC)
@@ -31,8 +30,8 @@ func TestRecordDeferPreservesManifestAndEventContract(t *testing.T) {
 	if !reflect.DeepEqual(result.Manifest, manifest) {
 		t.Fatalf("manifest mutated: got %+v want %+v", result.Manifest, manifest)
 	}
-	if result.Activity.LastDeferredAt == nil || !result.Activity.LastDeferredAt.Equal(now) {
-		t.Fatalf("last deferred = %v", result.Activity.LastDeferredAt)
+	if !result.DeferredAt.Equal(now) {
+		t.Fatalf("last deferred = %v", result.DeferredAt)
 	}
 	if len(store.events) != 1 || store.events[0].Type != "attention.deferred" || store.events[0].Actor != "user" {
 		t.Fatalf("events = %+v", store.events)
