@@ -7,7 +7,9 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/regb/workitem/internal/model"
 	"github.com/rivo/uniseg"
 )
 
@@ -31,12 +33,13 @@ func pickerSnapshot(candidates []pickerCandidate) pickerRenderSnapshot {
 	for _, candidate := range candidates {
 		names[candidate.Item.ID] = itemDisplayName(candidate.Item)
 	}
+	now := time.Now()
 	for _, candidate := range candidates {
 		title := pickerText(candidate.Item.Title)
 		if title == "" {
 			title = pickerText(candidate.Item.Slug)
 		}
-		snapshot.Items = append(snapshot.Items, pickerRenderItem{ID: candidate.Item.ID, Title: title, Repository: pickerText(candidate.Item.Repository), Section: candidate.Section, Current: candidate.Current, Unread: candidate.Item.Unread, Waiting: pickerText(strings.TrimPrefix(waitingSuffix(candidate.Item, names), "  · "))})
+		snapshot.Items = append(snapshot.Items, pickerRenderItem{ID: candidate.Item.ID, Title: title, Repository: pickerText(candidate.Item.Repository), Section: candidate.Section, Current: candidate.Current, Unread: candidate.Item.Unread, Waiting: pickerText(model.ShortList(candidate.Item.Blockers, now, func(id string) string { return names[id] }))})
 	}
 	return snapshot
 }
@@ -78,16 +81,10 @@ func (snapshot pickerRenderSnapshot) rows(out io.Writer, columns int) error {
 		}
 		// Unread responses are bold, like unread mail; read titles use the
 		// normal weight.
-		// The waiting label follows the title in yellow; the title is truncated
-		// first so the label stays visible.
-		suffix := ""
-		if item.Waiting != "" {
-			suffix = "  · " + item.Waiting
-		}
+		// Name and waiting label share the item column. Either can use cells
+		// the other does not need; only overflow forces them to share a budget.
+		suffix := pickerWaitingSuffix(item.Title, item.Waiting, titleWidth)
 		suffixWidth := uniseg.StringWidth(suffix)
-		if suffixWidth > titleWidth/2 {
-			suffix, suffixWidth = "", 0
-		}
 		title := strings.TrimRight(pickerDisplayCell(item.Title, titleWidth-suffixWidth), " ")
 		padding := strings.Repeat(" ", max(0, titleWidth-uniseg.StringWidth(title)-suffixWidth))
 		if item.Unread {
@@ -101,11 +98,32 @@ func (snapshot pickerRenderSnapshot) rows(out io.Writer, columns int) error {
 		// The search-only field starts beyond the visible pane. --no-hscroll and
 		// --no-wrap keep it off-screen; --nth searches its complete native text.
 		label, _ := pickerSectionStyle(item.Section)
-		if _, err := fmt.Fprintf(out, "%s\t%s  \t%s %s %s %s %s\n", item.ID, row, item.Title, item.Repository, pickerText(item.Section), label, item.Waiting); err != nil {
+		searchWaiting := item.Waiting
+		if searchWaiting != "" && searchWaiting != "waiting" {
+			searchWaiting = "waiting " + searchWaiting
+		}
+		if _, err := fmt.Fprintf(out, "%s\t%s  \t%s %s %s %s %s\n", item.ID, row, item.Title, item.Repository, pickerText(item.Section), label, searchWaiting); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// Name and condition borrow unused cells from each other. Keep a visible
+// condition even when both need truncating; the caller returns unused label
+// cells to the name. Color and the separator identify the blocker label.
+func pickerWaitingSuffix(title, condition string, titleWidth int) string {
+	if condition == "" || titleWidth <= 1 {
+		return ""
+	}
+	const separator = " · "
+	separatorWidth := uniseg.StringWidth(separator)
+	nameShare := min(uniseg.StringWidth(title), max(1, titleWidth/2))
+	budget := min(titleWidth-1, max(separatorWidth+1, titleWidth-nameShare))
+	if budget > separatorWidth {
+		return separator + strings.TrimRight(pickerDisplayCell(condition, budget-separatorWidth), " ")
+	}
+	return strings.TrimRight(pickerDisplayCell(condition, budget), " ")
 }
 
 func pickerPaneColumns(env map[string]string) int {

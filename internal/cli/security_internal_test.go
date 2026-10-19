@@ -147,7 +147,7 @@ func TestListAndPickerShowWaitingLabelAfterTheName(t *testing.T) {
 	if err := snapshot.rows(&rows, 80); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(rows.String(), "Parked work"+pickerYellow+"  · #42, on api-schema"+pickerReset) {
+	if !strings.Contains(rows.String(), "Parked work"+pickerYellow+" · #42, on") || !strings.Contains(rows.String(), "waiting #42, on api-schema") {
 		t.Fatalf("picker rows = %q", rows.String())
 	}
 }

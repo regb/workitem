@@ -24,6 +24,8 @@ An agent response you have not read is **unread**. Unread titles are bold in `wi
 - On an item that is not waiting, unread only changes the display. Reading never moves the item in the queue.
 - On a waiting item, an unread response puts the item back in NEEDS ATTENTION. Reading it returns the item to WAITING. This covers follow-up prompts sent to an item that waits for a review: the answer surfaces without clearing what it waits for.
 
+The picker shows waiting alongside the agent's status, including busy items and waiting items with unread responses. The item name and blocker label share the available column width, borrowing space from each other when one is short. Only when both cannot fit does the picker truncate them, keeping a visible condition label. Conditions appear in yellow after `·`, without a redundant `waiting:` prefix. The complete condition remains searchable.
+
 `wi switch`, the picker, and `wi next` mark the item read; other clients record the same fact with `wi attention read`. So does `wi wait`, because parking an item is a decision made after seeing it. If you opened something without really reading it, mark it unread again:
 
 ```bash
