@@ -32,6 +32,9 @@ type rpcOutput struct {
 	Data       json.RawMessage `json:"data,omitempty"`
 	RuntimeID  string          `json:"runtime_id,omitempty"`
 	WorkItemID string          `json:"work_item_id,omitempty"`
+	AgentState string          `json:"agent_state,omitempty"`
+	LeafID     string          `json:"leaf_id,omitempty"`
+	Readiness  string          `json:"readiness,omitempty"`
 }
 
 type queuedLiveEvent struct {
@@ -233,6 +236,32 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 	if err := json.Unmarshal(raw, &output); err != nil {
 		return t.emit(agent.RuntimeEvent{Type: agent.EventRuntimeFailed, Error: "invalid native Pi RPC output: " + err.Error(), Backend: "pi", BackendEvent: append(json.RawMessage(nil), raw...)})
 	}
+	if output.Type == "wi_runtime_status" {
+		if output.RuntimeID != t.spec.RuntimeID || output.WorkItemID != t.spec.WorkItemID || output.AgentState == "" || !driverprotocol.ValidAgentObservation(output.AgentState, output.LeafID, output.Readiness) {
+			return fmt.Errorf("invalid native Pi state observation")
+		}
+		t.busy = output.AgentState == "active"
+		if !t.busy {
+			t.lastAssistantFailed = output.AgentState == "failed"
+		}
+		state, readiness := output.AgentState, output.Readiness
+		// Host-submitted work may not have reached Pi yet. A snapshot taken
+		// before that handoff cannot make an idle-only command admissible.
+		for _, settled := range t.work {
+			if !settled {
+				state, readiness = "active", "busy"
+				break
+			}
+		}
+		if state != "active" && t.content != nil {
+			activity := "Idle"
+			if state == "failed" {
+				activity = "Selected branch ended with failure"
+			}
+			t.content.PublishTranscript(output.LeafID, "", activity, nil)
+		}
+		return t.emit(agent.RuntimeEvent{Type: agent.EventRuntimeStatus, AgentState: state, LeafID: output.LeafID, Readiness: readiness, Backend: "pi"})
+	}
 	if output.Type == "response" || output.Type == "wi_control_result" {
 		if output.Type == "wi_control_result" && (output.RuntimeID != t.spec.RuntimeID || output.WorkItemID != t.spec.WorkItemID) {
 			return fmt.Errorf("native idle-control result owner mismatch")
@@ -413,7 +442,7 @@ func (t *nativeRPCTransport) queueLiveEvent(event agent.RuntimeEvent, ack chan s
 		return false
 	}
 	t.ensureRuntimeEventID(&event)
-	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Outcome: event.Outcome, Failed: event.Failed || event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
+	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, Failed: event.Failed || event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
 	select {
 	case t.liveQueue <- queuedLiveEvent{event: semantic, ack: ack}:
 		return true
@@ -470,7 +499,7 @@ func (t *nativeRPCTransport) ensureRuntimeEventID(event *agent.RuntimeEvent) {
 
 func retainedLiveEvent(eventType string) bool {
 	switch eventType {
-	case agent.EventRuntimeReady, agent.EventRuntimeStopping, agent.EventRuntimeFailed, agent.EventCommandAccepted, agent.EventCommandRejected,
+	case agent.EventRuntimeReady, agent.EventRuntimeStatus, agent.EventRuntimeStopping, agent.EventRuntimeFailed, agent.EventCommandAccepted, agent.EventCommandRejected,
 		agent.EventAgentStarted, agent.EventAgentSettled, agent.EventTurnStarted, agent.EventTurnEnded, agent.EventMessageCompleted, agent.EventToolStarted, agent.EventToolCompleted:
 		return true
 	default:

@@ -36,7 +36,7 @@ if(event.type==='agent.settled'&&attempts.get(event.event_id)<3){socket.end(JSON
 accepted.push(event);socket.end(JSON.stringify({accepted:true})+'\n')})});
 await new Promise(resolve=>server.listen(process.env.WI_AGENT_EVENT_SOCKET,resolve));
 bridge({on:(name,handler)=>hooks.set(name,handler),registerCommand:()=>{}});
-const ctx={isIdle:()=>false,sessionManager:{getSessionId:()=> 'session',getSessionFile:()=>undefined}};
+const ctx={isIdle:()=>false,hasPendingMessages:()=>false,sessionManager:{getLeafId:()=> 'leaf',buildSessionProjection:()=>({messages:[]}),getSessionId:()=> 'session',getSessionFile:()=>undefined}};
 const fire=async(name,event={})=>await hooks.get(name)(event,ctx);
 const until=async predicate=>{for(let i=0;i<300&&!predicate();i++)await new Promise(resolve=>setTimeout(resolve,10));assert.ok(predicate(),'runtime event delivery did not recover')};
 await fire('session_start');await fire('agent_start');await fire('message_end',{message:{role:'assistant',content:[],stopReason:'stop'}});await fire('agent_before_settle',{outcome:'completed'});await fire('agent_settled');

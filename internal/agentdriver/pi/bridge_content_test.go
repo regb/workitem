@@ -37,7 +37,7 @@ const callbacks = new Map(); let idle = true; let shutDown = false; let leaf = '
 const eventPath = process.env.WI_AGENT_EVENT_SOCKET;
 const relay=createServer(socket=>{let data='';socket.on('data',chunk=>{data+=chunk;if(data.includes('\n')) socket.end('{"accepted":true}\n');});});
 await new Promise(resolve=>relay.listen(eventPath,resolve));
-const ctx={isIdle:()=>idle,hasPendingMessages:()=>false,shutdown:()=>{shutDown=true},sessionManager:{getLeafId:()=>leaf,getSessionId:()=> 'session',getSessionFile:()=> 'native'},ui:{notify:()=>{}}};
+const ctx={isIdle:()=>idle,hasPendingMessages:()=>false,shutdown:()=>{shutDown=true},sessionManager:{buildSessionProjection:()=>({messages:[]}),getLeafId:()=>leaf,getSessionId:()=> 'session',getSessionFile:()=> 'native'},ui:{notify:()=>{}}};
 bridge({on:(name,fn)=>callbacks.set(name,fn),sendUserMessage:(content,options)=>sent.push({content,options}),events:{}});
 await callbacks.get('session_start')({},ctx);
 await new Promise(resolve=>setTimeout(resolve,60));

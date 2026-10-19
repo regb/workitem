@@ -30,10 +30,10 @@ func TestTUIBridgeKeepsRetryActiveAndReportsSettlementOutcome(t *testing.T) {
 import assert from 'node:assert/strict';
 import {createServer} from 'node:net';
 const events=[];const hooks=new Map();
-const server=createServer(socket=>{let input='';socket.setEncoding('utf8');socket.on('data',chunk=>{input+=chunk;if(input.includes('\n')){events.push(JSON.parse(input.split('\n')[0]));socket.end(JSON.stringify({accepted:true})+'\n')}})});
+const server=createServer(socket=>{let input='';socket.setEncoding('utf8');socket.on('data',chunk=>{input+=chunk;if(input.includes('\n')){const event=JSON.parse(input.split('\n')[0]);if(event.type!=='runtime.status')events.push(event);socket.end(JSON.stringify({accepted:true})+'\n')}})});
 await new Promise(resolve=>server.listen(process.env.WI_AGENT_EVENT_SOCKET,resolve));
 bridge({on:(name,handler)=>hooks.set(name,handler),registerCommand:()=>{}});
-const ctx={isIdle:()=>false,sessionManager:{getSessionId:()=> 'session',getSessionFile:()=>undefined}};
+const ctx={isIdle:()=>false,hasPendingMessages:()=>false,sessionManager:{getLeafId:()=> 'leaf',buildSessionProjection:()=>({messages:[]}),getSessionId:()=> 'session',getSessionFile:()=>undefined}};
 const fire=async(name,event={})=>{assert.ok(hooks.has(name),name);await hooks.get(name)(event,ctx)};
 const delivered=async count=>{for(let i=0;i<300 && events.length<count;i++) await new Promise(resolve=>setTimeout(resolve,10));assert.ok(events.length>=count,JSON.stringify(events))};
 await fire('session_start');await fire('agent_start');await fire('turn_start');

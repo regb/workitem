@@ -28,9 +28,11 @@ type RuntimeActivity struct {
 	WorkItemID   string `json:"work_item_id"`
 	RuntimeID    string `json:"runtime_id,omitempty"`
 	RuntimeState string `json:"runtime_state,omitempty"`
-	// AgentState spans inner turns, tool failures, retries, and compaction.
-	// Only agent.settled closes an active session-level run.
+	// AgentState spans inner turns, retries, and compaction. Settlement records
+	// completion; a native observation may reconcile the selected branch after
+	// tree navigation or reload without fabricating another completion.
 	AgentState      string     `json:"agent_state,omitempty"`
+	LeafID          string     `json:"leaf_id,omitempty"`
 	TurnState       string     `json:"turn_state,omitempty"`
 	LastEventAt     *time.Time `json:"last_event_at,omitempty"`
 	LastRequestedAt *time.Time `json:"last_requested_at,omitempty"`

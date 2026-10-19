@@ -67,7 +67,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 					continue
 				}
 				forwardCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
-				_, err := client.IngestRuntimeEvent(forwardCtx, coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState})
+				_, err := client.IngestRuntimeEvent(forwardCtx, coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState})
 				cancel()
 				request.Respond(runtimeRelayError(err))
 			}

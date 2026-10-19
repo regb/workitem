@@ -31,6 +31,9 @@ type RuntimeSemanticEvent struct {
 	ReasonCode    string    `json:"reason_code,omitempty"`
 	DeliveryState string    `json:"delivery_state,omitempty"`
 	Outcome       string    `json:"outcome,omitempty"`
+	// AgentState is a native current-state observation, not inferred settlement.
+	AgentState string `json:"agent_state,omitempty"`
+	LeafID     string `json:"leaf_id,omitempty"`
 }
 
 // RuntimeEventRejection is a definitive validation or workspace-fence error,
@@ -81,6 +84,9 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if event.Outcome != "" && (event.Type != agent.EventAgentSettled || (event.Outcome != "completed" && event.Outcome != "failed") || (event.Outcome == "completed" && event.Failed)) {
 		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "invalid agent settlement outcome"}
 	}
+	if !driverprotocol.ValidAgentObservation(event.AgentState, event.LeafID, event.Readiness) || ((event.AgentState != "" || event.LeafID != "") && event.Type != agent.EventRuntimeStatus) {
+		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "invalid native agent state observation"}
+	}
 	canonical, err := database.CanonicalManifest(event.WorkItemID)
 	if err != nil {
 		return RuntimeIngestResult{}, err
@@ -105,7 +111,7 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if err != nil {
 		return RuntimeIngestResult{}, err
 	}
-	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness}
+	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, AgentState: event.AgentState, LeafID: event.LeafID}
 	applied := applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
 	updates := []ProjectionUpdate{}
 	readiness := event.Readiness
@@ -136,7 +142,7 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 		observationBytes, _ := json.Marshal(observation)
 		updates = append(updates, ProjectionUpdate{Projection: AgentObservationProjection, Key: event.WorkItemID, Value: observationBytes})
 	}
-	payload, _ := json.Marshal(map[string]any{"runtime_id": event.RuntimeID, "command_id": compactIdentifier(event.CommandID, 200), "request_id": header.RequestID, "role": header.Role, "tool_name": header.ToolName, "failed": event.Failed, "outcome": event.Outcome, "readiness": event.Readiness, "reason_code": event.ReasonCode, "delivery_state": event.DeliveryState})
+	payload, _ := json.Marshal(map[string]any{"runtime_id": event.RuntimeID, "command_id": compactIdentifier(event.CommandID, 200), "request_id": header.RequestID, "role": header.Role, "tool_name": header.ToolName, "failed": event.Failed, "outcome": event.Outcome, "agent_state": event.AgentState, "leaf_id": event.LeafID, "readiness": event.Readiness, "reason_code": event.ReasonCode, "delivery_state": event.DeliveryState})
 	commandID := "runtime-event:" + event.ID
 	committed, err := database.Commit(Command{ID: commandID, ProtocolVersion: ProtocolVersion, Type: "runtime.event.ingest", Actor: "runtime", ItemID: event.WorkItemID, ReceivedAt: time.Now().UTC()}, []PendingEvent{{ID: event.ID, ItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), Actor: "runtime", Payload: payload}}, updates)
 	if err != nil {
@@ -210,6 +216,29 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 		}
 	case agent.EventRuntimeStatus:
 		observation.ProcessOnline = true
+		if activity.RuntimeState == model.AgentRuntimeProblem {
+			observation.Status = "problem"
+			observation.TurnState = "failed"
+			observation.Reason = "live runtime reports failure"
+			break
+		}
+		if event.AgentState != "" {
+			switch event.AgentState {
+			case "active":
+				observation.Status = "busy"
+				observation.TurnState = "incomplete"
+				observation.Reason = "native agent reports active work"
+			case "idle":
+				observation.Status = "idle"
+				observation.TurnState = "idle"
+				observation.Reason = "native agent reports idle on its selected branch"
+			case "failed":
+				observation.Status = "problem"
+				observation.TurnState = "failed"
+				observation.Reason = "selected native branch ends with a failure"
+			}
+			break
+		}
 		// Input readiness is independent of the last turn's outcome. Returning
 		// to an empty editor or JSON inbox must not erase actionable failure.
 		if event.Readiness == "ready" && observation.TurnState == "failed" {

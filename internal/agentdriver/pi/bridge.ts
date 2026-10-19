@@ -1,7 +1,7 @@
 import { chmodSync, unlinkSync, writeSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { basename, dirname, join } from "node:path";
-import { createConnection, createServer, type Server } from "node:net";
+import { createConnection, createServer, type Server, type Socket } from "node:net";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const protocolVersion = 1;
@@ -51,6 +51,48 @@ function textFromContent(content: unknown): string {
     .join("\n");
 }
 
+type NativeObservation = { agent_state: "active" | "idle" | "failed"; leaf_id: string; readiness: "busy" | "ready" };
+
+// Pi owns branch selection and run finality. Never derive current state from
+// all JSONL entries: abandoned branches and omitted recovery attempts remain there.
+function nativeObserver(publish: (state: NativeObservation) => void, reserved: () => boolean = () => false) {
+  let context: ExtensionContext | undefined;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let previous = "";
+  const refresh = (ctx: ExtensionContext, force = false, finalFailed?: boolean) => {
+    context = ctx;
+    const busy = !ctx.isIdle() || ctx.hasPendingMessages() || reserved();
+    const leaf = ctx.sessionManager.getLeafId() ?? "-";
+    const key = JSON.stringify([busy, leaf]);
+    if (!force && key === previous) return;
+    let state: NativeObservation["agent_state"] = busy ? "active" : "idle";
+    if (!busy && finalFailed !== undefined) state = finalFailed ? "failed" : "idle";
+    else if (!busy) {
+      const messages = ctx.sessionManager.buildSessionProjection().messages;
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (message.role === "assistant") {
+          if (message.stopReason === "error" || message.stopReason === "aborted") state = "failed";
+          break;
+        }
+        if (message.role === "toolResult") { if (message.isError) state = "failed"; break; }
+        if (message.role === "user") break;
+      }
+    }
+    publish({ agent_state: state, leaf_id: leaf, readiness: busy ? "busy" : "ready" });
+    previous = key;
+  };
+  const stop = () => { if (timer) clearInterval(timer); timer = undefined; context = undefined; previous = ""; };
+  const start = (ctx: ExtensionContext) => {
+    stop(); refresh(ctx, true);
+    // Reconcile missed notifications using native state, never elapsed-time
+    // guesses. Only a changed leaf/run state publishes another compact fact.
+    timer = setInterval(() => { if (context) { try { refresh(context); } catch { /* retry after backpressure drains */ } } }, 1000);
+    timer.unref?.();
+  };
+  return { start, refresh, stop };
+}
+
 export default function wiBridge(pi: ExtensionAPI) {
   const workItemId = process.env.WI_ID ?? "";
   const runtimeId = process.env.WI_AGENT_RUNTIME_ID ?? "";
@@ -62,6 +104,15 @@ export default function wiBridge(pi: ExtensionAPI) {
   // Headless control is transported through RPC, but the idle precondition
   // must be checked in Pi's own event loop, not against delayed host events.
   if (mode === "headless") {
+    const observation = nativeObserver(state => writeSync(1, JSON.stringify({ type: "wi_runtime_status", runtime_id: runtimeId, work_item_id: workItemId, ...state }) + "\n"));
+    pi.on("session_start", (_event, ctx) => observation.start(ctx));
+    pi.on("session_tree", (_event, ctx) => observation.refresh(ctx, true));
+    let finalFailed = false;
+    pi.on("agent_before_settle", event => { finalFailed = event.outcome === "error" || event.outcome === "aborted"; });
+    pi.on("agent_settled", (_event, ctx) => observation.refresh(ctx, true, finalFailed));
+    pi.on("session_compact", (_event, ctx) => observation.refresh(ctx, true));
+    pi.on("session_compact_failed", (_event, ctx) => observation.refresh(ctx, true));
+    pi.on("session_shutdown", () => observation.stop());
     pi.registerCommand("wi-control-idle", {
       description: "Internal wi idle-only runtime control",
       handler: async (args, ctx) => {
@@ -97,6 +148,10 @@ export default function wiBridge(pi: ExtensionAPI) {
   let controlServer: Server | undefined;
   let contentServer: Server | undefined;
   let ownsContentSocket = false;
+  let ownsControlSocket = false;
+  let shuttingDown = false;
+  const connections = new Set<Socket>();
+  const trackConnection = (socket: Socket) => { connections.add(socket); socket.on("close", () => connections.delete(socket)); };
   const contentPath = join(dirname(controlSocketPath), createHash("sha256").update(`content:${basename(controlSocketPath)}`).digest("hex").slice(0, 16) + ".sock");
   let contentSequence = 0;
   let contentText = "";
@@ -109,8 +164,6 @@ export default function wiBridge(pi: ExtensionAPI) {
   let sendingRuntimeEvent = false;
   let runtimeEventsDisabled = false;
   let runtimeRetry: ReturnType<typeof setTimeout> | undefined;
-  let idleProbe: ReturnType<typeof setInterval> | undefined;
-  let activityReportedBusy = false;
   let settledFailed = false;
   const runtimeQueue: Array<Record<string, unknown>> = [];
   let lastDaemonRejection = "";
@@ -118,7 +171,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   const retainedRuntimeTypes = new Set([
     "runtime.ready", "runtime.stopping", "runtime.failed", "command.accepted", "command.rejected",
     "agent.started", "agent.settled", "turn.started", "turn.ended", "message.completed",
-    "tool.started", "tool.completed",
+    "tool.started", "tool.completed", "runtime.status",
   ]);
 
   const drainRuntimeQueue = () => {
@@ -191,6 +244,9 @@ export default function wiBridge(pi: ExtensionAPI) {
       role: record.role,
       tool_name: record.tool_name,
       outcome: record.outcome,
+      agent_state: record.agent_state,
+      leaf_id: record.leaf_id,
+      readiness: record.readiness,
       failed: record.failed === true || record.type === "runtime.failed" || record.type === "command.rejected",
     });
     drainRuntimeQueue();
@@ -222,20 +278,17 @@ export default function wiBridge(pi: ExtensionAPI) {
     if (type === "message.completed") { contentText = ""; contentTruncated = false; contentActivity = "Message saved"; }
     if (type === "tool.started") contentActivity = `Tool: ${String(fields.tool_name ?? "")}`;
     if (type === "agent.settled") { contentText = ""; contentTruncated = false; submittedWork = false; contentActivity = "Idle"; }
+    if (type === "runtime.status") {
+      if (fields.agent_state !== "active") { contentText = ""; contentTruncated = false; currentRequestId = ""; }
+      contentActivity = fields.agent_state === "active" ? "Agent working" : fields.agent_state === "failed" ? "Selected branch ended with failure" : "Idle";
+    }
     queueRuntimeEvent(record);
   };
 
-  const reconcileIdle = () => {
-    if (!activityReportedBusy || !context?.isIdle()) return;
-    try {
-      emit("agent.settled", { data: { reconciled: true }, failed: settledFailed, outcome: settledFailed ? "failed" : "completed", backend_event_type: "idle_probe" });
-      activityReportedBusy = false;
-      currentRequestId = "";
-    } catch {
-      // A full runtime queue throws rather than dropping semantic events. Keep
-      // the busy marker set so the next probe retries after the queue drains.
-    }
-  };
+  const observation = nativeObserver(state => {
+    emit("runtime.status", state);
+    if (state.agent_state !== "active") settledFailed = state.agent_state === "failed";
+  }, () => submittedWork);
 
   const accept = (command: ControlCommand) => emit("command.accepted", {
     command_id: command.id,
@@ -304,6 +357,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   pi.on("session_start", (event, ctx) => {
     context = ctx;
     contentServer = createServer((socket) => {
+      trackConnection(socket);
       let request = "";
       socket.setEncoding("utf8");
       socket.setTimeout(2000, () => socket.destroy());
@@ -330,6 +384,7 @@ export default function wiBridge(pi: ExtensionAPI) {
     });
     try { unlinkSync(controlSocketPath); } catch { /* absent or stale socket cleanup failed; listen reports real errors */ }
     controlServer = createServer((socket) => {
+      trackConnection(socket);
       let buffered = "";
       let bufferedBytes = 0;
       socket.setTimeout(2000, () => socket.destroy());
@@ -356,12 +411,11 @@ export default function wiBridge(pi: ExtensionAPI) {
       });
     });
     controlServer.listen(controlSocketPath, () => {
+      ownsControlSocket = true;
       try { chmodSync(controlSocketPath, 0o600); } catch { /* best effort */ }
     });
     controlServer.on("error", (error) => emit("runtime.failed", { error: `control socket: ${String(error)}` }));
-    if (idleProbe) clearInterval(idleProbe);
-    idleProbe = setInterval(reconcileIdle, 1000);
-    idleProbe.unref?.();
+    observation.start(ctx);
   });
 
   pi.on("input", (event, ctx) => {
@@ -371,8 +425,9 @@ export default function wiBridge(pi: ExtensionAPI) {
   });
   pi.on("agent_start", (event, ctx) => {
     context = ctx;
+    // Pi has accepted the handoff; native run state now guards idle control.
+    submittedWork = false;
     settledFailed = false;
-    activityReportedBusy = true;
     emit("agent.started", { backend_event_type: "agent_start", backend_event: { type: "agent_start", ...event } });
   });
   pi.on("agent_end", (event, ctx) => {
@@ -386,12 +441,11 @@ export default function wiBridge(pi: ExtensionAPI) {
   pi.on("agent_settled", (event, ctx) => {
     context = ctx;
     emit("agent.settled", { failed: settledFailed, outcome: settledFailed ? "failed" : "completed", backend_event_type: "agent_settled", backend_event: { type: "agent_settled", ...event } });
-    activityReportedBusy = false;
     currentRequestId = "";
+    observation.refresh(ctx, true, settledFailed);
   });
   pi.on("turn_start", (event, ctx) => {
     context = ctx;
-    activityReportedBusy = true;
     emit("turn.started", { data: { turn_index: event.turnIndex }, backend_event_type: "turn_start", backend_event: { type: "turn_start", ...event } });
   });
   pi.on("turn_end", (event, ctx) => {
@@ -430,7 +484,6 @@ export default function wiBridge(pi: ExtensionAPI) {
   });
   pi.on("tool_execution_start", (event, ctx) => {
     context = ctx;
-    activityReportedBusy = true;
     emit("tool.started", {
       tool_call_id: event.toolCallId,
       tool_name: event.toolName,
@@ -491,21 +544,34 @@ export default function wiBridge(pi: ExtensionAPI) {
     ctx.ui.notify("Forking the wi-owned root conversation is disabled; use /tree or create another work item.", "warning");
     return { cancel: true };
   });
+  pi.on("session_compact", (_event, ctx) => { context = ctx; observation.refresh(ctx, true); });
+  pi.on("session_compact_failed", (_event, ctx) => { context = ctx; observation.refresh(ctx, true); });
   pi.on("session_tree", (event, ctx) => {
     context = ctx;
-    emit("session.changed", { data: { old_leaf_id: event.oldLeafId, new_leaf_id: event.newLeafId }, backend_event_type: "session_tree", backend_event: { type: "session_tree", ...event } });
+    submittedWork = false;
+    observation.refresh(ctx, true);
   });
-  pi.on("session_shutdown", (event, ctx) => {
+  pi.on("session_shutdown", async (event, ctx) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     context = ctx;
-    if (idleProbe) clearInterval(idleProbe);
-    idleProbe = undefined;
-    controlServer?.close();
+    observation.stop();
+    const servers = [controlServer, contentServer];
     controlServer = undefined;
-    contentServer?.close();
     contentServer = undefined;
+    // Reload must not start a new listener before the old Unix server has
+    // finished unlinking its endpoint.
+    // A stalled local client must not hold /reload open indefinitely.
+    const drain = setTimeout(() => { for (const socket of connections) socket.destroy(); }, 1000);
+    await Promise.all(servers.map(server => new Promise<void>(resolve => {
+      if (!server) { resolve(); return; }
+      try { server.close(() => resolve()); } catch { resolve(); }
+    })));
+    clearTimeout(drain);
     if (ownsContentSocket) { try { unlinkSync(contentPath); } catch { /* absent */ } }
     ownsContentSocket = false;
-    try { unlinkSync(controlSocketPath); } catch { /* already removed */ }
+    if (ownsControlSocket) { try { unlinkSync(controlSocketPath); } catch { /* already removed */ } }
+    ownsControlSocket = false;
     emit("runtime.stopping", { backend_event_type: "session_shutdown", backend_event: { type: "session_shutdown", ...event } });
   });
 }

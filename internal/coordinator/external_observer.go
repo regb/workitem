@@ -245,7 +245,15 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 	case liveCurrent && live.AgentState == "failed":
 		observation.Status = "problem"
 		observation.Reason = "live agent loop settled with a failure"
+		if live.LeafID != "" {
+			observation.Reason = "native agent reports failure on its selected branch"
+		}
 		observation.TurnState = "failed"
+	case liveCurrent && live.AgentState == "idle":
+		observation.Status = "idle"
+		observation.Reason = "native agent reports idle on its selected branch"
+		observation.TurnState = "idle"
+		observation.LastActivityAt = live.LastEventAt
 	case liveCurrent && live.AgentState == "settled":
 		observation.Status = "idle"
 		observation.Reason = "live agent loop reports settled work"

@@ -36,6 +36,9 @@ type runtimeEventHeader struct {
 	Failed           bool      `json:"failed,omitempty"`
 	Outcome          string    `json:"outcome,omitempty"`
 	Readiness        string    `json:"readiness,omitempty"`
+	// AgentState is a native current-state observation, not inferred settlement.
+	AgentState string `json:"agent_state,omitempty"`
+	LeafID     string `json:"leaf_id,omitempty"`
 }
 
 func fileFingerprint(file *os.File, size int64) (string, error) {
@@ -97,7 +100,7 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 	switch event.Type {
 	case agent.EventRuntimeReady:
 		activity.RuntimeState = model.AgentRuntimeRunning
-		if activity.AgentState != "active" && activity.AgentState != "failed" {
+		if activity.AgentState != "active" && activity.AgentState != "failed" && activity.AgentState != "idle" {
 			activity.AgentState = ""
 		}
 		if activity.AgentState == "active" {
@@ -112,6 +115,19 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 			activity.TurnState = "busy"
 		}
 	case agent.EventRuntimeStatus:
+		if event.AgentState != "" {
+			activity.AgentState = event.AgentState
+			activity.LeafID = event.LeafID
+			switch event.AgentState {
+			case "active":
+				activity.TurnState = "busy"
+			case "idle":
+				activity.TurnState = "idle"
+			case "failed":
+				activity.TurnState = "failed"
+			}
+			break
+		}
 		if event.Readiness == "busy" && activity.AgentState != "active" {
 			activity.AgentState = ""
 			activity.TurnState = "busy"

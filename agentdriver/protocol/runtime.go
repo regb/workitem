@@ -54,6 +54,30 @@ const (
 	EventRuntimeFailed    = "runtime.failed"
 )
 
+// ValidAgentObservation validates the optional compact native-state snapshot.
+// The leaf is an opaque entry token; "-" denotes an empty branch.
+func ValidAgentObservation(state, leaf, readiness string) bool {
+	if state == "" && leaf == "" {
+		return true
+	}
+	if len(leaf) == 0 || len(leaf) > 200 {
+		return false
+	}
+	for _, c := range leaf {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '-' || c == '_') {
+			return false
+		}
+	}
+	switch state {
+	case "active":
+		return readiness == "busy"
+	case "idle", "failed":
+		return readiness == "ready"
+	default:
+		return false
+	}
+}
+
 type RuntimeEvent struct {
 	ProtocolVersion int       `json:"protocol_version"`
 	EventID         string    `json:"event_id"`
@@ -73,4 +97,7 @@ type RuntimeEvent struct {
 	// Outcome is explicit final settlement: completed or failed. An absent
 	// outcome from older drivers must not be mistaken for proven success.
 	Outcome string `json:"outcome,omitempty"`
+	// AgentState is a native current-state observation, not inferred settlement.
+	AgentState string `json:"agent_state,omitempty"`
+	LeafID     string `json:"leaf_id,omitempty"`
 }
