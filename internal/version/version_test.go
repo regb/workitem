@@ -37,6 +37,36 @@ func TestFromBuildInfoReleasePrecedence(t *testing.T) {
 	}
 }
 
+func TestSourceSnapshotIdentity(t *testing.T) {
+	build := &debug.BuildInfo{
+		Main: debug.Module{Version: "v0.2.0"},
+		Settings: []debug.BuildSetting{
+			{Key: "vcs.revision", Value: "stale"},
+			{Key: "vcs.time", Value: "2026-08-09T10:11:12Z"},
+		},
+	}
+	for _, tc := range []struct {
+		name, revision, modified, wantVersion string
+		wantModified                          bool
+	}{
+		{"clean", strings.Repeat("b", 40), "false", "devel+bbbbbbbbbbbb", false},
+		{"dirty", strings.Repeat("b", 40), "true", "devel+bbbbbbbbbbbb", true},
+		{"unknown", "", "true", "devel", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, metadata := range []*debug.BuildInfo{nil, build} {
+				info := fromBuildInfoWithSource("", metadata, tc.revision, tc.modified)
+				if info.Version != tc.wantVersion || info.Revision != tc.revision || info.Modified != tc.wantModified || info.Release != "" || info.CommitTime != nil {
+					t.Fatalf("info = %+v", info)
+				}
+			}
+		})
+	}
+	if info := fromBuildInfoWithSource("v0.3.0", build, strings.Repeat("b", 40), "false"); info.Release != "v0.3.0" || info.Version != "v0.3.0" {
+		t.Fatalf("explicit release = %+v", info)
+	}
+}
+
 func TestFromBuildInfoWithoutVCS(t *testing.T) {
 	info := fromBuildInfo("", nil)
 	if info.Version != "devel" || info.Revision != "" || info.ShortRevision != "" {

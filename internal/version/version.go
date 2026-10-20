@@ -18,6 +18,11 @@ import (
 // and modified state automatically when built from a Git checkout.
 var release string
 
+// Source snapshots without .git can supply identity with -X linker flags.
+// sourceModified must be "true" or "false" to enable this override. An empty
+// sourceRevision then means unknown, not a tagged release or a clean checkout.
+var sourceRevision, sourceModified string
+
 var buildIdentityOnce = sync.OnceValue(func() string {
 	info := Current()
 	executable, err := os.Executable()
@@ -49,12 +54,16 @@ type Info struct {
 func Current() Info {
 	build, ok := debug.ReadBuildInfo()
 	if !ok {
-		return fromBuildInfo(strings.TrimSpace(release), nil)
+		return fromBuildInfoWithSource(strings.TrimSpace(release), nil, sourceRevision, sourceModified)
 	}
-	return fromBuildInfo(strings.TrimSpace(release), build)
+	return fromBuildInfoWithSource(strings.TrimSpace(release), build, sourceRevision, sourceModified)
 }
 
 func fromBuildInfo(linkedRelease string, build *debug.BuildInfo) Info {
+	return fromBuildInfoWithSource(linkedRelease, build, "", "")
+}
+
+func fromBuildInfoWithSource(linkedRelease string, build *debug.BuildInfo, revision, modified string) Info {
 	info := Info{Release: linkedRelease, GoVersion: runtime.Version()}
 	moduleVersion := ""
 	if build != nil {
@@ -74,6 +83,12 @@ func fromBuildInfo(linkedRelease string, build *debug.BuildInfo) Info {
 				info.Modified = setting.Value == "true"
 			}
 		}
+	}
+	if modified == "true" || modified == "false" {
+		info.Revision = strings.TrimSpace(revision)
+		info.Modified = modified == "true"
+		info.CommitTime = nil
+		moduleVersion = ""
 	}
 	info.ShortRevision = shortRevision(info.Revision)
 	// A local Go build may synthesize a pseudo module version from the current

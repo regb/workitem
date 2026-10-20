@@ -1,0 +1,51 @@
+name: Nix
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  nix:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            system: x86_64-linux
+          - runner: macos-14
+            system: aarch64-darwin
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v31
+      - name: Check system
+        run: test "$(nix eval --impure --raw --expr builtins.currentSystem)" = '${{ matrix.system }}'
+      - name: Build
+        run: nix build .#default
+      - name: Verify provenance
+        shell: bash
+        run: |
+          root=$(mktemp -d)
+          trap 'rm -rf "$root"' EXIT
+          export HOME="$root/home" XDG_CONFIG_HOME="$root/config"
+          export XDG_DATA_HOME="$root/data" XDG_STATE_HOME="$root/state"
+          export XDG_CACHE_HOME="$root/cache" XDG_RUNTIME_DIR="$root/run"
+          mkdir -p "$HOME" "$XDG_RUNTIME_DIR"
+          ./result/bin/wi version --json > "$root/version.json"
+          python3 - "$root/version.json" "$GITHUB_SHA" <<'PY'
+          import json, sys
+          with open(sys.argv[1]) as source:
+              version = json.load(source)
+          assert version["revision"] == sys.argv[2], version
+          assert version["version"] == "devel+" + sys.argv[2][:12], version
+          assert not version["modified"], version
+          assert "release" not in version, version
+          PY
+      - name: Development shell
+        run: nix develop --command bash -c 'go version; git --version; tmux -V; fzf --version'
+      - name: Go checks
+        run: nix flake check -L
