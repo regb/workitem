@@ -139,7 +139,7 @@ Do not use `wi state set closed` as a cleanup shortcut. That primitive changes l
 
 ## Merge refuses the source checkout
 
-`wi merge` requires a completely clean source checkout and an existing local target branch.
+`wi merge` requires the expected source branch, no unfinished Git operation or unmerged index entries, and an existing local target branch. Staged, unstaged, untracked, and ignored source files do not need to be removed. Only committed work is integrated; a needed rebase uses a temporary checkout when local source data is present.
 
 ```bash
 wi workspace status ITEM

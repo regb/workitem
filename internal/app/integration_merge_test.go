@@ -3,6 +3,7 @@ package app_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -100,30 +101,72 @@ func TestMergeWorkItemRejectsMissingRegisteredTargetWorktreeBeforeRebase(t *test
 	}
 }
 
-func TestMergeWorkItemRejectsDirtySource(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		dirty func(*testing.T, string)
-	}{
-		{name: "untracked", dirty: func(t *testing.T, source string) { writeMergeFile(t, source, "untracked.txt", "dirty\n") }},
-		{name: "unstaged", dirty: func(t *testing.T, source string) { writeMergeFile(t, source, "README.md", "dirty\n") }},
-		{name: "staged", dirty: func(t *testing.T, source string) {
-			writeMergeFile(t, source, "staged.txt", "dirty\n")
-			runMergeGit(t, source, "add", "staged.txt")
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			application, _, source, itemID := setupMergeWorkItem(t)
-			tc.dirty(t, source)
-			oldSHA := mergeGitOutput(t, source, "rev-parse", "HEAD")
-			_, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, Target: "main", CWD: source})
-			if err == nil || !strings.Contains(err.Error(), "completely clean") {
-				t.Fatalf("error = %v", err)
-			}
-			if got := mergeGitOutput(t, source, "rev-parse", "HEAD"); got != oldSHA {
-				t.Fatalf("source moved: %s -> %s", oldSHA, got)
-			}
-		})
+func TestMergeWorkItemPreservesDirtySource(t *testing.T) {
+	for _, rebase := range []bool{false, true} {
+		for _, kind := range []string{"untracked", "unstaged", "staged", "mixed", "deleted", "renamed", "ignored", "ignored-only"} {
+			t.Run(fmt.Sprintf("rebase=%t/%s", rebase, kind), func(t *testing.T) {
+				application, repo, source, itemID := setupMergeWorkItem(t)
+				writeMergeFile(t, source, "feature.txt", "committed feature\n")
+				runMergeGit(t, source, "add", "feature.txt")
+				runMergeGit(t, source, "commit", "-m", "feature")
+				if rebase {
+					writeMergeFile(t, repo, "incoming.txt", "target commit\n")
+					runMergeGit(t, repo, "add", "incoming.txt")
+					runMergeGit(t, repo, "commit", "-m", "advance target")
+					runMergeGit(t, repo, "config", "rebase.updateRefs", "true")
+				}
+				switch kind {
+				case "untracked":
+					writeMergeFile(t, source, "incoming.txt", "untracked source data\n")
+					writeMergeFile(t, source, "datasets/private.csv", "untracked nested data\n")
+				case "unstaged":
+					writeMergeFile(t, source, "README.md", "unstaged changes\n")
+				case "staged":
+					writeMergeFile(t, source, "feature.txt", "staged changes\n")
+					runMergeGit(t, source, "add", "feature.txt")
+				case "mixed":
+					writeMergeFile(t, source, "feature.txt", "staged changes\n")
+					runMergeGit(t, source, "add", "feature.txt")
+					writeMergeFile(t, source, "feature.txt", "unstaged changes over staged changes\n")
+				case "deleted":
+					if err := os.Remove(filepath.Join(source, "README.md")); err != nil {
+						t.Fatal(err)
+					}
+				case "renamed":
+					runMergeGit(t, source, "mv", "README.md", "renamed.txt")
+				case "ignored-only":
+					writeMergeFile(t, source, ".gitignore", "incoming.txt\n")
+					runMergeGit(t, source, "add", ".gitignore")
+					runMergeGit(t, source, "commit", "-m", "ignore local dataset")
+					writeMergeFile(t, source, "incoming.txt", "ignored source data\n")
+				case "ignored":
+					writeMergeFile(t, source, ".gitignore", "incoming.txt\n")
+					runMergeGit(t, source, "add", ".gitignore")
+					writeMergeFile(t, source, "incoming.txt", "ignored source data\n")
+				}
+				before := captureMergeSource(t, source)
+				worktrees := mergeWorktreePaths(t, repo)
+				res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, CWD: source})
+				if err != nil {
+					t.Fatal(err)
+				}
+				assertMergeSource(t, source, before)
+				if !res.TargetAdvanced || !res.TargetSynced || res.Rebased != rebase || res.SourcePreserved != rebase {
+					t.Fatalf("result=%+v", res)
+				}
+				if got := mergeGitOutput(t, repo, "show", "main:feature.txt"); got != "committed feature" {
+					t.Fatalf("merged dirty content: %q", got)
+				}
+				if got := mergeWorktreePaths(t, repo); got != worktrees {
+					t.Fatal("temporary worktree leaked", got)
+				}
+				if rebase {
+					if got := mergeGitOutput(t, repo, "show", "main:incoming.txt"); got != "target commit" {
+						t.Fatal("source data was integrated", got)
+					}
+				}
+			})
+		}
 	}
 }
 

@@ -40,7 +40,9 @@ func runMerge(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 	if res.UpstreamSync != nil && res.UpstreamSync.Changed {
 		fmt.Fprintf(cfg.Stdout, "synchronized integration base with %s @ %s\n", res.UpstreamSync.Repository.Upstream.String(), shortDisplaySHA(res.UpstreamSync.LocalSHA))
 	}
-	if res.Rebased {
+	if res.SourcePreserved {
+		fmt.Fprintf(cfg.Stdout, "rebased committed snapshot of %s onto %s; source checkout unchanged\n", res.SourceBranch, res.TargetBranch)
+	} else if res.Rebased {
 		fmt.Fprintf(cfg.Stdout, "rebased %s onto %s\n", res.SourceBranch, res.TargetBranch)
 	}
 	fmt.Fprintf(cfg.Stdout, "merged %s into %s @ %s\n", res.SourceBranch, res.TargetBranch, shortDisplaySHA(res.SourceNewSHA))

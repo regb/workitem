@@ -381,7 +381,7 @@ var helpDocs = map[string]helpDoc{
 		Summary: "Fast-forward a local target branch, rebasing when needed",
 		Usage:   []string{"wi merge [--item <selector>] [--target <branch>] [--local] [target]"},
 		Description: []string{
-			"Merges the current active item without switching checkouts: requires a completely clean source checkout, rebases its persisted implementation branch only if it does not already contain the target, atomically fast-forwards the local target ref, and synchronizes any worktree where the target is checked out.",
+			"Merges the current active item without switching checkouts: integrates committed work while preserving uncommitted source changes, rebases only when needed using a temporary checkout for dirty sources, atomically fast-forwards the local target ref, and synchronizes any worktree where the target is checked out.",
 			"The target defaults to the registered integration branch. With a configured upstream, wi fetches and fast-forward-synchronizes that base before integrating the item; divergence stops before rebasing. --local skips that remote preflight. Other explicitly selected target branches remain local-only. No push, squash, branch deletion, workspace cleanup, shelve, or close is performed.",
 			"If item rebase, target advancement, or target-worktree synchronization fails, wi aborts/rolls back the item integration. An earlier successful upstream synchronization is deliberately retained and reported. Dirty non-integration target files are allowed only when they do not overlap incoming paths.",
 		},
