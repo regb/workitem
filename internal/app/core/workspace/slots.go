@@ -168,7 +168,7 @@ func listSlots(root string) ([]slotInfo, int, error) {
 	slots := []slotInfo{}
 	maxIndex := 0
 	for _, entry := range entries {
-		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "slot-") {
+		if !entry.IsDir() || !model.IsManagedSlotName(entry.Name()) {
 			continue
 		}
 		n, err := strconv.Atoi(strings.TrimPrefix(entry.Name(), "slot-"))
@@ -264,27 +264,8 @@ func (s *Service) validateManagedCheckoutPath(path string) error {
 	return nil
 }
 
-func IsSlotPathName(path string) bool {
-	base := filepath.Base(path)
-	if !strings.HasPrefix(base, "slot-") {
-		return false
-	}
-	_, err := strconv.Atoi(strings.TrimPrefix(base, "slot-"))
-	return err == nil
-}
+func IsSlotPathName(path string) bool { return model.IsManagedSlotName(filepath.Base(path)) }
 
 func (s *Service) isSlotPath(repo model.Repository, path string) bool {
-	root := filepath.Join(s.store.WorktreesDir(), repositoryKey(repo))
-	got, err := filepath.Abs(path)
-	if err != nil {
-		return false
-	}
-	want, err := filepath.Abs(root)
-	if err != nil {
-		return false
-	}
-	if filepath.Dir(got) != want {
-		return false
-	}
-	return IsSlotPathName(got)
+	return model.IsManagedSlotPath(s.store.WorktreesDir(), repositoryKey(repo), path)
 }

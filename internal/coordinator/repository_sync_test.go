@@ -271,11 +271,11 @@ func TestRepositorySyncRecoversInterruptedRefUpdate(t *testing.T) {
 	}
 }
 
-func TestRepositorySyncRejectsActiveGitOperationsAndCheckedOutIntegration(t *testing.T) {
+func TestRepositorySyncRejectsActiveManagedGitOperationsAndCheckedOutIntegration(t *testing.T) {
 	f := newSyncFixture(t)
 	old := f.status(false).LocalSHA
 	f.commit(f.origin, "remote", "remote\n", "remote")
-	path := filepath.Join(t.TempDir(), "item")
+	path := filepath.Join(f.root, "worktrees", importTestID, "slot-0001")
 	syncGit(t, f.store, "worktree", "add", "-b", "wi/item", path, old)
 	marker := syncGit(t, path, "rev-parse", "--git-path", "CHERRY_PICK_HEAD")
 	if !filepath.IsAbs(marker) {

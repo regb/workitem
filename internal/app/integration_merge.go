@@ -201,6 +201,9 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (result Merg
 		if m.Repository.ID != "" && target == m.Repository.IntegrationBranch {
 			return res, fmt.Errorf("integration branch %s is checked out at %s; release that checkout before merging", target, targetWorktree.Path)
 		}
+		if m.Repository.ID != "" && !model.IsManagedSlotPath(a.Store.WorktreesDir(), m.Repository.ID, targetWorktree.Path) {
+			return res, fmt.Errorf("target branch %s is checked out in external worktree %s; wi will not modify an unmanaged checkout; choose an unchecked-out target or manage that worktree with Git", target, targetWorktree.Path)
+		}
 		res.TargetWorktreePath = targetWorktree.Path
 		info, statErr := os.Stat(targetWorktree.Path)
 		if statErr != nil {

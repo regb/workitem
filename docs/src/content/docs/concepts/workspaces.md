@@ -7,6 +7,14 @@ A workspace is a Git checkout claim, not a tmux session or an agent process. All
 
 The checkout specification records the implementation branch and materialization policy. A nullable claim records the current assignment, including its path and identity. Release clears the claim but preserves the specification and last claim generation. Every later assignment receives a new identity and higher generation, even when reusing a directory. Runtime and terminal records bind to that assignment to fence stale owners.
 
+## Additional Git worktrees
+
+You can create additional Git worktrees sharing the owned repository. Keep them outside Wi\'s reserved `worktrees/<repository-id>/slot-*` namespace. Git registration alone does not make a checkout a Wi workspace.
+
+Wi does not adopt those external checkouts, inspect their in-progress Git operations, synchronize their files, or prune their stale registrations. A missing review checkout or an unrelated external rebase does not block repository synchronization or item merging. Wi still checks its own slots, including warm slots without an active claim.
+
+Shared Git refs still require protection. Wi will not advance the integration branch while it is checked out anywhere. It also refuses to merge into an explicitly selected branch checked out in an external worktree, rather than changing that checkout behind your back. Manage those checkouts with Git yourself.
+
 ## Managed slots
 
 Creation records the repository ID, implementation branch, and created-from commit, but leaves the checkout absent:

@@ -325,7 +325,10 @@ func (s *Server) ensureRepositoryIdle(ctx context.Context, source RepositorySour
 		return err
 	}
 	for _, wt := range worktrees {
-		if wt.Bare || wt.Path == skip {
+		// External worktrees share Git objects and refs, not Wi ownership.
+		// Integration-branch reservations are checked by ValidateOwnedBare;
+		// only our slots participate in the workspace-idle policy here.
+		if wt.Bare || wt.Path == skip || !model.IsManagedSlotPath(filepath.Join(s.dataRoot, "worktrees"), source.Repository.ID, wt.Path) {
 			continue
 		}
 		if err := gitpkg.New("git").EnsureNoOperationInProgress(ctx, wt.Path, "synchronize repository"); err != nil {

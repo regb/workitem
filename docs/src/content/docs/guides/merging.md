@@ -15,7 +15,7 @@ The operation:
 2. fetches and fast-forward-synchronizes a configured upstream when targeting the registered integration branch, unless `--local` is supplied
 3. preserves existing commits if they already contain the target; otherwise rebases onto the target, using a temporary detached checkout when the source has local changes or ignored files
 4. fast-forwards the local target reference
-5. synchronizes a checked-out non-integration target when safe
+5. synchronizes a checked-out non-integration target in a Wi-owned slot when safe
 
 When the target is already an ancestor, Wi preserves all commit IDs and merge history, including subtree merges. The source checkout is untouched, even with staged, unstaged, or untracked changes.
 
@@ -36,13 +36,13 @@ wi merge --item auth
 wi merge --item auth --target develop
 ```
 
-The target must already exist in the owned store. Wi refuses to advance the registered integration branch while it is checked out there; release that checkout before merging. The original external onboarding checkout is independent and is not synchronized.
+The target must already exist in the owned store. Wi refuses to advance the registered integration branch while it is checked out there; release that checkout before merging. The original external onboarding checkout is independent and is not synchronized. Additional Git worktrees are also unmanaged. Unrelated external worktrees do not block merge preflight, even when missing or running a Git operation. If an explicitly selected target branch is checked out in an external worktree, Wi refuses to advance it rather than modifying that checkout.
 
 ## Failure and rollback
 
 If item rebase, target advancement, or target-worktree synchronization fails, `wi` aborts or rolls back that item integration. An earlier successful upstream synchronization is retained and reported, rather than rolling the integration branch back to a stale remote base. Its old tip remains under the reported recovery ref.
 
-For an explicitly selected non-integration target, dirty files in its worktree are allowed only when they do not overlap incoming paths. Local source changes are preserved, including paths that overlap the integration base, because rebasing them uses a separate checkout.
+For an explicitly selected non-integration target in a Wi-owned slot, dirty files are allowed only when they do not overlap incoming paths. Local source changes are preserved, including paths that overlap the integration base, because rebasing them uses a separate checkout.
 
 ## Finish the work item separately
 
