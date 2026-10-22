@@ -41,6 +41,34 @@ function validateControlContent(command: ControlCommand) {
   }
 }
 
+type ContentTool = { id?: string; name: string; status: string; input?: string; output?: string };
+const maxFieldBytes = 64 * 1024;
+
+// dataText renders tool input or output as Go's eventDataText does: strings as
+// they are, anything else as indented JSON.
+function dataText(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  return typeof value === "string" ? value : JSON.stringify(value, null, 2);
+}
+
+// boundedField mirrors driverprotocol's 64 KiB tool field bound.
+function boundedField(value: string): string {
+  const bytes = Buffer.from(value, "utf8");
+  if (bytes.length <= maxFieldBytes) return value;
+  let end = maxFieldBytes;
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+  return bytes.subarray(0, end).toString("utf8") + "\n[content truncated]";
+}
+
+// boundedThought keeps the newest 64 KiB of reasoning, like driverprotocol.
+function boundedThought(value: string): string {
+  const bytes = Buffer.from(value, "utf8");
+  if (bytes.length <= maxFieldBytes) return value;
+  let start = bytes.length - maxFieldBytes;
+  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start++;
+  return bytes.subarray(start).toString("utf8");
+}
+
 function textFromContent(content: unknown): string {
   if (typeof content === "string") return content;
   if (!Array.isArray(content)) return "";
@@ -154,9 +182,24 @@ export default function wiBridge(pi: ExtensionAPI) {
   const trackConnection = (socket: Socket) => { connections.add(socket); socket.on("close", () => connections.delete(socket)); };
   const contentPath = join(dirname(controlSocketPath), createHash("sha256").update(`content:${basename(controlSocketPath)}`).digest("hex").slice(0, 16) + ".sock");
   let contentSequence = 0;
+  let contentMessageId = "";
   let contentText = "";
   let contentTruncated = false;
   let contentActivity = "";
+  let contentLeaf = "";
+  let contentSavedAs: string[] = [];
+  let contentThought = "";
+  // Prompts submitted with a request ID, oldest first, waiting for the user
+  // message that carries them.
+  let submittedPrompts: Array<{ requestId: string; text: string }> = [];
+  let contentTools: ContentTool[] = [];
+  // The most recently changed call, as driverprotocol's Content.Tool.
+  let contentTool: ContentTool | undefined;
+  let contentPrompts: Array<{ request_id: string; native_ids: string[] }> = [];
+  // Content stream subscribers; see agentdriver/protocol/content.go.
+  const contentSubscribers = new Set<Socket>();
+  const maxContentSubscribers = 32;
+  const maxContentBacklog = 1 << 20;
   let currentRequestId = "";
   const handled = new Set<string>();
   const runtimeNonce = randomUUID();
@@ -263,24 +306,25 @@ export default function wiBridge(pi: ExtensionAPI) {
       request_id: currentRequestId || undefined,
       ...fields,
     };
-    contentSequence++;
-    if (type === "message.started") { contentText = ""; contentTruncated = false; contentActivity = "Assistant responding"; }
-    if (type === "message.delta" && !contentTruncated) {
-      const bytes = Buffer.from(contentText + String(fields.text ?? ""), "utf8");
-      if (bytes.length > maxContentBytes) {
-        let end = maxContentBytes;
-        while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
-        contentText = bytes.subarray(0, end).toString("utf8");
-        contentTruncated = true;
-      } else contentText = bytes.toString("utf8");
-      contentActivity = "Assistant responding";
-    }
-    if (type === "message.completed") { contentText = ""; contentTruncated = false; contentActivity = "Message saved"; }
-    if (type === "tool.started") contentActivity = `Tool: ${String(fields.tool_name ?? "")}`;
-    if (type === "agent.settled") { contentText = ""; contentTruncated = false; submittedWork = false; contentActivity = "Idle"; }
+    syncContentLeaf();
+    // Only assistant messages are live text; prompts and tool results must not
+    // reset the reply or its parallel tool calls.
+    const assistant = fields.role === "assistant";
+    if (type === "message.started" && assistant) publishContent({ type: "message.started", message_id: `live-${contentSequence + 1}`, activity: "Assistant responding" });
+    if (type === "message.delta" && !contentTruncated && fields.text) publishContent({ type: "message.delta", message_id: contentMessageId || undefined, text: String(fields.text), activity: "Assistant responding" });
+    if (type === "message.completed" && assistant) publishContent({ type: "message.completed", message_id: contentMessageId || undefined, activity: "Message saved" });
+    if (type === "tool.started" || type === "tool.updated" || type === "tool.completed") publishTool(type, fields);
+    const update = (fields.data as { assistant_message_event?: { type?: string; delta?: string } } | undefined)?.assistant_message_event;
+    if (type === "message.delta" && update?.type === "thinking_delta" && update.delta) publishContent({ type: "thought.delta", message_id: contentMessageId || undefined, text: update.delta });
+    // Models that keep their reasoning private still say they are thinking.
+    if (type === "message.delta" && update?.type === "thinking_start" && contentActivity !== "Thinking") publishContent({ type: "activity", activity: "Thinking", leaf_id: contentLeaf });
+    if (type === "agent.settled") { submittedWork = false; publishContent({ type: "turn.settled", activity: "Idle" }); }
+    // Native run state: a run that is no longer active ends the live reply.
     if (type === "runtime.status") {
-      if (fields.agent_state !== "active") { contentText = ""; contentTruncated = false; currentRequestId = ""; }
-      contentActivity = fields.agent_state === "active" ? "Agent working" : fields.agent_state === "failed" ? "Selected branch ended with failure" : "Idle";
+      if (fields.agent_state !== "active") {
+        currentRequestId = "";
+        publishContent({ type: "turn.settled", activity: fields.agent_state === "failed" ? "Selected branch ended with failure" : "Idle" });
+      } else if (!contentActivity || contentActivity === "Idle") publishContent({ type: "activity", activity: "Agent working", leaf_id: contentLeaf });
     }
     queueRuntimeEvent(record);
   };
@@ -289,6 +333,136 @@ export default function wiBridge(pi: ExtensionAPI) {
     emit("runtime.status", state);
     if (state.agent_state !== "active") settledFailed = state.agent_state === "failed";
   }, () => submittedWork);
+
+  // publishTool mirrors the Go content server's tool events: each carries the
+  // call's whole state, with input and output as text bounded like Go's.
+  const publishTool = (type: string, fields: Record<string, unknown>) => {
+    const data = (fields.data ?? {}) as { args?: unknown; partial_result?: unknown; result?: unknown; is_error?: boolean };
+    const id = String(fields.tool_call_id ?? ""), name = String(fields.tool_name ?? "");
+    const prior = contentTools.findLast((tool) => (id ? tool.id === id : !tool.id && tool.name === name));
+    if (type === "tool.started") {
+      publishContent({ type, tool: { id: id || undefined, name, status: "running", input: boundedField(dataText(data.args)) || undefined }, activity: `Tool running: ${name}` });
+      return;
+    }
+    const tool: ContentTool = prior ? { ...prior } : { id: id || undefined, name, status: "running" };
+    if (type === "tool.completed") tool.status = data.is_error ? "failed" : "completed";
+    tool.output = boundedField(dataText(type === "tool.completed" ? data.result : data.partial_result)) || undefined;
+    publishContent({ type, tool, activity: type === "tool.completed" ? `Tool ${tool.status}: ${name}` : `Tool running: ${name}` });
+  };
+
+  // applyContent mirrors driverprotocol.ApplyContent, so subscribers applying
+  // these events hold the same snapshot as this bridge.
+  const applyContent = (event: Record<string, unknown>) => {
+    const activity = typeof event.activity === "string" ? event.activity : "";
+    switch (event.type) {
+      case "message.started":
+        contentMessageId = String(event.message_id ?? ""); contentText = ""; contentTruncated = false; contentSavedAs = []; contentThought = ""; contentTools = []; contentTool = undefined; break;
+      case "tool.started": case "tool.updated": case "tool.completed": {
+        const tool = event.tool as ContentTool;
+        const at = contentTools.findLastIndex((other) => tool.id ? other.id === tool.id : !other.id && other.name === tool.name);
+        contentTools = at >= 0 ? contentTools.map((other, index) => (index === at ? { ...tool } : other)) : [...contentTools, { ...tool }].slice(-32);
+        contentTool = { ...tool };
+        break;
+      }
+      case "thought.delta":
+        contentThought = boundedThought(contentThought + String(event.text ?? "")); break;
+      case "prompt.saved":
+        contentPrompts = [...contentPrompts.filter((link) => link.request_id !== event.request_id), { request_id: String(event.request_id ?? ""), native_ids: (event.native_ids as unknown[]).map(String) }].slice(-8); break;
+      case "message.saved":
+        contentSavedAs = Array.isArray(event.native_ids) ? event.native_ids.map(String) : []; break;
+      case "message.delta": {
+        if (contentTruncated) break;
+        contentSavedAs = [];
+        const bytes = Buffer.from(contentText + String(event.text ?? ""), "utf8");
+        if (bytes.length > maxContentBytes) {
+          let end = maxContentBytes;
+          while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+          contentText = bytes.subarray(0, end).toString("utf8");
+          contentTruncated = true;
+        } else contentText = bytes.toString("utf8");
+        break;
+      }
+      case "activity":
+        contentActivity = activity; contentLeaf = String(event.leaf_id ?? ""); return;
+    }
+    if (activity) contentActivity = activity;
+  };
+  // publishContent numbers one content event, applies it, and sends it to every
+  // subscriber. A subscriber that cannot keep up is dropped and resubscribes.
+  const publishContent = (event: Record<string, unknown>) => {
+    const numbered = { sequence: ++contentSequence, ...event };
+    applyContent(numbered);
+    const line = `${JSON.stringify(numbered)}\n`;
+    for (const socket of contentSubscribers) {
+      if (socket.writableLength > maxContentBacklog) { contentSubscribers.delete(socket); socket.destroy(); continue; }
+      socket.write(line);
+    }
+  };
+  // The branch leaf lives in Pi's session; a change becomes an activity event.
+  const syncContentLeaf = () => {
+    let leaf = "-";
+    try { leaf = context?.sessionManager?.getLeafId?.() ?? "-"; } catch { /* keep the last known leaf */ return; }
+    if (leaf !== contentLeaf) publishContent({ type: "activity", activity: contentActivity, leaf_id: leaf });
+  };
+  // findEntry returns the newest session entry of a message, by its role and
+  // timestamp, looking back a bounded way along the current branch.
+  const findEntry = (role: string, timestamp: number) => {
+    const branch: Array<{ type?: string; id?: string; message?: { role?: string; timestamp?: number } }> = context?.sessionManager?.getBranch?.() ?? [];
+    for (let i = branch.length - 1; i >= Math.max(0, branch.length - 64); i--) {
+      const entry = branch[i];
+      if (entry.type === "message" && entry.message?.role === role && entry.message.timestamp === timestamp) return entry.id ?? "";
+    }
+    return "";
+  };
+  // afterAppend looks for a session entry Pi appends after dispatching an
+  // event, retrying briefly, and reports it once found.
+  const afterAppend = (find: () => string, found: (id: string) => void) => {
+    const delays = [0, 50, 250, 1000, 3000];
+    const attempt = (index: number) => setTimeout(() => {
+      let id = "";
+      try { id = find(); } catch { return; }
+      if (id) found(id);
+      else if (index + 1 < delays.length) attempt(index + 1);
+    }, delays[index]);
+    attempt(0);
+  };
+  // linkPrompt pairs a saved user message with the oldest submitted prompt of
+  // the same text and reports the entry holding it to the prompt's sender.
+  const linkPrompt = (message: { role?: string; timestamp?: number; content?: unknown }) => {
+    if (message.role !== "user" || typeof message.timestamp !== "number") return;
+    const text = textFromContent(message.content).trim();
+    const index = submittedPrompts.findIndex((prompt) => prompt.text === text);
+    if (index < 0) return;
+    const { requestId } = submittedPrompts[index];
+    submittedPrompts = submittedPrompts.filter((_, other) => other !== index);
+    afterAppend(() => findEntry("user", message.timestamp!), (id) => publishContent({ type: "prompt.saved", request_id: requestId, native_ids: [id] }));
+  };
+  // markSaved reports the session entry holding an assistant message. Pi appends
+  // it after dispatching message_end, so the lookup waits for the next task;
+  // it is published only while the live text is still that message's text.
+  const markSaved = (message: { role?: string; timestamp?: number; content?: unknown }) => {
+    const text = textFromContent(message.content).trim();
+    if (message.role !== "assistant" || !text || typeof message.timestamp !== "number") return;
+    afterAppend(() => findEntry("assistant", message.timestamp!), (id) => {
+      // Whitespace may differ between streamed and saved text.
+      if (contentText.split(/\s+/).join(" ").trim() !== text.split(/\s+/).join(" ").trim()) return;
+      syncContentLeaf();
+      publishContent({ type: "message.saved", message_id: contentMessageId || undefined, native_ids: [id] });
+    });
+  };
+  const contentSnapshot = () => ({ protocol_version: contentVersion, runtime_id: runtimeId, work_item_id: workItemId, sequence: contentSequence, idle_guard: true, message_id: contentMessageId || undefined, text: contentText, truncated: contentTruncated, activity: contentActivity, leaf_id: contentLeaf, saved_as: contentSavedAs.length ? contentSavedAs : undefined, thought: contentThought || undefined, tool: contentTool, tools: contentTools.length ? contentTools : undefined, prompts: contentPrompts.length ? contentPrompts : undefined });
+
+  const reconcileIdle = () => {
+    if (!activityReportedBusy || !context?.isIdle()) return;
+    try {
+      emit("agent.settled", { data: { reconciled: true }, failed: settledFailed, outcome: settledFailed ? "failed" : "completed", backend_event_type: "idle_probe" });
+      activityReportedBusy = false;
+      currentRequestId = "";
+    } catch {
+      // A full runtime queue throws rather than dropping semantic events. Keep
+      // the busy marker set so the next probe retries after the queue drains.
+    }
+  };
 
   const accept = (command: ControlCommand) => emit("command.accepted", {
     command_id: command.id,
@@ -323,6 +497,7 @@ export default function wiBridge(pi: ExtensionAPI) {
                 ...command.images.map(image => ({ type: "image" as const, mimeType: image.mime_type, data: image.data }))]
             : command.message!;
           submittedWork = true;
+          if (command.request_id) submittedPrompts = [...submittedPrompts, { requestId: command.request_id, text: command.message?.trim() ?? "" }].slice(-16);
           if (context?.isIdle()) {
             pi.sendUserMessage(content);
           } else {
@@ -349,6 +524,8 @@ export default function wiBridge(pi: ExtensionAPI) {
     } catch (error) {
       handled.delete(command.id);
       if (command.type === "prompt" || command.type === "steer" || command.type === "follow_up") submittedWork = false;
+      // A refused prompt must not be paired with a later one of the same text.
+      if (command.request_id) submittedPrompts = submittedPrompts.filter((prompt) => prompt.requestId !== command.request_id);
       reject(command, error);
       return error instanceof Error ? error.message : String(error);
     }
@@ -371,7 +548,15 @@ export default function wiBridge(pi: ExtensionAPI) {
           if (req.protocol_version !== contentVersion || req.runtime_id !== runtimeId || req.work_item_id !== workItemId) {
             socket.end(`${JSON.stringify({error: "content owner mismatch"})}\n`); return;
           }
-          socket.end(`${JSON.stringify({protocol_version: contentVersion, runtime_id: runtimeId, work_item_id: workItemId, sequence: contentSequence, idle_guard: true, text: contentText, truncated: contentTruncated, activity: contentActivity, leaf_id: context?.sessionManager.getLeafId() ?? "-"})}\n`);
+          syncContentLeaf();
+          if (!req.stream) { socket.end(`${JSON.stringify(contentSnapshot())}\n`); return; }
+          if (contentSubscribers.size >= maxContentSubscribers) { socket.end(`${JSON.stringify({error: "too many content subscribers"})}\n`); return; }
+          // A stream starts with a snapshot and stays open for later events.
+          socket.removeAllListeners("data");
+          socket.setTimeout(0);
+          socket.on("close", () => contentSubscribers.delete(socket));
+          contentSubscribers.add(socket);
+          socket.write(`${JSON.stringify({ sequence: contentSequence, type: "snapshot", snapshot: contentSnapshot() })}\n`);
         } catch { socket.destroy(); }
       });
     });
@@ -473,6 +658,8 @@ export default function wiBridge(pi: ExtensionAPI) {
   pi.on("message_end", (event, ctx) => {
     context = ctx;
     const message = event.message;
+    markSaved(message);
+    linkPrompt(message);
     if (message.role === "assistant") settledFailed = message.stopReason === "error" || message.stopReason === "aborted";
     emit("message.completed", {
       role: message.role,
@@ -558,6 +745,9 @@ export default function wiBridge(pi: ExtensionAPI) {
     observation.stop();
     const servers = [controlServer, contentServer];
     controlServer = undefined;
+    // Subscribers stay connected until dropped; the server closes after.
+    for (const socket of contentSubscribers) socket.destroy();
+    contentSubscribers.clear();
     contentServer = undefined;
     // Reload must not start a new listener before the old Unix server has
     // finished unlinking its endpoint.

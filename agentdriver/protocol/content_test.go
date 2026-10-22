@@ -45,10 +45,12 @@ func TestContentSnapshotsAreBoundedReadOnlyAndOwnerScoped(t *testing.T) {
 	if len(value.Text) > 256<<10 {
 		t.Fatal("unbounded snapshot")
 	}
+	// A completed message keeps its text until the next one starts; readers
+	// hide it once history has it (Content.SavedAs).
 	server.Update(EventMessageCompleted, "private final", "")
 	value, err = ReadContent(context.Background(), path, "runtime", "item")
-	if err != nil || value.Text != "" {
-		t.Fatalf("final transcript duplicated %+v %v", value, err)
+	if err != nil || value.Activity != "Message saved" || !strings.HasPrefix(value.Text, "hello") {
+		t.Fatalf("completed message: activity=%q text bytes=%d err=%v", value.Activity, len(value.Text), err)
 	}
 	server.UpdateTool(EventToolStarted, "", "tool-1", "bash", `{"command":"pwd"}`, "", false)
 	value, err = ReadContent(context.Background(), path, "runtime", "item")

@@ -312,7 +312,7 @@ func TestHeadlessRuntimeMultiTurnAndShutdown(t *testing.T) {
 			}
 			send := func(id, kind, message string) {
 				t.Helper()
-				if err := protocol.SubmitControl(ctx, control, protocol.ControlCommand{ProtocolVersion: protocol.RuntimeVersion, RuntimeID: runtimeID, WorkItemID: itemID, ID: id, Type: kind, Message: message}); err != nil {
+				if err := protocol.SubmitControl(ctx, control, protocol.ControlCommand{ProtocolVersion: protocol.RuntimeVersion, RuntimeID: runtimeID, WorkItemID: itemID, ID: id, RequestID: "req-" + id, Type: kind, Message: message}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -349,6 +349,10 @@ func TestHeadlessRuntimeMultiTurnAndShutdown(t *testing.T) {
 			content, err := protocol.ReadContent(ctx, protocol.ContentSocketPath(control), runtimeID, itemID)
 			if err != nil || content.Text != "answer 2" {
 				t.Fatal(content, err)
+			}
+			// Each prompt is linked, for its sender, to the record uuid wi chose.
+			if links := content.Prompts; len(links) != 2 || links[1].RequestID != "req-two" || links[1].NativeIDs[0] != uuid("headless-command:two") {
+				t.Fatalf("prompt links = %+v", links)
 			}
 			send("stop", protocol.CommandShutdown, "")
 			select {

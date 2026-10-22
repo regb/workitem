@@ -60,7 +60,7 @@ func TestContentVersionDoesNotFollowBootstrapVersion(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer conn.Close()
-	if err := json.NewEncoder(conn).Encode(ContentRequest{ContentVersion + 1, "runtime", "item"}); err != nil {
+	if err := json.NewEncoder(conn).Encode(ContentRequest{ProtocolVersion: ContentVersion + 1, RuntimeID: "runtime", WorkItemID: "item"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := json.NewDecoder(conn).Decode(&value); err != nil {

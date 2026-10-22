@@ -36,9 +36,10 @@ func (s *headlessContent) frame(f headlessFrame) error {
 				Input                json.RawMessage
 			} `json:"content_block"`
 			Delta struct {
-				Type    string `json:"type"`
-				Text    string `json:"text"`
-				Partial string `json:"partial_json"`
+				Type     string `json:"type"`
+				Text     string `json:"text"`
+				Thinking string `json:"thinking"`
+				Partial  string `json:"partial_json"`
 			} `json:"delta"`
 		}
 		if json.Unmarshal(f.Event, &e) != nil {
@@ -51,8 +52,10 @@ func (s *headlessContent) frame(f headlessFrame) error {
 		case "message_start":
 			s.text = ""
 			s.truncated = false
+			s.tool = nil
 			s.blocks = map[int]*headlessBlock{}
 			s.activity = "Assistant responding"
+			s.server.StartMessage()
 		case "content_block_start":
 			if s.blocks == nil {
 				s.blocks = map[int]*headlessBlock{}
@@ -69,12 +72,17 @@ func (s *headlessContent) frame(f headlessFrame) error {
 				s.emit(protocol.RuntimeEvent{Type: protocol.EventToolStarted, ToolName: b.name})
 			} else if e.Block.Type == "text" {
 				s.appendText(e.Block.Text)
+			} else if e.Block.Type == "thinking" || e.Block.Type == "redacted_thinking" {
+				s.activity = "Thinking"
 			}
 		case "content_block_delta":
 			switch e.Delta.Type {
 			case "text_delta":
 				s.activity = "Assistant responding"
 				s.appendText(e.Delta.Text)
+			case "thinking_delta":
+				s.activity = "Thinking"
+				s.server.Thought(e.Delta.Thinking)
 			case "input_json_delta":
 				if b := s.blocks[e.Index]; b != nil && b.tool {
 					b.input, _ = boundedDisplay(b.input+e.Delta.Partial, 64<<10)
@@ -107,10 +115,13 @@ func (s *headlessContent) frame(f headlessFrame) error {
 			raw, _ = json.Marshal(filtered)
 		}
 		content(raw, &message, &truncated)
+		saved := ""
 		if f.Type == "assistant" && message.Text != "" {
 			s.text, s.truncated = boundedDisplay(message.Text, maxDisplayText)
 			s.truncated = s.truncated || truncated
 			s.activity = "Assistant message completed"
+			// The assistant frame is the transcript record holding this text.
+			saved = message.Text
 		}
 		for _, t := range message.Tools {
 			if len(t.ID) > 200 || len(t.Name) > 128 {
@@ -138,6 +149,9 @@ func (s *headlessContent) frame(f headlessFrame) error {
 			s.activity = "Tool " + s.tool.Status
 		}
 		s.publish()
+		if saved != "" && uuidPattern.MatchString(f.UUID) {
+			s.server.MarkSaved(saved, []string{f.UUID})
+		}
 	}
 	return nil
 }

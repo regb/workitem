@@ -114,6 +114,14 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 		state.close()
 	}()
 	display := &headlessContent{server: contentServer, emit: emit}
+	// confirm records Claude's receipt of a prompt and links it, for its
+	// sender, to the transcript record: wi chose that record's uuid.
+	confirm := func(id string) {
+		state.confirm(id)
+		if d := state.work[id]; d != nil {
+			contentServer.PromptSaved(d.command.RequestID, []string{id})
+		}
+	}
 	emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeStatus, Readiness: "starting", ReasonCode: "headless_initializing"})
 	initID := "wi-headless-initialize"
 	if _, err := writeHeadlessFrame(writer, headlessControl(initID, "initialize")); err != nil {
@@ -162,9 +170,16 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 			emit(protocol.RuntimeEvent{Type: protocol.EventAgentStarted})
 		}
 	}
-	protocolFailure := func() error {
+	// contentFault notes a frame whose content could not be shown. Live content
+	// is display only: the frame is skipped and the agent keeps working.
+	contentFault := func(frameType string, err error) {
+		fmt.Fprintf(os.Stderr, "Claude %s frame content skipped: %v\n", frameType, err)
+	}
+	// protocolFailure ends the runtime, naming the cause in its log without
+	// native content.
+	protocolFailure := func(cause string) error {
 		emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeFailed, Failed: true, ReasonCode: "headless_protocol_error"})
-		return fail(fmt.Errorf("Claude headless protocol failed; inspect its private runtime log"))
+		return fail(fmt.Errorf("Claude headless protocol failed: %s", cause))
 	}
 	for {
 		select {
@@ -182,21 +197,21 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 			drainTimer = time.NewTimer(3 * time.Second)
 			drainDeadline = drainTimer.C
 		case <-drainDeadline:
-			return protocolFailure()
+			return protocolFailure(fmt.Sprintf("Claude exited (%v) and its output did not end", processErr))
 		case <-ticker.C:
 			state.tick(time.Now())
 			status()
 		case item := <-frames:
 			if item.err != nil {
 				if !errors.Is(item.err, io.EOF) {
-					return protocolFailure()
+					return protocolFailure(item.err.Error())
 				}
 				if processDone {
 					if state.stopping {
 						return nil
 					}
 					if processErr != nil || state.busy() {
-						return protocolFailure()
+						return protocolFailure(fmt.Sprintf("Claude exited (%v) while busy=%v", processErr, state.busy()))
 					}
 					emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeFailed, Failed: true, ReasonCode: "runtime_stopped"})
 					return fail(fmt.Errorf("Claude headless exited unexpectedly"))
@@ -208,23 +223,23 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 						return nil
 					}
 					if err != nil || state.busy() {
-						return protocolFailure()
+						return protocolFailure(fmt.Sprintf("Claude exited (%v) while busy=%v", err, state.busy()))
 					}
 					emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeFailed, Failed: true, ReasonCode: "runtime_stopped"})
 					return fail(fmt.Errorf("Claude headless exited unexpectedly"))
 				case <-time.After(3 * time.Second):
-					return protocolFailure()
+					return protocolFailure("Claude's output ended but the process did not exit")
 				}
 			}
 			f := item.frame
 			if f.SessionID != "" && f.SessionID != session {
-				return protocolFailure()
+				return protocolFailure("a frame belongs to another session")
 			}
 			if f.ParentToolID != nil && *f.ParentToolID != "" {
 				continue
 			}
 			if len(f.UserIDs) > 1024 || len(f.Response.Response.Cancelled) > 1024 || len(f.Response.Response.Queued) > 1024 {
-				return protocolFailure()
+				return protocolFailure("a " + f.Type + " frame exceeds its identity bounds")
 			}
 			if state.retiredFrame(f) || f.IsReplay && f.Type != "user" {
 				continue
@@ -239,7 +254,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 						return fail(fmt.Errorf("Claude headless requires Claude Code 2.1.299 or later"))
 					}
 					if f.Response.Response.State == "" {
-						return protocolFailure()
+						return protocolFailure("initialization reported no session state")
 					}
 					state.initialized = true
 					state.nativeBusy = f.Response.Response.State != "idle"
@@ -260,27 +275,27 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 					emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeStatus, Readiness: "blocked", ReasonCode: "interaction_required"})
 				}
 				if _, err := writeHeadlessFrame(writer, map[string]any{"type": "control_response", "response": response}); err != nil {
-					return protocolFailure()
+					return protocolFailure("could not answer a control request: " + err.Error())
 				}
 			case "system":
 				if f.Subtype == "init" {
 					if !supportedHeadlessCapabilities(f.Capabilities) {
-						return protocolFailure()
+						return protocolFailure("Claude lacks a required headless capability")
 					}
 					state.cancelQueued = true
 				}
 				if f.Subtype == "status" && f.Status == "requesting" {
 					if !state.cancelQueued {
-						return protocolFailure()
+						return protocolFailure("Claude requested work before initialization")
 					}
 					startWork()
 				}
 			case "command_lifecycle":
 				if f.State == "queued" {
-					state.confirm(f.CommandUUID)
+					confirm(f.CommandUUID)
 				}
 				if f.State == "started" {
-					state.confirm(f.CommandUUID)
+					confirm(f.CommandUUID)
 					if d := state.work[f.CommandUUID]; d != nil {
 						d.started = true
 					}
@@ -305,13 +320,13 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 				}
 			case "user":
 				if f.IsReplay {
-					state.confirm(f.UUID)
+					confirm(f.UUID)
 				} else if err := display.frame(f); err != nil {
-					return protocolFailure()
+					contentFault(f.Type, err)
 				}
 			case "stream_event", "assistant":
 				if !state.cancelQueued && (f.Type != "assistant" || f.Error == "") {
-					return protocolFailure()
+					return protocolFailure("Claude streamed a reply before initialization")
 				}
 				for _, id := range f.UserIDs {
 					state.confirm(id)
@@ -326,7 +341,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 					startWork()
 				}
 				if err := display.frame(f); err != nil {
-					return protocolFailure()
+					contentFault(f.Type, err)
 				}
 			case "result":
 				matched, failed := state.result(f)

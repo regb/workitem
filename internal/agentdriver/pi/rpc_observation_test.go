@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
 )
 
@@ -72,5 +73,37 @@ func TestHeadlessNativeObservationUsesExistingRelayAndPreservesReservations(t *t
 	case <-delivered:
 		t.Fatal("invalid private status reached the event relay")
 	default:
+	}
+}
+
+// Readers fetch history at the branch tip the live content reports. Pi's
+// idle report can arrive while work the host submitted is still held
+// active; the tip must still advance, and the finished reply stays shown.
+func TestNativeObservationKeepsTheContentBranchCurrent(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	content := &driverprotocol.ContentServer{}
+	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "owner", WorkItemID: "item"}, content: content, liveContext: ctx, liveNonce: "nonce", liveQueue: make(chan queuedLiveEvent, 8), work: map[string]bool{"submitted": false}}
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case queued := <-transport.liveQueue:
+				if queued.ack != nil {
+					close(queued.ack)
+				}
+			}
+		}
+	}()
+	content.StartMessage()
+	content.Update("message.delta", "Updated rules_python.", "")
+	raw, _ := json.Marshal(map[string]any{"type": "wi_runtime_status", "runtime_id": "owner", "work_item_id": "item", "agent_state": "idle", "readiness": "ready", "leaf_id": "093285ce"})
+	if err := transport.handleOutput(raw); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := content.Snapshot()
+	if snapshot.LeafID != "093285ce" || snapshot.Text != "Updated rules_python." {
+		t.Fatalf("branch or reply lost: %+v", snapshot)
 	}
 }

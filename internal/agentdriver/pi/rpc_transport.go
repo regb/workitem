@@ -49,18 +49,24 @@ type nativeRPCTransport struct {
 	pending             map[string]agent.ControlCommand
 	handled             map[string]bool
 	lastAssistantFailed bool
-	busy                bool
-	work                map[string]bool // Submitted work, with true marking settlement before its response.
-	responses           map[string]func(error)
-	shutdownPending     bool
-	ready               bool
-	stopping            bool
-	currentRequestID    string
-	liveQueue           chan queuedLiveEvent
-	liveContext         context.Context
-	liveNonce           string
-	liveSequence        uint64
-	liveDisabled        atomic.Bool
+	// unsaved are messages whose session entries are not yet known; Pi appends
+	// an entry after dispatching its message_end.
+	unsaved []unsavedMessage
+	// prompts are submitted prompts with a request ID, oldest first, waiting
+	// for the user message that carries them.
+	prompts          []submittedPrompt
+	busy             bool
+	work             map[string]bool // Submitted work, with true marking settlement before its response.
+	responses        map[string]func(error)
+	shutdownPending  bool
+	ready            bool
+	stopping         bool
+	currentRequestID string
+	liveQueue        chan queuedLiveEvent
+	liveContext      context.Context
+	liveNonce        string
+	liveSequence     uint64
+	liveDisabled     atomic.Bool
 }
 
 func runNativeRPC(ctx context.Context, path string, args, env []string, spec ExecSpec) error {
@@ -253,12 +259,18 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 				break
 			}
 		}
-		if state != "active" && t.content != nil {
-			activity := "Idle"
-			if state == "failed" {
+		// Readers follow the branch tip whatever the run state; a run still
+		// held active for submitted work keeps its activity. The reply shown
+		// stays until history has it.
+		if t.content != nil {
+			activity := ""
+			switch state {
+			case "idle":
+				activity = "Idle"
+			case "failed":
 				activity = "Selected branch ended with failure"
 			}
-			t.content.PublishTranscript(output.LeafID, "", activity, nil)
+			t.content.SetBranch(output.LeafID, activity)
 		}
 		return t.emit(agent.RuntimeEvent{Type: agent.EventRuntimeStatus, AgentState: state, LeafID: output.LeafID, Readiness: readiness, Backend: "pi"})
 	}
@@ -331,6 +343,7 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 		if !output.Success {
 			event.Type = agent.EventCommandRejected
 			event.Error = output.Error
+			t.forgetPrompt(command.RequestID)
 		}
 		if err := t.emit(event); err != nil {
 			return err
@@ -357,6 +370,7 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 			}
 		}
 	}
+	t.resolveSaved()
 	if output.Type == "message_start" {
 		if requestID := requestMarkerFromNativeEvent(raw); requestID != "" {
 			t.currentRequestID = requestID
@@ -364,10 +378,22 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 	}
 	event := t.nativeEvent(normalizedPiEventType(output.Type), output.Type, raw, t.currentRequestID)
 	populateNormalizedPiEvent(&event, raw)
+	if thought := thinkingDelta(event); thought != "" {
+		t.content.Thought(thought)
+	} else if updateKind(event) == "thinking_start" {
+		// Models that keep their reasoning private still say they are thinking.
+		t.content.SetActivity("Thinking")
+	}
 	if (output.Type == "message_end" || output.Type == "turn_end") && event.Role == "assistant" {
 		message, _ := event.Data["message"].(map[string]any)
 		reason, _ := message["stopReason"].(string)
 		t.lastAssistantFailed = reason == "error" || reason == "aborted"
+		if timestamp, ok := message["timestamp"].(float64); ok && output.Type == "message_end" && event.Text != "" {
+			t.unsaved = append(t.unsaved, unsavedMessage{role: "assistant", text: event.Text, timestamp: int64(timestamp), since: time.Now()})
+		}
+	}
+	if output.Type == "message_end" && event.Role == "user" {
+		t.matchPrompt(event)
 	}
 	if output.Type == "agent_settled" {
 		event.Failed = t.lastAssistantFailed
@@ -405,7 +431,12 @@ func (t *nativeRPCTransport) emit(event agent.RuntimeEvent) error {
 		output = eventDataText(event.Data, "result")
 	}
 	failed, _ := event.Data["is_error"].(bool)
-	t.content.UpdateTool(event.Type, event.Text, event.ToolCallID, event.ToolName, input, output, failed || event.Error != "")
+	// Only assistant messages are live text; Pi also starts and ends messages
+	// for prompts and tool results, which must not reset the reply or its
+	// parallel tool calls.
+	if !(event.Type == agent.EventMessageCompleted || event.Type == "message.started") || event.Role == "assistant" {
+		t.content.UpdateTool(event.Type, event.Text, event.ToolCallID, event.ToolName, input, output, failed || event.Error != "")
+	}
 	t.emitLiveConfirmed(event)
 	return nil
 }
@@ -591,6 +622,12 @@ func (t *nativeRPCTransport) sendCommand(command agent.ControlCommand) error {
 		delete(t.handled, command.ID)
 		return err
 	}
+	if isWork && command.RequestID != "" {
+		t.prompts = append(t.prompts, submittedPrompt{requestID: command.RequestID, text: strings.TrimSpace(command.Message)})
+		if len(t.prompts) > 16 {
+			t.prompts = t.prompts[1:]
+		}
+	}
 	if command.Type == agent.CommandShutdown {
 		t.shutdownPending = true
 	}
@@ -743,4 +780,93 @@ func isExpectedProcessExit(err error) bool {
 	}
 	var exitErr *exec.ExitError
 	return errors.As(err, &exitErr) && exitErr.ExitCode() == 0
+}
+
+type unsavedMessage struct {
+	role, text, requestID string
+	timestamp             int64
+	since                 time.Time
+}
+
+// unsavedPatience bounds how long a message's session entry is looked for;
+// Pi may create the session file only after the first reply.
+const unsavedPatience = time.Minute
+
+// forgetPrompt drops a prompt Pi refused, so a later prompt of the same text
+// is not paired with it.
+func (t *nativeRPCTransport) forgetPrompt(requestID string) {
+	for i, prompt := range t.prompts {
+		if requestID != "" && prompt.requestID == requestID {
+			t.prompts = append(t.prompts[:i:i], t.prompts[i+1:]...)
+			return
+		}
+	}
+}
+
+type submittedPrompt struct {
+	requestID, text string
+}
+
+// matchPrompt pairs a saved user message with the oldest submitted prompt of
+// the same text, so its sender can be told which entry holds it.
+func (t *nativeRPCTransport) matchPrompt(event agent.RuntimeEvent) {
+	message, _ := event.Data["message"].(map[string]any)
+	timestamp, ok := message["timestamp"].(float64)
+	if !ok {
+		return
+	}
+	text := strings.TrimSpace(event.Text)
+	for i, prompt := range t.prompts {
+		if prompt.text == text {
+			t.prompts = append(t.prompts[:i:i], t.prompts[i+1:]...)
+			t.unsaved = append(t.unsaved, unsavedMessage{role: "user", requestID: prompt.requestID, timestamp: int64(timestamp), since: time.Now()})
+			return
+		}
+	}
+}
+
+// resolveSaved finds the session entries of recent messages, which Pi has
+// appended by the time it sends its next event, and reports them: an
+// assistant message so readers can match its live text with history, a
+// prompt so its sender can.
+func (t *nativeRPCTransport) resolveSaved() {
+	if len(t.unsaved) == 0 {
+		return
+	}
+	if t.content == nil || t.spec.SessionPath == "" {
+		t.unsaved = nil
+		return
+	}
+	remaining := t.unsaved[:0]
+	for _, pending := range t.unsaved {
+		if id, found := sessionEntryID(t.spec.SessionPath, pending.role, pending.timestamp); found {
+			if pending.role == "user" {
+				t.content.PromptSaved(pending.requestID, []string{id})
+			} else {
+				t.content.MarkSaved(pending.text, []string{id})
+			}
+			continue
+		}
+		if time.Since(pending.since) < unsavedPatience {
+			remaining = append(remaining, pending)
+		}
+	}
+	t.unsaved = remaining
+}
+
+// updateKind names a message update's native type, such as text_delta.
+func updateKind(event agent.RuntimeEvent) string {
+	update, _ := event.Data["assistant_message_event"].(map[string]any)
+	kind, _ := update["type"].(string)
+	return kind
+}
+
+// thinkingDelta returns the reasoning a message update adds, if any.
+func thinkingDelta(event agent.RuntimeEvent) string {
+	if updateKind(event) != "thinking_delta" {
+		return ""
+	}
+	update, _ := event.Data["assistant_message_event"].(map[string]any)
+	delta, _ := update["delta"].(string)
+	return delta
 }

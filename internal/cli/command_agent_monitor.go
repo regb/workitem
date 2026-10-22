@@ -24,8 +24,9 @@ func runAgentMonitor(ctx context.Context, args []string, cfg Config, jsonOut boo
 	fs := newFlagSet("agent monitor", cfg.Stderr)
 	var item string
 	var limit int
-	var follow bool
+	var follow, content bool
 	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
+	fs.BoolVar(&content, "content", false, "follow live content: message text, tool calls and activity")
 	fs.IntVar(&limit, "limit", 50, "show the latest N runtime events; zero means all")
 	fs.BoolVar(&follow, "follow", false, "continue streaming new runtime events")
 	if err := fs.Parse(args); err != nil {
@@ -42,6 +43,9 @@ func runAgentMonitor(ctx context.Context, args []string, cfg Config, jsonOut boo
 	manifest, err := cfg.App.ResolveItem(ctx, resolve)
 	if err != nil {
 		return err
+	}
+	if content {
+		return runContentMonitor(ctx, cfg, resolve, manifest.ID, jsonOut)
 	}
 	return runCoordinatorAgentMonitor(ctx, cfg, manifest.ID, limit, follow, jsonOut)
 }

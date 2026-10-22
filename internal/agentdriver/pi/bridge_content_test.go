@@ -76,7 +76,7 @@ value=await exchange(process.env.WI_AGENT_CONTROL_SOCKET,{...request,id:'queued-
 assert.deepEqual(sent.at(-1),{content:[{type:'text',text:'inspect this'},{type:'image',mimeType:'image/jpeg',data:'YWJj'}],options:{deliverAs:'followUp'}});
 value=await exchange(process.env.WI_AGENT_CONTROL_SOCKET,{...request,id:'shutdown-test',type:'shutdown',require_idle:true});assert.equal(value.accepted,false);assert.equal(shutDown,false);
 callbacks.get('message_end')({message:{role:'assistant',content:[{type:'text',text:'saved answer'}],stopReason:'stop'}},ctx);
-value=await exchange(path,request);assert.equal(value.text,'');
+value=await exchange(path,request);assert.equal(value.activity,'Message saved');
 leaf='other-leaf';callbacks.get('session_tree')({oldLeafId:'branch-leaf',newLeafId:leaf},ctx);value=await exchange(path,request);assert.equal(value.leaf_id,leaf);
 callbacks.get('session_shutdown')({},ctx);
 await new Promise(resolve=>setTimeout(resolve,60));relay.close();process.exit(0);

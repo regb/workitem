@@ -161,3 +161,9 @@ func (s *displayStream) PublishTranscript(leaf, text, activity string, tool *pro
 	}
 	s.publish()
 }
+
+// MarkSaved passes a saved record to the content server, which links it only
+// while the shown text is that record's text.
+func (s *displayStream) MarkSaved(text string, nativeIDs []string) {
+	s.server.MarkSaved(text, nativeIDs)
+}

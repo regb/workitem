@@ -118,7 +118,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | --- | --- |
 | `wi agent runtime status\|ensure\|stop` | Manage the exclusive runtime owner |
 | `wi agent status` | Inspect derived agent and worktree observations |
-| `wi agent monitor` | Read normalized runtime events |
+| `wi agent monitor` | Read normalized runtime events; `--content` follows live message text, tool calls and activity |
 | `wi agent control send` | Send steering or follow-up text and optional repeatable `--image` attachments |
 | `wi agent control abort` | Abort the current agent run |
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
+	"github.com/regb/workitem/internal/model"
 )
 
 type historyBackend interface {
@@ -51,27 +52,50 @@ func (a *App) conversationHistory(ctx context.Context, opts ResolveOptions, leaf
 	return backend.History(ctx, path, leaf)
 }
 
-// AgentContent reads a bounded snapshot from the verified current owner.
-func (a *App) AgentContent(ctx context.Context, opts ResolveOptions) (driverprotocol.Content, error) {
+// contentOwner returns the item and its verified live runtime, whose content
+// socket may be read.
+func (a *App) contentOwner(ctx context.Context, opts ResolveOptions) (string, *model.AgentRuntime, error) {
 	m, err := a.ResolveItem(ctx, opts)
 	if err != nil {
-		return driverprotocol.Content{}, err
+		return "", nil, err
 	}
 	r, err := a.Store.LoadAgentRuntime(m.ID)
 	if err != nil {
-		return driverprotocol.Content{}, err
+		return "", nil, err
 	}
 	if !a.primaryAgentService().ObserveOwnership(r).ControlAvailable {
-		return driverprotocol.Content{}, fmt.Errorf("no verified live runtime content endpoint")
+		return "", nil, fmt.Errorf("no verified live runtime content endpoint")
 	}
 	if !r.Capabilities.LiveContent {
-		return driverprotocol.Content{}, fmt.Errorf("agent driver does not provide live content; an existing owner may need an explicit restart after settling")
+		return "", nil, fmt.Errorf("agent driver does not provide live content; an existing owner may need an explicit restart after settling")
 	}
-	value, err := driverprotocol.ReadContent(ctx, driverprotocol.ContentSocketPath(a.runtimeControlSocketPath(m.ID, r)), r.ID, m.ID)
+	return m.ID, r, nil
+}
+
+// AgentContentStream follows the verified current owner's content: a snapshot
+// event, then every later event, each passed to apply. It returns when the
+// stream ends, for example because the runtime stopped; callers subscribe
+// again to follow its successor. driverprotocol.ErrContentStreamUnsupported
+// means the runtime only answers snapshot reads.
+func (a *App) AgentContentStream(ctx context.Context, opts ResolveOptions, apply func(driverprotocol.ContentEvent) error) error {
+	id, r, err := a.contentOwner(ctx, opts)
+	if err != nil {
+		return err
+	}
+	return driverprotocol.SubscribeContent(ctx, driverprotocol.ContentSocketPath(a.runtimeControlSocketPath(id, r)), r.ID, id, apply)
+}
+
+// AgentContent reads a bounded snapshot from the verified current owner.
+func (a *App) AgentContent(ctx context.Context, opts ResolveOptions) (driverprotocol.Content, error) {
+	id, r, err := a.contentOwner(ctx, opts)
+	if err != nil {
+		return driverprotocol.Content{}, err
+	}
+	value, err := driverprotocol.ReadContent(ctx, driverprotocol.ContentSocketPath(a.runtimeControlSocketPath(id, r)), r.ID, id)
 	if err != nil {
 		return driverprotocol.Content{}, fmt.Errorf("live content unavailable, existing drivers may need an explicit restart after settling: %w", err)
 	}
-	current, err := a.Store.LoadAgentRuntime(m.ID)
+	current, err := a.Store.LoadAgentRuntime(id)
 	if err != nil {
 		return driverprotocol.Content{}, err
 	}

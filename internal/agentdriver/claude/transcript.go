@@ -21,6 +21,7 @@ type transcriptFeed struct {
 	info                   os.FileInfo
 	pending                []byte
 	leaf, text, activity   string
+	textID                 string
 	tool                   *protocol.ContentTool
 }
 
@@ -104,6 +105,7 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 			content(record.Message.Content, &message, &truncated)
 			if record.Type == "assistant" {
 				f.text = message.Text
+				f.textID = record.ID
 				f.textPromptID = f.promptID
 				f.textAt, _ = time.Parse(time.RFC3339Nano, record.Timestamp)
 				f.activity = "Message saved"
@@ -154,6 +156,11 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 			publisher.PublishPromptTranscript(f.leaf, f.text, f.activity, f.tool, f.textPromptID, f.textAt)
 		} else {
 			server.PublishTranscript(f.leaf, f.text, f.activity, f.tool)
+		}
+		// Link the shown text to its record; the server ignores it unless that
+		// text is what readers currently see.
+		if saver, ok := server.(interface{ MarkSaved(string, []string) }); ok && f.text != "" && f.textID != "" {
+			saver.MarkSaved(f.text, []string{f.textID})
 		}
 	}
 	if len(f.pending) > 16<<20 {

@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -48,6 +50,7 @@ type headlessFrame struct {
 	Response struct {
 		Subtype   string `json:"subtype"`
 		RequestID string `json:"request_id"`
+		Error     string `json:"error"`
 		Response  struct {
 			Version   string   `json:"claude_code_version"`
 			State     string   `json:"session_state"`
@@ -83,10 +86,13 @@ func readHeadlessFrames(ctx context.Context, r io.Reader, out chan<- headlessRea
 		}
 	}
 	for scanner.Scan() {
-		var f headlessFrame
-		if json.Unmarshal(scanner.Bytes(), &f) != nil || f.Type == "" {
+		f, dropped, err := decodeHeadlessFrame(scanner.Bytes())
+		if err != nil || f.Type == "" {
 			send(headlessRead{err: errors.New("invalid Claude protocol frame")})
 			return
+		}
+		if len(dropped) > 0 {
+			fmt.Fprintf(os.Stderr, "Claude %s frame fields in an unexpected shape were ignored: %s\n", f.Type, strings.Join(dropped, ", "))
 		}
 		if !send(headlessRead{frame: f}) {
 			return
@@ -149,4 +155,33 @@ func supportedHeadlessVersion(version string) bool {
 		return false
 	}
 	return major > 2 || major == 2 && (minor > 1 || minor == 1 && patch >= 299)
+}
+
+// decodeHeadlessFrame decodes one frame. A newer Claude may change the shape
+// of a field; rather than lose the session, fields that no longer decode are
+// left out and named, and the rest of the frame is kept. Only a line that is
+// not a JSON object fails.
+func decodeHeadlessFrame(line []byte) (headlessFrame, []string, error) {
+	var f headlessFrame
+	if json.Unmarshal(line, &f) == nil {
+		return f, nil, nil
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(line, &fields); err != nil {
+		return headlessFrame{}, nil, err
+	}
+	dropped := []string{}
+	for key, value := range fields {
+		var probe headlessFrame
+		single, _ := json.Marshal(map[string]json.RawMessage{key: value})
+		if json.Unmarshal(single, &probe) != nil {
+			delete(fields, key)
+			dropped = append(dropped, key)
+		}
+	}
+	sort.Strings(dropped)
+	kept, _ := json.Marshal(fields)
+	f = headlessFrame{}
+	err := json.Unmarshal(kept, &f)
+	return f, dropped, err
 }

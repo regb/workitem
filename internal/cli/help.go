@@ -617,14 +617,19 @@ var helpDocs = map[string]helpDoc{
 		},
 	},
 	"agent monitor": {
-		Summary:     "Read compact runtime events",
-		Usage:       []string{"wi agent monitor [--item <selector>] [--limit <n>] [--follow] [item]"},
-		Description: []string{"Shows the compact lifecycle, message, command, and tool events retained by the daemon."},
+		Summary: "Read compact runtime events, or follow live content",
+		Usage:   []string{"wi agent monitor [--item <selector>] [--limit <n>] [--follow] [item]", "wi agent monitor --content [--item <selector>] [item]"},
+		Description: []string{
+			"Shows the compact lifecycle, message, command, and tool events retained by the daemon.",
+			"--content instead follows the running agent's live content as it happens: message text as it streams, reasoning the agent shares, tool calls, activity, and which history entries a finished message was saved as. Nothing of it is retained. It waits while no agent runs and follows the next one; interrupt it to stop. With --json it prints one compact event per line.",
+		},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
 			{"--limit <n>", "Show the latest N events; zero means all."},
 			{"--follow", "Continue streaming new normalized events."},
+			{"--content", "Follow live content instead of compact events."},
 		},
+		Examples: []string{`wi agent monitor --follow`, `wi agent monitor --content --item auth`},
 	},
 }
 

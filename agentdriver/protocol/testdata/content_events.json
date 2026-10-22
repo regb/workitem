@@ -1,0 +1,667 @@
+{
+  "events": [
+    {
+      "sequence": 1,
+      "type": "snapshot",
+      "snapshot": {
+        "protocol_version": 1,
+        "runtime_id": "runtime",
+        "work_item_id": "item",
+        "sequence": 1,
+        "idle_guard": false,
+        "text": "",
+        "activity": "Idle",
+        "leaf_id": "leaf-1"
+      }
+    },
+    {
+      "sequence": 2,
+      "type": "message.started",
+      "message_id": "live-2",
+      "activity": "Assistant responding"
+    },
+    {
+      "sequence": 3,
+      "type": "message.delta",
+      "message_id": "live-2",
+      "text": "Hel",
+      "activity": "Assistant responding"
+    },
+    {
+      "sequence": 4,
+      "type": "message.delta",
+      "message_id": "live-2",
+      "text": "lo 🌍"
+    },
+    {
+      "sequence": 5,
+      "type": "tool.started",
+      "tool": {
+        "id": "t1",
+        "name": "bash",
+        "status": "running",
+        "input": "{\"command\":\"ls\"}"
+      },
+      "activity": "Tool running: bash"
+    },
+    {
+      "sequence": 6,
+      "type": "thought.delta",
+      "text": "Checking the files"
+    },
+    {
+      "sequence": 7,
+      "type": "tool.started",
+      "tool": {
+        "id": "t0",
+        "name": "read",
+        "status": "running"
+      }
+    },
+    {
+      "sequence": 8,
+      "type": "tool.updated",
+      "tool": {
+        "id": "t1",
+        "name": "bash",
+        "status": "running",
+        "input": "{\"command\":\"ls\"}",
+        "output": "a"
+      }
+    },
+    {
+      "sequence": 9,
+      "type": "tool.completed",
+      "tool": {
+        "id": "t1",
+        "name": "bash",
+        "status": "failed",
+        "input": "{\"command\":\"ls\"}",
+        "output": "a\nb"
+      },
+      "activity": "Tool failed: bash"
+    },
+    {
+      "sequence": 10,
+      "type": "message.replaced",
+      "text": "Rewritten",
+      "truncated": true
+    },
+    {
+      "sequence": 11,
+      "type": "tool.cleared"
+    },
+    {
+      "sequence": 12,
+      "type": "activity",
+      "leaf_id": "leaf-2"
+    },
+    {
+      "sequence": 13,
+      "type": "message.completed",
+      "activity": "Message saved"
+    },
+    {
+      "sequence": 14,
+      "type": "message.saved",
+      "native_ids": [
+        "entry-1",
+        "entry-2"
+      ]
+    },
+    {
+      "sequence": 15,
+      "type": "prompt.saved",
+      "native_ids": [
+        "user-1"
+      ],
+      "request_id": "web-1"
+    },
+    {
+      "sequence": 16,
+      "type": "prompt.saved",
+      "native_ids": [
+        "user-2"
+      ],
+      "request_id": "web-2"
+    },
+    {
+      "sequence": 17,
+      "type": "prompt.saved",
+      "native_ids": [
+        "user-1b"
+      ],
+      "request_id": "web-1"
+    },
+    {
+      "sequence": 18,
+      "type": "turn.settled",
+      "activity": "Idle"
+    },
+    {
+      "sequence": 19,
+      "type": "message.started",
+      "message_id": "live-19"
+    },
+    {
+      "sequence": 20,
+      "type": "message.delta",
+      "text": "partial"
+    },
+    {
+      "sequence": 21,
+      "type": "message.saved",
+      "native_ids": [
+        "entry-3"
+      ]
+    },
+    {
+      "sequence": 22,
+      "type": "message.delta",
+      "text": " more"
+    }
+  ],
+  "snapshots": [
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 1,
+      "idle_guard": false,
+      "text": "",
+      "activity": "Idle",
+      "leaf_id": "leaf-1"
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 2,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "",
+      "activity": "Assistant responding",
+      "leaf_id": "leaf-1"
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 3,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Hel",
+      "activity": "Assistant responding",
+      "leaf_id": "leaf-1"
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 4,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Hello 🌍",
+      "activity": "Assistant responding",
+      "leaf_id": "leaf-1"
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 5,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Hello 🌍",
+      "activity": "Tool running: bash",
+      "leaf_id": "leaf-1",
+      "tool": {
+        "id": "t1",
+        "name": "bash",
+        "status": "running",
+        "input": "{\"command\":\"ls\"}"
+      },
+      "tools": [
+        {
+          "id": "t1",
+          "name": "bash",
+          "status": "running",
+          "input": "{\"command\":\"ls\"}"
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 6,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Hello 🌍",
+      "activity": "Tool running: bash",
+      "leaf_id": "leaf-1",
+      "thought": "Checking the files",
+      "tool": {
+        "id": "t1",
+        "name": "bash",
+        "status": "running",
+        "input": "{\"command\":\"ls\"}"
+      },
+      "tools": [
+        {
+          "id": "t1",
+          "name": "bash",
+          "status": "running",
+          "input": "{\"command\":\"ls\"}"
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 7,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Hello 🌍",
+      "activity": "Tool running: bash",
+      "leaf_id": "leaf-1",
+      "thought": "Checking the files",
+      "tool": {
+        "id": "t0",
+        "name": "read",
+        "status": "running"
+      },
+      "tools": [
+        {
+          "id": "t1",
+          "name": "bash",
+          "status": "running",
+          "input": "{\"command\":\"ls\"}"
+        },
+        {
+          "id": "t0",
+          "name": "read",
+          "status": "running"
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 8,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Hello 🌍",
+      "activity": "Tool running: bash",
+      "leaf_id": "leaf-1",
+      "thought": "Checking the files",
+      "tool": {
+        "id": "t1",
+        "name": "bash",
+        "status": "running",
+        "input": "{\"command\":\"ls\"}",
+        "output": "a"
+      },
+      "tools": [
+        {
+          "id": "t1",
+          "name": "bash",
+          "status": "running",
+          "input": "{\"command\":\"ls\"}",
+          "output": "a"
+        },
+        {
+          "id": "t0",
+          "name": "read",
+          "status": "running"
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 9,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Hello 🌍",
+      "activity": "Tool failed: bash",
+      "leaf_id": "leaf-1",
+      "thought": "Checking the files",
+      "tool": {
+        "id": "t1",
+        "name": "bash",
+        "status": "failed",
+        "input": "{\"command\":\"ls\"}",
+        "output": "a\nb"
+      },
+      "tools": [
+        {
+          "id": "t1",
+          "name": "bash",
+          "status": "failed",
+          "input": "{\"command\":\"ls\"}",
+          "output": "a\nb"
+        },
+        {
+          "id": "t0",
+          "name": "read",
+          "status": "running"
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 10,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Rewritten",
+      "truncated": true,
+      "activity": "Tool failed: bash",
+      "leaf_id": "leaf-1",
+      "thought": "Checking the files",
+      "tool": {
+        "id": "t1",
+        "name": "bash",
+        "status": "failed",
+        "input": "{\"command\":\"ls\"}",
+        "output": "a\nb"
+      },
+      "tools": [
+        {
+          "id": "t1",
+          "name": "bash",
+          "status": "failed",
+          "input": "{\"command\":\"ls\"}",
+          "output": "a\nb"
+        },
+        {
+          "id": "t0",
+          "name": "read",
+          "status": "running"
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 11,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Rewritten",
+      "truncated": true,
+      "activity": "Tool failed: bash",
+      "leaf_id": "leaf-1",
+      "thought": "Checking the files"
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 12,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Rewritten",
+      "truncated": true,
+      "activity": "",
+      "leaf_id": "leaf-2",
+      "thought": "Checking the files"
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 13,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Rewritten",
+      "truncated": true,
+      "activity": "Message saved",
+      "leaf_id": "leaf-2",
+      "thought": "Checking the files"
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 14,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Rewritten",
+      "truncated": true,
+      "activity": "Message saved",
+      "leaf_id": "leaf-2",
+      "saved_as": [
+        "entry-1",
+        "entry-2"
+      ],
+      "thought": "Checking the files"
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 15,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Rewritten",
+      "truncated": true,
+      "activity": "Message saved",
+      "leaf_id": "leaf-2",
+      "saved_as": [
+        "entry-1",
+        "entry-2"
+      ],
+      "thought": "Checking the files",
+      "prompts": [
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 16,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Rewritten",
+      "truncated": true,
+      "activity": "Message saved",
+      "leaf_id": "leaf-2",
+      "saved_as": [
+        "entry-1",
+        "entry-2"
+      ],
+      "thought": "Checking the files",
+      "prompts": [
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1"
+          ]
+        },
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 17,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Rewritten",
+      "truncated": true,
+      "activity": "Message saved",
+      "leaf_id": "leaf-2",
+      "saved_as": [
+        "entry-1",
+        "entry-2"
+      ],
+      "thought": "Checking the files",
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 18,
+      "idle_guard": false,
+      "message_id": "live-2",
+      "text": "Rewritten",
+      "truncated": true,
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "saved_as": [
+        "entry-1",
+        "entry-2"
+      ],
+      "thought": "Checking the files",
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 19,
+      "idle_guard": false,
+      "message_id": "live-19",
+      "text": "",
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 20,
+      "idle_guard": false,
+      "message_id": "live-19",
+      "text": "partial",
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 21,
+      "idle_guard": false,
+      "message_id": "live-19",
+      "text": "partial",
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "saved_as": [
+        "entry-3"
+      ],
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 1,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 22,
+      "idle_guard": false,
+      "message_id": "live-19",
+      "text": "partial more",
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    }
+  ]
+}
