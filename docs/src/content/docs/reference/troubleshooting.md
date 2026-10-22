@@ -133,7 +133,7 @@ wi terminal status ITEM
 wi workspace status ITEM
 ```
 
-Review and commit, stash, or otherwise resolve worktree changes with Git. Stop an active runtime before shelving. `close --force` may abort a busy runtime, but it does not discard a dirty checkout.
+Review and commit, stash, or otherwise resolve worktree changes with Git. Shelve and close stop an idle agent themselves. `shelve --force` and `close --force` may abort a busy runtime, but it does not discard a dirty checkout.
 
 Do not use `wi state set closed` as a cleanup shortcut. That primitive changes lifecycle only and can leave resources present.
 

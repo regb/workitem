@@ -151,3 +151,51 @@ func TestArchiveTimeoutRetainsShutdownWarningAndLifecycle(t *testing.T) {
 		t.Fatal("timeout applied archive")
 	}
 }
+
+func TestShelveStopsAnIdleAgentBeforeReleasingTheCheckout(t *testing.T) {
+	st := store.New(testutil.ShortTempDir(t))
+	application := newTestApp(st, newFakeGit(t))
+	application.Process = &fakeProcess{alive: map[int]bool{4321: true}}
+	application.ArchiveRuntimeStopTimeout = 20 * time.Millisecond
+	id := testutil.ID(t, 224)
+	application.NewID = func() (string, error) { return id, nil }
+	if _, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Shelve running", CWD: t.TempDir()}); err != nil {
+		t.Fatal(err)
+	}
+	m, err := st.LoadManifest(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.State = model.StateActive
+	if err := st.SaveManifest(context.Background(), m); err != nil {
+		t.Fatal(err)
+	}
+	runtime := model.AgentRuntime{ID: "shelve-owner", WorkItemID: id, Mode: "headless", Capabilities: model.RuntimeCapabilities{IdleGuard: true}, HostPID: 4321, HostProcessGroup: 4321, HostStartTime: 4321}
+	if err := st.SaveAgentRuntime(context.Background(), id, runtime); err != nil {
+		t.Fatal(err)
+	}
+	control, err := agent.ListenControlSocket(filepath.Join(st.ItemDir(id), "agent", "control.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer control.Close()
+	requested := make(chan agent.ControlCommand, 1)
+	go func() {
+		req := <-control.Requests()
+		requested <- req.Command
+		req.Respond(nil)
+	}()
+	// The fake process never exits, so shelving stops at the runtime step and
+	// leaves the item active rather than releasing a checkout under an agent.
+	result, err := application.Shelve(context.Background(), app.ResolveOptions{Selector: id}, false)
+	if err == nil || !strings.Contains(err.Error(), "did not exit") || result.State != model.StateActive {
+		t.Fatalf("shelve outcome %+v %v", result, err)
+	}
+	if command := <-requested; command.Type != agent.CommandShutdown || !command.RequireIdle {
+		t.Fatalf("shelve sent %+v, want an idle-only shutdown", command)
+	}
+	retained, _ := st.LoadManifest(id)
+	if retained.State != model.StateActive {
+		t.Fatal("shelve applied while the agent was still running")
+	}
+}

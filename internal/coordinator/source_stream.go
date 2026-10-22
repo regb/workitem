@@ -39,6 +39,8 @@ type runtimeEventHeader struct {
 	// AgentState is a native current-state observation, not inferred settlement.
 	AgentState string `json:"agent_state,omitempty"`
 	LeafID     string `json:"leaf_id,omitempty"`
+	// ReasonCode says why a settlement failed, such as usage_limit.
+	ReasonCode string `json:"reason_code,omitempty"`
 }
 
 func fileFingerprint(file *os.File, size int64) (string, error) {
@@ -133,6 +135,7 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 			activity.TurnState = "busy"
 		}
 	case agent.EventAgentStarted:
+		activity.FailureReason = ""
 		activity.AgentState = "active"
 		activity.RuntimeState = model.AgentRuntimeRunning
 		activity.TurnState = "busy"
@@ -166,9 +169,11 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 		if event.Outcome == "completed" {
 			activity.AgentState = "settled"
 		}
+		activity.FailureReason = ""
 		if event.Failed || event.Outcome == "failed" {
 			activity.AgentState = "failed"
 			activity.TurnState = "failed"
+			activity.FailureReason = event.ReasonCode
 		}
 		activity.LastCompletedAt = &at
 	case agent.EventMessageCompleted:

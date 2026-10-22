@@ -12,6 +12,11 @@ import (
 	"time"
 )
 
+// headlessDisallowedTools removes tools that wait for an interactive answer.
+// A headless runtime has no channel for replying to an agent's question, so
+// the agent proceeds on its own judgment instead of stalling the turn.
+const headlessDisallowedTools = "AskUserQuestion"
+
 func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(protocol.Ready) error) error {
 	replied := false
 	fail := func(err error) error {
@@ -28,7 +33,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 	defer prepared.close()
 	executable, session, env := prepared.executable, prepared.session, prepared.env
 	control, contentServer := prepared.control, prepared.content
-	args, err := prepared.args("--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--replay-user-messages", "--permission-prompts", "none")
+	args, err := prepared.args("--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--replay-user-messages", "--disallowed-tools", headlessDisallowedTools, "--permission-prompts", "none")
 	if err != nil {
 		return fail(err)
 	}

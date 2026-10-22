@@ -224,8 +224,11 @@ func (s *headlessControls) result(f headlessFrame) (bool, bool) {
 	}
 	if f.APIErrorStatus >= 400 {
 		failed, reason = true, "native_api_failed"
-		if f.APIErrorStatus == 401 || f.APIErrorStatus == 403 {
+		switch f.APIErrorStatus {
+		case 401, 403:
 			reason = "native_auth_failed"
+		case 429:
+			reason = "usage_limit"
 		}
 	}
 	if f.NumTurns == 0 && strings.HasPrefix(f.Result, "UserPromptSubmit operation blocked by hook:") {

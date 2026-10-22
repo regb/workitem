@@ -60,6 +60,39 @@ func TestTranscriptFeedMarksTheRecordHoldingTheText(t *testing.T) {
 
 // Claude displays a session recap after a turn settles. It is not a new turn,
 // while late batches of the reply being shown still belong to the settled one.
+func TestDisplaysAfterSettlementAreNotNewTurns(t *testing.T) {
+	display := func(prompt, turn, message string) displayInput {
+		var d displayInput
+		d.PromptID, d.TurnID, d.MessageID = prompt, turn, message
+		return d
+	}
+	turns := &turnTracker{}
+	stream := &displayStream{turns: turns, server: &protocol.ContentServer{}}
+	turns.accept(hookInput{Event: "UserPromptSubmit", PromptID: "p1"})
+	reply := display("p1", "t1", "reply")
+	if outOfTurnDisplay(turns, stream, reply) {
+		t.Fatal("a display during the turn was refused")
+	}
+	if _, err := stream.accept(reply); err != nil {
+		t.Fatal(err)
+	}
+	turns.settled = true
+	if outOfTurnDisplay(turns, stream, reply) {
+		t.Fatal("a late batch of the shown reply was refused")
+	}
+	if !outOfTurnDisplay(turns, stream, display("p1", "t1", "recap")) {
+		t.Fatal("a recap after settlement would start a turn")
+	}
+	// A new prompt starts a new turn, and its displays count again.
+	turns.accept(hookInput{Event: "UserPromptSubmit", PromptID: "p2"})
+	stream.reset()
+	if outOfTurnDisplay(turns, stream, display("p2", "t2", "next")) {
+		t.Fatal("a display after a new prompt was refused")
+	}
+}
+
+// A field in a shape the driver does not expect costs that field, not the
+// session: the rest of the frame is kept and the field is named.
 func TestFramesKeepWhatDecodesWhenAFieldChangesShape(t *testing.T) {
 	f, dropped, err := decodeHeadlessFrame([]byte(`{"type":"system","subtype":"status","status":{"phase":"requesting"},"session_id":"s","uuid":"u"}`))
 	if err != nil || f.Type != "system" || f.Subtype != "status" || f.SessionID != "s" || len(dropped) != 1 || dropped[0] != "status" {

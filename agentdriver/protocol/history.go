@@ -23,6 +23,9 @@ type HistoryMessage struct {
 	Timestamp string         `json:"timestamp,omitempty"`
 	Tools     []HistoryTool  `json:"tools,omitempty"`
 	Images    []HistoryImage `json:"images,omitempty"`
+	// Error marks a reply the agent's harness wrote in place of the model's,
+	// such as a usage limit notice; clients show it as a notice.
+	Error bool `json:"error,omitempty"`
 }
 
 // HistoryTool joins a native tool call and its eventual result so clients can

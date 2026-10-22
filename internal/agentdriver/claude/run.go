@@ -201,6 +201,9 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 	stopping := false
 	readySeen := false
 	turnFailed := false
+	// turnReason says why the turn failed when the transcript says, such as
+	// a usage limit.
+	turnReason := ""
 	turns := &turnTracker{}
 	stream := &displayStream{server: contentServer, turns: turns}
 	feed := &transcriptFeed{factAfter: readiness.started}
@@ -240,9 +243,8 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 				turns.executing = false
 				controls.settled()
 				turnFailed = true
-				reason := ""
-				if fact.StopReason == "prompt_blocked" {
-					reason = "prompt_blocked"
+				reason := settleReason(fact)
+				if reason == "prompt_blocked" {
 					stream.reset()
 				}
 				_ = emitFact(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: true, ReasonCode: reason, CommandID: turns.commandID, RequestID: turns.requestID})
@@ -291,6 +293,10 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 			if request.Command.ProtocolVersion != protocol.RuntimeVersion || request.Command.Type != "display" || h.Event != "MessageDisplay" || h.SessionID != session || filepath.Clean(h.Transcript) != native {
 				err = fmt.Errorf("invalid private display identity")
 			}
+			if err == nil && outOfTurnDisplay(turns, stream, h) {
+				request.Respond(nil)
+				continue
+			}
 			if err == nil {
 				var accepted bool
 				accepted, err = stream.accept(h)
@@ -330,6 +336,8 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 				startExecution := false
 				pending := controls.pending
 				controls.hook(h.Event, h.PromptDigest)
+				asking := controls.asking
+				controls.observeQuestion(h.Event, h.Tool, h.Notification)
 				if h.Event == "UserPromptSubmit" && pending != nil && pending.phase == "confirmed" {
 					turns.commandID = pending.command.ID
 					turns.requestID = pending.command.RequestID
@@ -337,6 +345,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 				switch h.Event {
 				case "UserPromptSubmit":
 					turnFailed = false
+					turnReason = ""
 					stream.reset()
 					contentServer.Update("message.started", "", "")
 				case "PreToolUse":
@@ -362,6 +371,9 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 					for _, fact := range facts {
 						if fact.Timestamp.IsZero() || !fact.Timestamp.Before(turns.started.Truncate(time.Millisecond)) {
 							turnFailed = true
+							if reason := settleReason(fact); reason != "" {
+								turnReason = reason
+							}
 						}
 					}
 					if h.Event == "StopFailure" {
@@ -375,7 +387,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 					// Stop hook. Reconcile again with the settled-turn fence in place.
 					stream.PublishTranscript(feed.leaf, feed.text, feed.activity, feed.tool)
 				}
-				if h.Event == "UserPromptSubmit" || h.Event == "PreToolUse" || h.Event == "SessionEnd" {
+				if (h.Event == "UserPromptSubmit" || h.Event == "PreToolUse" || h.Event == "SessionEnd") && controls.asking == asking {
 					readiness.nextProbe = time.Time{}
 					readiness.tick(ctx, controls, time.Now(), emitFact)
 				}
@@ -390,8 +402,13 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 					if len(h.Tool) > 128 {
 						err = fmt.Errorf("invalid tool name")
 					} else {
-						err = emit(kind, failed, h.Tool)
+						err = emitFact(protocol.RuntimeEvent{Type: kind, Failed: failed, ToolName: h.Tool, ReasonCode: settledReason(kind, failed, turnReason)})
 					}
+				}
+				if controls.asking != asking {
+					// After the tool fact, so the question outlasts the work it pauses.
+					readiness.nextProbe = time.Time{}
+					readiness.tick(ctx, controls, time.Now(), emitFact)
 				}
 			}
 			request.Respond(err)
@@ -406,4 +423,21 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 			return ctx.Err()
 		}
 	}
+}
+
+// settleReason is the reason code a failed transcript fact gives its turn.
+func settleReason(fact protocol.ConversationFact) string {
+	switch fact.StopReason {
+	case "prompt_blocked", "usage_limit":
+		return fact.StopReason
+	}
+	return ""
+}
+
+// settledReason attaches a failed turn's reason to its settlement only.
+func settledReason(kind string, failed bool, reason string) string {
+	if kind != protocol.EventAgentSettled || !failed {
+		return ""
+	}
+	return reason
 }

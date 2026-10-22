@@ -69,3 +69,35 @@ func TestReadinessEventsOnlyChangeAndFailuresStayBlocked(t *testing.T) {
 		t.Fatal(state, code)
 	}
 }
+func TestAQuestionPausesTheTurnForTheOperator(t *testing.T) {
+	now := time.Now()
+	r := &readinessTracker{started: now}
+	s, _, _ := testControls()
+	s.hook("SessionStart", "")
+	s.hook("UserPromptSubmit", "")
+	check := func(want, reason string) {
+		t.Helper()
+		if state, code := r.observe(context.Background(), s, now); state != want || code != reason {
+			t.Fatal(state, code, want, reason)
+		}
+	}
+	steps := []struct{ event, tool, notification, state, reason string }{
+		{"PreToolUse", "AskUserQuestion", "", "waiting_input", "question_pending"},
+		{"PostToolUse", "AskUserQuestion", "", "busy", "active_turn"},
+		{"PreToolUse", "Bash", "", "busy", "active_turn"},
+		{"Notification", "", "permission_prompt", "waiting_input", "permission_pending"},
+		{"Notification", "", "idle_prompt", "waiting_input", "permission_pending"},
+		{"PostToolUseFailure", "Bash", "", "busy", "active_turn"},
+		{"PreToolUse", "ExitPlanMode", "", "waiting_input", "plan_approval_pending"},
+	}
+	for _, step := range steps {
+		s.hook(step.event, "")
+		s.observeQuestion(step.event, step.tool, step.notification)
+		check(step.state, step.reason)
+	}
+	s.hook("Stop", "")
+	s.observeQuestion("Stop", "", "")
+	if s.asking != "" {
+		t.Fatal(s.asking)
+	}
+}

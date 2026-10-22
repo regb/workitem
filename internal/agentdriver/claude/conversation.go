@@ -188,6 +188,7 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 		Sidechain           bool            `json:"isSidechain"`
 		Meta                bool            `json:"isMeta"`
 		APIError            bool            `json:"isApiErrorMessage"`
+		Error               string          `json:"error"`
 		CompactSummary      bool            `json:"isCompactSummary"`
 		Subtype             string          `json:"subtype"`
 		PreventContinuation bool            `json:"preventContinuation"`
@@ -212,6 +213,11 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 		return protocol.ConversationFact{}, true
 	}
 	fact := protocol.ConversationFact{Line: line, Type: "message", Role: record.Type, Timestamp: record.Timestamp, StopReason: record.Message.Stop, Failed: record.APIError}
+	// Claude writes a synthetic reply when the API refuses a turn; a usage
+	// limit waits for its reset rather than for a fix.
+	if record.APIError && record.Error == "rate_limit" {
+		fact.StopReason = "usage_limit"
+	}
 	var content []struct {
 		Type  string `json:"type"`
 		Error bool   `json:"is_error"`

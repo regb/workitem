@@ -499,10 +499,10 @@ var helpDocs = map[string]helpDoc{
 	"shelve": {
 		Summary:     "Return active work to backlog",
 		Usage:       []string{"wi shelve [--item <selector>] [--force] [item]"},
-		Description: []string{"Transitions active -> backlog after inactive terminal/worktree cleanup. Blockers are kept. Active runtimes must be stopped explicitly; dirty or branch-mismatched worktrees remain protected."},
+		Description: []string{"Transitions active -> backlog after stopping an idle agent and cleaning up its terminal and worktree, like close. A busy agent refuses unless --force aborts its turn. Blockers are kept; dirty or branch-mismatched worktrees remain protected."},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
-			{"--force", "Allow the state transition while retaining an unclosable current terminal."},
+			{"--force", "Abort a busy agent, and allow the state transition while retaining an unclosable current terminal."},
 		},
 	},
 	"close": {

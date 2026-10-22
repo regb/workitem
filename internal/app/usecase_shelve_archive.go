@@ -27,7 +27,14 @@ func (a *App) Shelve(ctx context.Context, opts ResolveOptions, force bool) (Stat
 	if prevState != model.StateActive {
 		return StateTransitionResult{}, fmt.Errorf("invalid state transition %s -> %s", prevState, model.StateBacklog)
 	}
+	// Like close, shelving stops an idle agent first; a busy one refuses
+	// unless forced. Check the checkout before touching the runtime.
+	stopWarnings, err := a.prepareArchive(ctx, m, opts, force)
+	if err != nil {
+		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Manifest: m, Warnings: stopWarnings}, err
+	}
 	m, workspaceWarnings, workspaceChanged, err := a.closeWorkspace(ctx, m, force, opts.Env)
+	workspaceWarnings = append(stopWarnings, workspaceWarnings...)
 	if err != nil {
 		return StateTransitionResult{}, err
 	}
@@ -190,7 +197,7 @@ func (a *App) stopRuntimeForArchive(ctx context.Context, m model.Manifest, opts 
 	stopped, err := a.primaryAgentService().Stop(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}, force)
 	warnings := append([]string{}, stopped.Warnings...)
 	if err != nil {
-		return warnings, fmt.Errorf("stop agent runtime before archiving: %w", err)
+		return warnings, fmt.Errorf("stop agent runtime: %w", err)
 	}
 	if stopped.Changed {
 		warnings = append(warnings, "requested agent runtime shutdown")
@@ -205,7 +212,7 @@ func (a *App) stopRuntimeForArchive(ctx context.Context, m model.Manifest, opts 
 			return warnings, err
 		}
 		if !time.Now().Before(deadline) {
-			return warnings, fmt.Errorf("agent runtime %s did not exit within %s; archive was not applied", runtime.ID, timeout)
+			return warnings, fmt.Errorf("agent runtime %s did not exit within %s; the item was not changed", runtime.ID, timeout)
 		}
 		timer := time.NewTimer(50 * time.Millisecond)
 		select {

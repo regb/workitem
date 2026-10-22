@@ -23,6 +23,7 @@ type historyRecord struct {
 	Sidechain      bool            `json:"isSidechain"`
 	Meta           bool            `json:"isMeta"`
 	CompactSummary bool            `json:"isCompactSummary"`
+	APIError       bool            `json:"isApiErrorMessage"`
 	Subtype        string          `json:"subtype"`
 	Summary        json.RawMessage `json:"content"`
 	Message        struct {
@@ -143,7 +144,7 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (protocol.H
 		if len(record.Timestamp) > 128 {
 			return result, fmt.Errorf("invalid Claude history timestamp")
 		}
-		message := protocol.HistoryMessage{ID: record.ID, Role: record.Type, Timestamp: record.Timestamp}
+		message := protocol.HistoryMessage{ID: record.ID, Role: record.Type, Timestamp: record.Timestamp, Error: record.APIError}
 		content(record.Message.Content, &message, &result.Truncated)
 		if record.CompactSummary {
 			message.Role = "summary"

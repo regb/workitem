@@ -21,6 +21,7 @@ type hookInput struct {
 	SessionID    string    `json:"session_id"`
 	Transcript   string    `json:"transcript_path,omitempty"`
 	Tool         string    `json:"tool_name,omitempty"`
+	Notification string    `json:"notification_type,omitempty"`
 	PromptDigest string    `json:"prompt_digest,omitempty"`
 	PromptID     string    `json:"prompt_id,omitempty"`
 	ObservedAt   time.Time `json:"observed_at,omitempty"`
@@ -94,7 +95,7 @@ func hookSettings(self, socket string) (string, func(), error) {
 	cleanup := func() { os.RemoveAll(dir) }
 	hooks := map[string]any{}
 	command := quote(self) + " internal-driver claude hook " + quote(socket)
-	for _, event := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop", "StopFailure", "SessionEnd", "MessageDisplay"} {
+	for _, event := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop", "StopFailure", "SessionEnd", "MessageDisplay", "Notification"} {
 		hooks[event] = []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 5}}}}
 	}
 	data, err := json.Marshal(map[string]any{"hooks": hooks})

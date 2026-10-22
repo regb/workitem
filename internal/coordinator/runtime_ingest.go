@@ -111,7 +111,7 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if err != nil {
 		return RuntimeIngestResult{}, err
 	}
-	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, AgentState: event.AgentState, LeafID: event.LeafID}
+	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, AgentState: event.AgentState, LeafID: event.LeafID, ReasonCode: compactIdentifier(event.ReasonCode, 64)}
 	// A setting change is recorded for its requester but is not agent activity.
 	applied := !driverprotocol.SettingOutcome(event.ReasonCode) && applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
 	updates := []ProjectionUpdate{}
@@ -196,6 +196,9 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 		if activity.AgentState == "failed" {
 			observation.Status = "problem"
 			observation.Reason = "live agent loop settled with a failure"
+			if reason := driverprotocol.RuntimeReasonText(activity.FailureReason); reason != "" {
+				observation.Reason = reason
+			}
 			observation.TurnState = "failed"
 			observation.Activity.LastCompletedAt = &at
 			break
@@ -206,6 +209,9 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 		if event.Failed {
 			observation.Status = "problem"
 			observation.Reason = "live runtime event reports failed or interrupted work"
+			if reason := driverprotocol.RuntimeReasonText(event.ReasonCode); reason != "" {
+				observation.Reason = reason
+			}
 			observation.TurnState = "failed"
 		}
 		observation.Activity.LastCompletedAt = &at
@@ -246,9 +252,15 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 			return
 		}
 		observation.Reason = driverprotocol.RuntimeReasonText(event.ReasonCode)
-		switch event.Readiness {
-		case "blocked", "waiting_input":
+		switch {
+		case inputBlocked(event.Readiness, event.ReasonCode):
 			observation.Status = "problem"
+		case event.Readiness == "waiting_input":
+			// A draft or another TUI screen: someone is at the terminal. A
+			// question asked mid-turn waits for the operator, not for a fix.
+			observation.Status = "idle"
+		}
+		switch event.Readiness {
 		case "starting", "stopping", "awaiting_confirmation":
 			observation.Status = "idle"
 		case "busy":
@@ -271,9 +283,29 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 			observation.Reason = driverprotocol.RuntimeReasonText(event.ReasonCode)
 		}
 	}
-	if activity.AgentState == "active" && activity.RuntimeState != model.AgentRuntimeProblem && !(event.Type == agent.EventRuntimeStatus && (event.Readiness == "blocked" || event.Readiness == "waiting_input")) {
+	if activity.AgentState == "active" && activity.RuntimeState != model.AgentRuntimeProblem && !(event.Type == agent.EventRuntimeStatus && (inputBlocked(event.Readiness, event.ReasonCode) || awaitingAnswer(event.Readiness, event.ReasonCode))) {
 		observation.Status = "busy"
 		observation.Reason = "live agent loop is active"
 		observation.TurnState = "incomplete"
 	}
+}
+
+// inputBlocked reports whether a runtime's input readiness needs the
+// operator. A draft or queued message in a TUI editor, or another screen open
+// over it, means someone is using the terminal, not that the agent is stuck.
+func inputBlocked(readiness, reason string) bool {
+	switch readiness {
+	case "blocked":
+		return true
+	case "waiting_input":
+		return reason != "editor_not_empty" && reason != "editor_not_visible" && !awaitingAnswer(readiness, reason)
+	}
+	return false
+}
+
+// awaitingAnswer reports a turn paused on a question, plan approval or
+// permission prompt. The turn is still open, but only the operator can move
+// it on, so it needs attention rather than showing as work in progress.
+func awaitingAnswer(readiness, reason string) bool {
+	return readiness == "waiting_input" && driverprotocol.AwaitsAnswer(reason)
 }

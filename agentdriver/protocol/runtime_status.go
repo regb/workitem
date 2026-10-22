@@ -17,6 +17,18 @@ func ValidDeliveryState(value string) bool {
 	}
 	return false
 }
+
+// AwaitsAnswer reports a waiting_input reason for a turn paused on a
+// question, plan approval or permission prompt that only the operator can
+// answer.
+func AwaitsAnswer(code string) bool {
+	switch code {
+	case "question_pending", "plan_approval_pending", "permission_pending":
+		return true
+	}
+	return false
+}
+
 func RuntimeReasonText(code string) string {
 	switch code {
 	case "runtime_stopping":
@@ -33,6 +45,8 @@ func RuntimeReasonText(code string) string {
 		return "Interactive approval or user input is unavailable in headless mode"
 	case "native_auth_failed":
 		return "Claude authentication or account access failed; inspect its private runtime output"
+	case "usage_limit":
+		return "Usage limit reached; the turn stopped until it resets"
 	case "native_api_failed":
 		return "Claude's model or API request failed"
 	case "native_turn_interrupted":
@@ -47,6 +61,12 @@ func RuntimeReasonText(code string) string {
 		return "Waiting for Claude SessionStart; inspect its TUI for setup or disabled hooks"
 	case "editor_not_visible":
 		return "Claude chat editor is not visible; inspect its TUI"
+	case "question_pending":
+		return "Claude is waiting for your answer"
+	case "plan_approval_pending":
+		return "Claude is waiting for plan approval"
+	case "permission_pending":
+		return "Claude is waiting for permission"
 	case "editor_not_empty":
 		return "Claude editor contains a draft or dialog; no input sent"
 	case "controls_unavailable":

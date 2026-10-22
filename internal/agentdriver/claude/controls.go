@@ -31,11 +31,14 @@ type tuiControls struct {
 	inputReadyAt          time.Time
 	lastFailureCode       string
 	executionPending      bool
-	pending               *commandDelivery
-	aborting              *commandDelivery
-	queue                 []*commandDelivery
-	seen                  map[string]*commandDelivery
-	emit                  func(string, protocol.ControlCommand, bool)
+	// asking names the dialog in which Claude waits for the user's answer
+	// mid-turn: a question, a plan approval or a permission prompt.
+	asking   string
+	pending  *commandDelivery
+	aborting *commandDelivery
+	queue    []*commandDelivery
+	seen     map[string]*commandDelivery
+	emit     func(string, protocol.ControlCommand, bool)
 }
 
 func (d *commandDelivery) releaseImages() {
@@ -193,6 +196,7 @@ func (s *tuiControls) cancelQueued(reason string) {
 }
 func (s *tuiControls) settled() {
 	s.lastFailureCode = ""
+	s.asking = ""
 	s.ready = s.sessionStarted
 	s.busy = false
 	s.executionPending = false
@@ -275,6 +279,28 @@ func (s *tuiControls) hook(event, digest string) {
 		s.stopping = true
 	}
 }
+
+// observeQuestion tracks whether Claude shows a dialog waiting for the user.
+// PreToolUse precedes the permission check, so a later permission
+// notification for the same tool still applies; any further progress in the
+// turn means the dialog was answered.
+func (s *tuiControls) observeQuestion(event, tool, notification string) {
+	switch event {
+	case "PreToolUse":
+		s.asking = questionTools[tool]
+	case "Notification":
+		if reason := questionNotifications[notification]; reason != "" {
+			s.asking = reason
+		}
+	case "PostToolUse", "PostToolUseFailure", "UserPromptSubmit", "Stop", "StopFailure", "SessionStart", "SessionEnd":
+		s.asking = ""
+	}
+}
+
+var questionTools = map[string]string{"AskUserQuestion": "question_pending", "ExitPlanMode": "plan_approval_pending"}
+
+var questionNotifications = map[string]string{"permission_prompt": "permission_pending", "elicitation_dialog": "question_pending"}
+
 func (s *tuiControls) tick(ctx context.Context, now time.Time) {
 	if s.aborting != nil && now.After(s.aborting.deadline) {
 		d := s.aborting

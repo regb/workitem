@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	protocol "github.com/regb/workitem/agentdriver/protocol"
 )
 
 func TestTitleRequestIsolation(t *testing.T) {
@@ -41,7 +43,7 @@ printf '"Add API retry handling"\n'
 		}
 	}
 	input, _ := os.ReadFile(filepath.Join(dir, "input"))
-	if string(input) != "task text" {
+	if string(input) != protocol.TitleRequest("task text") {
 		t.Fatalf("input %q", input)
 	}
 }

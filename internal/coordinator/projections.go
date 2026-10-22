@@ -31,7 +31,10 @@ type RuntimeActivity struct {
 	// AgentState spans inner turns, retries, and compaction. Settlement records
 	// completion; a native observation may reconcile the selected branch after
 	// tree navigation or reload without fabricating another completion.
-	AgentState      string     `json:"agent_state,omitempty"`
+	AgentState string `json:"agent_state,omitempty"`
+	// FailureReason is the reason code of the last failed settlement, such as
+	// usage_limit, while the agent stays failed.
+	FailureReason   string     `json:"failure_reason,omitempty"`
 	LeafID          string     `json:"leaf_id,omitempty"`
 	TurnState       string     `json:"turn_state,omitempty"`
 	LastEventAt     *time.Time `json:"last_event_at,omitempty"`

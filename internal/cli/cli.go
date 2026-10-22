@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/regb/workitem/internal/agent"
@@ -110,12 +111,16 @@ func Main(ctx context.Context, args []string) int {
 	application.DefaultAgent = cfgFile.DefaultAgent
 	application.AgentsConfig = cfgFile.Agents
 	application.DriversConfig = cfgFile.Drivers
-	var approve plugin.Approver
 	application.Plugins = pluginHost
-	if !jsonOut && inputIsTerminal(os.Stdin) {
-		approve = func(ctx context.Context, request plugin.Approval) (bool, error) {
-			return promptExtensionApproval(os.Stdin, os.Stderr, request)
+	terminalApprovals.Store(!jsonOut && inputIsTerminal(os.Stdin))
+	approve := func(ctx context.Context, request plugin.Approval) (bool, error) {
+		if approve := plugin.ContextApprover(ctx); approve != nil {
+			return approve(ctx, request)
 		}
+		if !terminalApprovals.Load() {
+			return false, nil
+		}
+		return promptExtensionApproval(os.Stdin, os.Stderr, request)
 	}
 	mux := tmux.New("tmux")
 	application.Tmux = mux
@@ -496,6 +501,10 @@ func exitCode(err error) int {
 	}
 	return ExitError
 }
+
+// terminalApprovals allows approval prompts on this process's terminal. A
+// server such as wi web turns it off: nobody answers its terminal.
+var terminalApprovals atomic.Bool
 
 func inputIsTerminal(input *os.File) bool {
 	if input == nil {

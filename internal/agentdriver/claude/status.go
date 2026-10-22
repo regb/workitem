@@ -73,6 +73,9 @@ func (r *readinessTracker) observe(ctx context.Context, s *tuiControls, now time
 	if !s.ready && s.lastFailureCode != "" {
 		return "blocked", s.lastFailureCode
 	}
+	if s.busy && s.asking != "" {
+		return "waiting_input", s.asking
+	}
 	if s.busy {
 		if s.executionPending {
 			return "awaiting_confirmation", "execution_pending"

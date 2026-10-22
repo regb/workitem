@@ -29,7 +29,7 @@ wi agent runtime stop item-slug
 wi agent runtime status item-slug
 ```
 
-Bundled Pi and Claude support both modes. Claude headless requires Claude Code 2.1.299 or later and keeps one persistent process for successive turns. Its private output uses API text deltas; the native TUI still uses line batches. Neither Claude mode offers atomic idle-only controls. Drivers must advertise the requested mode. Force cleanup affects only verified Wi-owned processes.
+Bundled Pi and Claude support both modes. Claude headless requires Claude Code 2.1.299 or later and keeps one persistent process for successive turns. Its private output uses API text deltas; the native TUI still uses line batches. Neither Claude mode offers atomic idle-only controls. Claude headless runs without its `AskUserQuestion` tool: nothing can answer a question there, so the agent decides on its own instead of stalling the turn. In the Claude TUI, a question, plan approval or permission prompt pauses the turn: Wi reports the agent as waiting for your answer, under NEEDS ATTENTION rather than NEEDS FIXING, until you answer it in the terminal. Drivers must advertise the requested mode. Force cleanup affects only verified Wi-owned processes.
 
 ## Channels
 

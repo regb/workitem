@@ -337,9 +337,13 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 	case liveOwnerCurrent && live.RuntimeState == model.AgentRuntimeProblem:
 		observation.Status = "problem"
 		observation.Reason = "live runtime event reports a failure"
-	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && observation.ProcessOnline && (owner.Readiness == "blocked" || owner.Readiness == "waiting_input") && owner.ReadinessObservedAt != nil && (live.LastRequestedAt == nil || !owner.ReadinessObservedAt.Before(*live.LastRequestedAt)) && (live.LastCompletedAt == nil || !owner.ReadinessObservedAt.Before(*live.LastCompletedAt)):
+	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && observation.ProcessOnline && inputBlocked(owner.Readiness, owner.ReadinessReasonCode) && owner.ReadinessObservedAt != nil && (live.LastRequestedAt == nil || !owner.ReadinessObservedAt.Before(*live.LastRequestedAt)) && (live.LastCompletedAt == nil || !owner.ReadinessObservedAt.Before(*live.LastCompletedAt)):
 		observation.Status = "problem"
 		observation.Reason = driverprotocol.RuntimeReasonText(owner.ReadinessReasonCode)
+	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && observation.ProcessOnline && live.AgentState == "active" && awaitingAnswer(owner.Readiness, owner.ReadinessReasonCode) && owner.ReadinessObservedAt != nil && (live.LastRequestedAt == nil || !owner.ReadinessObservedAt.Before(*live.LastRequestedAt)):
+		observation.Status = "idle"
+		observation.Reason = driverprotocol.RuntimeReasonText(owner.ReadinessReasonCode)
+		observation.TurnState = "incomplete"
 	case liveOwnerCurrent && live.Source == "daemon.runtime.live" && live.AgentState == "active" && !observation.ProcessOnline:
 		observation.Status = "problem"
 		observation.Reason = "live agent loop was active but runtime ownership is offline"
@@ -357,6 +361,9 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 	case liveCurrent && live.AgentState == "failed":
 		observation.Status = "problem"
 		observation.Reason = "live agent loop settled with a failure"
+		if reason := driverprotocol.RuntimeReasonText(live.FailureReason); reason != "" {
+			observation.Reason = reason
+		}
 		if live.LeafID != "" {
 			observation.Reason = "native agent reports failure on its selected branch"
 		}
@@ -381,12 +388,23 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 		observation.Reason = "live runtime event reports settled work"
 		observation.TurnState = "idle"
 		observation.LastActivityAt = live.LastEventAt
+	case !conversationFound && ownerFound && startingRuntime(owner, observation.ProcessOnline):
+		// Nothing is written before the first turn; the agent is coming up.
+		observation.Status = "busy"
+		observation.Reason = "agent is starting"
+		observation.TurnState = "incomplete"
+	case !conversationFound && (!ownerFound || owner.State == model.AgentRuntimeStopped):
+		observation.Status = "idle"
+		observation.Reason = "agent has not started; send it a message to start it"
 	case !conversationFound:
 		observation.Status = "problem"
 		observation.Reason = "daemon has not indexed the conversation"
 	case conversation.InferredTurnState == "failed":
 		observation.Status = "problem"
 		observation.Reason = "latest terminal assistant message failed"
+		if last := conversation.LastTerminalAssistant; last != nil && last.StopReason == "usage_limit" {
+			observation.Reason = driverprotocol.RuntimeReasonText(last.StopReason)
+		}
 	case conversation.InferredTurnState == "idle":
 		observation.Status = "idle"
 		observation.Reason = "latest assistant answer is terminal"
@@ -398,6 +416,19 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 		observation.Reason = "latest conversation activity is incomplete and runtime ownership is offline"
 	}
 	return nil
+}
+
+// agentStartGrace bounds how long a runtime may be recorded as starting
+// without its process being seen before it counts as a failed start.
+const agentStartGrace = 30 * time.Second
+
+// startingRuntime reports a runtime that is coming up: its process is seen,
+// or it was recorded moments ago and its host may not run yet.
+func startingRuntime(owner model.AgentRuntime, online bool) bool {
+	if owner.State != model.AgentRuntimeStarting && owner.State != model.AgentRuntimeRunning {
+		return false
+	}
+	return online || time.Since(owner.UpdatedAt) < agentStartGrace
 }
 
 func (o *ExternalObserver) runtimeControlUnavailable(itemID string, owner model.AgentRuntime) bool {

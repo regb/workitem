@@ -19,6 +19,31 @@ type Subject struct {
 }
 type Approval struct{ ItemID, Path, Question string }
 type Approver func(context.Context, Approval) (bool, error)
+
+type approverKey struct{}
+
+// WithApprover answers approvals for work done under ctx, ahead of the
+// process's own approver: a web request asks its browser, never the terminal
+// the server happens to run in.
+func WithApprover(ctx context.Context, approve Approver) context.Context {
+	return context.WithValue(ctx, approverKey{}, approve)
+}
+
+// ContextApprover returns the approver set by WithApprover, or nil.
+func ContextApprover(ctx context.Context) Approver {
+	approve, _ := ctx.Value(approverKey{}).(Approver)
+	return approve
+}
+
+// ApprovalRequired is returned by an approver that cannot ask now, such as
+// a web request whose browser has not answered yet. The caller asks and
+// retries with the answer.
+type ApprovalRequired struct{ Approval Approval }
+
+func (e *ApprovalRequired) Error() string {
+	return fmt.Sprintf("%s %s", e.Approval.Question, e.Approval.Path)
+}
+
 type EnvironmentRequest struct {
 	Subject        Subject
 	Values, Source map[string]string

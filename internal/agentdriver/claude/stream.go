@@ -167,3 +167,12 @@ func (s *displayStream) PublishTranscript(leaf, text, activity string, tool *pro
 func (s *displayStream) MarkSaved(text string, nativeIDs []string) {
 	s.server.MarkSaved(text, nativeIDs)
 }
+
+// outOfTurnDisplay reports a message displayed after the turn settled with no
+// prompt since, such as Claude's session recap. It is neither part of the
+// settled reply nor a new turn: taking it as work would leave the agent busy
+// with no Stop to follow. Late batches of the message already shown remain
+// part of the turn.
+func outOfTurnDisplay(turns *turnTracker, stream *displayStream, h displayInput) bool {
+	return turns.settled && h.MessageID != stream.messageID
+}

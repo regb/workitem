@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 )
 
 func TestTitleGenerationIsToolFreeAndNonPersisted(t *testing.T) {
@@ -32,7 +34,7 @@ func TestTitleGenerationIsToolFreeAndNonPersisted(t *testing.T) {
 			t.Fatalf("missing %s: %s", flag, args)
 		}
 	}
-	if strings.Contains(string(args), "Untrusted") || string(input) != "Untrusted @file --flags task" {
+	if strings.Contains(string(args), "Untrusted") || string(input) != driverprotocol.TitleRequest("Untrusted @file --flags task") {
 		t.Fatal("task interpreted as command-line options instead of stdin")
 	}
 }
