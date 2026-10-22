@@ -141,6 +141,13 @@ type App struct {
 	Leases ControlLeases
 	// Plugins is the common catalog/host for native and executable contributions.
 	Plugins *plugin.Host
+	// ControlOutcomes waits for a driver's verdict on a submitted command;
+	// nil trusts the control socket's handoff acknowledgement.
+	ControlOutcomes ControlOutcomes
+	// runtimeModes caches each agent profile's runtime.modes answer.
+	runtimeModes runtimeModesCache
+	// modelCatalogs caches each agent profile's config.models answer.
+	modelCatalogs catalogCache
 }
 
 func New(st Store, git Git) *App {

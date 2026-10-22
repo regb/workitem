@@ -50,6 +50,12 @@ func (a *App) ValidateItemAgentConfig(ctx context.Context, opts ResolveOptions) 
 // driverConfigJSON applies agent overrides to driver defaults without changing
 // either configured map. Conversation and auxiliary operations use the same merge.
 func (a *App) driverConfigJSON(definition config.AgentDefinitionConfig) (json.RawMessage, error) {
+	return json.Marshal(a.driverConfig(definition, nil))
+}
+
+// driverConfig merges driver defaults, the agent profile, and an item's own
+// agent settings, in that order of precedence.
+func (a *App) driverConfig(definition config.AgentDefinitionConfig, item map[string]string) map[string]any {
 	values := make(map[string]any)
 	for key, value := range a.DriversConfig[definition.Driver].Defaults {
 		values[key] = value
@@ -57,5 +63,8 @@ func (a *App) driverConfigJSON(definition config.AgentDefinitionConfig) (json.Ra
 	for key, value := range definition.Config {
 		values[key] = value
 	}
-	return json.Marshal(values)
+	for key, value := range item {
+		values[key] = value
+	}
+	return values
 }

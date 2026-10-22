@@ -31,6 +31,7 @@ func BindCoordinatorApp(application *app.App, native *storepkg.Store, client *co
 		return app.AttentionActivity{LastRequestedAt: a.LastRequestedAt, LastCompletedAt: a.LastCompletedAt, LastDeferredAt: a.LastDeferredAt, LastReadAt: a.LastReadAt, LastUnreadAt: a.LastUnreadAt}, nil
 	}
 	application.Leases = client
+	application.ControlOutcomes = coordinatorControlOutcomes{client: client}
 }
 
 // coordinatorStore makes the daemon the commit point for every mutation issued

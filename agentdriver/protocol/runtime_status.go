@@ -95,7 +95,24 @@ func RuntimeReasonText(code string) string {
 		return "Command submitted; awaiting native confirmation"
 	case "delivery_failed":
 		return "Terminal delivery failed; inspect the runtime"
+	case ReasonSettingApplied:
+		return "Runtime setting changed"
+	case ReasonSettingRejected:
+		return "Runtime refused a setting change"
 	}
 	return ""
 }
+
+// Reason codes for the outcome of a set command. A setting change is neither
+// agent work nor a runtime failure, so it leaves agent status unchanged.
+const (
+	ReasonSettingApplied  = "setting_applied"
+	ReasonSettingRejected = "setting_rejected"
+)
+
+// SettingOutcome reports whether an event settles a set command.
+func SettingOutcome(reasonCode string) bool {
+	return reasonCode == ReasonSettingApplied || reasonCode == ReasonSettingRejected
+}
+
 func ValidReasonCode(code string) bool { return code == "" || RuntimeReasonText(code) != "" }

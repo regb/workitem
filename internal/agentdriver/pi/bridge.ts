@@ -16,7 +16,8 @@ interface ControlCommand {
   runtime_id: string;
   work_item_id: string;
   request_id?: string;
-  type: "prompt" | "steer" | "follow_up" | "abort" | "shutdown";
+  type: "prompt" | "steer" | "follow_up" | "abort" | "shutdown" | "set";
+  setting?: { name: string; value: string };
   actor?: string;
   message?: string;
   images?: Array<{ mime_type: string; data: string }>;
@@ -518,6 +519,25 @@ export default function wiBridge(pi: ExtensionAPI) {
           context.shutdown();
           accept(command);
           break;
+        case "set": {
+          if (!context) throw new Error("Pi extension context is not ready");
+          const setting = command.setting;
+          if (!setting || typeof setting.name !== "string" || typeof setting.value !== "string") throw new Error("control set requires a setting");
+          if (setting.name === "model") {
+            const slash = setting.value.indexOf("/");
+            if (slash <= 0 || slash === setting.value.length - 1) throw new Error(`Pi model must be provider/model, got ${setting.value}`);
+            const model = context.modelRegistry.find(setting.value.slice(0, slash), setting.value.slice(slash + 1));
+            if (!model) throw new Error(`unknown Pi model ${setting.value}`);
+            if (!(await pi.setModel(model))) throw new Error(`no credentials are configured for ${setting.value}`);
+          } else if (setting.name === "thinking") {
+            if (!["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(setting.value)) throw new Error(`invalid Pi thinking level ${setting.value}`);
+            pi.setThinkingLevel(setting.value as Parameters<typeof pi.setThinkingLevel>[0]);
+          } else {
+            throw new Error(`Pi cannot change ${setting.name} while running`);
+          }
+          accept(command);
+          break;
+        }
         default:
           throw new Error(`unsupported runtime control command ${(command as ControlCommand).type}`);
       }

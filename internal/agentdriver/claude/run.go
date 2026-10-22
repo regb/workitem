@@ -80,6 +80,17 @@ func Run(ctx context.Context) error {
 	if request.Operation == protocol.OperationConfigValidate {
 		return reply(protocol.Response{ProtocolVersion: protocol.Version, ConfigValidation: &protocol.ConfigValidationResult{Valid: true}})
 	}
+	if request.Operation == protocol.OperationConfigModels {
+		catalog, err := ModelCatalog(ctx, config)
+		if err != nil {
+			return fail(err)
+		}
+		return reply(protocol.Response{ProtocolVersion: protocol.Version, ModelCatalog: &catalog})
+	}
+	if request.Operation == protocol.OperationRuntimeModes {
+		modes := RuntimeModes()
+		return reply(protocol.Response{ProtocolVersion: protocol.Version, RuntimeModes: &modes})
+	}
 	if request.Operation != protocol.OperationLaunch {
 		result, err := conversationOperationContext(ctx, request)
 		if err != nil {

@@ -76,6 +76,46 @@ func (c Client) ValidateConfig(ctx context.Context, agent string, config json.Ra
 	return nil
 }
 
+// ModelCatalog lists the models and reasoning levels a profile can use.
+func (c Client) ModelCatalog(ctx context.Context, agent string, config json.RawMessage) (driverprotocol.ModelCatalog, error) {
+	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	env := c.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	response, err := RunOperation(ctx, c.Path, c.Args, driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: c.Driver, Operation: driverprotocol.OperationConfigModels, Agent: agent, Config: config}, env)
+	if err != nil {
+		return driverprotocol.ModelCatalog{}, err
+	}
+	if response.ModelCatalog == nil {
+		return driverprotocol.ModelCatalog{}, fmt.Errorf("driver %q omitted config.models", c.Driver)
+	}
+	return *response.ModelCatalog, nil
+}
+
+// RuntimeModes asks what each runtime mode of a profile offers. It is
+// stateless; drivers that predate the operation return an error.
+func (c Client) RuntimeModes(ctx context.Context, agent string, config json.RawMessage) (driverprotocol.RuntimeModes, error) {
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	env := c.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	response, err := RunOperation(ctx, c.Path, c.Args, driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: c.Driver, Operation: driverprotocol.OperationRuntimeModes, Agent: agent, Config: config}, env)
+	if err != nil {
+		return driverprotocol.RuntimeModes{}, err
+	}
+	if response.RuntimeModes == nil {
+		return driverprotocol.RuntimeModes{}, fmt.Errorf("driver %q omitted runtime.modes", c.Driver)
+	}
+	if err := response.RuntimeModes.Validate(); err != nil {
+		return driverprotocol.RuntimeModes{}, fmt.Errorf("driver %q: %w", c.Driver, err)
+	}
+	return *response.RuntimeModes, nil
+}
+
 func (c Client) ConversationCapabilities(ctx context.Context) (driverprotocol.ConversationCapabilities, error) {
 	response, err := c.request(ctx, driverprotocol.OperationConversationCapabilities, "", nil, driverprotocol.ConversationRequest{})
 	if err != nil {

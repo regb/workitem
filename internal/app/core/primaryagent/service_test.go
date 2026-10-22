@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -104,7 +105,7 @@ func TestRuntimeStatusWarnsForInvalidMode(t *testing.T) {
 	if err != nil || !status.Online || len(status.Warnings) != 1 || !strings.Contains(status.Warnings[0], "invalid agent runtime mode") {
 		t.Fatalf("status=%+v err=%v", status, err)
 	}
-	if status.Capabilities != (agent.Capabilities{}) {
+	if !reflect.DeepEqual(status.Capabilities, agent.Capabilities{}) {
 		t.Fatalf("capabilities=%+v", status.Capabilities)
 	}
 }

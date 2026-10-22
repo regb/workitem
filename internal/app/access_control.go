@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"strings"
 	"time"
 
@@ -71,6 +72,9 @@ type ControlPlan struct {
 	Start             string              `json:"start,omitempty"`
 	NeedsConfirmation bool                `json:"needs_confirmation"`
 	Reasons           []string            `json:"reasons"`
+	// Unavailable explains why the holder cannot get the channel it needs:
+	// no runtime mode of the agent profile offers it. Taking control fails.
+	Unavailable string `json:"unavailable,omitempty"`
 }
 
 type ControlRequest struct {
@@ -195,7 +199,7 @@ func (a *App) AgentBusy(ctx context.Context, itemID string) bool {
 	return err != nil || status.Status == "busy"
 }
 
-func (a *App) planControl(status ControlStatus, request ControlRequest) ControlPlan {
+func (a *App) planControl(status ControlStatus, request ControlRequest, modes driverprotocol.RuntimeModes) ControlPlan {
 	plan := ControlPlan{Holder: request.Holder, Reasons: []string{}}
 	switch {
 	case status.Lease != nil && !status.Lease.SameClient(request.Holder, request.ClientID):
@@ -206,19 +210,28 @@ func (a *App) planControl(status ControlStatus, request ControlRequest) ControlP
 		plan.DisplacesTerminal = true
 		plan.Reasons = append(plan.Reasons, "a terminal is attached to this agent and will become read-only")
 	}
-	mode := agent.ModeHeadless
+	// The web needs structured control, a terminal needs a TUI. Keep a
+	// running runtime that has the channel; otherwise use a mode of the same
+	// profile that offers it, as the driver reports.
 	hasChannel := status.Channels.Control == model.ControlStructured
+	missing := "no runtime mode of this agent accepts structured input; control it from a terminal"
 	if request.Holder == model.LeaseHolderTerminal {
-		mode, hasChannel = agent.ModeTUI, status.Channels.Terminal
+		hasChannel = status.Channels.Terminal
+		missing = "no runtime mode of this agent offers a terminal; control it from the browser"
 	}
+	mode, available := controlMode(modes, request.Holder)
 	switch {
 	case !status.RuntimeOnline:
-		if request.EnsureRuntime {
+		if request.EnsureRuntime && available {
 			plan.Start = string(mode)
+		} else if request.EnsureRuntime {
+			plan.Unavailable = missing
 		}
-	case !hasChannel:
+	case !hasChannel && available:
 		plan.Replace = string(mode)
 		plan.Reasons = append(plan.Reasons, fmt.Sprintf("the %s runtime will restart in %s mode on the same conversation", status.RuntimeMode, mode))
+	case !hasChannel:
+		plan.Unavailable = missing
 	}
 	if status.Busy && (plan.Displaces != nil || plan.DisplacesTerminal || plan.Replace != "") {
 		plan.Abort = true
@@ -247,7 +260,7 @@ func (a *App) PlanControl(ctx context.Context, request ControlRequest) (ControlS
 	if err != nil {
 		return status, ControlPlan{}, err
 	}
-	return status, a.planControl(status, request), nil
+	return status, a.planControl(status, request, a.AgentRuntimeModes(ctx, m.Agent)), nil
 }
 
 // AcquireControl makes request.Holder the item's single controller. It
@@ -275,8 +288,11 @@ func (a *App) AcquireControl(ctx context.Context, request ControlRequest) (Contr
 	if err != nil {
 		return ControlResult{}, err
 	}
-	plan := a.planControl(status, request)
+	plan := a.planControl(status, request, a.AgentRuntimeModes(ctx, m.Agent))
 	result := ControlResult{WorkItemID: m.ID, Plan: plan, Warnings: []string{}}
+	if plan.Unavailable != "" {
+		return result, errors.New(plan.Unavailable)
+	}
 	if plan.NeedsConfirmation && !request.Confirm {
 		return result, &ControlConfirmationError{Plan: plan}
 	}

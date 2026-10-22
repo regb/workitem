@@ -543,9 +543,20 @@ var helpDocs = map[string]helpDoc{
 	},
 	"agent": {
 		Summary:     "Inspect, run, monitor, and communicate with the primary agent",
-		Usage:       []string{"wi agent <status|control|runtime|monitor> [options]"},
+		Usage:       []string{"wi agent <status|control|runtime|monitor|settings> [options]"},
 		Description: []string{"Agent commands derive status from runtime events and expose direct runtime control."},
-		SeeAlso:     []string{"agent status", "agent control", "agent runtime", "agent monitor"},
+		SeeAlso:     []string{"agent status", "agent control", "agent runtime", "agent monitor", "agent settings"},
+	},
+	"agent settings": {
+		Summary: "Show or change an item's model and thinking settings",
+		Usage:   []string{"wi agent settings [show] [--item <selector>]", "wi agent settings set [--item <selector>] [--restart] NAME=VALUE..."},
+		Description: []string{
+			"Settings are the agent profile's driver configuration keys, such as model and thinking for Pi or model and effort for Claude. An item's own values override its profile for every runtime that starts or resumes its conversation; an empty VALUE resets one to the profile.",
+			"show lists the effective values, where each comes from, the driver's available models and reasoning levels, and which settings the running agent can change live.",
+			"set validates the settings with the driver and saves them. A running agent changes them live when its runtime supports it (Pi in both modes, Claude headless); otherwise they apply when it next starts, or now with --restart, which resumes the same conversation in the same mode. A busy agent is not restarted. Changing a running agent needs control, like sending a message.",
+		},
+		Options:  []helpOption{{"--item <selector>", "Select an item explicitly."}, {"--restart", "Restart a runtime that cannot apply a change live."}},
+		Examples: []string{`wi agent settings`, `wi agent settings set model=openai-codex/gpt-6-sol thinking=high`, `wi agent settings set --item auth --restart model=sonnet effort=xhigh`, `wi agent settings set effort=`},
 	},
 	"agent status": {
 		Summary:     "Inspect derived agent and worktree status",

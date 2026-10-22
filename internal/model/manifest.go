@@ -42,10 +42,14 @@ type Manifest struct {
 	Checkout            Checkout      `json:"checkout"`
 	PrimaryConversation *Conversation `json:"primary_conversation,omitempty"`
 	Agent               string        `json:"agent,omitempty"`
-	Labels              []string      `json:"labels"`
-	DeepWork            bool          `json:"deep_work"`
-	Resolution          string        `json:"resolution,omitempty"`
-	Blockers            []Blocker     `json:"blockers,omitempty"`
+	// AgentSettings override the agent profile's driver configuration for
+	// this item, such as its model or thinking level. Every runtime that
+	// starts or resumes the conversation uses them.
+	AgentSettings map[string]string `json:"agent_settings,omitempty"`
+	Labels        []string          `json:"labels"`
+	DeepWork      bool              `json:"deep_work"`
+	Resolution    string            `json:"resolution,omitempty"`
+	Blockers      []Blocker         `json:"blockers,omitempty"`
 }
 
 func (m Manifest) TerminalSessionName() string {

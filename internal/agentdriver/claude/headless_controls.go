@@ -25,6 +25,7 @@ type headlessControls struct {
 	work                              map[string]*headlessDelivery
 	queue                             []*headlessDelivery
 	aborting                          *headlessDelivery
+	settings                          map[string]*headlessDelivery
 	initialized, stopping, nativeBusy bool
 	cancelQueued                      bool
 	emit                              func(protocol.RuntimeEvent)
@@ -71,6 +72,8 @@ func (s *headlessControls) accept(c protocol.ControlCommand) error {
 		return fmt.Errorf("Claude is stopping")
 	}
 	switch c.Type {
+	case protocol.CommandSet:
+		return s.applySetting(c)
 	case protocol.CommandPrompt, protocol.CommandSteer, protocol.CommandFollowUp, protocol.CommandAbort:
 	default:
 		return fmt.Errorf("unsupported Claude headless control")
@@ -357,4 +360,68 @@ func (s *headlessControls) close() {
 		s.fact(protocol.EventCommandRejected, d, true, "uncertain", "runtime_stopped")
 		s.aborting = nil
 	}
+}
+
+// effortLevels are Claude Code's --effort values.
+var effortLevels = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true, "max": true}
+
+// applySetting changes the model or effort of the running session through
+// Claude's control requests. The control response confirms or rejects it.
+func (s *headlessControls) applySetting(c protocol.ControlCommand) error {
+	if !s.initialized {
+		return fmt.Errorf("Claude control protocol is not ready")
+	}
+	if s.inputBroken {
+		return fmt.Errorf("Claude native input is unavailable; restart before further control delivery")
+	}
+	var request map[string]any
+	switch c.Setting.Name {
+	case "model":
+		request = headlessControl("", "set_model")
+		request["request"].(map[string]any)["model"] = c.Setting.Value
+	case "effort":
+		if !effortLevels[c.Setting.Value] {
+			return fmt.Errorf("invalid Claude effort %q", c.Setting.Value)
+		}
+		request = headlessControl("", "apply_flag_settings")
+		request["request"].(map[string]any)["settings"] = map[string]any{"effortLevel": c.Setting.Value}
+	default:
+		return fmt.Errorf("Claude cannot change %s while running", c.Setting.Name)
+	}
+	d, duplicate, err := s.remember(c)
+	if duplicate || err != nil {
+		return err
+	}
+	request["request_id"] = d.nativeID
+	if s.settings == nil {
+		s.settings = map[string]*headlessDelivery{}
+	}
+	s.settings[d.nativeID] = d
+	d.phase = "submitted"
+	if _, err := writeHeadlessFrame(s.input, request); err != nil {
+		delete(s.settings, d.nativeID)
+		s.inputBroken = true
+		d.phase = "not_sent"
+		d.err = err
+		s.fact(protocol.EventCommandRejected, d, true, "not_sent", "delivery_failed")
+		return err
+	}
+	return nil
+}
+
+// settingResponse settles a setting change from its control response.
+func (s *headlessControls) settingResponse(f headlessFrame) {
+	d := s.settings[f.Response.RequestID]
+	if d == nil {
+		return
+	}
+	delete(s.settings, f.Response.RequestID)
+	if f.Response.Subtype != "success" {
+		d.phase = "failed"
+		d.err = fmt.Errorf("Claude rejected the setting: %s", f.Response.Error)
+		s.fact(protocol.EventCommandRejected, d, true, "", protocol.ReasonSettingRejected)
+		return
+	}
+	d.phase = "confirmed"
+	s.fact(protocol.EventCommandAccepted, d, false, "confirmed", protocol.ReasonSettingApplied)
 }

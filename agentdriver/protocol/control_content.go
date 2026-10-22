@@ -18,6 +18,16 @@ const (
 // ValidateContent bounds prompt content independently of the access mechanism.
 // Drivers must also enforce these limits for clients connecting directly.
 func (c ControlCommand) ValidateContent() error {
+	if c.Type == CommandSet {
+		if c.Setting == nil || c.Message != "" || len(c.Images) > 0 {
+			return fmt.Errorf("control set requires one setting and no message content")
+		}
+		if err := c.Setting.Validate(); err != nil {
+			return err
+		}
+	} else if c.Setting != nil {
+		return fmt.Errorf("control %s does not accept a setting", c.Type)
+	}
 	if len(c.Message) > MaxControlMessageBytes || !utf8.ValidString(c.Message) {
 		return fmt.Errorf("control message must be UTF-8 and at most 64 KiB")
 	}
@@ -45,6 +55,18 @@ func (c ControlCommand) ValidateContent() error {
 		if total > MaxControlImageBytes {
 			return fmt.Errorf("control images exceed 8 MiB total")
 		}
+	}
+	return nil
+}
+
+// Validate bounds a setting change: a short configuration key and a short
+// single-line value.
+func (s Setting) Validate() error {
+	if s.Name == "" || len(s.Name) > 64 || strings.Trim(s.Name, "abcdefghijklmnopqrstuvwxyz0123456789_") != "" {
+		return fmt.Errorf("setting name must be a lowercase configuration key")
+	}
+	if s.Value == "" || len(s.Value) > 256 || !utf8.ValidString(s.Value) || strings.ContainsAny(s.Value, "\r\n\x00") {
+		return fmt.Errorf("setting %s value must be one nonempty line of at most 256 bytes", s.Name)
 	}
 	return nil
 }

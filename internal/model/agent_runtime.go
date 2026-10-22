@@ -26,6 +26,18 @@ type RuntimeCapabilities struct {
 	Monitor     bool `json:"monitor"`
 	// Control is the driver-reported control channel kind; see ControlChannel.
 	Control string `json:"control,omitempty"`
+	// Settings are the profile settings this runtime can change live.
+	Settings []string `json:"settings,omitempty"`
+}
+
+// LiveSetting reports whether the runtime can change a setting while running.
+func (c RuntimeCapabilities) LiveSetting(name string) bool {
+	for _, setting := range c.Settings {
+		if setting == name {
+			return true
+		}
+	}
+	return false
 }
 
 type AgentRuntime struct {

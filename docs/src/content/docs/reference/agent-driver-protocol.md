@@ -58,6 +58,40 @@ Each profile has a unique lowercase name using letters, digits, and hyphens, an 
 
 Discovery must not launch a coding backend, authenticate, make model requests, create native content, or return credentials. Bundled drivers locate their executable on `PATH` and return an absolute launcher path, preserving installation symlinks. `wi init` validates each discovered profile through `config.validate`, asks the user to select a named default, writes the default_agent pointer, and publishes the config without overwriting an existing file. The operation and response field are additive within protocol version 2.
 
+### Runtime modes
+
+`runtime.modes` is a stateless request carrying the profile name and merged `config`. It reports, without launching anything, what each runtime mode of that profile offers:
+
+```json
+{
+  "runtime_modes": {
+    "modes": {
+      "tui":      {"control": "emulated",   "terminal": true, "image_input": true},
+      "headless": {"control": "structured", "image_input": true}
+    },
+    "settings": {"model": {"on_resume": true}, "effort": {"on_resume": true}}
+  }
+}
+```
+
+`control` is `structured` when the driver delivers and acknowledges commands, `emulated` when it can only type into a terminal UI, or absent when the mode takes no input from Wi. `terminal` marks a native TUI a person can attach to; `idle_guard` an atomic idle-only prompt; `image_input` image attachments. `settings` lists profile settings that may differ between successive runtimes of one conversation, when a runtime resumes it (`on_resume`) and in which modes while it runs (`live`).
+
+**Resume contract:** every listed mode must be able to resume any conversation of the driver with the same profile settings. Wi relies on this to replace a runtime with one in another mode on the same conversation, for example when a browser needs structured control and the running TUI only accepts keystrokes. When no mode offers the channel a client needs, Wi refuses control with an explanation instead of restarting the runtime.
+
+The request may check the installed backend version, but must not start an agent, authenticate, or create native content. The answer is an expectation: a runtime's `Ready` capabilities remain authoritative. Wi caches it per profile for the life of the process. Drivers that do not implement the operation are treated as offering structured control in headless mode and a terminal in TUI mode. The operation and response field are additive within protocol version 2.
+
+### Model catalog
+
+`config.models` is a stateless request carrying the profile name and merged `config`. It lists the choices for the profile's model setting and its reasoning-depth setting:
+
+```json
+{"model_catalog": {"model_setting": "model", "reasoning_setting": "effort",
+  "reasoning_levels": ["low", "medium", "high", "xhigh", "max"],
+  "models": [{"value": "opus", "label": "Opus 5.5", "description": "…", "reasoning": true, "levels": ["low", "high"]}]}}
+```
+
+`value` is what the model setting takes. A model's `levels` narrows the reasoning levels; `reasoning: false` means it has none. The driver may run its backend's own catalog command but must not start an agent session or make model requests: bundled Pi parses `pi --list-models`, and bundled Claude reads the `initialize` response of its headless control protocol in an empty directory without saving a session. Wi caches the answer for ten minutes.
+
 ## Bundled skills
 
 The host embeds `skills/wi/` in the Wi executable at build time and includes trusted resources in the optional `launch.skills` array. Each skill has a `name` and `files`; each file has a portable relative `path`, base64-encoded `data`, and optional `executable` flag. No backend destination paths are supplied by the host. Payloads are limited to 16 skills, 64 files per skill, and 4 MiB of content in total. Absolute, hidden, escaping, duplicate, and file/directory-colliding paths are rejected.
@@ -90,6 +124,8 @@ Pi title requests use a temporary working directory and non-persisted print mode
 ## Runtime controls and events
 
 The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. Host-side application control resolves daemon-owned state, verifies current runtime ownership and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. Prompt-like commands may carry generic base64 `images` with MIME types only when the driver advertises `image_input`; each driver translates that payload to its native API. A driver must reject unsupported controls. It may translate supported commands through backend APIs or its own verified TUI input transport. Terminal input belongs inside the driver, not application policy. For the bundled Claude driver, native acceptance is confirmed through TUI lifecycle hooks or headless replay/queue receipts after input delivery; an initial acknowledgement can instead mean a command entered its bounded queue. It does not advertise atomic idle control. Unknown delivery outcomes must not trigger automatic retyping.
+
+`set` changes one profile setting of a running agent: it carries `setting: {"name": "model", "value": "sonnet"}` and no message. Names are the driver's configuration keys; values are one line of at most 256 bytes. A driver lists the settings a runtime can change live in `Ready.capabilities.settings` and rejects others. It confirms or rejects the change through `command.accepted` or `command.rejected` with the command ID; Wi waits briefly for that verdict. Bundled Pi changes `model` (`provider/model`) and `thinking` in both modes, through RPC `set_model`/`set_thinking_level` headless and its extension in the TUI. Bundled Claude changes `model` and `effort` in headless mode through its `set_model` and `apply_flag_settings` control requests; its TUI does not change them live.
 
 Control messages are limited to 64 KiB of UTF-8 text and four images totaling at most 8 MiB decoded. Images require nonempty canonical base64 and JPEG, PNG, GIF, or WebP MIME types. Control sockets accept up to 12 MiB of serialized JSON to accommodate base64 and escaping; event sockets retain their 1 MiB limit. The host and bundled drivers validate image content before handing it off. Drivers can restrict the supported formats further; the Claude TUI driver currently accepts PNG and JPEG.
 

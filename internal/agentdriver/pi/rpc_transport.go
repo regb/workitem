@@ -345,6 +345,12 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 			event.Error = output.Error
 			t.forgetPrompt(command.RequestID)
 		}
+		if command.Type == agent.CommandSet {
+			event.ReasonCode = agent.ReasonSettingApplied
+			if !output.Success {
+				event.ReasonCode = agent.ReasonSettingRejected
+			}
+		}
 		if err := t.emit(event); err != nil {
 			return err
 		}
@@ -592,6 +598,14 @@ func (t *nativeRPCTransport) sendCommand(command agent.ControlCommand) error {
 		native["message"] = command.Message
 	case agent.CommandAbort, agent.CommandShutdown:
 		// Guarded shutdown is handled by the in-process extension below.
+	case agent.CommandSet:
+		setting, err := nativeSetting(*command.Setting)
+		if err != nil {
+			return t.emit(agent.RuntimeEvent{Type: agent.EventCommandRejected, CommandID: command.ID, RequestID: command.RequestID, Error: err.Error(), Backend: "pi"})
+		}
+		for key, value := range setting {
+			native[key] = value
+		}
 	default:
 		return t.emit(agent.RuntimeEvent{Type: agent.EventCommandRejected, CommandID: command.ID, RequestID: command.RequestID, Error: "unsupported runtime control command " + command.Type, Backend: "pi"})
 	}
@@ -634,7 +648,8 @@ func (t *nativeRPCTransport) sendCommand(command agent.ControlCommand) error {
 	// A successful write transfers ownership to Pi's native RPC transport.
 	// Publish compact actionability before replying to the control client; the
 	// later backend response remains separate confirmation evidence.
-	if command.Type == agent.CommandShutdown {
+	// A setting change starts no work; its response reports the outcome.
+	if command.Type == agent.CommandShutdown || command.Type == agent.CommandSet {
 		return nil
 	}
 	t.emitLiveConfirmed(agent.RuntimeEvent{Type: agent.EventCommandAccepted, RequestID: command.RequestID, Timestamp: time.Now().UTC()})
@@ -780,6 +795,25 @@ func isExpectedProcessExit(err error) bool {
 	}
 	var exitErr *exec.ExitError
 	return errors.As(err, &exitErr) && exitErr.ExitCode() == 0
+}
+
+// nativeSetting maps a profile setting change onto Pi's RPC commands: a model
+// is "provider/model" and a thinking level one of Pi's levels.
+func nativeSetting(setting agent.Setting) (map[string]any, error) {
+	switch setting.Name {
+	case "model":
+		provider, model, ok := strings.Cut(setting.Value, "/")
+		if !ok || provider == "" || model == "" {
+			return nil, fmt.Errorf("Pi model must be provider/model, got %q", setting.Value)
+		}
+		return map[string]any{"type": "set_model", "provider": provider, "modelId": model}, nil
+	case "thinking":
+		if !validThinkingLevel(setting.Value) {
+			return nil, fmt.Errorf("invalid Pi thinking level %q", setting.Value)
+		}
+		return map[string]any{"type": "set_thinking_level", "level": setting.Value}, nil
+	}
+	return nil, fmt.Errorf("Pi cannot change %s while running", setting.Name)
 }
 
 type unsavedMessage struct {

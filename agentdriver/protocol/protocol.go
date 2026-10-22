@@ -68,6 +68,9 @@ type Capabilities struct {
 	// are delivered and acknowledged by the driver, "emulated" when the driver
 	// can only type into a terminal UI. Older drivers omit it.
 	Control string `json:"control,omitempty"`
+	// Settings lists the profile settings this runtime can change while it
+	// runs, through CommandSet.
+	Settings []string `json:"settings,omitempty"`
 }
 
 const (

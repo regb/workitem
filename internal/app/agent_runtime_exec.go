@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -31,7 +32,8 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 	if !ok {
 		return fmt.Errorf("agent driver %q is not configured", definition.Driver)
 	}
-	configJSON, err := a.driverConfigJSON(definition)
+	// The item's own settings (model, thinking) apply to every runtime.
+	configJSON, err := json.Marshal(a.driverConfig(definition, manifest.AgentSettings))
 	if err != nil {
 		return fmt.Errorf("encode agent driver configuration: %w", err)
 	}
@@ -86,7 +88,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 			if runtime == nil || runtime.ID != spec.RuntimeID {
 				return fmt.Errorf("agent runtime ownership changed during driver startup")
 			}
-			runtime.Capabilities = model.RuntimeCapabilities{LiveContent: ready.Capabilities.LiveContent, IdleGuard: ready.Capabilities.IdleGuard, ImageInput: ready.Capabilities.ImageInput, NativeTUI: ready.Capabilities.NativeTUI, Headless: ready.Capabilities.Headless, Streaming: ready.Capabilities.Streaming, Prompt: ready.Capabilities.Prompt, Steering: ready.Capabilities.Steering, FollowUp: ready.Capabilities.FollowUp, Cancel: ready.Capabilities.Cancel, Monitor: ready.Capabilities.Monitor, Control: ready.Capabilities.Control}
+			runtime.Capabilities = model.RuntimeCapabilities{LiveContent: ready.Capabilities.LiveContent, IdleGuard: ready.Capabilities.IdleGuard, ImageInput: ready.Capabilities.ImageInput, NativeTUI: ready.Capabilities.NativeTUI, Headless: ready.Capabilities.Headless, Streaming: ready.Capabilities.Streaming, Prompt: ready.Capabilities.Prompt, Steering: ready.Capabilities.Steering, FollowUp: ready.Capabilities.FollowUp, Cancel: ready.Capabilities.Cancel, Monitor: ready.Capabilities.Monitor, Control: ready.Capabilities.Control, Settings: append([]string(nil), ready.Capabilities.Settings...)}
 			runtime.UpdatedAt = a.now()
 			return a.Store.SaveAgentRuntime(ctx, spec.WorkItemID, *runtime)
 		})

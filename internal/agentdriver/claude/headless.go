@@ -261,12 +261,13 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 					initDeadline = nil
 					initialization.Stop()
 					replied = true
-					if err := reply(protocol.Ready{ProtocolVersion: protocol.Version, BackendPath: executable, BackendVersion: f.Response.Response.Version, Capabilities: protocol.Capabilities{Headless: true, LiveContent: true, Streaming: true, ImageInput: true, BundledSkills: true, Monitor: true, Prompt: true, Steering: true, FollowUp: true, Cancel: true, Control: protocol.ControlStructured}}); err != nil {
+					if err := reply(protocol.Ready{ProtocolVersion: protocol.Version, BackendPath: executable, BackendVersion: f.Response.Response.Version, Capabilities: protocol.Capabilities{Headless: true, LiveContent: true, Streaming: true, ImageInput: true, BundledSkills: true, Monitor: true, Prompt: true, Steering: true, FollowUp: true, Cancel: true, Control: protocol.ControlStructured, Settings: []string{"model", "effort"}}}); err != nil {
 						return err
 					}
 					emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeReady, Readiness: "ready", ReasonCode: "headless_ready"})
 				} else {
 					state.interruptResponse(f)
+					state.settingResponse(f)
 				}
 			case "control_request":
 				response := map[string]any{"subtype": "error", "request_id": f.RequestID, "error": "Unsupported headless control request"}

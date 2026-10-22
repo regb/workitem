@@ -22,6 +22,8 @@ type ControlOptions struct {
 	RequestID         string
 	ExpectedRuntimeID string
 	RequireIdle       bool
+	// Setting is the change carried by CommandSet.
+	Setting *agent.Setting
 }
 
 type ControlResult struct {
@@ -72,6 +74,16 @@ func (s *Service) Control(ctx context.Context, opts ControlOptions) (ControlResu
 		if strings.TrimSpace(opts.Message) != "" || len(opts.Images) != 0 {
 			return ControlResult{}, fmt.Errorf("agent control %s does not accept message content", commandType)
 		}
+	case agent.CommandSet:
+		if opts.Setting == nil || strings.TrimSpace(opts.Message) != "" || len(opts.Images) != 0 {
+			return ControlResult{}, fmt.Errorf("agent control set requires one setting and no message content")
+		}
+		if err := opts.Setting.Validate(); err != nil {
+			return ControlResult{}, err
+		}
+		if !runtime.Capabilities.LiveSetting(opts.Setting.Name) {
+			return ControlResult{}, fmt.Errorf("agent runtime cannot change %s while it runs", opts.Setting.Name)
+		}
 	default:
 		return ControlResult{}, fmt.Errorf("unsupported agent control command %q", commandType)
 	}
@@ -86,7 +98,7 @@ func (s *Service) Control(ctx context.Context, opts ControlOptions) (ControlResu
 	if actor == "" {
 		actor = "operator"
 	}
-	command := agent.ControlCommand{ID: commandID, RequestID: strings.TrimSpace(opts.RequestID), Type: commandType, Actor: actor, Message: strings.TrimSpace(opts.Message), Images: opts.Images, CreatedAt: s.now(), RequireIdle: opts.RequireIdle}
+	command := agent.ControlCommand{ID: commandID, RequestID: strings.TrimSpace(opts.RequestID), Type: commandType, Actor: actor, Message: strings.TrimSpace(opts.Message), Images: opts.Images, CreatedAt: s.now(), RequireIdle: opts.RequireIdle, Setting: opts.Setting}
 	if err := s.SubmitControl(ctx, m.ID, *runtime, command); err != nil {
 		return ControlResult{}, err
 	}
@@ -105,6 +117,8 @@ func supportsControl(capabilities model.RuntimeCapabilities, commandType string)
 		return capabilities.Cancel
 	case agent.CommandShutdown:
 		return true
+	case agent.CommandSet:
+		return len(capabilities.Settings) > 0
 	default:
 		return false
 	}

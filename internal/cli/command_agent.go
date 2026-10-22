@@ -12,7 +12,7 @@ import (
 
 func runAgent(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	if len(args) == 0 {
-		return usageErr{errors.New("usage: wi agent <status|control|runtime|monitor> [options]")}
+		return usageErr{errors.New("usage: wi agent <status|control|runtime|monitor|settings> [options]")}
 	}
 	switch args[0] {
 	case "status":
@@ -23,6 +23,8 @@ func runAgent(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 		return runAgentRuntime(ctx, args[1:], cfg, jsonOut)
 	case "monitor":
 		return runAgentMonitor(ctx, args[1:], cfg, jsonOut)
+	case "settings":
+		return runAgentSettings(ctx, args[1:], cfg, jsonOut)
 	case "exec":
 		return runAgentExec(ctx, args[1:], cfg)
 	default:

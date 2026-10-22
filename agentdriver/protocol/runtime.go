@@ -10,6 +10,10 @@ const (
 	CommandFollowUp = "follow_up"
 	CommandAbort    = "abort"
 	CommandShutdown = "shutdown"
+	// CommandSet changes one profile setting (such as the model) of a
+	// running agent. Drivers accept it only for settings their runtime
+	// reports as live in Capabilities.Settings.
+	CommandSet = "set"
 )
 
 // RuntimeVersion is independent of process bootstrap so conversation transport
@@ -32,7 +36,15 @@ type ControlCommand struct {
 	Message         string         `json:"message,omitempty"`
 	Images          []ImageContent `json:"images,omitempty"`
 	RequireIdle     bool           `json:"require_idle,omitempty"`
+	Setting         *Setting       `json:"setting,omitempty"`
 	CreatedAt       time.Time      `json:"created_at"`
+}
+
+// Setting is one profile setting value carried by CommandSet. Names are the
+// driver's configuration keys, as listed in RuntimeModes.Settings.
+type Setting struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 const (

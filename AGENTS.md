@@ -8,7 +8,7 @@ Short-lived work has a durable record: restarting an agent, releasing a worktree
 
 ## Core model
 
-- A work item owns a stable ID, title, description, lifecycle, labels, deep-work classification, repository reference, checkout specification, and primary conversation identity.
+- A work item owns a stable ID, title, description, lifecycle, labels, deep-work classification, repository reference, checkout specification, primary conversation identity, and optional agent settings that override its profile's driver configuration (model, thinking) for every runtime of its conversation.
 - Repositories are explicitly registered independent bare Git stores. Items retain the repository ID and immutable created-from commit. External onboarding checkouts are not operational dependencies.
 - IDs and branch specifications are immutable. Active slugs stay fixed until close clears them; reopening allocates a new slug without renaming the branch. Titles and descriptions remain editable without implicit prompts.
 - Drivers validate merged profile config through stateless `config.validate` before new runtime startup. Plain backlog capture is driver-independent; existing owners are not reconfigured.

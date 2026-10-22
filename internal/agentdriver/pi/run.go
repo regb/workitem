@@ -50,6 +50,24 @@ func Run(ctx context.Context) error {
 		}
 		return reply(driverprotocol.Response{ProtocolVersion: driverprotocol.Version, ConfigValidation: &driverprotocol.ConfigValidationResult{Valid: true}})
 	}
+	if request.Operation == driverprotocol.OperationConfigModels {
+		config, err := parseConfig(request.Config)
+		if err != nil {
+			return respondError(fmt.Errorf("invalid Pi configuration: %w", err))
+		}
+		catalog, err := ModelCatalog(ctx, config)
+		if err != nil {
+			return respondError(err)
+		}
+		return reply(driverprotocol.Response{ProtocolVersion: driverprotocol.Version, ModelCatalog: &catalog})
+	}
+	if request.Operation == driverprotocol.OperationRuntimeModes {
+		if _, err := parseConfig(request.Config); err != nil {
+			return respondError(fmt.Errorf("invalid Pi configuration: %w", err))
+		}
+		modes := RuntimeModes()
+		return reply(driverprotocol.Response{ProtocolVersion: driverprotocol.Version, RuntimeModes: &modes})
+	}
 	if request.Operation != driverprotocol.OperationLaunch {
 		result, err := handleConversationOperation(ctx, request)
 		if err != nil {
@@ -114,7 +132,7 @@ func launch(ctx context.Context, request driverprotocol.LaunchRequest, reply fun
 	}
 	defer cleanup()
 	capabilities := agent.CapabilitiesForMode(mode)
-	if err := reply(driverprotocol.Ready{ProtocolVersion: driverprotocol.Version, BackendPath: resolved, Capabilities: driverprotocol.Capabilities{LiveContent: true, IdleGuard: true, ImageInput: true, BundledSkills: true, NativeTUI: capabilities.NativeTUI, Headless: capabilities.Headless, Streaming: capabilities.Streaming, Prompt: true, Steering: capabilities.Steering, FollowUp: capabilities.FollowUp, Cancel: capabilities.Cancel, Monitor: capabilities.Monitor, Control: driverprotocol.ControlStructured}}); err != nil {
+	if err := reply(driverprotocol.Ready{ProtocolVersion: driverprotocol.Version, BackendPath: resolved, Capabilities: driverprotocol.Capabilities{LiveContent: true, IdleGuard: true, ImageInput: true, BundledSkills: true, NativeTUI: capabilities.NativeTUI, Headless: capabilities.Headless, Streaming: capabilities.Streaming, Prompt: true, Steering: capabilities.Steering, FollowUp: capabilities.FollowUp, Cancel: capabilities.Cancel, Monitor: capabilities.Monitor, Control: driverprotocol.ControlStructured, Settings: liveSettings}}); err != nil {
 		return err
 	}
 	environment := request.Environment

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
 )
@@ -120,5 +121,46 @@ func seedRuntimeOwner(t *testing.T, db *Database, itemID, runtimeID string) {
 	}
 	if err := db.UpdateProjections([]ProjectionUpdate{{Projection: RuntimeOwnershipProjection, Key: itemID, Value: encoded}}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSettingOutcomesLeaveAgentStatusUnchanged(t *testing.T) {
+	root := t.TempDir()
+	native := store.New(root)
+	if err := native.Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	manifest := model.NewManifest(importTestID, "settings", "Settings", nil, false, now, model.Repository{}, model.Checkout{})
+	manifest.State = model.StateActive
+	if err := native.CreateItem(context.Background(), manifest); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDatabase(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := seedManifests(context.Background(), db, root); err != nil {
+		t.Fatal(err)
+	}
+	seedRuntimeOwner(t, db, importTestID, "runtime-1")
+	events := []RuntimeSemanticEvent{
+		{ID: "runtime-1:ready", Type: agent.EventRuntimeReady, Timestamp: now.Add(time.Second)},
+		{ID: "runtime-1:model", Type: agent.EventCommandAccepted, CommandID: "model", Timestamp: now.Add(2 * time.Second), DeliveryState: "confirmed", ReasonCode: agent.ReasonSettingApplied},
+		{ID: "runtime-1:bad", Type: agent.EventCommandRejected, CommandID: "bad", Timestamp: now.Add(3 * time.Second), Failed: true, ReasonCode: agent.ReasonSettingRejected},
+	}
+	for _, event := range events {
+		event.RuntimeID, event.WorkItemID = "runtime-1", importTestID
+		if _, err := IngestRuntimeEvent(context.Background(), db, event); err != nil {
+			t.Fatal(err)
+		}
+		var observation AgentObservation
+		if _, err := db.ReadProjection(AgentObservationProjection, importTestID, &observation); err != nil {
+			t.Fatal(err)
+		}
+		if observation.Status != "idle" {
+			t.Fatalf("after %s the agent is %q: %+v", event.ID, observation.Status, observation)
+		}
 	}
 }

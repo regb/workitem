@@ -35,6 +35,8 @@ type Response struct {
 	Conversation     *ConversationResponse   `json:"conversation,omitempty"`
 	ConfigValidation *ConfigValidationResult `json:"config_validation,omitempty"`
 	ConfigDiscovery  *ConfigDiscoveryResult  `json:"config_discovery,omitempty"`
+	RuntimeModes     *RuntimeModes           `json:"runtime_modes,omitempty"`
+	ModelCatalog     *ModelCatalog           `json:"model_catalog,omitempty"`
 	Error            string                  `json:"error,omitempty"`
 }
 

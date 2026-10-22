@@ -15,10 +15,12 @@ const (
 	CommandFollowUp = driverprotocol.CommandFollowUp
 	CommandAbort    = driverprotocol.CommandAbort
 	CommandShutdown = driverprotocol.CommandShutdown
+	CommandSet      = driverprotocol.CommandSet
 )
 
 type ControlCommand = driverprotocol.ControlCommand
 type ImageContent = driverprotocol.ImageContent
+type Setting = driverprotocol.Setting
 
 const (
 	EventRuntimeStatus    = driverprotocol.EventRuntimeStatus
@@ -38,6 +40,9 @@ const (
 	EventSessionChanged   = driverprotocol.EventSessionChanged
 	EventRuntimeStopping  = driverprotocol.EventRuntimeStopping
 	EventRuntimeFailed    = driverprotocol.EventRuntimeFailed
+
+	ReasonSettingApplied  = driverprotocol.ReasonSettingApplied
+	ReasonSettingRejected = driverprotocol.ReasonSettingRejected
 )
 
 type RuntimeEvent struct {

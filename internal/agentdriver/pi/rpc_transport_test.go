@@ -314,3 +314,14 @@ func waitForDaemonRuntimeEvent(t *testing.T, client *coordinator.Client, itemID,
 	t.Fatalf("event %s was not observed", eventType)
 	return nil
 }
+
+func TestLiveEventsKeepTheSettingReasonCode(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "runtime", WorkItemID: "item"}, liveQueue: make(chan queuedLiveEvent, 1), liveContext: ctx, liveNonce: "nonce"}
+	transport.queueLiveEvent(agent.RuntimeEvent{Type: agent.EventCommandAccepted, CommandID: "model", ReasonCode: agent.ReasonSettingApplied, Timestamp: time.Now()}, nil)
+	// The daemon needs the reason code to tell a setting change from work.
+	if queued := <-transport.liveQueue; queued.event.ReasonCode != agent.ReasonSettingApplied {
+		t.Fatalf("event=%+v", queued.event)
+	}
+}
