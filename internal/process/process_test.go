@@ -3,7 +3,10 @@ package process
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"testing"
 )
 
@@ -67,5 +70,55 @@ func TestMatchesCommandLine(t *testing.T) {
 	python := Info{PID: 2, Command: "python", Cmdline: []string{"python", "script.py"}}
 	if matches(python, []string{"pi"}) {
 		t.Fatal("did not expect short substring match")
+	}
+}
+
+// A runtime's identity is its start time as ps reports it; reading one
+// process and reading the whole table must agree on it.
+func TestSingleProcessAndSnapshotAgreeOnIdentity(t *testing.T) {
+	inspector := New()
+	single, err := inspector.Info(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := inspector.Snapshot().Info(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if single.StartTime == 0 || single.StartTime != snapshot.StartTime || single.PGRP != snapshot.PGRP || single.PPID != snapshot.PPID {
+		t.Fatalf("single=%+v snapshot=%+v", single, snapshot)
+	}
+	if _, err := inspector.Info(1 << 22); err == nil {
+		t.Fatal("a missing process was found")
+	}
+}
+
+// Identity must not depend on the locale of the process that reads it: a
+// runtime host records its own start time and the daemon checks it later.
+func TestDarwinIdentityIgnoresTheCallersLocale(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("ps start times are only read on macOS")
+	}
+	t.Setenv("LC_ALL", "de_DE.UTF-8")
+	got, err := New().Info(os.Getpid())
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("/bin/ps", "-o", "pid=,ppid=,pgid=,state=,lstart=,comm=,args=", "-p", strconv.Itoa(os.Getpid()))
+	command.Env = append(os.Environ(), "LC_ALL=C")
+	out, err := command.Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := parseDarwinSnapshot(string(out))[os.Getpid()]
+	if got.StartTime != want.StartTime {
+		t.Fatalf("identity read in the caller's locale: got %d want %d", got.StartTime, want.StartTime)
+	}
+}
+
+func TestStartedAsAcceptsTheLegacyIdentity(t *testing.T) {
+	info := Info{StartTime: 7, LegacyStartTime: 9}
+	if !info.StartedAs(7) || !info.StartedAs(9) || info.StartedAs(8) || (Info{}).StartedAs(0) {
+		t.Fatal("StartedAs")
 	}
 }

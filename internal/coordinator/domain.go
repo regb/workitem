@@ -266,6 +266,7 @@ func (d *Database) executeManifestCommand(command ManifestCommand, queueOptions 
 	if err != nil {
 		return ManifestCommandResult{}, ActionabilityQueueResult{}, err
 	}
+	d.changes.record(command.ItemID)
 	return result, queue, nil
 }
 

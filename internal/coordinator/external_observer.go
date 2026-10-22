@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
@@ -93,25 +94,100 @@ func NewExternalObserver(database *Database, dataRoot string) *ExternalObserver 
 }
 
 func (o *ExternalObserver) Reconcile(ctx context.Context) error {
-	return o.reconcile(ctx, true)
+	inspection, err := o.Inspect(ctx, true)
+	if err != nil {
+		return err
+	}
+	return o.ReconcileWith(ctx, inspection)
 }
 
 func (o *ExternalObserver) ReconcileRuntime(ctx context.Context) error {
-	return o.reconcile(ctx, false)
+	inspection, err := o.Inspect(ctx, false)
+	if err != nil {
+		return err
+	}
+	return o.ReconcileWith(ctx, inspection)
 }
 
-func (o *ExternalObserver) reconcile(ctx context.Context, includeWorktree bool) error {
+// Inspection holds what the observer saw outside Wi: tmux panes, the process
+// table and, optionally, Git status of active checkouts. Taking it only reads
+// the database, so callers take it outside the domain lock and apply it with
+// ReconcileWith; the lock is then held only to fold it into observations.
+type Inspection struct {
+	at        time.Time
+	panes     map[string][]model.TerminalPaneInfo
+	processes processpkg.Inspector
+	// checkouts is nil when worktrees were not inspected. Each applies only
+	// while its item still claims the same checkout.
+	checkouts map[string]inspectedWorktree
+}
+
+type inspectedWorktree struct {
+	path, branch string
+	worktree     *ProjectedWorktree
+}
+
+// maxWorktreeInspections bounds concurrent Git processes.
+const maxWorktreeInspections = 8
+
+// Inspect probes tmux and processes, and with worktrees runs Git status for
+// every active checkout in parallel.
+func (o *ExternalObserver) Inspect(ctx context.Context, worktrees bool) (*Inspection, error) {
+	result := &Inspection{at: time.Now().UTC(), panes: map[string][]model.TerminalPaneInfo{}}
+	if panes, err := o.tmux.ListPanes(ctx); err == nil {
+		for _, pane := range panes {
+			result.panes[pane.SessionName] = append(result.panes[pane.SessionName], pane)
+		}
+	}
+	// One process table read serves every item of the pass.
+	result.processes = o.process.Snapshot()
+	if !worktrees {
+		return result, nil
+	}
+	manifests, err := o.database.ListManifests()
+	if err != nil {
+		return nil, err
+	}
+	result.checkouts = map[string]inspectedWorktree{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	slots := make(chan struct{}, maxWorktreeInspections)
+	for _, manifest := range manifests {
+		if manifest.State != model.StateActive {
+			continue
+		}
+		wg.Add(1)
+		slots <- struct{}{}
+		go func(manifest model.Manifest) {
+			defer wg.Done()
+			defer func() { <-slots }()
+			path, branch := checkoutKey(manifest)
+			worktree := o.observeWorktree(ctx, manifest)
+			mu.Lock()
+			result.checkouts[manifest.ID] = inspectedWorktree{path: path, branch: branch, worktree: worktree}
+			mu.Unlock()
+		}(manifest)
+	}
+	wg.Wait()
+	return result, ctx.Err()
+}
+
+func checkoutKey(manifest model.Manifest) (path, branch string) {
+	if manifest.Checkout.Present() && manifest.Checkout.Claim != nil {
+		path = manifest.Checkout.Claim.Path
+	}
+	return path, manifest.Checkout.Specification.Branch
+}
+
+// ReconcileWith observes runtimes and terminals for active items from an
+// inspection, keeping the last observed worktree where it inspected none.
+func (o *ExternalObserver) ReconcileWith(ctx context.Context, inspection *Inspection) error {
 	manifests, err := o.database.ListManifests()
 	if err != nil {
 		return err
 	}
-	panesBySession := map[string][]model.TerminalPaneInfo{}
-	if panes, paneErr := o.tmux.ListPanes(ctx); paneErr == nil {
-		for _, pane := range panes {
-			panesBySession[pane.SessionName] = append(panesBySession[pane.SessionName], pane)
-		}
-	}
 	updates := []ProjectionUpdate{}
+	changed := []string{}
 	for _, manifest := range manifests {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -119,14 +195,41 @@ func (o *ExternalObserver) reconcile(ctx context.Context, includeWorktree bool) 
 		if manifest.State != model.StateActive {
 			continue
 		}
-		observation := o.observe(ctx, manifest, panesBySession[manifest.TerminalSessionName()], includeWorktree)
+		observation := o.observe(ctx, manifest, inspection)
+		var previous AgentObservation
+		if found, _ := o.database.ReadProjection(AgentObservationProjection, manifest.ID, &previous); !found || observationShown(previous) != observationShown(observation) {
+			changed = append(changed, manifest.ID)
+		}
 		encoded, err := json.Marshal(observation)
 		if err != nil {
 			return err
 		}
 		updates = append(updates, ProjectionUpdate{Projection: AgentObservationProjection, Key: manifest.ID, Value: encoded})
 	}
-	return o.database.UpdateProjections(updates)
+	if err := o.database.UpdateProjections(updates); err != nil {
+		return err
+	}
+	// Readers waiting for changes learn of what only observation found, such
+	// as a runtime that exited or a worktree that became dirty, at once
+	// rather than on their fallback beat.
+	o.database.changes.record(changed...)
+	return nil
+}
+
+// observedState is what readers show of an observation; its timestamps
+// change on every pass and are left out.
+type observedState struct {
+	status, reason, turn string
+	online               bool
+	worktree             ProjectedWorktree
+}
+
+func observationShown(o AgentObservation) observedState {
+	shown := observedState{status: o.Status, reason: o.Reason, turn: o.TurnState, online: o.ProcessOnline}
+	if o.Worktree != nil {
+		shown.worktree = *o.Worktree
+	}
+	return shown
 }
 
 // ReconcileActionability folds the latest native conversation checkpoint and live runtime
@@ -138,6 +241,7 @@ func (o *ExternalObserver) ReconcileActionability(ctx context.Context) error {
 		return err
 	}
 	updates := []ProjectionUpdate{}
+	changed := []string{}
 	for _, manifest := range manifests {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -146,9 +250,13 @@ func (o *ExternalObserver) ReconcileActionability(ctx context.Context) error {
 			continue
 		}
 		observation := AgentObservation{WorkItemID: manifest.ID, Status: "problem", ObservedAt: time.Now().UTC(), Warnings: []string{}, Activity: AttentionActivity{WorkItemID: manifest.ID}}
-		_, _ = o.database.ReadProjection(AgentObservationProjection, manifest.ID, &observation)
+		found, _ := o.database.ReadProjection(AgentObservationProjection, manifest.ID, &observation)
+		previous := observationShown(observation)
 		if err := o.applyActionability(manifest.ID, &observation); err != nil {
 			return err
+		}
+		if !found || observationShown(observation) != previous {
+			changed = append(changed, manifest.ID)
 		}
 		encoded, err := json.Marshal(observation)
 		if err != nil {
@@ -156,7 +264,11 @@ func (o *ExternalObserver) ReconcileActionability(ctx context.Context) error {
 		}
 		updates = append(updates, ProjectionUpdate{Projection: AgentObservationProjection, Key: manifest.ID, Value: encoded})
 	}
-	return o.database.UpdateProjections(updates)
+	if err := o.database.UpdateProjections(updates); err != nil {
+		return err
+	}
+	o.database.changes.record(changed...)
+	return nil
 }
 
 func (o *ExternalObserver) applyActionability(itemID string, observation *AgentObservation) error {
@@ -315,7 +427,8 @@ func laterTime(left, right *time.Time) *time.Time {
 	return right
 }
 
-func (o *ExternalObserver) observe(ctx context.Context, manifest model.Manifest, panes []model.TerminalPaneInfo, includeWorktree bool) AgentObservation {
+func (o *ExternalObserver) observe(ctx context.Context, manifest model.Manifest, inspection *Inspection) AgentObservation {
+	panes := inspection.panes[manifest.TerminalSessionName()]
 	now := time.Now().UTC()
 	observation := AgentObservation{WorkItemID: manifest.ID, Status: "problem", ObservedAt: now, Warnings: []string{}, Activity: AttentionActivity{WorkItemID: manifest.ID}}
 	var runtimeValue model.AgentRuntime
@@ -348,7 +461,12 @@ func (o *ExternalObserver) observe(ctx context.Context, manifest model.Manifest,
 		}
 	}
 	if runtime != nil && runtime.HostPID > 0 && runtime.HostStartTime > 0 {
-		if info, err := o.process.Info(runtime.HostPID); err == nil && info.State != "Z" && info.StartTime == runtime.HostStartTime && (runtime.HostProcessGroup == 0 || info.PGRP == runtime.HostProcessGroup) {
+		info, err := inspection.processes.Info(runtime.HostPID)
+		if err != nil && runtime.UpdatedAt.After(inspection.at) {
+			// The runtime started after the process table was read.
+			info, err = o.process.Info(runtime.HostPID)
+		}
+		if err == nil && info.State != "Z" && info.StartedAs(runtime.HostStartTime) && (runtime.HostProcessGroup == 0 || info.PGRP == runtime.HostProcessGroup) {
 			observation.ProcessOnline = true
 			observation.Process.DiscoverySource = "runtime"
 		}
@@ -368,7 +486,7 @@ func (o *ExternalObserver) observe(ctx context.Context, manifest model.Manifest,
 			observation.Process.TmuxPaneIndex = pane.PaneIndex
 			observation.Process.TmuxPanePID = pane.PanePID
 			observation.Process.TmuxPaneCommand = pane.Command
-			if backend, found, err := o.process.FindDescendant(pane.PanePID, []string{"internal-driver", "wi-agent-"}); err == nil && found {
+			if backend, found, err := inspection.processes.FindDescendant(pane.PanePID, []string{"internal-driver", "wi-agent-"}); err == nil && found {
 				observation.ProcessOnline = true
 				observation.Process.BackendPID = backend.PID
 				observation.Process.DiscoverySource = "tmux"
@@ -379,9 +497,10 @@ func (o *ExternalObserver) observe(ctx context.Context, manifest model.Manifest,
 	if err := o.applyActionability(manifest.ID, &observation); err != nil {
 		observation.Warnings = append(observation.Warnings, err.Error())
 	}
-	if includeWorktree {
-		observation.Worktree = o.observeWorktree(ctx, manifest)
-		observation.WorktreeObservedAt = now
+	path, branch := checkoutKey(manifest)
+	if inspected, ok := inspection.worktree(manifest.ID); ok && inspected.path == path && inspected.branch == branch {
+		observation.Worktree = inspected.worktree
+		observation.WorktreeObservedAt = inspection.at
 	} else {
 		var previous AgentObservation
 		if found, _ := o.database.ReadProjection(AgentObservationProjection, manifest.ID, &previous); found {
@@ -390,6 +509,11 @@ func (o *ExternalObserver) observe(ctx context.Context, manifest model.Manifest,
 		}
 	}
 	return observation
+}
+
+func (i *Inspection) worktree(itemID string) (inspectedWorktree, bool) {
+	inspected, ok := i.checkouts[itemID]
+	return inspected, ok
 }
 
 func (o *ExternalObserver) observeWorktree(ctx context.Context, manifest model.Manifest) *ProjectedWorktree {

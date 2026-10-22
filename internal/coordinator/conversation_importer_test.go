@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -113,4 +114,118 @@ func testConversationLineDecoder(_ model.Conversation, line uint64, raw []byte) 
 		fact.Terminal = true
 	}
 	return fact, true
+}
+
+// A driver may decode a record without reporting a fact for it, as Claude
+// does for meta and side-chain entries. The import must still advance:
+// otherwise it re-decodes the same records on every pass.
+func TestConversationImporterAdvancesPastRecordsWithoutFacts(t *testing.T) {
+	root, itemID, sessionID := t.TempDir(), importTestID, "01KZYHHK91GWS6FZFQZQTT1KJ2"
+	relative := filepath.Join("sessions", "claude", sessionID+".jsonl")
+	path := filepath.Join(root, "items", itemID, relative)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("{\"meta\":true}\n{\"role\":\"user\"}\n{\"meta\":true}\n{\"role\":\"assistant\"}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDatabase(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	manifest := model.NewManifest(itemID, "claude-index", "Claude index", nil, false, time.Now().UTC(), model.Repository{}, model.Checkout{})
+	manifest.PrimaryConversation = &model.Conversation{Driver: "claude", ID: sessionID, Locator: relative}
+	encodedManifest, _ := json.Marshal(manifest)
+	digest := sha256.Sum256(encodedManifest)
+	if _, err := db.SyncImportedManifests(map[string]ImportedManifest{itemID: {Manifest: manifest, Digest: hex.EncodeToString(digest[:])}}, true); err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	decoders := ConversationDecoders{"claude": func(_ context.Context, _ model.Conversation, records []ConversationRecord) ([]ConversationEventFact, []bool, error) {
+		calls++
+		facts := []ConversationEventFact{}
+		decoded := make([]bool, len(records))
+		for i, record := range records {
+			var value struct {
+				Role string `json:"role"`
+			}
+			decoded[i] = json.Unmarshal(record.Raw, &value) == nil
+			if value.Role != "" {
+				facts = append(facts, ConversationEventFact{Line: record.Line, Type: "message", Role: value.Role, Terminal: value.Role == "assistant"})
+			}
+		}
+		return facts, decoded, nil
+	}}
+	first, err := ImportConversations(context.Background(), db, root, decoders)
+	if err != nil || len(first.Warnings) != 0 || first.EntriesScanned != 4 {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	var index ConversationIndex
+	if ok, err := db.ReadProjection(ConversationProjection, itemID, &index); err != nil || !ok || index.LastUserPrompt == nil || index.LastTerminalAssistant == nil {
+		t.Fatalf("index=%+v ok=%v err=%v", index, ok, err)
+	}
+	second, err := ImportConversations(context.Background(), db, root, decoders)
+	if err != nil || second.BytesRead != 0 || calls != 1 {
+		t.Fatalf("second=%+v calls=%d err=%v", second, calls, err)
+	}
+}
+
+// racingLock lets another import commit while this one decodes, as the
+// daemon's barrier and its import loop can.
+type racingLock struct {
+	race func()
+	mu   sync.Mutex
+}
+
+func (l *racingLock) Lock() {
+	if l.race != nil {
+		race := l.race
+		l.race = nil
+		race()
+	}
+	l.mu.Lock()
+}
+func (l *racingLock) Unlock() { l.mu.Unlock() }
+
+func TestConversationImportsDecodeOutsideTheLockWithoutApplyingTwice(t *testing.T) {
+	root, itemID, sessionID := t.TempDir(), importTestID, "01KZYHHK91GWS6FZFQZQTT1KJ2"
+	relative := filepath.Join("sessions", "pi", sessionID+".jsonl")
+	path := filepath.Join(root, "items", itemID, relative)
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	at := time.Now().UTC()
+	line := func(role string, offset time.Duration) string {
+		encoded, _ := json.Marshal(map[string]any{"type": "message", "timestamp": at.Add(offset).Format(time.RFC3339Nano), "message": map[string]any{"role": role, "stopReason": "stop"}})
+		return string(encoded) + "\n"
+	}
+	if err := os.WriteFile(path, []byte(line("user", 0)+line("assistant", time.Second)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDatabase(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	manifest := model.NewManifest(itemID, "pi-race", "Pi race", nil, false, at, model.Repository{}, model.Checkout{})
+	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: sessionID, Locator: relative}
+	encodedManifest, _ := json.Marshal(manifest)
+	digest := sha256.Sum256(encodedManifest)
+	if _, err := db.SyncImportedManifests(map[string]ImportedManifest{itemID: {Manifest: manifest, Digest: hex.EncodeToString(digest[:])}}, true); err != nil {
+		t.Fatal(err)
+	}
+	lock := &racingLock{race: func() {
+		if _, err := ImportConversations(context.Background(), db, root, testConversationDecoders); err != nil {
+			t.Error(err)
+		}
+	}}
+	report, err := importConversations(context.Background(), db, root, false, testConversationDecoders, lock)
+	if err != nil || len(report.Warnings) != 0 || report.FilesImported != 0 {
+		t.Fatalf("racing import report=%+v err=%v", report, err)
+	}
+	checkpoint, found, err := db.SourceCheckpoint(filepath.Join("items", itemID, relative))
+	if err != nil || !found || checkpoint.RecordsImported != 2 {
+		t.Fatalf("records applied twice or lost: %+v found=%v err=%v", checkpoint, found, err)
+	}
 }

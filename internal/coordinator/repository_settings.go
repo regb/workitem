@@ -275,6 +275,10 @@ func (d *Database) SetRepositorySetting(command SetRepositorySettingCommand, reg
 		}
 		return outcomes.Put([]byte(command.ID), data)
 	})
+	if err == nil {
+		// Repository changes show in every item's project.
+		d.changes.recordAll()
+	}
 	return result, err
 }
 func (c *Client) RepositorySettings(ctx context.Context, selector string) (RepositorySettingsResult, error) {

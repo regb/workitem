@@ -50,6 +50,7 @@ const (
 	MethodStoreCommand          = "store_command"
 	MethodRuntimeEvent          = "runtime_event"
 	MethodRuntimeEvents         = "runtime_events"
+	MethodChangesWait           = "changes_wait"
 	MethodItemEvents            = "item_events"
 	MethodActivityBarrier       = "activity_barrier"
 	MethodActionability         = "actionability_snapshot"

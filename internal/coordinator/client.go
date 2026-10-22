@@ -284,6 +284,13 @@ func (c *Client) AcquireLease(ctx context.Context, request model.LeaseRequest) (
 	return result, err
 }
 
+// Changes waits up to request.WaitMillis for items to change after a revision.
+func (c *Client) Changes(ctx context.Context, request ChangesRequest) (ChangesResult, error) {
+	var result ChangesResult
+	err := c.Call(ctx, MethodChangesWait, request, &result)
+	return result, err
+}
+
 func (c *Client) ReleaseLease(ctx context.Context, request model.LeaseRequest) (model.LeaseResult, error) {
 	var result model.LeaseResult
 	err := c.Call(ctx, MethodLeaseRelease, request, &result)

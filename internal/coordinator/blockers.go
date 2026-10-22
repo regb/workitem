@@ -263,6 +263,9 @@ func (d *Database) SweepBlockers(now time.Time) (int, error) {
 		}
 		return nil
 	})
+	if err == nil && cleared > 0 {
+		d.changes.recordAll()
+	}
 	return cleared, err
 }
 

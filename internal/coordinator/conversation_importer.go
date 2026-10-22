@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/regb/workitem/internal/model"
@@ -64,12 +66,19 @@ type ConversationImportReport struct {
 }
 
 func ImportConversations(ctx context.Context, database *Database, dataRoot string, registries ...ConversationDecoders) (ConversationImportReport, error) {
-	return importConversations(ctx, database, dataRoot, false, firstConversationDecoders(registries))
+	return importConversations(ctx, database, dataRoot, false, firstConversationDecoders(registries), noLock{})
 }
 
 func ImportActiveConversations(ctx context.Context, database *Database, dataRoot string, registries ...ConversationDecoders) (ConversationImportReport, error) {
-	return importConversations(ctx, database, dataRoot, true, firstConversationDecoders(registries))
+	return importConversations(ctx, database, dataRoot, true, firstConversationDecoders(registries), noLock{})
 }
+
+// noLock serves callers that already hold the domain lock or run before the
+// daemon serves anyone.
+type noLock struct{}
+
+func (noLock) Lock()   {}
+func (noLock) Unlock() {}
 
 func firstConversationDecoders(registries []ConversationDecoders) ConversationDecoders {
 	if len(registries) > 0 {
@@ -78,7 +87,10 @@ func firstConversationDecoders(registries []ConversationDecoders) ConversationDe
 	return nil
 }
 
-func importConversations(ctx context.Context, database *Database, dataRoot string, activeOnly bool, decoders ConversationDecoders) (ConversationImportReport, error) {
+// importConversations holds apply only while folding decoded facts into
+// projections, so a running daemon keeps ingesting runtime events while
+// drivers decode.
+func importConversations(ctx context.Context, database *Database, dataRoot string, activeOnly bool, decoders ConversationDecoders, apply sync.Locker) (ConversationImportReport, error) {
 	report := ConversationImportReport{Warnings: []string{}}
 	manifests, err := database.ListManifests()
 	if err != nil {
@@ -116,11 +128,14 @@ func importConversations(ctx context.Context, database *Database, dataRoot strin
 			continue
 		}
 		decoder := decoders[manifest.PrimaryConversation.Driver]
-		part, err := importConversationFile(ctx, database, path, source, manifest.ID, *manifest.PrimaryConversation, info, decoder)
+		part, err := importConversationFile(ctx, database, path, source, manifest.ID, *manifest.PrimaryConversation, info, decoder, apply)
 		report.EntriesScanned += part.EntriesScanned
 		report.MalformedLines += part.MalformedLines
 		report.BytesRead += part.BytesRead
 		report.Warnings = append(report.Warnings, part.Warnings...)
+		if errors.Is(err, errImportRaced) {
+			continue
+		}
 		if err != nil {
 			report.Warnings = append(report.Warnings, fmt.Sprintf("%s: %v", manifest.ID, err))
 			continue
@@ -130,7 +145,15 @@ func importConversations(ctx context.Context, database *Database, dataRoot strin
 	return report, nil
 }
 
-func importConversationFile(ctx context.Context, database *Database, path, source, itemID string, conversation model.Conversation, info os.FileInfo, decoder ConversationDecoder) (ConversationImportReport, error) {
+// errImportRaced stops a file's import when another import advanced its
+// checkpoint meanwhile; that import already covers the records.
+var errImportRaced = errors.New("conversation checkpoint changed during import")
+
+// importConversationFile reads and decodes new records without the domain
+// lock: decoding runs the driver, and a large catch-up takes long. Only
+// folding the facts into projections and committing holds apply, after
+// checking that no other import moved the checkpoint since it was read.
+func importConversationFile(ctx context.Context, database *Database, path, source, itemID string, conversation model.Conversation, info os.FileInfo, decoder ConversationDecoder, apply sync.Locker) (ConversationImportReport, error) {
 	report := ConversationImportReport{Warnings: []string{}}
 	file, err := os.Open(path)
 	if err != nil {
@@ -152,26 +175,21 @@ func importConversationFile(ctx context.Context, database *Database, path, sourc
 	if err != nil {
 		return report, err
 	}
+	// committed is the checkpoint as stored; the import applies only on top
+	// of it.
+	committed, committedFound := checkpoint, found
 	reset := !found || checkpoint.Fingerprint != fingerprint || checkpoint.Offset > info.Size()
+	if !reset {
+		var index ConversationIndex
+		if found, err := database.ReadProjection(ConversationProjection, itemID, &index); err != nil {
+			return report, err
+		} else if !found {
+			reset = true
+		}
+	}
 	if reset {
 		checkpoint = SourceCheckpoint{Source: source, Fingerprint: fingerprint, FingerprintSize: fingerprintSize}
 	}
-	index := ConversationIndex{WorkItemID: itemID, ConversationID: conversation.ID, Source: source}
-	if !reset {
-		found, err := database.ReadProjection(ConversationProjection, itemID, &index)
-		if err != nil {
-			return report, err
-		}
-		if !found {
-			reset = true
-			checkpoint = SourceCheckpoint{Source: source, Fingerprint: fingerprint, FingerprintSize: fingerprintSize}
-		}
-	}
-	attentionSnapshot, err := database.AttentionActivity(itemID)
-	if err != nil {
-		return report, err
-	}
-	attention := attentionSnapshot.Activity
 	if _, err := file.Seek(checkpoint.Offset, io.SeekStart); err != nil {
 		return report, err
 	}
@@ -179,6 +197,7 @@ func importConversationFile(ctx context.Context, database *Database, path, sourc
 	offset, batchStart := checkpoint.Offset, checkpoint.Offset
 	changed := false
 	records := make([]ConversationRecord, 0, runtimeBatchRecords)
+	facts := []ConversationEventFact{}
 	flush := func() error {
 		if len(records) == 0 {
 			return nil
@@ -189,30 +208,32 @@ func importConversationFile(ctx context.Context, database *Database, path, sourc
 			records = records[:0]
 			return nil
 		}
-		facts, decoded, err := decoder(ctx, conversation, records)
+		decodedFacts, decoded, err := decoder(ctx, conversation, records)
 		if err != nil {
 			return err
 		}
 		if len(decoded) != len(records) {
 			return fmt.Errorf("conversation driver returned %d decode results for %d records", len(decoded), len(records))
 		}
+		// A decoded record yields at most one fact, in record order: drivers
+		// report records they understood but have nothing to say about (meta
+		// or side-chain entries) as decoded without a fact.
 		factIndex := 0
-		for _, ok := range decoded {
+		for i, ok := range decoded {
 			if !ok {
 				report.MalformedLines++
 				checkpoint.RecordsSkipped++
 				continue
 			}
-			if factIndex >= len(facts) {
-				return fmt.Errorf("conversation driver omitted a decoded fact")
-			}
 			report.EntriesScanned++
 			checkpoint.RecordsImported++
-			applyConversationFact(&index, &attention, facts[factIndex])
-			factIndex++
+			if factIndex < len(decodedFacts) && decodedFacts[factIndex].Line == records[i].Line {
+				facts = append(facts, decodedFacts[factIndex])
+				factIndex++
+			}
 		}
-		if factIndex != len(facts) {
-			return fmt.Errorf("conversation driver returned extra decoded facts")
+		if factIndex != len(decodedFacts) {
+			return fmt.Errorf("conversation driver returned facts for records it did not decode")
 		}
 		records = records[:0]
 		return nil
@@ -223,6 +244,31 @@ func importConversationFile(ctx context.Context, database *Database, path, sourc
 		}
 		if offset == checkpoint.Offset && !changed {
 			return nil
+		}
+		apply.Lock()
+		defer apply.Unlock()
+		current, currentFound, err := database.SourceCheckpoint(source)
+		if err != nil {
+			return err
+		}
+		if currentFound != committedFound || currentFound && (current.Offset != committed.Offset || current.Fingerprint != committed.Fingerprint) {
+			return errImportRaced
+		}
+		index := ConversationIndex{WorkItemID: itemID, ConversationID: conversation.ID, Source: source}
+		if !reset {
+			if found, err := database.ReadProjection(ConversationProjection, itemID, &index); err != nil {
+				return err
+			} else if !found {
+				return errImportRaced
+			}
+		}
+		attentionSnapshot, err := database.AttentionActivity(itemID)
+		if err != nil {
+			return err
+		}
+		attention := attentionSnapshot.Activity
+		for _, fact := range facts {
+			applyConversationFact(&index, &attention, fact)
 		}
 		observed := time.Now().UTC()
 		checkpoint.Offset = offset
@@ -239,10 +285,11 @@ func importConversationFile(ctx context.Context, database *Database, path, sourc
 		attention.Source = source
 		indexBytes, _ := json.Marshal(index)
 		attentionBytes, _ := json.Marshal(attention)
-		_, err := database.CommitSourceBatch(checkpoint, nil, []ProjectionUpdate{{Projection: ConversationProjection, Key: itemID, Value: indexBytes}, {Projection: AttentionActivityProjection, Key: itemID, Value: attentionBytes}})
-		if err != nil {
+		if _, err := database.CommitSourceBatch(checkpoint, nil, []ProjectionUpdate{{Projection: ConversationProjection, Key: itemID, Value: indexBytes}, {Projection: AttentionActivityProjection, Key: itemID, Value: attentionBytes}}); err != nil {
 			return err
 		}
+		committed, committedFound, reset = checkpoint, true, false
+		facts = facts[:0]
 		batchStart = offset
 		changed = false
 		return nil

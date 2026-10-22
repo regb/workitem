@@ -127,12 +127,9 @@ func (s *Service) EnterExisting(ctx context.Context, opts contract.ResolveOption
 	if s.tmux == nil {
 		return Result{}, fmt.Errorf("tmux terminal adapter is not configured")
 	}
-	if err := s.validateClaim(ctx, m); err != nil {
-		return Result{}, err
-	}
-	exists, err := s.tmux.HasSession(ctx, res.Session)
+	exists, err := s.validateClaim(ctx, m)
 	if err != nil {
-		return Result{}, fmt.Errorf("could not inspect existing tmux terminal: %w", err)
+		return Result{}, err
 	}
 	if !exists {
 		return Result{}, fmt.Errorf("active TUI runtime terminal %s does not exist; the runtime process may be orphaned after a tmux server restart, run `wi agent runtime stop --force --item %s`, wait for it to exit, then switch again", res.Session, m.ID)
@@ -237,7 +234,7 @@ func (s *Service) EnsureForManifestWithEnvironmentAndScrub(ctx context.Context, 
 	if s.tmux == nil {
 		return res, fmt.Errorf("tmux terminal adapter is not configured")
 	}
-	if err := s.validateClaim(ctx, m); err != nil {
+	if _, err := s.validateClaim(ctx, m); err != nil {
 		return Result{}, err
 	}
 	created, err := s.tmux.EnsureSession(ctx, s.SpecWithEnvironmentAndScrub(m, environment, scrub))
@@ -265,23 +262,28 @@ func (s *Service) EnsureForManifestWithEnvironmentAndScrub(ctx context.Context, 
 	return res, nil
 }
 
-func (s *Service) validateClaim(ctx context.Context, m model.Manifest) error {
+// validateClaim reports whether the item's terminal exists, and fails when
+// it belongs to a superseded workspace claim.
+func (s *Service) validateClaim(ctx context.Context, m model.Manifest) (bool, error) {
 	// A missing terminal is normal; stale handle metadata must not block creation.
 	exists, err := s.tmux.HasSession(ctx, m.TerminalSessionName())
-	if err != nil || !exists {
-		return err
+	if err != nil {
+		return false, fmt.Errorf("could not inspect existing tmux terminal: %w", err)
+	}
+	if !exists {
+		return false, nil
 	}
 	terminal, err := s.store.LoadTerminalRuntime(m.ID)
 	if err != nil {
-		return err
+		return true, err
 	}
 	if terminal != nil && terminal.WorkspaceClaimID != "" {
 		claim := m.Checkout.Claim
 		if claim == nil || claim.ID != terminal.WorkspaceClaimID || claim.Generation != terminal.WorkspaceClaimGeneration {
-			return fmt.Errorf("terminal belongs to a superseded workspace claim; stop its agent runtime and close the terminal before reopening it")
+			return true, fmt.Errorf("terminal belongs to a superseded workspace claim; stop its agent runtime and close the terminal before reopening it")
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (s *Service) resolveTerminalItem(ctx context.Context, opts contract.ResolveOptions) (model.Manifest, error) {

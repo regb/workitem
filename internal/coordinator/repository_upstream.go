@@ -127,5 +127,9 @@ func (d *Database) recordRepositoryUpstream(command SetRepositoryUpstreamCommand
 		}
 		return outcomes.Put([]byte(command.ID), encoded)
 	})
+	if err == nil {
+		// Repository changes show in every item's project.
+		d.changes.recordAll()
+	}
 	return result, err
 }

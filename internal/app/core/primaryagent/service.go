@@ -89,7 +89,7 @@ func (s *Service) ObserveOwnership(runtime *model.AgentRuntime) OwnershipStatus 
 	if err != nil || info.State == "Z" {
 		return status
 	}
-	status.IdentityVerified = runtime.HostStartTime != 0 && runtime.HostProcessGroup != 0 && info.StartTime == runtime.HostStartTime && info.PGRP == runtime.HostProcessGroup
+	status.IdentityVerified = runtime.HostProcessGroup != 0 && info.StartedAs(runtime.HostStartTime) && info.PGRP == runtime.HostProcessGroup
 	if !status.IdentityVerified {
 		return status
 	}

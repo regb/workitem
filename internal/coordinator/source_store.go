@@ -164,5 +164,13 @@ func (d *Database) CommitSourceBatch(checkpoint SourceCheckpoint, pending []Pend
 	if err != nil {
 		return SourceBatchResult{}, fmt.Errorf("commit source batch: %w", err)
 	}
+	// Imported native content changes what readers of those items show.
+	ids := []string{}
+	for _, event := range pending {
+		ids = append(ids, event.ItemID)
+	}
+	if result.Imported > 0 {
+		d.changes.record(eventItems(ids...)...)
+	}
 	return result, nil
 }

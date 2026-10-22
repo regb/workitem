@@ -170,6 +170,12 @@ func coordinatorActionabilitySnapshot(ctx context.Context, cfg Config, labelRule
 	if current, err := cfg.App.ResolveItem(ctx, app.ResolveOptions{CWD: cfg.CWD, Env: cfg.Env}); err == nil {
 		currentItemID = current.ID
 	}
+	return coordinatorActionabilitySnapshotFrom(ctx, cfg, currentItemID, labelRules)
+}
+
+// coordinatorActionabilitySnapshotFrom ranks from an already resolved current
+// item; resolving it from tmux costs two tmux commands.
+func coordinatorActionabilitySnapshotFrom(ctx context.Context, cfg Config, currentItemID string, labelRules map[string]bool) (app.AttentionQueueResult, *app.NextQueueSelection, error) {
 	requestCtx, cancel := context.WithTimeout(ctx, 2500*time.Millisecond)
 	result, err := cfg.Coordinator.ActionabilitySnapshot(requestCtx, coordinator.ActionabilitySnapshotRequest{CurrentItemID: currentItemID, Queue: coordinator.ActionabilityQueueOptions{Strategy: cfg.App.AttentionConfig.Priority, LabelRules: labelRules}})
 	cancel()

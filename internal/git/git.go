@@ -103,8 +103,10 @@ func (c Client) DetectRepository(ctx context.Context, dir, revision string) (mod
 
 // WorktreeSnapshot returns HEAD, branch, and porcelain-v2 status from one Git
 // process. The status excludes branch metadata and is empty for a clean tree.
+// It takes no optional locks, so observing never makes an agent's own Git
+// command fail on index.lock.
 func (c Client) WorktreeSnapshot(ctx context.Context, dir string) (head, branch, status string, err error) {
-	output, err := c.output(ctx, dir, "status", "--porcelain=v2", "--branch", "--untracked-files=normal")
+	output, err := c.output(ctx, dir, "--no-optional-locks", "status", "--porcelain=v2", "--branch", "--untracked-files=normal")
 	if err != nil {
 		return "", "", "", err
 	}

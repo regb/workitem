@@ -143,6 +143,9 @@ func (d *Database) ExecuteStoreCommand(command StoreCommand, payload json.RawMes
 		}
 		return outcomes.Put([]byte(command.ID), encodedOutcome)
 	})
+	if err == nil && !result.Duplicate {
+		d.changes.record(command.ItemID)
+	}
 	return result, err
 }
 

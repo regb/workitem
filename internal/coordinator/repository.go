@@ -131,5 +131,9 @@ func (d *Database) RegisterRepository(command RegisterRepositoryCommand) (Regist
 		outcome, _ := json.Marshal(repositoryCommandOutcome{Command: command, Result: result})
 		return outcomes.Put([]byte(command.ID), outcome)
 	})
+	if err == nil {
+		// Repository changes show in every item's project.
+		d.changes.recordAll()
+	}
 	return result, err
 }

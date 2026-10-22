@@ -39,6 +39,8 @@ var (
 type Database struct {
 	path string
 	db   *bolt.DB
+	// changes wakes readers waiting for item changes (changes_wait).
+	changes *changeLog
 }
 
 type DatabaseStatus struct {
@@ -126,7 +128,7 @@ func OpenDatabase(dataRoot string) (*Database, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open coordinator database: %w", err)
 	}
-	result := &Database{path: path, db: db}
+	result := &Database{path: path, db: db, changes: newChangeLog()}
 	if err := result.backupBeforeUpgrade(); err != nil {
 		db.Close()
 		return nil, err
@@ -311,6 +313,15 @@ func (d *Database) Commit(command Command, pending []PendingEvent, updates []Pro
 		}
 		return commands.Put([]byte(command.ID), encoded)
 	})
+	if err == nil && !result.Duplicate {
+		ids := []string{command.ItemID}
+		for _, event := range result.Events {
+			ids = append(ids, event.ItemID)
+		}
+		if len(result.Events) > 0 || len(updates) > 0 {
+			d.changes.record(eventItems(ids...)...)
+		}
+	}
 	return result, err
 }
 
@@ -427,6 +438,9 @@ func (d *Database) SyncImportedManifests(values map[string]ImportedManifest, sca
 		result.GlobalSequence = sequence
 		return nil
 	})
+	if err == nil && (result.Imported > 0 || result.Removed > 0) {
+		d.changes.recordAll()
+	}
 	return result, err
 }
 

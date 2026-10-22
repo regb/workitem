@@ -128,5 +128,9 @@ func (d *Database) RenameRepository(command RenameRepositoryCommand) (RenameRepo
 		}
 		return outcomes.Put([]byte(command.ID), encoded)
 	})
+	if err == nil {
+		// Repository changes show in every item's project.
+		d.changes.recordAll()
+	}
 	return result, err
 }

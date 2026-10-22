@@ -230,9 +230,7 @@ func (s *Server) reconcilePi(ctx context.Context) {
 		case <-s.closed:
 			return
 		case <-ticker.C:
-			s.domainMu.Lock()
-			conversationReport, conversationErr := ImportConversations(ctx, s.database, s.dataRoot, s.conversationDecoders)
-			s.domainMu.Unlock()
+			conversationReport, conversationErr := importConversations(ctx, s.database, s.dataRoot, false, s.conversationDecoders, &s.domainMu)
 			if conversationErr == nil {
 				s.importMu.Lock()
 				s.lastConversationImport = conversationReport
@@ -270,7 +268,10 @@ func (s *Server) sweepBlockers(ctx context.Context) {
 func (s *Server) reconcileExternal(ctx context.Context) {
 	defer s.wg.Done()
 	runtimeTicker := time.NewTicker(2 * time.Second)
-	worktreeTicker := time.NewTicker(30 * time.Second)
+	// Inspection runs outside the domain lock, so it can keep observations
+	// fresh for readers that do not inspect themselves (wi next, the web
+	// dashboard).
+	worktreeTicker := time.NewTicker(10 * time.Second)
 	defer runtimeTicker.Stop()
 	defer worktreeTicker.Stop()
 	for {
@@ -280,29 +281,59 @@ func (s *Server) reconcileExternal(ctx context.Context) {
 		case <-s.closed:
 			return
 		case <-runtimeTicker.C:
-			s.domainMu.Lock()
-			_ = s.observer.ReconcileRuntime(ctx)
-			s.domainMu.Unlock()
+			s.reconcile(ctx, false)
 		case <-worktreeTicker.C:
-			s.domainMu.Lock()
-			_ = s.observer.Reconcile(ctx)
-			s.domainMu.Unlock()
+			s.reconcile(ctx, true)
 		}
 	}
 }
 
-func (s *Server) activityBarrier(ctx context.Context) (ActivityBarrierResult, error) {
+// reconcile inspects outside the domain lock, then folds the inspection
+// into observations under it.
+func (s *Server) reconcile(ctx context.Context, worktrees bool) {
+	inspection, err := s.observer.Inspect(ctx, worktrees)
+	if err != nil {
+		return
+	}
 	s.domainMu.Lock()
 	defer s.domainMu.Unlock()
-	return s.refreshActionabilityLocked(ctx)
+	_ = s.observer.ReconcileWith(ctx, inspection)
 }
 
-func (s *Server) refreshActionabilityLocked(ctx context.Context) (ActivityBarrierResult, error) {
-	report, err := ImportActiveConversations(ctx, s.database, s.dataRoot, s.conversationDecoders)
+func (s *Server) activityBarrier(ctx context.Context) (ActivityBarrierResult, error) {
+	inspection, report, err := s.prepareBarrier(ctx)
 	if err != nil {
 		return ActivityBarrierResult{}, err
 	}
-	if err := s.observer.Reconcile(ctx); err != nil {
+	s.domainMu.Lock()
+	defer s.domainMu.Unlock()
+	return s.refreshActionabilityLocked(ctx, inspection, report)
+}
+
+// prepareBarrier does the slow part of a barrier without the domain lock, so
+// runtime events keep flowing meanwhile: it inspects Git, tmux and processes
+// while importing new conversation records, which holds the lock only to
+// apply them.
+func (s *Server) prepareBarrier(ctx context.Context) (*Inspection, ConversationImportReport, error) {
+	var report ConversationImportReport
+	var importErr error
+	imported := make(chan struct{})
+	go func() {
+		defer close(imported)
+		report, importErr = importConversations(ctx, s.database, s.dataRoot, true, s.conversationDecoders, &s.domainMu)
+	}()
+	inspection, err := s.observer.Inspect(ctx, true)
+	<-imported
+	if err == nil {
+		err = importErr
+	}
+	return inspection, report, err
+}
+
+// refreshActionabilityLocked folds a barrier's inspection into observations
+// under the domain lock.
+func (s *Server) refreshActionabilityLocked(ctx context.Context, inspection *Inspection, report ConversationImportReport) (ActivityBarrierResult, error) {
+	if err := s.observer.ReconcileWith(ctx, inspection); err != nil {
 		return ActivityBarrierResult{}, err
 	}
 	s.importMu.Lock()
@@ -316,10 +347,25 @@ func (s *Server) refreshActionabilityLocked(ctx context.Context) (ActivityBarrie
 	return ActivityBarrierResult{Projection: ProjectionMetadata{Revision: status.GlobalSequence, Source: "daemon.activity_barrier", ObservedAt: observedAt, Fresh: true, Warnings: append([]string(nil), report.Warnings...)}, ConversationImport: report}, nil
 }
 
+// actionabilitySnapshot ranks what needs attention for wi next. Navigation
+// must be instant, so it inspects nothing outside Wi: live runtimes report
+// their own activity, and processes, terminals and worktrees come from the
+// background inspection (at most 2 s old for processes, 10 s for Git). It
+// imports new conversation records, so a reply just written counts.
 func (s *Server) actionabilitySnapshot(ctx context.Context, currentItemID string, options ActionabilityQueueOptions) (ActionabilitySnapshotResult, error) {
+	report, err := importConversations(ctx, s.database, s.dataRoot, true, s.conversationDecoders, &s.domainMu)
+	if err != nil {
+		return ActionabilitySnapshotResult{}, err
+	}
 	s.domainMu.Lock()
 	defer s.domainMu.Unlock()
-	barrier, err := s.refreshActionabilityLocked(ctx)
+	if err := s.observer.ReconcileActionability(ctx); err != nil {
+		return ActionabilitySnapshotResult{}, err
+	}
+	s.importMu.Lock()
+	s.lastConversationImport = report
+	s.importMu.Unlock()
+	status, err := s.database.Status()
 	if err != nil {
 		return ActionabilitySnapshotResult{}, err
 	}
@@ -327,7 +373,8 @@ func (s *Server) actionabilitySnapshot(ctx context.Context, currentItemID string
 	if err != nil {
 		return ActionabilitySnapshotResult{}, err
 	}
-	return ActionabilitySnapshotResult{Projection: barrier.Projection, ConversationImport: barrier.ConversationImport, Queue: queue, Selection: SelectActionability(queue, currentItemID)}, nil
+	projection := ProjectionMetadata{Revision: status.GlobalSequence, Source: "daemon.actionability_snapshot", ObservedAt: time.Now().UTC(), Fresh: true, Warnings: append([]string(nil), report.Warnings...)}
+	return ActionabilitySnapshotResult{Projection: projection, ConversationImport: report, Queue: queue, Selection: SelectActionability(queue, currentItemID)}, nil
 }
 
 func (s *Server) publishRuntimeEvent() {
@@ -462,6 +509,7 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		}
 		var leaseResult model.LeaseResult
 		var err error
+		before := s.leases.get(leaseRequest.ItemID, time.Now().UTC())
 		if request.Method == MethodLeaseAcquire {
 			leaseResult, err = s.leases.acquire(leaseRequest, time.Now().UTC())
 		} else {
@@ -470,6 +518,10 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		if err != nil {
 			s.writeError(conn, request.ID, "invalid_request", err.Error())
 			return
+		}
+		// A handover changes who may write; a renewal changes nothing readers show.
+		if leaseResult.Granted && (request.Method == MethodLeaseRelease || before == nil || leaseResult.Lease == nil || before.ID != leaseResult.Lease.ID) {
+			s.database.changes.record(leaseRequest.ItemID)
 		}
 		result = leaseResult
 	case MethodItemResources:
@@ -574,6 +626,24 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			events = append(events, event.toModelEvent())
 		}
 		result = ItemEventsResult{Events: events}
+	case MethodChangesWait:
+		var changesRequest ChangesRequest
+		if err := json.Unmarshal(request.Payload, &changesRequest); err != nil || changesRequest.WaitMillis < 0 || changesRequest.WaitMillis > 30000 {
+			s.writeError(conn, request.ID, "invalid_request", "valid after and wait_millis are required")
+			return
+		}
+		changes, waiter := s.database.changes.since(changesRequest.Epoch, changesRequest.After)
+		if !changes.All && len(changes.ItemIDs) == 0 && changesRequest.WaitMillis > 0 {
+			timer := time.NewTimer(time.Duration(changesRequest.WaitMillis) * time.Millisecond)
+			select {
+			case <-waiter:
+			case <-timer.C:
+			case <-s.closed:
+			}
+			timer.Stop()
+			changes, _ = s.database.changes.since(changesRequest.Epoch, changesRequest.After)
+		}
+		result = changes
 	case MethodRuntimeEvents:
 		var eventsRequest RuntimeEventsRequest
 		if err := json.Unmarshal(request.Payload, &eventsRequest); err != nil || !model.ValidID(eventsRequest.ItemID) || eventsRequest.Limit < 0 || eventsRequest.Limit > 10000 || eventsRequest.WaitMillis < 0 || eventsRequest.WaitMillis > 30000 {

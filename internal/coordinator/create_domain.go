@@ -170,6 +170,9 @@ func (d *Database) executeCreateItemCommand(command CreateItemCommand, actor str
 		}
 		return outcomes.Put([]byte(command.ID), encodedOutcome)
 	})
+	if err == nil && !result.Duplicate {
+		d.changes.record(result.Manifest.ID)
+	}
 	return result, err
 }
 

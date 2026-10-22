@@ -73,8 +73,15 @@ func runNext(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 		precomputedQueue = &queue
 		precomputedSelection = selection
 	}
+	resolve := app.ResolveOptions{CWD: cfg.CWD, Env: cfg.Env}
 	if !waitCurrent && !deferCurrent {
-		queue, selection, snapshotErr := coordinatorActionabilitySnapshot(ctx, cfg, labelRules)
+		currentItemID := ""
+		if current, err := cfg.App.ResolveItem(ctx, resolve); err == nil {
+			currentItemID = current.ID
+			// Navigation resolves the current item once.
+			resolve.Selector = current.ID
+		}
+		queue, selection, snapshotErr := coordinatorActionabilitySnapshotFrom(ctx, cfg, currentItemID, labelRules)
 		if snapshotErr != nil {
 			return fmt.Errorf("load actionability snapshot: %w", snapshotErr)
 		}
@@ -82,7 +89,7 @@ func runNext(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 		precomputedSelection = selection
 	}
 	res, err := cfg.App.NextWorkItem(ctx, app.NextWorkItemOptions{
-		ResolveOptions:       app.ResolveOptions{CWD: cfg.CWD, Env: cfg.Env},
+		ResolveOptions:       resolve,
 		WorkListOptions:      app.WorkListOptions{LabelRules: labelRules},
 		DeferCurrent:         deferCurrent,
 		WaitCurrent:          waitCurrent,

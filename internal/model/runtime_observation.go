@@ -7,9 +7,18 @@ type ProcessInfo struct {
 	PPID      int
 	PGRP      int
 	StartTime uint64
-	State     string
-	Command   string
-	Cmdline   []string
+	// LegacyStartTime is the start time identity as recorded before it was
+	// read locale-independently, or zero; runtimes started earlier carry it.
+	LegacyStartTime uint64
+	State           string
+	Command         string
+	Cmdline         []string
+}
+
+// StartedAs reports whether this is the process whose start time identity
+// was recorded.
+func (i ProcessInfo) StartedAs(recorded uint64) bool {
+	return recorded != 0 && (i.StartTime == recorded || i.LegacyStartTime == recorded)
 }
 
 func (i ProcessInfo) CommandLine() string {

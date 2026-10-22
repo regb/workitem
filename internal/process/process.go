@@ -2,6 +2,7 @@ package process
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -10,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/regb/workitem/internal/model"
@@ -20,6 +22,29 @@ type Info = model.ProcessInfo
 
 type Inspector struct {
 	ProcRoot string
+	// table, when set, answers every lookup from one earlier process table
+	// read; see Snapshot.
+	table map[int]Info
+}
+
+// Snapshot returns an inspector for many lookups at one moment. On macOS
+// each lookup otherwise reads the whole process table through ps, so the
+// snapshot reads it once; elsewhere single lookups are cheap and stay live.
+// When ps fails, lookups stay live and report the failure themselves.
+func (i Inspector) Snapshot() Inspector {
+	if !i.darwin() {
+		return i
+	}
+	infos, err := darwinSnapshot()
+	if err != nil {
+		return i
+	}
+	i.table = infos
+	return i
+}
+
+func (i Inspector) darwin() bool {
+	return runtime.GOOS == "darwin" && (i.ProcRoot == "" || i.ProcRoot == "/proc")
 }
 
 func New() Inspector { return Inspector{ProcRoot: "/proc"} }
@@ -144,7 +169,10 @@ func (i Inspector) findDescendantSnapshot(rootPID int, needles []string) (Info, 
 }
 
 func (i Inspector) snapshot() (map[int]Info, error) {
-	if runtime.GOOS == "darwin" && (i.ProcRoot == "" || i.ProcRoot == "/proc") {
+	if i.table != nil {
+		return i.table, nil
+	}
+	if i.darwin() {
 		return darwinSnapshot()
 	}
 	root := i.ProcRoot
@@ -174,8 +202,12 @@ func (i Inspector) snapshot() (map[int]Info, error) {
 }
 
 func (i Inspector) readInfo(pid int) (Info, error) {
-	if runtime.GOOS == "darwin" && (i.ProcRoot == "" || i.ProcRoot == "/proc") {
-		infos, err := darwinSnapshot()
+	if i.darwin() {
+		infos, err := i.table, error(nil)
+		if infos == nil {
+			// One process costs a fraction of the whole table.
+			infos, err = darwinProcess(pid)
+		}
 		if err != nil {
 			return Info{}, err
 		}
@@ -204,14 +236,65 @@ func (i Inspector) readInfo(pid int) (Info, error) {
 	return info, nil
 }
 
+// darwinProcess reads one process like darwinSnapshot. ps exits non-zero
+// when the process does not exist, which reads as an empty table.
+func darwinProcess(pid int) (map[int]Info, error) {
+	return darwinPS("-o", "pid=,ppid=,pgid=,state=,lstart=,comm=,args=", "-p", strconv.Itoa(pid))
+}
+
 func darwinSnapshot() (map[int]Info, error) {
 	// lstart is stable for the life of a PID and avoids relying on Linux /proc.
-	out, err := exec.Command("/bin/ps", "-axo", "pid=,ppid=,pgid=,state=,lstart=,comm=,args=").Output()
-	if err != nil {
-		return nil, fmt.Errorf("inspect processes with ps: %w", err)
-	}
-	return parseDarwinSnapshot(string(out)), nil
+	return darwinPS("-axo", "pid=,ppid=,pgid=,state=,lstart=,comm=,args=")
 }
+
+// darwinPS runs ps in the C locale. Process identity hashes ps's start time
+// text, so every wi process must read it alike whatever its own locale; a
+// runtime host and the daemon checking it can run under different locales.
+// Runtimes started before that recorded the text in their own locale, so in
+// any other locale ps also runs as before for their LegacyStartTime.
+func darwinPS(args ...string) (map[int]Info, error) {
+	read := func(environment []string) (map[int]Info, error) {
+		command := exec.Command("/bin/ps", args...)
+		command.Env = environment
+		out, err := command.Output()
+		var exit *exec.ExitError
+		if errors.As(err, &exit) && len(out) == 0 {
+			// A missing process.
+			return map[int]Info{}, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("inspect processes with ps: %w", err)
+		}
+		return parseDarwinSnapshot(string(out)), nil
+	}
+	infos, err := read(append(os.Environ(), "LC_ALL=C"))
+	if err != nil || !localizedTime() {
+		return infos, err
+	}
+	legacy, err := read(os.Environ())
+	if err != nil {
+		return infos, nil
+	}
+	for pid, info := range infos {
+		if previous, ok := legacy[pid]; ok {
+			info.LegacyStartTime = previous.StartTime
+			infos[pid] = info
+		}
+	}
+	return infos, nil
+}
+
+// localizedTime reports whether this process's locale may print times
+// differently from C.
+var localizedTime = sync.OnceValue(func() bool {
+	locale := ""
+	for _, name := range []string{"LC_ALL", "LC_TIME", "LANG"} {
+		if locale = os.Getenv(name); locale != "" {
+			break
+		}
+	}
+	return locale != "" && locale != "C" && locale != "POSIX"
+})
 
 func parseDarwinSnapshot(out string) map[int]Info {
 	infos := map[int]Info{}
