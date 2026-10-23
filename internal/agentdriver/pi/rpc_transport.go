@@ -345,6 +345,9 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 			event.Error = output.Error
 			t.forgetPrompt(command.RequestID)
 		}
+		if command.Type == agent.CommandAbort && output.Success {
+			event.ReasonCode = agent.ReasonAbortAccepted
+		}
 		if command.Type == agent.CommandSet {
 			event.ReasonCode = agent.ReasonSettingApplied
 			if !output.Success {

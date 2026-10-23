@@ -291,6 +291,7 @@ export default function wiBridge(pi: ExtensionAPI) {
       agent_state: record.agent_state,
       leaf_id: record.leaf_id,
       readiness: record.readiness,
+      reason_code: record.reason_code,
       failed: record.failed === true || record.type === "runtime.failed" || record.type === "command.rejected",
     });
     drainRuntimeQueue();
@@ -468,6 +469,8 @@ export default function wiBridge(pi: ExtensionAPI) {
   const accept = (command: ControlCommand) => emit("command.accepted", {
     command_id: command.id,
     request_id: command.request_id,
+    // An accepted abort stops work; it must not read as new work.
+    reason_code: command.type === "abort" ? "abort_accepted" : undefined,
     data: { command_type: command.type, actor: command.actor },
   });
 

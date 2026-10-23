@@ -106,7 +106,7 @@ func (s *headlessControls) accept(c protocol.ControlCommand) error {
 		}
 		if !s.busy() {
 			d.phase = "confirmed"
-			s.fact(protocol.EventCommandAccepted, d, false, "confirmed", "native_confirmed")
+			s.fact(protocol.EventCommandAccepted, d, false, "confirmed", protocol.ReasonAbortAccepted)
 			return nil
 		}
 		if !s.initialized {
@@ -317,7 +317,7 @@ func (s *headlessControls) interruptResponse(f headlessFrame) {
 	}
 	d.phase = "confirmed"
 	d.err = nil
-	s.fact(protocol.EventCommandAccepted, d, false, "confirmed", "native_confirmed")
+	s.fact(protocol.EventCommandAccepted, d, false, "confirmed", protocol.ReasonAbortAccepted)
 }
 func (s *headlessControls) cancelOwnQueue() {
 	for _, d := range s.queue {

@@ -124,6 +124,7 @@ func seedRuntimeOwner(t *testing.T, db *Database, itemID, runtimeID string) {
 	}
 }
 
+// Setting changes and accepted aborts settle commands without being work.
 func TestSettingOutcomesLeaveAgentStatusUnchanged(t *testing.T) {
 	root := t.TempDir()
 	native := store.New(root)
@@ -149,6 +150,9 @@ func TestSettingOutcomesLeaveAgentStatusUnchanged(t *testing.T) {
 		{ID: "runtime-1:ready", Type: agent.EventRuntimeReady, Timestamp: now.Add(time.Second)},
 		{ID: "runtime-1:model", Type: agent.EventCommandAccepted, CommandID: "model", Timestamp: now.Add(2 * time.Second), DeliveryState: "confirmed", ReasonCode: agent.ReasonSettingApplied},
 		{ID: "runtime-1:bad", Type: agent.EventCommandRejected, CommandID: "bad", Timestamp: now.Add(3 * time.Second), Failed: true, ReasonCode: agent.ReasonSettingRejected},
+		// A stopped turn settles, and the abort's acceptance can follow it.
+		{ID: "runtime-1:settled", Type: agent.EventAgentSettled, Timestamp: now.Add(4 * time.Second), Outcome: "completed"},
+		{ID: "runtime-1:abort", Type: agent.EventCommandAccepted, CommandID: "abort", Timestamp: now.Add(5 * time.Second), DeliveryState: "confirmed", ReasonCode: agent.ReasonAbortAccepted},
 	}
 	for _, event := range events {
 		event.RuntimeID, event.WorkItemID = "runtime-1", importTestID

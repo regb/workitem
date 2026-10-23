@@ -112,8 +112,9 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 		return RuntimeIngestResult{}, err
 	}
 	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, AgentState: event.AgentState, LeafID: event.LeafID, ReasonCode: compactIdentifier(event.ReasonCode, 64)}
-	// A setting change is recorded for its requester but is not agent activity.
-	applied := !driverprotocol.SettingOutcome(event.ReasonCode) && applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
+	// A setting change or an accepted abort is recorded for its requester but
+	// is not agent activity.
+	applied := !driverprotocol.QuietOutcome(event.ReasonCode) && applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
 	updates := []ProjectionUpdate{}
 	readiness := event.Readiness
 	if event.Type == agent.EventRuntimeReady && readiness == "" {

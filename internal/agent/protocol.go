@@ -43,6 +43,7 @@ const (
 
 	ReasonSettingApplied  = driverprotocol.ReasonSettingApplied
 	ReasonSettingRejected = driverprotocol.ReasonSettingRejected
+	ReasonAbortAccepted   = driverprotocol.ReasonAbortAccepted
 )
 
 type RuntimeEvent struct {

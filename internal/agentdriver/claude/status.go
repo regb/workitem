@@ -40,6 +40,9 @@ func (s *tuiControls) deliveryFacts(c protocol.ControlCommand) (string, string) 
 	case "submitted":
 		return "submitted", "command_submitted"
 	case "confirmed":
+		if c.Type == protocol.CommandAbort {
+			return "confirmed", protocol.ReasonAbortAccepted
+		}
 		return "confirmed", "native_confirmed"
 	case "failed":
 		return "not_sent", failureCode(d.err)

@@ -119,6 +119,8 @@ func RuntimeReasonText(code string) string {
 		return "Runtime setting changed"
 	case ReasonSettingRejected:
 		return "Runtime refused a setting change"
+	case ReasonAbortAccepted:
+		return "The agent stopped its turn"
 	}
 	return ""
 }
@@ -133,6 +135,17 @@ const (
 // SettingOutcome reports whether an event settles a set command.
 func SettingOutcome(reasonCode string) bool {
 	return reasonCode == ReasonSettingApplied || reasonCode == ReasonSettingRejected
+}
+
+// ReasonAbortAccepted marks the acceptance of an abort command. It stops work
+// rather than starting it, so it never makes the agent busy, even when it
+// arrives after the turn settled.
+const ReasonAbortAccepted = "abort_accepted"
+
+// QuietOutcome reports an event that settles a command without being agent
+// activity: a setting change or an accepted abort.
+func QuietOutcome(reasonCode string) bool {
+	return SettingOutcome(reasonCode) || reasonCode == ReasonAbortAccepted
 }
 
 func ValidReasonCode(code string) bool { return code == "" || RuntimeReasonText(code) != "" }
