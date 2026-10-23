@@ -284,3 +284,43 @@ func TestTmuxInputBracketedPasteOwnershipAndSteerKeys(t *testing.T) {
 		t.Fatal("typed over draft")
 	}
 }
+
+// Claude can open a dialog at startup. A queued prompt waits for the screen
+// to be free instead of failing, and gives way when the operator types first.
+func TestQueuedPromptWaitsForADialogToClose(t *testing.T) {
+	ctx := context.Background()
+	dialog := beforeInputError{err: inputFailure("editor_not_empty", fmt.Errorf("a dialog is open"))}
+	for _, operatorFirst := range []bool{false, true} {
+		s, input, events := testControls()
+		c := control("startup", protocol.CommandPrompt, "Read this work item")
+		if err := s.accept(ctx, c); err != nil {
+			t.Fatal(err)
+		}
+		s.hook("SessionStart", "")
+		input.err = dialog
+		s.tick(ctx, time.Now().Add(time.Second))
+		if len(input.messages) != 1 || len(s.queue) != 1 || s.pending != nil || !s.ready {
+			t.Fatalf("dialog failed the prompt: messages=%d queue=%d pending=%v ready=%v", len(input.messages), len(s.queue), s.pending, s.ready)
+		}
+		for _, event := range *events {
+			if event.Type == protocol.EventCommandRejected {
+				t.Fatalf("rejected while waiting: %+v", *events)
+			}
+		}
+		if state, reason := s.deliveryFacts(c); state != "queued" || reason != "queued_screen_busy" {
+			t.Fatalf("delivery %s %s", state, reason)
+		}
+		if operatorFirst {
+			s.hook("UserPromptSubmit", promptDigest("the operator's own prompt"))
+			if len(s.queue) != 0 || (*events)[len(*events)-1].Type != protocol.EventCommandRejected {
+				t.Fatalf("waiting prompt followed the operator's: queue=%d events=%+v", len(s.queue), *events)
+			}
+			continue
+		}
+		input.err = nil
+		s.tick(ctx, time.Now().Add(3*time.Second))
+		if len(input.messages) != 2 || s.pending == nil {
+			t.Fatalf("not retried once free: messages=%d pending=%v", len(input.messages), s.pending)
+		}
+	}
+}

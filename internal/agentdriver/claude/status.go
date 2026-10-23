@@ -33,6 +33,9 @@ func (s *tuiControls) deliveryFacts(c protocol.ControlCommand) (string, string) 
 	}
 	switch d.phase {
 	case "queued":
+		if d.reasonCode != "" {
+			return "queued", d.reasonCode
+		}
 		if c.Type == protocol.CommandFollowUp {
 			return "queued", "queued_follow_up"
 		}

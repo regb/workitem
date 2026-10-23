@@ -22,7 +22,15 @@ type commandDelivery struct {
 	err            error
 	reasonCode     string
 	deadline       time.Time
+	// waitUntil bounds how long a command keeps waiting for Claude's screen
+	// to be free, while a dialog (or a draft) occupies its editor.
+	waitUntil time.Time
 }
+
+// screenWait bounds how long a queued command waits for a dialog to close,
+// such as one Claude shows at startup, before it is rejected.
+const screenWait = 10 * time.Minute
+
 type tuiControls struct {
 	input                 tuiInput
 	ready, busy, stopping bool
@@ -223,6 +231,9 @@ func (s *tuiControls) submit(ctx context.Context, d *commandDelivery, steer bool
 	} else {
 		err = s.input.Send(ctx, d.command.Message, steer)
 	}
+	if s.waitForScreen(d, err) {
+		return nil
+	}
 	d.command.Message = ""
 	d.command.Images = nil
 	if err != nil {
@@ -244,6 +255,54 @@ func (s *tuiControls) submit(ctx context.Context, d *commandDelivery, steer bool
 	// or its deadline expires. Retrying this command ID never retypes anything.
 	return err
 }
+
+// waitForScreen puts a command back at the head of the queue when nothing was
+// typed because a dialog or draft occupies Claude's editor: Claude shows
+// dialogs at startup, and the command goes in once the screen is free. It
+// retries each second, up to screenWait.
+func (s *tuiControls) waitForScreen(d *commandDelivery, err error) bool {
+	var untouched beforeInputError
+	if err == nil || !errors.As(err, &untouched) || len(d.command.Images) > 0 {
+		return false
+	}
+	if code := failureCode(err); code != "editor_not_empty" && code != "editor_not_visible" {
+		return false
+	}
+	now := time.Now()
+	if d.waitUntil.IsZero() {
+		d.waitUntil = now.Add(screenWait)
+	}
+	if now.After(d.waitUntil) {
+		return false
+	}
+	s.pending = nil
+	d.phase = "queued"
+	d.reasonCode = "queued_screen_busy"
+	s.queue = append([]*commandDelivery{d}, s.queue...)
+	s.inputReadyAt = now.Add(time.Second)
+	s.emit(protocol.EventQueueChanged, d.command, false)
+	return true
+}
+
+// cancelWaiting drops commands that waited for the screen when the operator
+// submits their own prompt there: they took over the terminal, and the
+// waiting command must not follow their turn.
+func (s *tuiControls) cancelWaiting() {
+	kept := s.queue[:0]
+	for _, d := range s.queue {
+		if d.waitUntil.IsZero() {
+			kept = append(kept, d)
+			continue
+		}
+		d.err = fmt.Errorf("the operator typed in Claude's terminal first")
+		d.phase = "cancelled"
+		d.command.Message = ""
+		d.command.Images = nil
+		s.emit(protocol.EventCommandRejected, d.command, true)
+	}
+	s.queue = kept
+}
+
 func (s *tuiControls) hook(event, digest string) {
 	switch event {
 	case "SessionStart":
@@ -267,6 +326,8 @@ func (s *tuiControls) hook(event, digest string) {
 			d.phase = "confirmed"
 			d.releaseImages()
 			s.emit(protocol.EventCommandAccepted, d.command, false)
+		} else {
+			s.cancelWaiting()
 		}
 	case "PreToolUse":
 		s.executionPending = false

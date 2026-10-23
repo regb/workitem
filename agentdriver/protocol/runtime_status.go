@@ -105,6 +105,8 @@ func RuntimeReasonText(code string) string {
 		return "Queued command cancelled before delivery"
 	case "runtime_stopped":
 		return "Runtime stopped before command confirmation"
+	case "queued_screen_busy":
+		return "Command queued until Claude's screen is free; close the dialog in its terminal"
 	case "queued_follow_up":
 		return "Command queued until the current turn settles"
 	case "queued_startup":
