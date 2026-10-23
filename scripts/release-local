@@ -37,6 +37,8 @@ if git rev-parse -q --verify "refs/tags/$version" >/dev/null; then
 fi
 
 echo "testing $(git rev-parse --short=12 HEAD)"
+# Test and build the embedded browser client before the binary.
+scripts/build-web --test
 go test ./...
 
 tmpdir=$(mktemp -d)

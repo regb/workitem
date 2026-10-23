@@ -39,6 +39,8 @@ if [ -n "$dirty" ]; then
     echo "install-local: warning: installing a dirty development build" >&2
 fi
 
+# The wi binary embeds the browser client built from web/.
+scripts/build-web
 go install -buildvcs=true ./cmd/wi ./cmd/wi-github
 
 gobin=$(go env GOBIN)

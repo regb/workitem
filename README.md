@@ -91,6 +91,73 @@ wi close add-api-retries
 
 Use `wi help <command>` for current flags and safety rules.
 
+## Browser access over Tailscale
+
+`wi web` serves a work list and agent chat to a browser. It binds only to
+loopback, so to reach it from your other devices put Tailscale in front of it.
+
+### Install on the machine
+
+From source, with Go and Node.js 24 or newer (Node.js only builds the browser
+client into the binary):
+
+```bash
+git clone -b web/frontend https://github.com/regb/workitem.git
+cd workitem
+scripts/install-local --clean
+```
+
+With Nix, which builds the client from its lockfile and embeds it:
+
+```bash
+nix profile install github:regb/workitem/web/frontend
+# or pin a revision: github:regb/workitem/<commit>
+```
+
+A plain `go install` embeds only a placeholder page. Then run `wi init` and
+register repositories as in the quick start, as the user whose agents and Git
+credentials Wi should use, never as root.
+
+### Expose it to your tailnet
+
+Serve on a fixed loopback port, declare the exact address browsers will use,
+and keep a persistent access secret in a private file:
+
+```bash
+wi web --port 8787 \
+  --access-url https://HOST.TAILNET.ts.net:8448 \
+  --token-file ~/.local/state/wi/web-token
+tailscale serve --bg --https=8448 http://127.0.0.1:8787
+```
+
+Open `https://HOST.TAILNET.ts.net:8448/#token=` followed by the contents of
+the token file. The page keeps the secret for that tab.
+
+- The secret grants operator authority: reading conversations, starting
+  agents, closing work. Keep the token file private; delete it to rotate.
+  `wi web` never prints a persistent secret.
+- Use `tailscale serve`, never `tailscale funnel`: the page must not be on the
+  public Internet. Restrict which tailnet users and devices can reach the
+  machine with Tailscale access controls.
+- Do not open port 8787 in a firewall or bind it elsewhere; only Tailscale
+  forwards to it.
+- `--no-token` drops the secret and relies on the tailnet alone: any device
+  allowed through, and any local process, then has operator authority.
+
+### Keep it running
+
+- **Simply:** run `wi web` in a terminal or tmux window. Commands start the
+  daemon on demand, and a newer `wi` replaces an older daemon automatically.
+  This suits a workstation you use directly.
+- **As services:** on an always-on machine, let systemd (or launchd) own both
+  the daemon and `wi web`. Set `[daemon] managed = true` in `config.toml`, so
+  that no `wi` command starts or replaces the supervised daemon, and run both
+  with `KillMode=process`, so restarts leave running agents alone. The
+  [web chat guide](docs/src/content/docs/guides/web-chat.md#run-as-a-service)
+  has the unit files.
+
+Stopping `wi web` or the daemon never stops running agents.
+
 ## Requirements
 
 - Linux
@@ -98,7 +165,8 @@ Use `wi help <command>` for current flags and safety rules.
 - Git
 - [Pi](https://pi.dev) for the default packaged agent driver
 - tmux for interactive TUI runtimes
-- fzf 0.71+ for the optional `wi switch` picker
+- fzf 0.71+ for the optional `wi switch` picker and `@` file mentions in `wi web`
+- Node.js 24+ and npm to build the `wi web` client from source (not to run it)
 
 Headless runtimes do not require tmux or fzf.
 
