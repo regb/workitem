@@ -48,7 +48,12 @@ func TestCatalogValidatesContributionsAndProtectsItsSnapshot(t *testing.T) {
 	}
 }
 func TestManifestIsDeclarativeBoundedAndPackageContained(t *testing.T) {
-	root := t.TempDir()
+	// Manifests resolve their package directory; on macOS the temporary
+	// directory itself is behind a symlink (/var is /private/var).
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(root, "plugin.json")
 	asset := filepath.Join(root, "instructions.md")
 	if err := os.WriteFile(asset, []byte("Static instructions."), 0600); err != nil {

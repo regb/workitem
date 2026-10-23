@@ -84,8 +84,23 @@ func TestEditTitleEditsMetadataInEveryLifecycleState(t *testing.T) {
 }
 
 func TestEditTitleRejectsInvalidInputWithoutMutation(t *testing.T) {
-	for _, args := range [][]string{{"edit", "--title"}, {"edit", "--title", "one", "two", "three"}, {"edit", "--title", " "}, {"edit", "--title", "line\nbreak"}, {"edit", "--title", "control\x1b"}, {"edit", "--title", strings.Repeat("界", 171)}, {"edit", "--title", string([]byte{0xff})}} {
-		t.Run(strings.Join(args, " "), func(t *testing.T) {
+	// Cases are named, not titled by their arguments: a test's temporary
+	// directory takes its name, and an overlong title exceeds the file name
+	// limit of Linux file systems.
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{"missing", []string{"edit", "--title"}},
+		{"several words unquoted", []string{"edit", "--title", "one", "two", "three"}},
+		{"blank", []string{"edit", "--title", " "}},
+		{"line break", []string{"edit", "--title", "line\nbreak"}},
+		{"control character", []string{"edit", "--title", "control\x1b"}},
+		{"too long", []string{"edit", "--title", strings.Repeat("界", 171)}},
+		{"invalid UTF-8", []string{"edit", "--title", string([]byte{0xff})}},
+	} {
+		args := test.args
+		t.Run(test.name, func(t *testing.T) {
 			stdout, stderr, a := configuredApp(t)
 			created, err := a.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Original", CWD: t.TempDir()})
 			if err != nil {

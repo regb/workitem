@@ -97,7 +97,7 @@ Test builds disable path trimming because real-binary fixtures use
 `runtime.Caller` to find the repository. No live agent or tmux server is needed.
 The credential-dependent native Pi smoke test remains opt-in and is not enabled.
 
-Four tests are excluded from this sandbox check:
+Thirteen tests are excluded from this sandbox check:
 
 - `TestHeadlessRuntimeUsesNativeControlWithoutTmux` expects PATH to be unchanged,
   but the implementation adds the configured `/usr/local/bin/wi` directory.
@@ -107,6 +107,17 @@ Four tests are excluded from this sandbox check:
   long test names that exceed Unix socket path limits in the sandbox.
 - `TestTmuxInputBracketedPasteOwnershipAndSteerKeys` uses process group 1 as an
   invalid owner, but the Linux Nix sandbox can itself use process group 1.
+- `TestAgentProjectTrustRequiresVerifiedRegisteredManagedWorktree`,
+  `TestSetAgentSettingsAppliesLiveWhereTheRuntimeCan`,
+  `TestSetAgentSettingsWaitsForAStartingRuntime`,
+  `TestStructuredControlRequiresCurrentControllerAndLeaseGeneration`,
+  `TestAgentExecHoldsLockAndRunsPiWithExplicitRootConversationLocator`,
+  `TestAgentExecTUIDriverUsesPublicControlAndEventProtocol`,
+  `TestExternalObserverVerifiesRuntimeAndBuildsAgentProjection`,
+  `TestSingleProcessAndSnapshotAgreeOnIdentity` and
+  `TestDarwinIdentityIgnoresTheCallersLocale` verify process identity, which
+  on macOS reads `/bin/ps`. The macOS sandbox does not
+  allow running that setuid program. Linux reads `/proc` and runs them.
 
 These exclusions do not affect ordinary `go test ./...` or the existing Go CI
 job. The Nix CI workflow builds, verifies clean revision provenance, exercises

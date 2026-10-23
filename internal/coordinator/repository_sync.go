@@ -380,7 +380,7 @@ func (s *Server) resumeRepositorySync(ctx context.Context, source RepositorySour
 				return result, fmt.Errorf("reconciliation checkout must not be a symlink")
 			}
 			info, err := g.DetectRepository(ctx, path, "")
-			if err != nil || filepath.Clean(info.Repository.GitCommonDir) != filepath.Clean(source.GitDir) {
+			if err != nil || !model.SameDir(info.Repository.GitCommonDir, source.GitDir) {
 				return result, fmt.Errorf("reconciliation checkout no longer belongs to owned store")
 			}
 			branch, err := g.CurrentBranch(ctx, path)

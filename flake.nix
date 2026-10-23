@@ -62,7 +62,7 @@
               export GOFLAGS="-mod=vendor"
               export TMPDIR=/tmp
               # See the Nix guide for these sandbox-specific exclusions.
-              go test ./... -skip '^(TestHeadlessRuntimeUsesNativeControlWithoutTmux|TestCoordinatorWaitAndQueueReturnsAtomicPostTransitionSnapshot|TestRepositoryRegistrationThroughOperatorEndpoint|TestTmuxInputBracketedPasteOwnershipAndSteerKeys)$'
+              go test ./... -skip '^(TestHeadlessRuntimeUsesNativeControlWithoutTmux|TestCoordinatorWaitAndQueueReturnsAtomicPostTransitionSnapshot|TestRepositoryRegistrationThroughOperatorEndpoint|TestTmuxInputBracketedPasteOwnershipAndSteerKeys|TestAgentProjectTrustRequiresVerifiedRegisteredManagedWorktree|TestSetAgentSettingsAppliesLiveWhereTheRuntimeCan|TestSetAgentSettingsWaitsForAStartingRuntime|TestStructuredControlRequiresCurrentControllerAndLeaseGeneration|TestAgentExecHoldsLockAndRunsPiWithExplicitRootConversationLocator|TestAgentExecTUIDriverUsesPublicControlAndEventProtocol|TestExternalObserverVerifiesRuntimeAndBuildsAgentProjection|TestSingleProcessAndSnapshotAgreeOnIdentity|TestDarwinIdentityIgnoresTheCallersLocale)$'
               runHook postCheck
             '';
           });
