@@ -130,9 +130,12 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 			}
 			break
 		}
-		if event.Readiness == "busy" && activity.AgentState != "active" {
+		if (event.Readiness == "busy" || promptReceived(event.Readiness, event.ReasonCode)) && activity.AgentState != "active" {
 			activity.AgentState = ""
 			activity.TurnState = "busy"
+			if promptReceived(event.Readiness, event.ReasonCode) {
+				activity.LastRequestedAt = &at
+			}
 		}
 	case agent.EventAgentStarted:
 		activity.FailureReason = ""

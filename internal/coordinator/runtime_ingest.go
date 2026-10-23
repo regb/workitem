@@ -260,6 +260,12 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 			// question asked mid-turn waits for the operator, not for a fix.
 			observation.Status = "idle"
 		}
+		if promptReceived(event.Readiness, event.ReasonCode) {
+			// The agent has the prompt: from the operator's side, it is working.
+			observation.Status = "busy"
+			observation.TurnState = "incomplete"
+			return
+		}
 		switch event.Readiness {
 		case "starting", "stopping", "awaiting_confirmation":
 			observation.Status = "idle"
@@ -301,6 +307,12 @@ func inputBlocked(readiness, reason string) bool {
 		return reason != "editor_not_empty" && reason != "editor_not_visible" && !awaitingAnswer(readiness, reason)
 	}
 	return false
+}
+
+// promptReceived reports an agent that has received a prompt but not yet
+// shown work on it: the model is thinking. It counts as working.
+func promptReceived(readiness, reason string) bool {
+	return readiness == "awaiting_confirmation" && reason == "execution_pending"
 }
 
 // awaitingAnswer reports a turn paused on a question, plan approval or

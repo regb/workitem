@@ -210,3 +210,25 @@ func TestAUsageLimitIsReportedAsSuch(t *testing.T) {
 		t.Fatalf("stale failure reason: %+v", activity)
 	}
 }
+
+// A prompt the agent received is work in progress at once, not after the
+// model's first output: the picker shows it moving the moment it is sent.
+func TestAReceivedPromptIsWorkInProgress(t *testing.T) {
+	at := time.Now()
+	activity := RuntimeActivity{AgentState: "settled", TurnState: "idle"}
+	header := runtimeEventHeader{Type: agent.EventRuntimeStatus, Timestamp: at, Readiness: "awaiting_confirmation", ReasonCode: "execution_pending"}
+	if !applyRuntimeActivity(&activity, header, importTestID, "owner") || activity.TurnState != "busy" || activity.LastRequestedAt == nil {
+		t.Fatalf("activity=%+v", activity)
+	}
+	observation := AgentObservation{Status: "idle", TurnState: "idle"}
+	applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: "awaiting_confirmation", ReasonCode: "execution_pending", Timestamp: at}, activity)
+	if observation.Status != "busy" {
+		t.Fatalf("observation=%+v", observation)
+	}
+	// A command still being confirmed is not yet the agent's.
+	submitted := AgentObservation{Status: "idle", TurnState: "idle"}
+	applyLiveRuntimeObservation(&submitted, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: "awaiting_confirmation", ReasonCode: "command_submitted", Timestamp: at}, RuntimeActivity{})
+	if submitted.Status != "idle" {
+		t.Fatalf("submitted=%+v", submitted)
+	}
+}
