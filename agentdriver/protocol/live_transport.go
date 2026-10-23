@@ -13,13 +13,37 @@ import (
 	"sync"
 )
 
-type ControlRejectedError struct{ Message string }
+// ErrNotIdle marks a command that required an idle agent and found it at
+// work. Drivers refuse with NotIdle, which keeps their own message; the
+// refusal stays recognizable across the control socket.
+var ErrNotIdle = errors.New("the agent is not idle")
+
+// ControlReasonNotIdle is the control response reason of an ErrNotIdle refusal.
+const ControlReasonNotIdle = "not_idle"
+
+type notIdleError struct{ message string }
+
+func (e notIdleError) Error() string        { return e.message }
+func (e notIdleError) Is(target error) bool { return target == ErrNotIdle }
+
+// NotIdle refuses a command that required an idle agent.
+func NotIdle(message string) error { return notIdleError{message: message} }
+
+type ControlRejectedError struct {
+	Message string
+	// Reason classifies the refusal, such as ControlReasonNotIdle.
+	Reason string
+}
 
 func (e *ControlRejectedError) Error() string { return e.Message }
+func (e *ControlRejectedError) Is(target error) bool {
+	return target == ErrNotIdle && e.Reason == ControlReasonNotIdle
+}
 
 type ControlResponse struct {
 	Accepted bool   `json:"accepted"`
 	Error    string `json:"error,omitempty"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 type socketReply struct {
@@ -127,6 +151,9 @@ func (s *ControlServer) accept() {
 				response := ControlResponse{Accepted: result.err == nil}
 				if result.err != nil {
 					response.Error = result.err.Error()
+					if errors.Is(result.err, ErrNotIdle) {
+						response.Reason = ControlReasonNotIdle
+					}
 				}
 				_ = json.NewEncoder(conn).Encode(response)
 				close(result.sent)
@@ -163,7 +190,7 @@ func SubmitControl(ctx context.Context, path string, command ControlCommand) err
 		if response.Error == "" {
 			response.Error = "runtime rejected control command"
 		}
-		return &ControlRejectedError{Message: response.Error}
+		return &ControlRejectedError{Message: response.Error, Reason: response.Reason}
 	}
 	return nil
 }

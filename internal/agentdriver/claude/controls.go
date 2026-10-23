@@ -121,7 +121,7 @@ func (s *tuiControls) accept(ctx context.Context, c protocol.ControlCommand) err
 		return fmt.Errorf("Claude follow-up queue is full")
 	}
 	if c.RequireIdle && (!s.ready || time.Now().Before(s.inputReadyAt) || s.busy || s.pending != nil || len(s.queue) > 0) {
-		return fmt.Errorf("Claude is not observed idle")
+		return protocol.NotIdle("Claude is not observed idle")
 	}
 	if c.Type == protocol.CommandPrompt && s.ready && (s.busy || s.pending != nil || len(s.queue) > 0) {
 		return fmt.Errorf("Claude is busy; use steer or follow-up")
@@ -152,7 +152,7 @@ func (s *tuiControls) abort(ctx context.Context, c protocol.ControlCommand) erro
 		return fmt.Errorf("Claude command deduplication capacity reached; restart the runtime")
 	}
 	if c.RequireIdle && (!s.ready || s.busy || s.pending != nil || len(s.queue) > 0) {
-		return fmt.Errorf("Claude is not observed idle")
+		return protocol.NotIdle("Claude is not observed idle")
 	}
 	// Unknown readiness without an in-flight submission is not safe for an
 	// interrupt shortcut.

@@ -567,7 +567,7 @@ func (t *nativeRPCTransport) sendCommand(command agent.ControlCommand) error {
 		return err
 	}
 	if command.RequireIdle && (t.busy || len(t.work) != 0) {
-		return fmt.Errorf("agent became busy; operation refused without interrupting the turn")
+		return driverprotocol.NotIdle("agent became busy; operation refused without interrupting the turn")
 	}
 	t.handled[command.ID] = true
 	if command.Type == agent.CommandShutdown && !command.RequireIdle {

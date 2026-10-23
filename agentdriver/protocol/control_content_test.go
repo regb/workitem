@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net"
 	"path/filepath"
 	"strings"
@@ -115,5 +116,33 @@ func TestEventLimitRemainsOneMiB(t *testing.T) {
 	var event RuntimeEvent
 	if err := decodeLine(right, &event, 1<<20); err == nil {
 		t.Fatal("oversized event accepted")
+	}
+}
+
+// A command refused because the agent was at work stays recognizable as such
+// on the client's side, with the driver's own message.
+func TestControlTransportKeepsNotIdleRefusals(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "control.sock")
+	server, err := ListenControl(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, refusal := range []error{NotIdle("agent became busy"), errors.New("agent became busy")} {
+		command := ControlCommand{ProtocolVersion: RuntimeVersion, ID: "prompt", RuntimeID: "owner", WorkItemID: "item", Type: CommandPrompt, Message: "hello", RequireIdle: true}
+		done := make(chan error, 1)
+		go func() { done <- SubmitControl(ctx, path, command) }()
+		select {
+		case request := <-server.Requests():
+			request.Respond(refusal)
+		case <-ctx.Done():
+			t.Fatal("command not delivered")
+		}
+		err := <-done
+		if err == nil || err.Error() != "agent became busy" || errors.Is(err, ErrNotIdle) != errors.Is(refusal, ErrNotIdle) {
+			t.Fatalf("refusal %v arrived as %v", refusal, err)
+		}
 	}
 }
