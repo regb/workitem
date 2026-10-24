@@ -316,3 +316,26 @@ func manifest(t *testing.T, id, title string, now time.Time) model.Manifest {
 		CreatedFromCommit: strings.Repeat("a", 40),
 	}, model.Checkout{Specification: model.CheckoutSpecification{Branch: model.ItemBranchName("item", id)}})
 }
+
+// An item's whole ID resolves to that item or to nothing, never to another
+// item whose title or description mentions it.
+func TestResolveWholeIDOfMissingItemIsNotFound(t *testing.T) {
+	st := store.New(t.TempDir())
+	now := testutil.Time()
+	missing := testutil.ID(t, 30)
+	reference := manifest(t, testutil.ID(t, 31), "Follow up "+missing, now)
+	if err := st.CreateItem(context.Background(), reference); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(st.ItemDir(reference.ID), model.DescriptionFilename), []byte("Continues @@[Old](wi:"+missing+")"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, selector := range []string{missing, strings.ToLower(missing)} {
+		if resolved, err := st.Resolve(selector); !errors.Is(err, store.ErrNotFound) {
+			t.Fatalf("missing ID %s resolved to %+v err=%v", selector, resolved, err)
+		}
+	}
+	if resolved, err := st.Resolve(strings.ToLower(reference.ID)); err != nil || resolved.ID != reference.ID {
+		t.Fatalf("own ID = %+v err=%v", resolved, err)
+	}
+}

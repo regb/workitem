@@ -663,6 +663,12 @@ func ResolveFromManifests(manifests []model.Manifest, selector string, descripti
 			return m, nil
 		}
 	}
+	// A whole ID names one item or none. Titles and descriptions mention
+	// other items by ID, so searching them would turn the ID of a deleted
+	// item into whichever item mentions it.
+	if model.ValidID(upperSelector) {
+		return model.Manifest{}, ErrNotFound
+	}
 	var prefix []model.Manifest
 	for _, m := range manifests {
 		if strings.HasPrefix(m.ID, upperSelector) {
