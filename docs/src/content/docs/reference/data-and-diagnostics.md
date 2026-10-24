@@ -41,7 +41,8 @@ The daemon does not watch every filesystem change. A cached observation read by 
 
 ## Diagnose the local daemon
 
-Ordinary commands start the daemon when needed:
+Ordinary commands start the daemon when needed, unless a service manager owns
+it (see [Managed daemon](../configuration/#managed-daemon)):
 
 ```bash
 wi daemon status

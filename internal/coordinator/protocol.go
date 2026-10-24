@@ -147,17 +147,24 @@ type ActionabilitySnapshotResult struct {
 }
 
 type Status struct {
-	ProtocolVersion    int                      `json:"protocol_version"`
-	BuildIdentity      string                   `json:"build_identity"`
-	PID                int                      `json:"pid"`
-	StartedAt          string                   `json:"started_at"`
-	DataRoot           string                   `json:"data_root"`
-	SocketPath         string                   `json:"socket_path"`
-	AgentSocketPath    string                   `json:"agent_socket_path,omitempty"`
-	Access             string                   `json:"access"`
+	ProtocolVersion int    `json:"protocol_version"`
+	BuildIdentity   string `json:"build_identity"`
+	PID             int    `json:"pid"`
+	StartedAt       string `json:"started_at"`
+	DataRoot        string `json:"data_root"`
+	SocketPath      string `json:"socket_path"`
+	AgentSocketPath string `json:"agent_socket_path,omitempty"`
+	Access          string `json:"access"`
+	// Managed reports a daemon a service manager owns: clients must not
+	// stop or replace it.
+	Managed            bool                     `json:"managed,omitempty"`
 	Database           DatabaseStatus           `json:"database"`
 	ConversationImport ConversationImportReport `json:"conversation_import"`
 }
+
+// ManagedDaemonMessage explains why a managed daemon is not stopped, started
+// or replaced by wi itself.
+const ManagedDaemonMessage = "the wi daemon is managed by a service manager; start, stop or restart it there (for example: systemctl --user restart wi-daemon), and use the wi build it runs"
 
 func SocketPath(runtimeDir, dataRoot string) (string, error) {
 	if strings.TrimSpace(runtimeDir) == "" || strings.TrimSpace(dataRoot) == "" {

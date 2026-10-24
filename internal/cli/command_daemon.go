@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/plugin"
@@ -24,7 +25,11 @@ func daemonCommandRequested(args []string) bool {
 	return len(filtered) > 0 && filtered[0] == "daemon"
 }
 
-func ensureDaemonRunning(ctx context.Context, paths xdg.Paths, socketPath string) (coordinator.Status, bool, error) {
+// ensureDaemonRunning returns the running daemon, replacing one of another
+// build or starting one when none runs. A managed daemon, configured so or
+// reporting itself so, belongs to a service manager: it is never started or
+// replaced here, and a client of another build is refused instead.
+func ensureDaemonRunning(ctx context.Context, paths xdg.Paths, socketPath string, managed bool) (coordinator.Status, bool, error) {
 	client := &coordinator.Client{SocketPath: socketPath}
 	probeCtx, cancel := context.WithTimeout(ctx, 150*time.Millisecond)
 	status, err := client.Status(probeCtx)
@@ -33,6 +38,12 @@ func ensureDaemonRunning(ctx context.Context, paths xdg.Paths, socketPath string
 		return status, false, nil
 	}
 	var compatibility *coordinator.CompatibilityError
+	if (managed || status.Managed) && errors.As(err, &compatibility) {
+		return status, false, fmt.Errorf("%w; %s", compatibility, coordinator.ManagedDaemonMessage)
+	}
+	if managed && !errors.As(err, &compatibility) {
+		return status, false, fmt.Errorf("the wi daemon is managed by a service manager and is not running; start it there (for example: systemctl --user start wi-daemon)")
+	}
 	if errors.As(err, &compatibility) {
 		shutdownCtx, shutdownCancel := context.WithTimeout(ctx, 2*time.Second)
 		if compatibility.Kind == "build" {
@@ -126,7 +137,12 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 			fmt.Fprintln(stderr, "usage: wi daemon start")
 			return ExitUsage
 		}
-		status, started, err := ensureDaemonRunning(ctx, paths, socketPath)
+		daemon, err := config.LoadDaemon(paths.ConfigFile)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return ExitError
+		}
+		status, started, err := ensureDaemonRunning(ctx, paths, socketPath, daemon.Managed)
 		if err != nil {
 			fmt.Fprintln(stderr, err)
 			return ExitError
@@ -181,6 +197,7 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 		}
 		defer server.Close()
 		server.ConfigureRepositorySettings(pluginHost.Registry.Options())
+		server.SetManaged(cfgFile.Daemon.Managed)
 		pluginClient := &coordinator.Client{SocketPath: socketPath}
 		pluginHost.ReadRepository = func(ctx context.Context, id string) (model.RepositorySettings, error) {
 			result, err := pluginClient.RepositorySettings(ctx, id)

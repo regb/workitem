@@ -19,7 +19,9 @@ type shutdownCommandResult struct {
 	Items          []app.ShutdownItemResult `json:"items,omitempty"`
 	OrphanedClosed []string                 `json:"orphaned_terminals_closed,omitempty"`
 	DaemonStopped  bool                     `json:"daemon_stopped"`
-	Failures       []app.ShutdownFailure    `json:"failures"`
+	// DaemonManaged reports a daemon left to its service manager.
+	DaemonManaged bool                  `json:"daemon_managed,omitempty"`
+	Failures      []app.ShutdownFailure `json:"failures"`
 }
 
 func runShutdown(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
@@ -59,10 +61,20 @@ func runShutdown(ctx context.Context, args []string, cfg Config, jsonOut bool) e
 	if shutdownErr != nil && len(result.Failures) == 0 {
 		result.Failures = append(result.Failures, app.ShutdownFailure{Resource: "shutdown", Error: shutdownErr.Error()})
 	}
-	requestCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	err := cfg.Coordinator.Shutdown(requestCtx)
-	cancel()
-	if err != nil {
+	// A managed daemon is its service manager's to stop.
+	managed := cfg.GlobalConfig != nil && cfg.GlobalConfig.Daemon.Managed
+	if status, err := cfg.Coordinator.Status(ctx); err == nil && status.Managed {
+		managed = true
+	}
+	var err error
+	if !managed {
+		requestCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		err = cfg.Coordinator.Shutdown(requestCtx)
+		cancel()
+	}
+	if managed {
+		result.DaemonManaged = true
+	} else if err != nil {
 		result.Failures = append(result.Failures, app.ShutdownFailure{Resource: "daemon", Error: err.Error()})
 	} else {
 		result.DaemonStopped = waitForDaemonExit(ctx, cfg, 3*time.Second)
@@ -206,6 +218,9 @@ func printShutdownResult(cfg Config, result shutdownCommandResult) {
 	fmt.Fprintf(cfg.Stdout, "wi tmux sessions closed: %d\n", terminals)
 	if result.DaemonStopped {
 		fmt.Fprintln(cfg.Stdout, "daemon stopped")
+	}
+	if result.DaemonManaged {
+		fmt.Fprintln(cfg.Stdout, "daemon left running: its service manager stops it")
 	}
 	for _, failure := range result.Failures {
 		resource := failure.Resource

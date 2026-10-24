@@ -95,7 +95,7 @@ var helpDocs = map[string]helpDoc{
 	"daemon": {
 		Summary:     "Run and inspect the authoritative local coordinator",
 		Usage:       []string{"wi daemon <start|serve|status|stop|doctor>"},
-		Description: []string{"The daemon is the authoritative per-data-root event store and the only writer of canonical state."},
+		Description: []string{"The daemon is the authoritative per-data-root event store and the only writer of canonical state.", "Commands start it when needed and replace one of another build. With [daemon] managed = true in config.toml, a service manager owns it: wi never starts, stops or replaces it, and the daemon refuses shutdown requests."},
 		SeeAlso:     []string{"daemon start", "daemon serve", "daemon status", "daemon doctor", "daemon stop"},
 	},
 	"daemon start": {
@@ -106,7 +106,7 @@ var helpDocs = map[string]helpDoc{
 	"daemon serve": {
 		Summary:     "Serve the coordinator in the foreground",
 		Usage:       []string{"wi daemon serve"},
-		Description: []string{"Opens the central database and serves the versioned user-only Unix socket until stopped or signaled."},
+		Description: []string{"Opens the central database and serves the versioned user-only Unix socket until stopped or signaled. Service managers run this."},
 	},
 	"daemon status": {
 		Summary:     "Inspect a running coordinator",

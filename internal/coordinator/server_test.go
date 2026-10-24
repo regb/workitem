@@ -274,3 +274,38 @@ func TestServerRefusesToReplaceNonSocket(t *testing.T) {
 		t.Fatalf("non-socket changed: %q err=%v", content, err)
 	}
 }
+
+// A managed daemon belongs to a service manager: no client, of this build or
+// another, can shut it down or replace it, and it says so.
+func TestManagedServerRefusesShutdown(t *testing.T) {
+	root, runtime := t.TempDir(), t.TempDir()
+	socket, err := SocketPath(runtime, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server, err := NewServer(root, socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.SetManaged(true)
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- server.Serve(context.Background()) }()
+	defer func() { server.Close(); <-serveDone }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	client := &Client{SocketPath: socket}
+	if err := client.Ping(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if status, err := client.Status(ctx); err != nil || !status.Managed {
+		t.Fatalf("status = %+v, err = %v", status, err)
+	}
+	for _, requester := range []*Client{client, {SocketPath: socket, BuildIdentity: "different-build"}} {
+		if err := requester.Shutdown(ctx); err == nil || !strings.Contains(err.Error(), "service manager") {
+			t.Fatalf("shutdown by %q = %v", requester.BuildIdentity, err)
+		}
+	}
+	if err := client.Ping(ctx); err != nil {
+		t.Fatalf("managed daemon stopped: %v", err)
+	}
+}

@@ -185,3 +185,25 @@ func TestPluginTablesHoldRegistrationAndRegisteredOptions(t *testing.T) {
 		}
 	}
 }
+
+// Daemon commands read [daemon] even when the rest of the configuration is
+// incomplete, and the full loader accepts it.
+func TestDaemonManagedSetting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if daemon, err := config.LoadDaemon(path); err != nil || daemon.Managed {
+		t.Fatalf("missing file: %+v %v", daemon, err)
+	}
+	if err := os.WriteFile(path, []byte("[daemon]\nmanaged = true\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if daemon, err := config.LoadDaemon(path); err != nil || !daemon.Managed {
+		t.Fatalf("incomplete file: %+v %v", daemon, err)
+	}
+	if err := os.WriteFile(path, []byte("default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n[daemon]\nmanaged = true\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, warnings, err := config.Load(path)
+	if err != nil || !cfg.Daemon.Managed || len(warnings) != 0 {
+		t.Fatalf("full load: %+v %v %v", cfg.Daemon, warnings, err)
+	}
+}

@@ -30,6 +30,7 @@ type Config struct {
 	Agent        AgentConfig                       `json:"agent"`
 	AgentStatus  AgentStatusConfig                 `json:"agent_status"`
 	Attention    AttentionConfig                   `json:"attention"`
+	Daemon       DaemonConfig                      `json:"daemon"`
 	Agents       map[string]AgentDefinitionConfig  `json:"agents"`
 	Drivers      map[string]DriverDefinitionConfig `json:"drivers"`
 	Plugins      map[string]plugin.Registration    `json:"plugins,omitempty"`
@@ -37,6 +38,14 @@ type Config struct {
 	// resolved with schema defaults. Registration fields are in Plugins.
 	PluginSettings map[string]map[string]any `json:"-"`
 	optionOrigins  map[string]string
+}
+
+// DaemonConfig says how the coordinator daemon runs. Managed means a service
+// manager such as systemd or launchd owns it: wi never starts, stops or
+// replaces it, and refuses a client of another build instead of replacing
+// the daemon; the service manager restarts it.
+type DaemonConfig struct {
+	Managed bool `json:"managed" toml:"managed"`
 }
 
 type AgentConfig struct {
@@ -110,6 +119,26 @@ func PluginRegistrations(path string) (map[string]plugin.Registration, error) {
 	return registrations, nil
 }
 func Load(path string) (Config, []string, error) { return LoadWithRegistry(path, nil) }
+
+// LoadDaemon reads only the [daemon] table, so that daemon commands follow it
+// whatever the state of the rest of the configuration. A missing file is
+// the default: an unmanaged daemon.
+func LoadDaemon(path string) (DaemonConfig, error) {
+	var file struct {
+		Daemon DaemonConfig `toml:"daemon"`
+	}
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) || strings.TrimSpace(path) == "" {
+		return DaemonConfig{}, nil
+	}
+	if err != nil {
+		return DaemonConfig{}, fmt.Errorf("open config: %w", err)
+	}
+	if err := toml.Unmarshal(data, &file); err != nil {
+		return DaemonConfig{}, fmt.Errorf("parse config: %w", err)
+	}
+	return file.Daemon, nil
+}
 func LoadWithRegistry(path string, registry *options.Registry) (Config, []string, error) {
 	cfg := Default()
 	root := map[string]any{}
@@ -138,6 +167,7 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 	// Validate the typed core and preserve plugin options for registered schemas.
 	known := map[string]map[string]bool{
 		"deep_work": {"max_active": true}, "item": {"defaults": true}, "list": {"repository_folders": true, "labels": true}, "agent": {"startup_message": true, "append_system_prompt": true}, "agent_status": {"markers": true}, "attention": {"priority": true},
+		"daemon": {"managed": true},
 	}
 	for section, value := range root {
 		if keys, ok := known[section]; ok {

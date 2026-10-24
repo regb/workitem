@@ -38,12 +38,18 @@ type Server struct {
 	lastConversationImport     ConversationImportReport
 	conversationDecoders       ConversationDecoders
 	repositorySettingsRegistry *options.Registry
+	managed                    bool
 	leases                     *leaseTable
 	closed                     chan struct{}
 	closeDone                  chan struct{}
 	closeOnce                  sync.Once
 	wg                         sync.WaitGroup
 }
+
+// SetManaged marks a daemon a service manager owns, before Serve. It refuses
+// requests to shut down, from any client: the service manager stops and
+// restarts it, and a client of another build must not replace it.
+func (s *Server) SetManaged(managed bool) { s.managed = managed }
 
 // ConfigureRepositorySettings installs trusted declarative schemas before Serve.
 // Clients cannot register schemas or authorize their own setting writes.
@@ -476,6 +482,10 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		}
 		result = status
 	case MethodShutdown:
+		if s.managed {
+			s.writeError(conn, request.ID, "managed_daemon", ManagedDaemonMessage)
+			return
+		}
 		result = map[string]any{"stopping": true}
 		defer func() { go s.Close() }()
 	case MethodConversation:
@@ -1083,7 +1093,7 @@ func (s *Server) status() (Status, error) {
 	s.importMu.RLock()
 	lastConversationImport := s.lastConversationImport
 	s.importMu.RUnlock()
-	return Status{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, PID: os.Getpid(), StartedAt: s.startedAt.Format(time.RFC3339Nano), DataRoot: s.dataRoot, SocketPath: s.socketPath, AgentSocketPath: s.agentSocketPath, Access: AccessOperator, Database: database, ConversationImport: lastConversationImport}, nil
+	return Status{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, PID: os.Getpid(), StartedAt: s.startedAt.Format(time.RFC3339Nano), DataRoot: s.dataRoot, SocketPath: s.socketPath, AgentSocketPath: s.agentSocketPath, Access: AccessOperator, Managed: s.managed, Database: database, ConversationImport: lastConversationImport}, nil
 }
 
 func (s *Server) writeError(conn net.Conn, id, code, message string) {

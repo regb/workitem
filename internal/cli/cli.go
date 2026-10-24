@@ -163,7 +163,7 @@ func Main(ctx context.Context, args []string) int {
 		runConfig.Coordinator = client
 		runConfig.ControlAccess = status.Access
 	} else if agentSocketPath == "" {
-		status, _, startErr := ensureDaemonRunning(ctx, paths, socketPath)
+		status, _, startErr := ensureDaemonRunning(ctx, paths, socketPath, cfgFile.Daemon.Managed)
 		if startErr != nil {
 			fmt.Fprintf(os.Stderr, "daemon is required for this command: %s\n", startErr)
 			return ExitError

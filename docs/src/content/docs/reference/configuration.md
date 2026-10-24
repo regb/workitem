@@ -95,6 +95,49 @@ extensions = ["/home/me/tools/web-search.ts"]
 
 `deep_work.max_active` limits active items marked as deep work, waiting or not. A value of `0` prevents starting deep backlog work unless you pass `--force`.
 
+## Managed daemon
+
+By default, wi starts its daemon when a command needs it, and a command
+built differently from the running daemon replaces it. To let a service
+manager such as systemd or launchd own the daemon instead, set:
+
+```toml
+[daemon]
+managed = true
+```
+
+wi then never starts, stops or replaces the daemon itself. A command fails
+with an explanation when the daemon is not running, or when it runs another
+wi build; `wi daemon start` and `wi daemon stop` refuse as well. The daemon
+run with this setting refuses to be shut down by any client, including older
+wi builds that ignore the setting. `wi shutdown` still stops agents and
+terminals, and leaves the daemon running. Upgrade by installing the new build
+and restarting the service.
+
+Run the daemon in the foreground under the service manager, as the user who
+owns the wi data, never as root. A systemd user unit:
+
+```ini
+# ~/.config/systemd/user/wi-daemon.service
+[Unit]
+Description=wi coordinator daemon
+
+[Service]
+ExecStart=/path/to/wi daemon serve
+Restart=on-failure
+# Agents started by wi live in the service's control group. Stop only the
+# daemon itself, so a restart leaves running agents alone.
+KillMode=process
+
+[Install]
+WantedBy=default.target
+```
+
+Enable it with `systemctl --user enable --now wi-daemon`, and let it run
+without a login session with `loginctl enable-linger USER`. On macOS, a
+LaunchAgent running `wi daemon serve` with `KeepAlive` and
+`AbandonProcessGroup` set plays the same role.
+
 ## Default labels
 
 New items combine labels from user configuration, `.config/wi.toml` read from the selected starting commit in the owned store, `WI_ITEM_DEFAULT_LABELS`, and explicit `--label` flags. Dirty edits in the external onboarding checkout are not configuration for new items. `--no-default-labels` suppresses configured and environment defaults.
