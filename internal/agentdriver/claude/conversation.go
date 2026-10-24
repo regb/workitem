@@ -43,9 +43,13 @@ func conversationOperationContext(ctx context.Context, r protocol.Request) (prot
 	c := r.Conversation
 	switch r.Operation {
 	case protocol.OperationConversationCapabilities:
-		result.Capabilities = &protocol.ConversationCapabilities{History: true, HistoryPaging: true, Title: true}
+		result.Capabilities = &protocol.ConversationCapabilities{History: true, HistoryPaging: true, Title: true, Subagents: true}
 	case protocol.OperationConversationHistory:
-		history, err := ReadHistoryPage(ctx, c.Path, c.LeafID, c.BeforeID)
+		read := func() (protocol.History, error) { return ReadHistoryPage(ctx, c.Path, c.LeafID, c.BeforeID) }
+		if c.Subagent != "" {
+			read = func() (protocol.History, error) { return ReadSubagentHistoryPage(ctx, c.Path, c.Subagent, c.BeforeID) }
+		}
+		history, err := read()
 		if err != nil {
 			return result, err
 		}

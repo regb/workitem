@@ -61,8 +61,11 @@ type ConfigValidationResult struct {
 }
 
 type ConversationRequest struct {
-	Prompt       string       `json:"prompt,omitempty"`
-	BeforeID     string       `json:"before_id,omitempty"`
+	Prompt   string `json:"prompt,omitempty"`
+	BeforeID string `json:"before_id,omitempty"`
+	// Subagent selects that subagent's conversation for history instead of
+	// the main one.
+	Subagent     string       `json:"subagent,omitempty"`
 	LeafID       string       `json:"leaf_id,omitempty"`
 	ID           string       `json:"id,omitempty"`
 	Conversation Conversation `json:"conversation,omitempty"`
@@ -84,6 +87,8 @@ type ConversationCapabilities struct {
 	HistoryPaging bool `json:"history_paging,omitempty"`
 	History       bool `json:"history"`
 	Title         bool `json:"title"`
+	// Subagents means history can read a subagent's conversation.
+	Subagents bool `json:"subagents,omitempty"`
 }
 
 type ConversationResponse struct {

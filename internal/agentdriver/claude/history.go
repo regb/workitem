@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"unicode/utf8"
 
@@ -26,7 +27,10 @@ type historyRecord struct {
 	APIError       bool            `json:"isApiErrorMessage"`
 	Subtype        string          `json:"subtype"`
 	Summary        json.RawMessage `json:"content"`
-	Message        struct {
+	Origin         struct {
+		Kind string `json:"kind"`
+	} `json:"origin"`
+	Message struct {
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
 }
@@ -40,6 +44,33 @@ type historyOffset struct {
 // ReadHistoryPage indexes the native parent graph without retaining message
 // bodies. Pages contain bounded content from one branch, never daemon events.
 func ReadHistoryPage(ctx context.Context, path, leaf, before string) (protocol.History, error) {
+	result, err := readHistoryPage(ctx, path, leaf, before, false)
+	if err == nil {
+		linkSubagents(path, &result)
+	}
+	return result, err
+}
+
+// ReadSubagentHistoryPage reads the conversation of one of the session's
+// subagents, which Claude keeps beside the session's own transcript.
+func ReadSubagentHistoryPage(ctx context.Context, path, agent, before string) (protocol.History, error) {
+	if !subagentID.MatchString(agent) {
+		return protocol.History{}, fmt.Errorf("invalid subagent identity")
+	}
+	transcript := filepath.Join(subagentDir(path), "agent-"+agent+".jsonl")
+	if info, err := os.Lstat(transcript); err != nil || !info.Mode().IsRegular() {
+		return protocol.History{}, fmt.Errorf("subagent %s has no conversation", agent)
+	}
+	result, err := readHistoryPage(ctx, transcript, "", before, true)
+	if err == nil {
+		linkSubagents(path, &result)
+	}
+	return result, err
+}
+
+// readHistoryPage reads the main conversation, or with sidechain a
+// subagent's, whose every record is on Claude's side chain.
+func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain bool) (protocol.History, error) {
 	result := protocol.History{Messages: []protocol.HistoryMessage{}}
 	if leaf == "-" {
 		return result, nil
@@ -80,7 +111,7 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (protocol.H
 		if len(r.ID) > 128 || len(r.Parent) > 128 {
 			return result, fmt.Errorf("invalid Claude history identity")
 		}
-		if r.ID == "" || r.Sidechain {
+		if r.ID == "" || r.Sidechain != sidechain {
 			continue
 		}
 		index[r.ID] = historyOffset{parent: r.Parent, typ: r.Type, offset: start, length: len(line), visible: (!r.Meta && (r.Type == "user" || r.Type == "assistant")) || r.CompactSummary || (r.Type == "system" && r.Subtype == "compact_boundary")}
@@ -146,6 +177,9 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (protocol.H
 		}
 		message := protocol.HistoryMessage{ID: record.ID, Role: record.Type, Timestamp: record.Timestamp, Error: record.APIError}
 		content(record.Message.Content, &message, &result.Truncated)
+		if record.Origin.Kind == "task-notification" {
+			taskNotification(&message)
+		}
 		if record.CompactSummary {
 			message.Role = "summary"
 		}

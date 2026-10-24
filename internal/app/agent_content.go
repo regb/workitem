@@ -52,6 +52,30 @@ func (a *App) conversationHistory(ctx context.Context, opts ResolveOptions, leaf
 	return backend.History(ctx, path, leaf)
 }
 
+// SubagentHistoryPage reads the conversation of a subagent the primary
+// conversation delegated to, through the driver that owns both.
+func (a *App) SubagentHistoryPage(ctx context.Context, opts ResolveOptions, subagent, before string) (driverprotocol.History, error) {
+	m, err := a.ResolveItem(ctx, opts)
+	if err != nil {
+		return driverprotocol.History{}, err
+	}
+	if m.PrimaryConversation == nil {
+		return driverprotocol.History{}, fmt.Errorf("work item has no conversation")
+	}
+	c := m.PrimaryConversation
+	backend, ok := a.conversationBackend(m, *c).(interface {
+		SubagentHistory(context.Context, string, string, string) (driverprotocol.History, error)
+	})
+	if !ok {
+		return driverprotocol.History{}, fmt.Errorf("driver %q does not provide subagent history", c.Driver)
+	}
+	path, err := a.primaryAgentService().AbsPath(m.ID, filepath.FromSlash(c.NativeLocator()))
+	if err != nil {
+		return driverprotocol.History{}, err
+	}
+	return backend.SubagentHistory(ctx, path, subagent, before)
+}
+
 // contentOwner returns the item and its verified live runtime, whose content
 // socket may be read.
 func (a *App) contentOwner(ctx context.Context, opts ResolveOptions) (string, *model.AgentRuntime, error) {

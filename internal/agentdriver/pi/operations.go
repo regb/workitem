@@ -38,6 +38,9 @@ func handleConversationOperation(ctx context.Context, envelope driverprotocol.Re
 		observation, warnings := ObserveConversationPath(request.Path, request.Now)
 		return driverprotocol.ConversationResponse{Observation: &observation, Warnings: warnings}, nil
 	case driverprotocol.OperationConversationHistory:
+		if request.Subagent != "" {
+			return driverprotocol.ConversationResponse{}, fmt.Errorf("pi conversations have no subagents")
+		}
 		history, err := ReadHistoryPage(ctx, request.Path, request.LeafID, request.BeforeID)
 		return driverprotocol.ConversationResponse{History: &history}, err
 	case driverprotocol.OperationConversationDecode:

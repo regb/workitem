@@ -26,6 +26,9 @@ type HistoryMessage struct {
 	// Error marks a reply the agent's harness wrote in place of the model's,
 	// such as a usage limit notice; clients show it as a notice.
 	Error bool `json:"error,omitempty"`
+	// Subagent marks a message reporting a subagent's result, with role
+	// "subagent"; Text is the result the subagent returned.
+	Subagent *HistorySubagent `json:"subagent,omitempty"`
 }
 
 // HistoryTool joins a native tool call and its eventual result so clients can
@@ -37,6 +40,19 @@ type HistoryTool struct {
 	Output string         `json:"output,omitempty"`
 	Status string         `json:"status"`
 	Images []HistoryImage `json:"images,omitempty"`
+	// Subagent is the agent this call delegated to, whose own conversation a
+	// driver with the subagents capability reads by its ID.
+	Subagent *HistorySubagent `json:"subagent,omitempty"`
+}
+
+// HistorySubagent identifies a subagent and what is known of its run.
+// Status is running, completed or failed.
+type HistorySubagent struct {
+	ID          string `json:"id"`
+	ToolID      string `json:"tool_id,omitempty"`
+	Type        string `json:"type,omitempty"`
+	Description string `json:"description,omitempty"`
+	Status      string `json:"status,omitempty"`
 }
 
 type HistoryImage struct {

@@ -20,3 +20,23 @@ func (c Client) HistoryPage(ctx context.Context, path, leaf, before string) (dri
 	}
 	return *res.History, nil
 }
+
+// SubagentHistory reads a subagent's conversation, which only a driver with
+// the subagents capability can tell apart from the main one.
+func (c Client) SubagentHistory(ctx context.Context, path, subagent, before string) (driverprotocol.History, error) {
+	capabilities, err := c.ConversationCapabilities(ctx)
+	if err != nil {
+		return driverprotocol.History{}, err
+	}
+	if !capabilities.Subagents {
+		return driverprotocol.History{}, fmt.Errorf("driver does not provide subagent history")
+	}
+	res, err := c.request(ctx, driverprotocol.OperationConversationHistory, "", nil, driverprotocol.ConversationRequest{Path: path, Subagent: subagent, BeforeID: before})
+	if err != nil {
+		return driverprotocol.History{}, err
+	}
+	if res.History == nil {
+		return driverprotocol.History{}, fmt.Errorf("driver does not provide subagent history")
+	}
+	return *res.History, nil
+}
