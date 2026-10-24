@@ -22,6 +22,19 @@ func TestBoundedEditorParsing(t *testing.T) {
 	if err != nil || text != "continuation draft" {
 		t.Fatal(text, err)
 	}
+	// Claude 2.1.310 shows a dim hint in the empty editor; a draft is not dim.
+	hint := "───\n\x1b[39m❯ \x1b[2mTry \"edit headless.go to...\"\x1b[0m\n───\n"
+	if text, err := editorText(hint); err != nil || text != "" {
+		t.Fatalf("dim hint read as a draft: %q %v", text, err)
+	}
+	draft := "───\n❯ \x1b[1mfix\x1b[22m the \x1b]8;;https://x.test\x1b\\link\x1b]8;;\x1b\\\x1b[2;37m suggestion\x1b[m\n───\n"
+	if text, err := editorText(draft); err != nil || text != "fix the link" {
+		t.Fatalf("styled draft read as %q %v", text, err)
+	}
+	colored := "───\n❯ \x1b[38;2;255;2;2mred\x1b[38;5;2m green\x1b[39m\n───\n"
+	if text, err := editorText(colored); err != nil || text != "red green" {
+		t.Fatalf("truecolor draft read as %q %v", text, err)
+	}
 	if !draftMatches("work\n  continued", "work continued") || draftMatches("work changed", "work") || !draftMatches("[Pasted text #2 +2 lines]", "first\nsecond\nthird") || draftMatches("[Pasted text #2 +3 lines]", "first\nsecond\nthird") {
 		t.Fatal("bad readback matching")
 	}

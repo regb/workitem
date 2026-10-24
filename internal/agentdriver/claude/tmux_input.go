@@ -127,7 +127,7 @@ func (t *tmuxInput) verify(ctx context.Context, editor bool) error {
 		return inputFailure("pane_changed", fmt.Errorf("Claude pane process group changed"))
 	}
 	if editor {
-		screen, err := t.run(ctx, nil, "capture-pane", "-p", "-t", t.pane)
+		screen, err := t.run(ctx, nil, "capture-pane", "-p", "-e", "-t", t.pane)
 		if err != nil {
 			return err
 		}

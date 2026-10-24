@@ -25,8 +25,10 @@ func (e beforeInputError) Unwrap() error { return e.err }
 
 // Recognize the bounded chat editor, not an old prompt in scrollback or a
 // selected menu row. Continuation rows matter even when its first row is blank.
+// The screen may carry escape sequences (capture-pane -e): dim text, such as
+// the empty editor's "Try …" hint or a suggested completion, is not input.
 func editorText(screen string) (string, error) {
-	lines := strings.Split(screen, "\n")
+	lines := strings.Split(undimmed(screen), "\n")
 	border := func(line string) bool {
 		line = strings.TrimSpace(line)
 		return len([]rune(line)) >= 3 && strings.Trim(line, "─") == ""
@@ -49,11 +51,64 @@ func editorText(screen string) (string, error) {
 	}
 	return "", editorNotVisible{}
 }
+
+// undimmed drops dim (SGR 2) text and every escape sequence, keeping what
+// the pane shows at normal intensity.
+func undimmed(screen string) string {
+	var out strings.Builder
+	dim := false
+	for i := 0; i < len(screen); i++ {
+		if screen[i] != 0x1b || i+1 >= len(screen) {
+			if !dim || screen[i] == '\n' {
+				out.WriteByte(screen[i])
+			}
+			continue
+		}
+		switch screen[i+1] {
+		case '[': // CSI: parameters, then a final byte in @–~.
+			j := i + 2
+			for j < len(screen) && (screen[j] < '@' || screen[j] > '~') {
+				j++
+			}
+			if j < len(screen) && screen[j] == 'm' {
+				params := strings.Split(screen[i+2:j], ";")
+				for k := 0; k < len(params); k++ {
+					switch params[k] {
+					case "", "0", "22":
+						dim = false
+					case "2":
+						dim = true
+					case "38", "48", "58": // Extended colors carry 2 or 4 arguments.
+						if k+1 < len(params) && params[k+1] == "5" {
+							k += 2
+						} else if k+1 < len(params) && params[k+1] == "2" {
+							k += 4
+						}
+					}
+				}
+			}
+			i = j
+		case ']': // OSC, such as a hyperlink: ends at BEL or ST.
+			j := i + 2
+			for j < len(screen) && screen[j] != 0x07 && !(screen[j] == 0x1b && j+1 < len(screen) && screen[j+1] == '\\') {
+				j++
+			}
+			if j < len(screen) && screen[j] == 0x1b {
+				j++
+			}
+			i = j
+		default:
+			i++
+		}
+	}
+	return out.String()
+}
+
 func (t *tmuxInput) readEditor(ctx context.Context) (string, error) {
 	if err := t.verify(ctx, false); err != nil {
 		return "", err
 	}
-	screen, err := t.run(ctx, nil, "capture-pane", "-p", "-J", "-t", t.pane)
+	screen, err := t.run(ctx, nil, "capture-pane", "-p", "-e", "-J", "-t", t.pane)
 	if err != nil {
 		return "", inputFailure("pane_unavailable", err)
 	}
