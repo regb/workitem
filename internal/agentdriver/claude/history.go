@@ -212,6 +212,7 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (protocol.H
 			}
 		}
 	}
+	recoverSiblingResults(file, index, seen, result.Messages, &textRemaining, &imageRemaining, &result.Truncated)
 	if result.HasMore {
 		result.Truncated = true
 	} else {

@@ -126,3 +126,29 @@ func TestHistoryInvalidAndCanceled(t *testing.T) {
 		t.Fatal("ignored cancellation")
 	}
 }
+
+// Claude records parallel calls one after another; the first call's result
+// hangs off that call, beside the branch, and still completes it.
+func TestHistoryParallelCallResultsOffTheBranch(t *testing.T) {
+	path := historyFixture(t,
+		`{"type":"user","uuid":"u","parentUuid":null,"message":{"content":"go"}}`,
+		`{"type":"assistant","uuid":"a1","parentUuid":"u","message":{"content":[{"type":"tool_use","id":"t1","name":"WebFetch","input":{"url":"https://a.test"}}]}}`,
+		`{"type":"assistant","uuid":"a2","parentUuid":"a1","message":{"content":[{"type":"tool_use","id":"t2","name":"WebFetch","input":{"url":"https://b.test"}}]}}`,
+		`{"type":"user","uuid":"r1","parentUuid":"a1","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"page a"}]}}`,
+		`{"type":"user","uuid":"r2","parentUuid":"a2","message":{"content":[{"type":"tool_result","tool_use_id":"t2","content":"page b"}]}}`,
+		`{"type":"assistant","uuid":"done","parentUuid":"r2","message":{"content":"read both"}}`,
+		`{"type":"user","uuid":"other","parentUuid":"a1","message":{"content":[{"type":"tool_result","tool_use_id":"t9","content":"unrelated"}]}}`)
+	h, err := ReadHistoryPage(context.Background(), path, "done", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	outputs := map[string]string{}
+	for _, m := range h.Messages {
+		for _, tool := range m.Tools {
+			outputs[tool.ID] = tool.Status + ":" + tool.Output
+		}
+	}
+	if outputs["t1"] != "completed:page a" || outputs["t2"] != "completed:page b" || len(outputs) != 2 {
+		t.Fatalf("%v", outputs)
+	}
+}
