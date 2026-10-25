@@ -155,3 +155,29 @@ wi list --json --state active
 wi list --json --label +backend --label -blocked
 wi list --json --all # To include archived items
 ```
+
+## Common workflows
+
+### Design exploration in a sub-item
+
+When the user asks to explore a design or a plan separately, file it as its own item and have the current item wait for it.
+
+Write a self-contained description that ends with the deliverable, for example:
+
+```markdown
+Explore options for X and propose a plan. Do not implement it.
+When done, attach the plan with `wi attach PLAN.md` and stop.
+```
+
+Then file and start it, and wait on it from the current item:
+
+```bash
+wi new --title "Design X" --desc-file DESC_FILE --start
+wi wait --on SUB_ITEM_ID
+```
+
+Tell the user to review the sub-item when its agent is done, and to close it once the plan is accepted. Closing it ends the current item's wait and brings it back to the user's attention. Then read the plan by the sub-item's ID, since closing clears its slug:
+
+```bash
+wi attachment cat --item SUB_ITEM_ID PLAN.md
+```
