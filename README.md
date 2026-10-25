@@ -91,6 +91,81 @@ wi close add-api-retries
 
 Use `wi help <command>` for current flags and safety rules.
 
+## Browser access
+
+`wi web` serves a work list and agent chat to a browser. It has no sign-in:
+whoever reaches it controls your agents. It binds only to loopback or to a
+private Unix socket, and an authenticating proxy, such as Tailscale or
+Cloudflare Tunnel, brings it to your other devices.
+
+### Install on the machine
+
+From source, with Go and Node.js 24 or newer (Node.js only builds the browser
+client into the binary):
+
+```bash
+git clone -b web/frontend https://github.com/regb/workitem.git
+cd workitem
+scripts/install-local --clean
+```
+
+With Nix, which builds the client from its lockfile and embeds it:
+
+```bash
+nix profile install github:regb/workitem/web/frontend
+# or pin a revision: github:regb/workitem/<commit>
+```
+
+A plain `go install` embeds only a placeholder page. Then run `wi init` and
+register repositories as in the quick start, as the user whose agents and Git
+credentials Wi should use, never as root.
+
+### Expose it through Tailscale (recommended)
+
+Tailscale keeps the page on your tailnet, encrypted end to end between your
+devices, and its access controls decide who reaches it. On Linux, serve on a
+socket only your user can open, declare the exact address browsers will use,
+and let Tailscale forward to it:
+
+```bash
+wi web --socket "$XDG_RUNTIME_DIR/wi-web/web.sock" \
+  --access-url https://HOST.TAILNET.ts.net:8448 \
+  --identity-header Tailscale-User-Login
+tailscale serve --bg --https=8448 "unix:$XDG_RUNTIME_DIR/wi-web/web.sock"
+```
+
+The macOS Tailscale app cannot open your sockets; there, use
+`wi web --port 8787 --access-url https://HOST.TAILNET.ts.net:8448` and
+`tailscale serve --bg --https=8448 http://127.0.0.1:8787`.
+
+The web chat guide's
+[access from other devices](docs/src/content/docs/guides/web-chat.md#access-from-other-devices)
+covers every self-hosting option: Tailscale on Linux and macOS, Cloudflare
+Tunnel with Access for any browser, and what each one can see.
+
+- The proxy is the only sign-in. Use `tailscale serve`, never
+  `tailscale funnel`, and restrict which tailnet users and devices reach the
+  machine with Tailscale access controls.
+- Prefer `--socket`: a loopback port is open to every process and user on the
+  machine, which is acceptable only on a computer that only you use. Never
+  open the port in a firewall.
+- `--identity-header` makes Wi refuse requests the proxy did not sign in, and
+  shows whose browser tab controls an agent.
+
+### Keep it running
+
+- **Simply:** run `wi web` in a terminal or tmux window. Commands start the
+  daemon on demand, and a newer `wi` replaces an older daemon automatically.
+  This suits a workstation you use directly.
+- **As services:** on an always-on machine, let systemd (or launchd) own both
+  the daemon and `wi web`. Set `[daemon] managed = true` in `config.toml`, so
+  that no `wi` command starts or replaces the supervised daemon, and run both
+  with `KillMode=process`, so restarts leave running agents alone. The
+  [web chat guide](docs/src/content/docs/guides/web-chat.md#run-as-a-service)
+  has the unit files.
+
+Stopping `wi web` or the daemon never stops running agents.
+
 ## Requirements
 
 - Linux
@@ -98,7 +173,8 @@ Use `wi help <command>` for current flags and safety rules.
 - Git
 - [Pi](https://pi.dev) for the default packaged agent driver
 - tmux for interactive TUI runtimes
-- fzf 0.71+ for the optional `wi switch` picker
+- fzf 0.71+ for the optional `wi switch` picker and `@` file mentions in `wi web`
+- Node.js 24+ and npm to build the `wi web` client from source (not to run it)
 
 Headless runtimes do not require tmux or fzf.
 

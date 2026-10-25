@@ -3,7 +3,7 @@ title: Nix installation
 description: Build, run, and pin Wi with an upstream flake.
 ---
 
-Wi's flake provides `packages.default`, `packages.wi`, `apps.default`,
+Wi's flake provides `packages.default`, `packages.wi`, `packages.web-client`, `apps.default`,
 `apps.wi`, `devShells.default`, and `checks.go-tests` for `x86_64-linux` and
 `aarch64-darwin`. Enable Nix's `nix-command` and `flakes` experimental features.
 The locked nixpkgs input supplies Go 1.26, satisfying Wi's Go 1.24 minimum.
@@ -25,16 +25,23 @@ remote invocation, use `nix run github:regb/workitem/main -- --help`.
 That command resolves main when invoked. Use a locked consumer input for a
 repeatable installation.
 
-The package contains the Wi executable and its embedded resources. It does
-not wrap PATH or install an agent. Supply Git on PATH for repository operations,
-tmux for interactive TUI runtimes, and fzf 0.71 or newer for `wi switch`.
+The package contains the Wi executable and its embedded resources, including
+the `wi web` browser client. The flake builds the client from
+`web/package-lock.json` with Node.js (`packages.web-client`) and embeds it;
+running Wi needs no Node.js. A plain `go build` or `go install` embeds only a
+placeholder page: build the client first with `scripts/build-web`, as
+`scripts/install-local` does. The package does not wrap PATH or install an
+agent. Supply Git on PATH for repository operations,
+tmux for interactive TUI runtimes, and fzf 0.71 or newer for `wi switch` and
+`@` file mentions in `wi web`.
 Headless operation needs neither tmux nor fzf. Install your chosen agent
 separately and select its executable through Wi configuration or PATH. Optional
 direnv integration also requires direnv. Plugins and editors may need their own
 tools. No credentials, Fleet configuration, or Wi runtime state are packaged.
 
 The development shell supplies Go, Git, tmux, fzf, direnv, and Node.js.
-Node.js exercises the Pi bridge tests; it does not install Pi or credentials.
+Node.js exercises the Pi bridge tests and builds the web client; it does not
+install Pi or credentials.
 
 ## Pin a consumer
 

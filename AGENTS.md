@@ -27,6 +27,7 @@ Short-lived work has a durable record: restarting an agent, releasing a worktree
 ## Code map
 
 - `cmd/wi/`, `internal/cli/`: entrypoint, command parsing, output, and coordinator-backed commands.
+- `internal/web/`, `web/`: `wi web` HTTP API and event stream, and its React client (Vite, embedded from `internal/web/dist/app`).
 - `internal/app/`: service composition, cross-cutting `usecase_*.go`, merge integration, shared `contract/`, and read composition in `view/`.
 - `internal/app/core/`: separate `item/`, `workspace/`, `primaryagent/`, and `attention/` policy. Preserve these dependency boundaries.
 - `internal/coordinator/`: daemon, sole structured-state writer, bbolt events/projections, repository registry, and native-content indexing.
@@ -66,7 +67,7 @@ After a successful change that affects the `wi` executable, install the developm
    scripts/install-local
    ```
 
-A dirty-build warning is expected before commit. The script installs through `go install -buildvcs=true` and prints the installed path and version. Use `scripts/install-local --clean` only when an exact clean-commit build is required.
+A dirty-build warning is expected before commit. The script builds the web client with `scripts/build-web` (Node.js and npm required), installs through `go install -buildvcs=true`, and prints the installed path and version. Use `scripts/install-local --clean` only when an exact clean-commit build is required.
 
 If `~/.agentbox/tools/bin` exists, also update its sandbox copy after installing:
 
@@ -88,6 +89,7 @@ Documentation-only and test-only changes do not require reinstalling the binary.
 ## Testing notes
 
 - The full suite should run without requiring a live tmux server or coding-agent process.
+- The web client has its own tests: `scripts/build-web --test` (or `npm test` in `web/`). Go tests must pass with or without a built client.
 - Process-launching test packages use `testutil.RunIsolatedTests` in `TestMain` to isolate HOME, XDG roots, Pi configuration, Git overrides, and Wi/tmux/direnv context. Preserve this guard when adding tests. Go compiler/module caches may be shared; binary installation destinations must remain private.
 - CLI subprocess tests must also use explicit isolated environments. Manual development-binary/browser smoke tests need their own HOME and XDG roots; do not run older binaries against the operator's live daemon.
 - Test both TUI and headless composition when changing runtime startup or lifecycle behavior.

@@ -295,6 +295,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = runSwitch(ctx, args[1:], cfg, jsonOut)
 	case "next":
 		err = runNext(ctx, args[1:], cfg, jsonOut)
+	case "web":
+		err = runWeb(ctx, args[1:], cfg, jsonOut)
 	case "resume":
 		err = runResume(ctx, args[1:], cfg, jsonOut)
 	case "shelve":

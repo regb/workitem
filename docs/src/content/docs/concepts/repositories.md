@@ -153,6 +153,6 @@ Publishing stays explicit. Use Git against the store reported by `wi repo show` 
 
 ### Follow the upstream
 
-Creating an item from the integration branch first synchronizes it like `wi repo sync` without options, so new work starts from current upstream changes. This applies to `wi new`, backlog items included. A behind branch fast-forwards, an ahead one is left alone, and diverged histories are not reconciled. Creation never fails because of it: when the upstream is unreachable, the fetch takes more than 20 seconds, a reconciliation is pending or the histories diverged, the item starts from the local integration branch and creation reports a warning. Repositories without an upstream are not affected.
+Creating an item from the integration branch first synchronizes it like `wi repo sync` without options, so new work starts from current upstream changes. This applies to `wi new` and to creation in `wi web`, backlog items included. A behind branch fast-forwards, an ahead one is left alone, and diverged histories are not reconciled. Creation never fails because of it: when the upstream is unreachable, the fetch takes more than 20 seconds, a reconciliation is pending or the histories diverged, the item starts from the local integration branch and creation reports a warning. Repositories without an upstream are not affected.
 
 Set `follow_upstream = "off"` under `[repo]` in `config.toml` to create items from the local integration branch without fetching. Merges still synchronize first; use `wi merge --local` to skip that.

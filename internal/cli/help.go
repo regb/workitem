@@ -555,7 +555,18 @@ var helpDocs = map[string]helpDoc{
 		Environment: []helpOption{{"WI_LIST_LABELS", "Comma-separated label rules overlaid on config."}},
 		Examples:    []string{`wi next`, `wi next --defer`, `wi next --wait --until tomorrow`, `wi next --wait --on -`, `wi next --close --resolution abandoned`, `wi next --label +backend --label -blocked`, `wi --json next --wait --until 4h`},
 	},
-
+	"web": {
+		Summary:     "Serve a local work list and primary-agent chat",
+		Usage:       []string{"wi web [--port PORT | --socket PATH] [--access-url ORIGIN] [--identity-header NAME]"},
+		Description: []string{"There is no sign-in: whoever reaches the server controls your agents. It binds only to loopback or to an owner-only Unix socket; to reach it from other devices, put an authenticating proxy such as Tailscale Serve or Cloudflare Tunnel in front of it. Host and Origin checks keep other websites from acting through your browser. Existing chat never starts or replaces an owner. New saves and starts headless work in the background. Close runs safety checks without force. Stopping the server leaves primary agents running."},
+		Options: []helpOption{
+			{Flag: "--port PORT", Text: "Bind 127.0.0.1 on this port; default chooses an available port. Any process on this machine can connect"},
+			{Flag: "--socket PATH", Text: "Serve on this Unix socket instead, so only your user and a proxy running as root or as you can connect. Requires --access-url"},
+			{Flag: "--access-url ORIGIN", Text: "The exact http:// or https:// origin the proxy serves to browsers; requests for any other host are refused"},
+			{Flag: "--identity-header NAME", Text: "Refuse requests without this header, set by the proxy to the signed-in user (Tailscale-User-Login, Cf-Access-Authenticated-User-Email), and name control leases after it. Trust it only when nothing but the proxy reaches the server"},
+		},
+		SeeAlso: []string{"list", "new", "repo", "close"},
+	},
 	"resume": {
 		Summary:     "Ensure an active item's agent runtime",
 		Usage:       []string{"wi resume [--item <selector>] [--agent-mode <tui|headless>] [item]"},
@@ -751,7 +762,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  wi help [command [subcommand]]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Work:")
-	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"search", "Find items by text"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}, {"reopen", "Reopen closed work"}})
+	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"web", "Open local browser access"}, {"show", "Show an item"}, {"search", "Find items by text"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}, {"reopen", "Reopen closed work"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
 	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
