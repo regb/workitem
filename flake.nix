@@ -14,12 +14,39 @@
           # has unknown identity; never invent a revision or release label.
           revision = self.rev or (nixpkgs.lib.removeSuffix "-dirty" (self.dirtyRev or ""));
           modified = if self ? rev then "false" else "true";
+          version = "unstable-${if revision == "" then "unknown" else builtins.substring 0 12 revision}${if modified == "true" then "-dirty" else ""}";
+          # The browser client for `wi web`, built from web/package-lock.json.
+          # Git ignores its output, so the binary embeds it from here.
+          webClient = pkgs.buildNpmPackage {
+            pname = "wi-web-client";
+            inherit version;
+            src = self;
+            nodejs = pkgs.nodejs_24;
+            npmRoot = "web";
+            npmDeps = pkgs.importNpmLock { npmRoot = ./web; };
+            npmConfigHook = pkgs.importNpmLock.npmConfigHook;
+            # Vite writes to internal/web/dist/app, outside web/.
+            buildPhase = ''
+              runHook preBuild
+              (cd web && npm run build)
+              runHook postBuild
+            '';
+            installPhase = ''
+              runHook preInstall
+              cp -r internal/web/dist/app "$out"
+              runHook postInstall
+            '';
+          };
           wi = pkgs.buildGo126Module {
             pname = "wi";
-            version = "unstable-${if revision == "" then "unknown" else builtins.substring 0 12 revision}${if modified == "true" then "-dirty" else ""}";
+            inherit version;
             src = self;
             vendorHash = "sha256-IAkxa6kvGN0NbcwQrYLAVAylnt1v3cvXu6Y028+oZEA=";
             subPackages = [ "cmd/wi" ];
+            preBuild = ''
+              cp -r ${webClient} internal/web/dist/app
+              chmod -R u+w internal/web/dist/app
+            '';
             ldflags = [
               "-s" "-w"
               "-X=github.com/regb/workitem/internal/version.sourceRevision=${revision}"
@@ -66,11 +93,12 @@
               runHook postCheck
             '';
           });
-        in { inherit pkgs wi tests testTools; };
+        in { inherit pkgs wi webClient tests testTools; };
     in {
       packages = forAllSystems (system: let p = perSystem system; in {
         default = p.wi;
         wi = p.wi;
+        web-client = p.webClient;
       });
       apps = forAllSystems (system: let app = {
         type = "app";

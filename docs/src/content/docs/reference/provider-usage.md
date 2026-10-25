@@ -18,7 +18,7 @@ It is a bundled plugin, installed with wi as `wi-usage`. Enable it in Wi's confi
 enabled = true
 ```
 
-`wi usage` then runs it; `wi usage show` is the same.
+`wi usage` then runs it; `wi usage show` is the same. The web Settings → Usage page shows the same results, with a Refresh button.
 
 ## Text summary
 

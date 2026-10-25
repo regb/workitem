@@ -13,7 +13,7 @@ wi start --reasoning low item-slug
 wi agent settings set model=sonnet
 ```
 
-A running agent reports the model and reasoning level it uses, and `wi agent settings` shows them. When neither the item nor its profile chooses a model, the item records the one its agent first runs with, so the conversation keeps it even if the agent's default changes. A model or reasoning level changed in the agent's own interface, such as Pi's `/model`, becomes the item's setting too. Resetting the item's settings returns it to the profile, until the next start records again.
+A running agent reports the model and reasoning level it uses, and `wi agent settings` and the web client show them. When neither the item nor its profile chooses a model, the item records the one its agent first runs with, so the conversation keeps it even if the agent's default changes. A model or reasoning level changed in the agent's own interface, such as Pi's `/model`, becomes the item's setting too. Resetting the item's settings returns it to the profile, until the next start records again.
 
 Each item has at most one primary conversation and one active runtime owner. A runtime can stop and later resume that conversation. The conversation belongs to one bounded task, not an ongoing project chat: close the item when its objective is settled.
 
