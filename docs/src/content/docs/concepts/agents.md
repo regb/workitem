@@ -3,7 +3,15 @@ title: Agents and conversations
 description: Agent profiles, driver-owned conversations, and exclusive runtimes.
 ---
 
-An item selects an agent profile, such as `pi` or `pi-deep`. Profiles choose a driver and its configuration; several profiles can use the same driver. Run `wi init` to discover installed agents and select the default. Profiles are explicit in the user config; `default_agent` must point to an existing named profile. Items store the resolved name rather than the pointer, so changing the default does not reassign existing named-profile items. See [Configuration](../../reference/configuration/#coding-agents-and-drivers).
+An item selects an agent profile, such as `pi` or `claude`. Profiles choose a driver and its configuration; several profiles can use the same driver, for example one per account. Run `wi init` to discover installed agents and select the default. Profiles are explicit in the user config; `default_agent` must point to an existing named profile. Items store the resolved name rather than the pointer, so changing the default does not reassign existing named-profile items. See [Configuration](../../reference/configuration/#coding-agents-and-drivers).
+
+An item can also choose its own model and reasoning level, which override its profile's for every runtime of its conversation. Reasoning is one ladder for every driver (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`); drivers and models accept a subset.
+
+```bash
+wi new --model opus --reasoning xhigh --title "Plan the migration"
+wi start --reasoning low item-slug
+wi agent settings set model=sonnet
+```
 
 Each item has at most one primary conversation and one active runtime owner. A runtime can stop and later resume that conversation. The conversation belongs to one bounded task, not an ongoing project chat: close the item when its objective is settled.
 

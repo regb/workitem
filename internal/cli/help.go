@@ -174,6 +174,8 @@ var helpDocs = map[string]helpDoc{
 			{"--start", "Start an unattached agent and send the configured startup message."},
 			{"--prompt <text>", "Start an agent and send this message without changing the description; implies --start."},
 			{"--agent <name>", "Select a named agent profile; omitted uses default_agent from config."},
+			{"--model <model>", "Choose the item's model, overriding the profile's. Stored as given; the driver checks it when the agent starts."},
+			{"--reasoning <level>", "Choose the item's reasoning level: off, minimal, low, medium, high, xhigh, or max. Drivers and models accept a subset."},
 			{"--agent-mode <mode>", "With --start or --prompt, start tui (default) or headless."},
 			{"--slug <slug>", "Set the initial active slug; must be unique."},
 			{"--label <label>", "Add a label after inherited defaults; repeatable."},
@@ -188,6 +190,7 @@ var helpDocs = map[string]helpDoc{
 			`wi new --desc-file handoff.md --start --title "Investigate refresh race"`,
 			`wi new --desc-file audit.md --start --agent-mode headless --prompt "Read wi show and run the audit." --title "Audit dependencies"`,
 			`wi new --deep --repo api --title "Redesign authentication"`,
+			`wi new --model opus --reasoning xhigh --desc-file plan.md --start --agent claude --title "Plan the migration"`,
 			`wi new --base=@ --title "Build on this task"`,
 			`wi new --base=^ --title "Independent task"`,
 			`wi new --untitled --repo api`,
@@ -449,7 +452,7 @@ var helpDocs = map[string]helpDoc{
 	},
 	"start": {
 		Summary: "Start an existing backlog item",
-		Usage:   []string{"wi start [--agent-mode <tui|headless>] [--force] <slug>"},
+		Usage:   []string{"wi start [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] <slug>"},
 		Description: []string{
 			"Resolves an exact active slug or one unambiguous active-slug substring. Exact matches take precedence; ambiguous substrings fail with candidate IDs and slugs. IDs, title keywords, implicit current-item selection, and --item are not accepted.",
 			"Transitions backlog -> active, enforces deep-work capacity, materializes the worktree, and ensures the selected primary runtime. TUI mode attaches terminal access; headless mode remains tmux-independent. JSON never attaches. Starting an existing item does not send a message.",
@@ -457,9 +460,11 @@ var helpDocs = map[string]helpDoc{
 		},
 		Options: []helpOption{
 			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless mode."},
+			{"--model <model>", "Save the item's model before starting, as wi agent settings set model=MODEL does."},
+			{"--reasoning <level>", "Save the item's reasoning level before starting."},
 			{"--force", "Override the deep-work active limit."},
 		},
-		Examples: []string{`wi start auth-race`, `wi start --agent-mode headless audit`},
+		Examples: []string{`wi start auth-race`, `wi start --agent-mode headless audit`, `wi start --reasoning high auth-race`},
 	},
 	"switch": {
 		Summary: "Select and switch to a work item",

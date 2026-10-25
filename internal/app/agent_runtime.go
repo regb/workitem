@@ -61,7 +61,7 @@ func (a *App) ensureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 		return EnsureAgentRuntimeResult{}, err
 	}
 	if !a.primaryAgentService().ObserveOwnership(existing).ProcessAlive {
-		if err := a.ValidateAgentConfig(ctx, m.Agent); err != nil {
+		if err := a.ValidateAgentConfig(ctx, m.Agent, m.AgentSettings); err != nil {
 			return EnsureAgentRuntimeResult{}, err
 		}
 	}

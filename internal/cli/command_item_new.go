@@ -18,7 +18,7 @@ import (
 func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("new", cfg.Stderr)
 	var labels repeatFlag
-	var title, descFile, prompt, slug, base, repoPath, agentMode, agentName string
+	var title, descFile, prompt, slug, base, repoPath, agentMode, agentName, modelName, reasoning string
 	var deep, noDefaultLabels, start, untitled bool
 	fs.StringVar(&title, "title", "", "work-item title; required unless --untitled is supplied")
 	fs.BoolVar(&untitled, "untitled", false, "use an editable placeholder title and an ID-derived slug")
@@ -27,6 +27,8 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	fs.StringVar(&prompt, "prompt", "", "start an agent and send this message without changing the description")
 	fs.StringVar(&agentMode, "agent-mode", "tui", "with --start, runtime mode: tui or headless")
 	fs.StringVar(&agentName, "agent", "", "named agent profile (default: default_agent from config)")
+	fs.StringVar(&modelName, "model", "", "model for this item's agent (default: the profile's)")
+	fs.StringVar(&reasoning, "reasoning", "", "reasoning level for this item's agent (default: the profile's)")
 	fs.StringVar(&slug, "slug", "", "explicit active slug for the new work item")
 	fs.Var(&labels, "label", "label to add (repeatable)")
 	fs.BoolVar(&noDefaultLabels, "no-default-labels", false, "do not inherit user or repository default labels")
@@ -94,6 +96,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	opts := app.NewWorkItemOptions{
 		Title: title, Untitled: untitled, Slug: slug, Description: description, Labels: labels,
 		NoDefaultLabels: noDefaultLabels, DeepWork: deep, Base: base, CWD: newCWD, Env: cfg.Env, Agent: agentName,
+		AgentSettings: agentSettingFlags(modelName, reasoning),
 	}
 	if cfg.RequireOwnedRepository {
 		selector := strings.TrimSpace(repoPath)
@@ -158,7 +161,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 }
 
 func runCoordinatorNewAgent(ctx context.Context, cfg Config, opts app.NewWorkItemOptions, mode agent.Mode, message string) (app.NewAgentWorkItemResult, error) {
-	if err := cfg.App.ValidateAgentConfig(ctx, opts.Agent); err != nil {
+	if err := cfg.App.ValidateAgentConfig(ctx, opts.Agent, opts.AgentSettings); err != nil {
 		return app.NewAgentWorkItemResult{}, err
 	}
 	created, err := createCoordinatorWorkItem(ctx, cfg, opts)

@@ -141,7 +141,7 @@ func (a *App) switchWorkItem(ctx context.Context, m model.Manifest, opts Resolve
 		// typically because the tmux server restarted. The process is
 		// unreachable, so recycle it and fall through to start a fresh TUI
 		// runtime in a new terminal that resumes the same conversation.
-		if err := a.ValidateAgentConfig(ctx, m.Agent); err != nil {
+		if err := a.ValidateAgentConfig(ctx, m.Agent, m.AgentSettings); err != nil {
 			return CompositionResult{}, err
 		}
 		recycled, err := a.recycleOrphanedTUIRuntime(ctx, m, existing)

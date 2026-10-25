@@ -13,15 +13,17 @@ import (
 
 func runStart(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("start", cfg.Stderr)
-	var agentMode string
+	var agentMode, modelName, reasoning string
 	var force bool
 	fs.StringVar(&agentMode, "agent-mode", "tui", "agent runtime mode: tui or headless")
+	fs.StringVar(&modelName, "model", "", "set the item's model before starting")
+	fs.StringVar(&reasoning, "reasoning", "", "set the item's reasoning level before starting")
 	fs.BoolVar(&force, "force", false, "override deep work active limit")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
 	}
 	if fs.NArg() != 1 {
-		return usageErr{errors.New("usage: wi start [--agent-mode <tui|headless>] [--force] <slug>")}
+		return usageErr{errors.New("usage: wi start [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] <slug>")}
 	}
 	input := strings.TrimSpace(fs.Arg(0))
 	if input == "" {
@@ -34,6 +36,13 @@ func runStart(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 	manifest, err := cfg.App.Store.ResolveActiveSlug(input)
 	if err != nil {
 		return err
+	}
+	// The choices are durable intent for this and every later runtime, so
+	// they are saved even if the start then fails.
+	if settings := agentSettingFlags(modelName, reasoning); len(settings) > 0 {
+		if _, err := cfg.App.SetAgentSettings(ctx, app.SetAgentSettingsOptions{ResolveOptions: app.ResolveOptions{Selector: manifest.ID, CWD: cfg.CWD, Env: cfg.Env}, Settings: settings}); err != nil {
+			return err
+		}
 	}
 	res, err := coordinatorStartWorkItem(ctx, cfg, manifest.ID, force, !jsonOut && mode == agent.ModeTUI, mode, "work_item.started")
 	if err != nil {

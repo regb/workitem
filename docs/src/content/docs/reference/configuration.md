@@ -220,25 +220,20 @@ Older items recorded the special name `default`; those records still resolve thr
 
 `[agents.<name>]` defines a flat selectable agent profile and selects a registered driver. An optional `label` provides display text; clients should fall back to the profile name when it is blank. The nested `config` belongs to the driver, which can require fields and reject missing or invalid values. Wi passes this table as opaque JSON and checks it through the driver's stateless `config.validate` operation before starting a new owner. There is no generic required-field schema. Invalid configuration fails before startup creates resources; `new --start` also validates before creating the item. Plain backlog capture does not require a driver process, and existing owners are not reconfigured.
 
-Pi accepts optional `executable`, `extensions`, `model`, and `thinking`. The executable defaults to `pi`; omitted model/thinking settings leave the choice to Pi. Explicit thinking values must be `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. `[drivers.<name>.defaults]` provides settings shared by every agent using that driver; agent configuration overrides those defaults.
+Every driver takes the same two choices: `model`, and `reasoning`, one level of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Each driver maps `reasoning` onto its backend, as Pi's thinking level or Claude's effort, and accepts a subset of the levels. A profile's values are defaults; an item chooses its own with `wi new --model M --reasoning L`, `wi start`, or `wi agent settings set`, so a profile per model or level is not needed.
+
+Pi accepts optional `executable`, `extensions`, `model`, and `reasoning`. The executable defaults to `pi`; omitted model and reasoning settings leave the choice to Pi, which accepts every level. `[drivers.<name>.defaults]` provides settings shared by every agent using that driver; agent configuration overrides those defaults.
 
 ```toml
-[agents.pi-fast]
+[agents.pi]
 driver = "pi"
-label = "Pi · Fast"
-[agents.pi-fast.config]
+label = "Pi"
+[agents.pi.config]
 model = "openai-codex/gpt-5.4"
-thinking = "low"
-
-[agents.pi-deep]
-driver = "pi"
-label = "Pi · Deep"
-[agents.pi-deep.config]
-model = "openai-codex/gpt-5.4"
-thinking = "xhigh"
+reasoning = "high"
 ```
 
-Items retain the selected profile name. Runtime startup resolves the profile and passes its configuration through the selected driver.
+Items retain the selected profile name. Runtime startup resolves the profile, applies the item's own model and reasoning, and passes the configuration through the selected driver.
 
 Select a profile with `wi new --agent NAME`.
 
@@ -246,7 +241,7 @@ External driver programs use wi's versioned bootstrap protocol. The bundled driv
 
 ### Claude Code
 
-Claude accepts optional `executable`, `model`, and `effort`. The executable defaults to `claude`; omitted model and effort settings leave the choice to Claude. Effort accepts `low`, `medium`, `high`, `xhigh`, or `max`.
+Claude accepts optional `executable`, `model`, and `reasoning`. The executable defaults to `claude`; omitted model and reasoning settings leave the choice to Claude. Reasoning is passed as Claude's effort and accepts `low`, `medium`, `high`, `xhigh`, or `max`.
 
 The bundled Claude driver always passes `--dangerously-skip-permissions`, on both creation and resume, to match Pi's execution without per-tool approvals. Permission mode is not configurable; `permission_mode` is rejected as an unknown field. Claude executes with the host account's access. A managed worktree is not a sandbox.
 
@@ -257,11 +252,12 @@ label = "Claude Code"
 [agents.claude.config]
 executable = "/Users/me/.local/bin/claude"
 model = "sonnet"
-effort = "high"
+reasoning = "high"
 ```
 
 ```sh
 wi new --agent claude --title "Review authentication"
+wi new --agent claude --model opus --reasoning xhigh --title "Plan the migration"
 wi start ITEM
 ```
 

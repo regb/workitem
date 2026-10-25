@@ -22,6 +22,8 @@ type NewWorkItemOptions struct {
 	CWD              string
 	Env              map[string]string
 	Agent            string
+	// AgentSettings are the item's own model and reasoning choices.
+	AgentSettings map[string]string
 }
 
 type NewWorkItemResult struct {
@@ -45,8 +47,12 @@ func (a *App) PrepareNewWorkItem(ctx context.Context, opts NewWorkItemOptions) (
 	if err != nil {
 		return PreparedNewWorkItem{}, err
 	}
+	settings, _, err := mergeSettings(nil, opts.AgentSettings)
+	if err != nil {
+		return PreparedNewWorkItem{}, err
+	}
 	res, err := a.itemService().NewWorkItem(ctx, itemcore.NewOptions{
-		Title: opts.Title, Untitled: opts.Untitled, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
+		Title: opts.Title, Untitled: opts.Untitled, Slug: opts.Slug, Description: opts.Description, Agent: agentName, AgentSettings: settings,
 		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
 		DeepWork: opts.DeepWork, Base: opts.Base,
 		CWD: opts.CWD, Env: opts.Env, PrepareOnly: true, Repository: opts.Repository, RepositoryLabels: opts.RepositoryLabels,
@@ -67,8 +73,12 @@ func (a *App) NewWorkItem(ctx context.Context, opts NewWorkItemOptions) (NewWork
 	if err != nil {
 		return NewWorkItemResult{}, err
 	}
+	settings, _, err := mergeSettings(nil, opts.AgentSettings)
+	if err != nil {
+		return NewWorkItemResult{}, err
+	}
 	res, err := a.itemService().NewWorkItem(ctx, itemcore.NewOptions{
-		Title: opts.Title, Untitled: opts.Untitled, Slug: opts.Slug, Description: opts.Description, Agent: agentName,
+		Title: opts.Title, Untitled: opts.Untitled, Slug: opts.Slug, Description: opts.Description, Agent: agentName, AgentSettings: settings,
 		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
 		DeepWork: opts.DeepWork, Base: opts.Base,
 		CWD: opts.CWD, Env: opts.Env, Repository: opts.Repository, RepositoryLabels: opts.RepositoryLabels,

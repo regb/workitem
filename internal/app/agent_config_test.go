@@ -70,7 +70,7 @@ func TestAgentConfigValidationMergesSettingsWithoutResources(t *testing.T) {
 	a.ConversationBackends["pi"] = backend
 	a.DriversConfig["pi"] = config.DriverDefinitionConfig{Defaults: map[string]any{"required": "present", "setting": "default"}}
 	a.AgentsConfig["review"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{"setting": "override"}}
-	if err := a.ValidateAgentConfig(context.Background(), "review"); err != nil {
+	if err := a.ValidateAgentConfig(context.Background(), "review", nil); err != nil {
 		t.Fatal(err)
 	}
 	if backend.calls != 1 || backend.name != "review" || backend.values["setting"] != "override" {
@@ -83,7 +83,7 @@ func TestAgentConfigValidationMergesSettingsWithoutResources(t *testing.T) {
 		t.Fatal("validation created an item")
 	}
 	a.ConversationBackends = nil
-	if err := a.ValidateAgentConfig(context.Background(), "review"); err == nil {
+	if err := a.ValidateAgentConfig(context.Background(), "review", nil); err == nil {
 		t.Fatal("missing validator silently accepted")
 	}
 }

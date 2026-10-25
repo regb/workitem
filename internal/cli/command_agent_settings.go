@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/coordinator"
@@ -167,4 +168,19 @@ func (o coordinatorControlOutcomes) Wait(ctx context.Context, itemID string, cur
 		}
 		cursor = result.LastSequence
 	}
+}
+
+// agentSettingFlags collects the --model and --reasoning choices given.
+func agentSettingFlags(modelName, reasoning string) map[string]string {
+	settings := map[string]string{}
+	if modelName = strings.TrimSpace(modelName); modelName != "" {
+		settings[driverprotocol.SettingModel] = modelName
+	}
+	if reasoning = strings.TrimSpace(reasoning); reasoning != "" {
+		settings[driverprotocol.SettingReasoning] = reasoning
+	}
+	if len(settings) == 0 {
+		return nil
+	}
+	return settings
 }

@@ -8,9 +8,10 @@ import (
 	"github.com/regb/workitem/internal/config"
 )
 
-// ValidateAgentConfig asks the driver to validate merged profile settings without
-// materializing a checkout, conversation, terminal, or runtime.
-func (a *App) ValidateAgentConfig(ctx context.Context, name string) error {
+// ValidateAgentConfig asks the driver to validate merged profile settings and
+// an item's own settings without materializing a checkout, conversation,
+// terminal, or runtime.
+func (a *App) ValidateAgentConfig(ctx context.Context, name string, settings map[string]string) error {
 	name, err := a.resolveAgentName(name)
 	if err != nil {
 		return err
@@ -20,7 +21,7 @@ func (a *App) ValidateAgentConfig(ctx context.Context, name string) error {
 	if backend == nil {
 		return fmt.Errorf("configuration validator for driver %q is not configured", definition.Driver)
 	}
-	raw, err := a.driverConfigJSON(definition)
+	raw, err := json.Marshal(a.driverConfig(definition, settings))
 	if err != nil {
 		return err
 	}
@@ -44,7 +45,7 @@ func (a *App) ValidateItemAgentConfig(ctx context.Context, opts ResolveOptions) 
 	if a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive {
 		return nil
 	}
-	return a.ValidateAgentConfig(ctx, m.Agent)
+	return a.ValidateAgentConfig(ctx, m.Agent, m.AgentSettings)
 }
 
 // driverConfigJSON applies agent overrides to driver defaults without changing

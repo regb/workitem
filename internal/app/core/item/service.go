@@ -61,6 +61,7 @@ type NewOptions struct {
 	Env              map[string]string
 	PrepareOnly      bool
 	Agent            string
+	AgentSettings    map[string]string
 }
 
 type NewResult struct {
@@ -224,6 +225,7 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 	if m.Agent == "" {
 		m.Agent = "default"
 	}
+	m.AgentSettings = opts.AgentSettings
 	createEvent := model.NewEvent(now, "work_item.created", "user", map[string]any{"title": title, "slug": slug, "workspace_kind": checkout.Specification.Kind})
 	if opts.PrepareOnly {
 		return NewResult{Manifest: m, ItemDir: s.store.ItemDir(id), Warnings: warnings, Description: opts.Description, CreateEvent: createEvent}, nil
