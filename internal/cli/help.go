@@ -370,6 +370,61 @@ var helpDocs = map[string]helpDoc{
 		Options:     []helpOption{{"--label <rule>", "Apply the same repeatable label rules as wi list."}},
 		Environment: []helpOption{{"WI_LIST_LABELS", "Comma-separated label rules overlaid on config."}},
 	},
+	"note": {
+		Summary: "Add a note to an item's log",
+		Usage:   []string{"wi note [--item <selector>] <text>"},
+		Description: []string{
+			"Appends a short, timestamped note to the item's log: a decision, an abandoned approach, a blocker, a milestone. Notes are append-only and at most 2 KB; attach longer content instead. When the item has a worktree, the note records its HEAD commit.",
+			"Notes are quiet: they never count as unread, never raise attention, and are never sent to the agent. The agent endpoint may add them.",
+		},
+		Options:  []helpOption{{"--item <selector>", "Select an item; defaults to the current item. Put options before the text."}},
+		Examples: []string{`wi note "Dropped the cache approach: invalidation races with merge"`, `wi note --item auth "Waiting on the API team's answer"`},
+		SeeAlso:  []string{"notes", "attach"},
+	},
+	"notes": {
+		Summary:     "Show an item's notes",
+		Usage:       []string{"wi notes [--item <selector>] [item]"},
+		Description: []string{"Prints the item's notes, oldest first, with the worktree commit each was taken at. Attaching a file adds a note too. JSON output returns the full records."},
+		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}},
+		Examples:    []string{`wi notes`, `wi --json notes auth`},
+		SeeAlso:     []string{"note", "attachments"},
+	},
+	"attach": {
+		Summary: "Attach a file to an item",
+		Usage:   []string{"wi attach [--item <selector>] [--as <name>] [-m <note>] <file>"},
+		Description: []string{
+			"Copies a file into the item, outside Git: a report, a screenshot, evidence. The original is left alone. Attaching under an existing name replaces it; earlier content stays readable by the digest its note recorded. Each attach adds a note. Files are at most 16 MB. The agent endpoint may attach files.",
+		},
+		Options: []helpOption{
+			{"--item <selector>", "Select an item; defaults to the current item."},
+			{"--as <name>", "Name the attachment; defaults to the file's name."},
+			{"-m <note>", "Record this note instead of \"Attached <name>\"."},
+		},
+		Examples: []string{`wi attach REPORT.md`, `wi attach --as login-bug.png -m "Login fails after redirect" /tmp/shot.png`},
+		SeeAlso:  []string{"attachments", "attachment cat", "notes"},
+	},
+	"attachments": {
+		Summary:     "List an item's attachments",
+		Usage:       []string{"wi attachments [--item <selector>] [item]"},
+		Description: []string{"Lists each attachment name with its latest content's size and time."},
+		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}},
+		Examples:    []string{`wi attachments`, `wi --json attachments auth`},
+		SeeAlso:     []string{"attach", "attachment cat"},
+	},
+	"attachment": {
+		Summary:  "Read an item's attachments",
+		Usage:    []string{"wi attachment cat [--item <selector>] <name|digest>"},
+		Examples: []string{`wi attachment cat REPORT.md`},
+		SeeAlso:  []string{"attachment cat", "attachments"},
+	},
+	"attachment cat": {
+		Summary:     "Print an attachment",
+		Usage:       []string{"wi attachment cat [--item <selector>] <name|digest>"},
+		Description: []string{"Prints the latest content attached under a name, or earlier content by the digest a note recorded."},
+		Options:     []helpOption{{"--item <selector>", "Select an item; defaults to the current item."}},
+		Examples:    []string{`wi attachment cat REPORT.md`, `wi attachment cat --item auth login-bug.png > bug.png`},
+		SeeAlso:     []string{"attachments", "notes"},
+	},
 	"events": {
 		Summary:     "Show the durable work-item event log",
 		Usage:       []string{"wi events [--item <selector>] [item]"},
@@ -655,7 +710,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
-	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"attention", "Inspect, defer, or mark attention read"}})
+	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Agent and checkout:")
 	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})

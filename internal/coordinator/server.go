@@ -815,6 +815,30 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			return
 		}
 		result = queueResult
+	case MethodAddNote:
+		var noteRequest AddNoteRequest
+		if err := json.Unmarshal(request.Payload, &noteRequest); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		note, err := s.addNote(context.Background(), noteRequest)
+		if err != nil {
+			s.writeError(conn, request.ID, "command_error", err.Error())
+			return
+		}
+		result = note
+	case MethodAttach:
+		var attachRequest AttachRequest
+		if err := json.Unmarshal(request.Payload, &attachRequest); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		note, err := s.attach(context.Background(), attachRequest)
+		if err != nil {
+			s.writeError(conn, request.ID, "command_error", err.Error())
+			return
+		}
+		result = note
 	case MethodEditItem:
 		var editRequest EditItemRequest
 		if err := json.Unmarshal(request.Payload, &editRequest); err != nil {
@@ -1053,6 +1077,9 @@ func agentMethodAllowed(method string) bool {
 	case MethodRepositorySource:
 		return true
 	case MethodPing, MethodStatus, MethodListManifests, MethodCreateItem:
+		return true
+	// Agents keep their items' notes and attachments.
+	case MethodAddNote, MethodAttach:
 		return true
 	default:
 		return false

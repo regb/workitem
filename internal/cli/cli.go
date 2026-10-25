@@ -314,6 +314,16 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = runShutdown(ctx, args[1:], cfg, jsonOut)
 	case "edit":
 		err = runEdit(ctx, args[1:], cfg, jsonOut)
+	case "note":
+		err = runNote(ctx, args[1:], cfg, jsonOut)
+	case "notes":
+		err = runNotes(ctx, args[1:], cfg, jsonOut)
+	case "attach":
+		err = runAttach(ctx, args[1:], cfg, jsonOut)
+	case "attachments":
+		err = runAttachments(ctx, args[1:], cfg, jsonOut)
+	case "attachment":
+		err = runAttachment(ctx, args[1:], cfg, jsonOut)
 	case "agent":
 		err = runAgent(ctx, args[1:], cfg, jsonOut)
 	default:

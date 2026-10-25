@@ -80,6 +80,8 @@ Use a JSON parser rather than matching serialized whitespace. A working lifecycl
 | `wi show` | Read metadata and the durable description |
 | `wi edit` | Edit title, description, labels, and deep work together; open an editor when no edit flags are supplied |
 | `wi events` | Read append-only item history |
+| `wi note` / `wi notes` | Add to or read the item's log of short progress notes |
+| `wi attach` / `wi attachments` / `wi attachment cat` | Attach a file to the item, list attachments, print one |
 | `wi state show\|set` | Inspect or mutate lifecycle only |
 
 `wi edit` defaults to the current item. Select another with `--item SELECTOR` or a positional selector; use IDs for closed items.
@@ -101,6 +103,19 @@ Titles are non-empty single-line UTF-8, at most 512 bytes. Descriptions are UTF-
 All requested metadata changes are validated and committed together. Wi refuses stale item revisions or description digests instead of overwriting concurrent edits. Description bytes stay on disk, staged for durable recovery; the database contains only hashes. If native materialization fails after commit, Wi explicitly reports the retained edit and pending description rather than claiming rollback. Do not discard the staged file: reconcile the canonical description with either its expected old content or the committed staged content, then the daemon can finish recovery. Unrelated items remain usable.
 
 Editing does not change lifecycle, slug, branch, checkout, conversation, or runtime, and sends no prompt. Use `wi show` to read metadata and description. JSON returns `work_item_id`, `changed`, `title`, `labels`, `deep_work`, `description_changed`, and `manifest`. No-op edits report `changed: false` without adding an event.
+
+### Notes and attachments
+
+```bash
+wi note "Dropped the cache approach: invalidation races with merge"
+wi notes
+wi attach REPORT.md
+wi attach --as login-bug.png -m "Login fails after redirect" /tmp/shot.png
+wi attachments
+wi attachment cat REPORT.md
+```
+
+Notes are append-only, timestamped, and at most 2 KB. While the item has a worktree, each note records its `HEAD`. Attaching copies a file of at most 16 MB into the item and adds a note; attaching under an existing name replaces it, and earlier content stays readable with `wi attachment cat DIGEST`, using the digest its note recorded. Options go before the note text. Notes never mark an item unread, raise attention, or reach the agent. The agent endpoint may add notes and attachments. JSON output returns the full records.
 
 The former title, label, and deep metadata commands have been removed; there are no aliases. Lifecycle and workflow verbs remain separate.
 

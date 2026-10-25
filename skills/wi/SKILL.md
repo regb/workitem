@@ -42,6 +42,27 @@ To inspect the item description and the task:
 wi show --json
 ```
 
+## Notes and attachments
+
+Each item keeps an append-only log of short notes, useful for handover and for other items. Note only important events, such as a decision, an abandoned approach, a blocker, or a milestone, in a few lines.
+
+```bash
+wi note "Chose X over Y because Z"
+wi notes [ITEM]
+```
+
+Attach files that belong with the item but not in the repository, such as a task report or an evidence screenshot. These can be thought of evidences you'd attach to a PR for review, but don't want to pollute the repository long term. Attaching under an existing name replaces it.
+
+```bash
+wi attach REPORT.md
+wi attachments [ITEM]
+wi attachment cat REPORT.md
+```
+
+Adding an attachment automatically adds a corresponding note.
+
+Notes and attachments are a log of the item's important activity, read without the session. Adding to it is always explicit and should reflect very high-level activity on the item. Prompts, session messages, and tool output are never added automatically. 
+
 ## Filing work items
 
 Create a new work item with its description in a markdown file:

@@ -35,6 +35,12 @@ wi show cache-race
 
 `show` returns metadata and the description.
 
+## Notes and attachments
+
+The description stays the item's intent. Progress goes in its notes: short, timestamped, append-only lines for decisions, abandoned approaches, blockers, and milestones, which give a quick view of what was done and tried without reading the conversation. Operators and agents add them with `wi note`; they never raise attention.
+
+Files that belong with the task but not in the repository, such as a report, a screenshot, or other evidence, can be attached with `wi attach`. A research task can ask for its findings as an attached `REPORT.md`. Attachments are kept with the item, outside Git, and each one adds a note.
+
 ## IDs and slugs
 
 The ID is permanent; the active slug is a human-readable selector. Selectors can also use a unique ID prefix or an unambiguous active-item keyword. `wi start` specifically requires an active slug or slug substring.
