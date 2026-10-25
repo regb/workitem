@@ -11,9 +11,6 @@ import (
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 )
 
-// thinkingLevels are Pi's --thinking values, clamped by Pi to each model.
-var thinkingLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
-
 // ModelCatalog lists the models Pi can use with the configured credentials,
 // from `pi --list-models`. It starts no session.
 func ModelCatalog(ctx context.Context, config Config) (driverprotocol.ModelCatalog, error) {
@@ -33,7 +30,7 @@ func ModelCatalog(ctx context.Context, config Config) (driverprotocol.ModelCatal
 // parseModelList reads Pi's table: provider, model, context, max output,
 // thinking (yes/no) and images (yes/no) columns after a header line.
 func parseModelList(text string) driverprotocol.ModelCatalog {
-	catalog := driverprotocol.ModelCatalog{ModelSetting: "model", ReasoningSetting: "thinking", ReasoningLevels: thinkingLevels, Models: []driverprotocol.ModelOption{}}
+	catalog := driverprotocol.ModelCatalog{ReasoningLevels: driverprotocol.ReasoningLevels, Models: []driverprotocol.ModelOption{}}
 	scanner := bufio.NewScanner(strings.NewReader(text))
 	header := true
 	for scanner.Scan() {

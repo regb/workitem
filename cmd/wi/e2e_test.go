@@ -126,7 +126,7 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 	exercisePluginCatalogE2E(t, binary, repository, env, configDir, defaultProfile)
 	// Validate through the real bundled driver process, with neither Pi nor
 	// tmux on PATH. Invalid settings must fail before any item is created.
-	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(defaultProfile+"[agents.invalid]\ndriver = \"pi\"\n[agents.invalid.config]\nthinking = \"extreme\"\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(defaultProfile+"[agents.invalid]\ndriver = \"pi\"\n[agents.invalid.config]\nreasoning = \"extreme\"\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	emptyList := string(runWiE2E(t, binary, repository, env, "list", "--ids"))
@@ -134,7 +134,7 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 		invalid := exec.Command(binary, "new", "--repo", "test", "--title", "Invalid startup", "--agent", "invalid", "--start", "--agent-mode", mode)
 		invalid.Dir, invalid.Env = repository, env
 		output, err := invalid.CombinedOutput()
-		if err == nil || !strings.Contains(string(output), "invalid Pi thinking level") || strings.Contains(string(output), "created work item") {
+		if err == nil || !strings.Contains(string(output), "invalid Pi reasoning level") || strings.Contains(string(output), "created work item") {
 			t.Fatalf("preflight mode=%s err=%v output=%s", mode, err, output)
 		}
 		if list := string(runWiE2E(t, binary, repository, env, "list", "--ids")); list != emptyList {

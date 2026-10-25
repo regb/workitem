@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -337,20 +338,17 @@ func (a *App) saveAgentSettings(ctx context.Context, id string, overrides map[st
 }
 
 // mergeSettings applies changes to an item's overrides and reports which
-// settings changed. Names are configuration keys; "executable" stays with
-// the operator's configuration.
+// settings changed. An item chooses only its model and reasoning level; the
+// rest of the configuration stays with the operator's profile.
 func mergeSettings(current, changes map[string]string) (map[string]string, []string, error) {
 	next := copySettings(current)
 	changed := []string{}
 	for name, value := range changes {
 		value = strings.TrimSpace(value)
-		if name == "executable" {
-			return nil, nil, errors.New("the agent executable cannot be changed per item")
+		if name != driverprotocol.SettingModel && name != driverprotocol.SettingReasoning {
+			return nil, nil, fmt.Errorf("unknown agent setting %q; an item sets only model and reasoning", name)
 		}
 		if value == "" {
-			if err := (agent.Setting{Name: name, Value: "reset"}).Validate(); err != nil {
-				return nil, nil, err
-			}
 			if _, ok := next[name]; ok {
 				delete(next, name)
 				changed = append(changed, name)
@@ -360,13 +358,13 @@ func mergeSettings(current, changes map[string]string) (map[string]string, []str
 		if err := (agent.Setting{Name: name, Value: value}).Validate(); err != nil {
 			return nil, nil, err
 		}
+		if name == driverprotocol.SettingReasoning && !slices.Contains(driverprotocol.ReasoningLevels, value) {
+			return nil, nil, fmt.Errorf("invalid reasoning level %q; levels are %s", value, strings.Join(driverprotocol.ReasoningLevels, ", "))
+		}
 		if next[name] != value {
 			next[name] = value
 			changed = append(changed, name)
 		}
-	}
-	if len(next) > 8 {
-		return nil, nil, errors.New("at most eight agent settings per item")
 	}
 	sort.Strings(changed)
 	if len(next) == 0 {

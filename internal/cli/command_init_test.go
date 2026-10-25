@@ -26,7 +26,7 @@ func (f *discoveryFixture) ValidateConfig(context.Context, string, json.RawMessa
 func initFixtures() map[string]configDiscoverer {
 	return map[string]configDiscoverer{
 		"pi":     &discoveryFixture{profiles: []protocol.DiscoveredAgentConfig{{Name: "pi", Label: "Pi", Config: json.RawMessage(`{"executable":"/opt/bin/pi","extensions":["/tmp/a b.ts"]}`)}}},
-		"claude": &discoveryFixture{profiles: []protocol.DiscoveredAgentConfig{{Name: "claude", Label: "Claude Code", Config: json.RawMessage(`{"executable":"/opt/bin/claude","effort":"high"}`)}}},
+		"claude": &discoveryFixture{profiles: []protocol.DiscoveredAgentConfig{{Name: "claude", Label: "Claude Code", Config: json.RawMessage(`{"executable":"/opt/bin/claude","reasoning":"high"}`)}}},
 	}
 }
 func TestInitSelectionAndConfigRoundTrip(t *testing.T) {

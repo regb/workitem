@@ -801,7 +801,7 @@ func isExpectedProcessExit(err error) bool {
 }
 
 // nativeSetting maps a profile setting change onto Pi's RPC commands: a model
-// is "provider/model" and a thinking level one of Pi's levels.
+// is "provider/model" and a reasoning level becomes Pi's thinking level.
 func nativeSetting(setting agent.Setting) (map[string]any, error) {
 	switch setting.Name {
 	case "model":
@@ -810,9 +810,9 @@ func nativeSetting(setting agent.Setting) (map[string]any, error) {
 			return nil, fmt.Errorf("Pi model must be provider/model, got %q", setting.Value)
 		}
 		return map[string]any{"type": "set_model", "provider": provider, "modelId": model}, nil
-	case "thinking":
-		if !validThinkingLevel(setting.Value) {
-			return nil, fmt.Errorf("invalid Pi thinking level %q", setting.Value)
+	case "reasoning":
+		if !validReasoningLevel(setting.Value) {
+			return nil, fmt.Errorf("invalid Pi reasoning level %q", setting.Value)
 		}
 		return map[string]any{"type": "set_thinking_level", "level": setting.Value}, nil
 	}

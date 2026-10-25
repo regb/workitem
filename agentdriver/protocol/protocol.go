@@ -7,7 +7,7 @@ import "encoding/json"
 
 // Version identifies the process bootstrap and conversation-operation protocol.
 // Version 2 transports native conversation lines as opaque base64 bytes.
-const Version = 2
+const Version = 3
 
 const BootstrapSocketEnv = "WI_AGENT_DRIVER_BOOTSTRAP_SOCKET"
 

@@ -106,8 +106,8 @@ func (p *runtimeSetup) args(modeArgs ...string) ([]string, error) {
 	if p.config.Model != "" {
 		args = append(args, "--model", p.config.Model)
 	}
-	if p.config.Effort != "" {
-		args = append(args, "--effort", p.config.Effort)
+	if p.config.Reasoning != "" {
+		args = append(args, "--effort", p.config.Reasoning)
 	}
 	return args, nil
 }

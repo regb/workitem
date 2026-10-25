@@ -29,12 +29,12 @@ func TestMain(m *testing.M) {
 	os.Exit(testutil.RunIsolatedTests(m.Run))
 }
 func TestConfiguration(t *testing.T) {
-	for _, raw := range []string{`{"extensions":[]}`, `{"args":["--session-id","other"]}`, `{"effort":"bad"}`, `{"permission_mode":"bypassPermissions"}`, `{"permission_mode":"plan"}`, `{"permission_mode":"default"}`, `{"model":"--version"}`, `{} {}`} {
+	for _, raw := range []string{`{"extensions":[]}`, `{"args":["--session-id","other"]}`, `{"reasoning":"bad"}`, `{"reasoning":"off"}`, `{"effort":"high"}`, `{"permission_mode":"bypassPermissions"}`, `{"permission_mode":"plan"}`, `{"permission_mode":"default"}`, `{"model":"--version"}`, `{} {}`} {
 		if _, err := parseConfig([]byte(raw)); err == nil {
 			t.Fatalf("accepted %s", raw)
 		}
 	}
-	c, err := parseConfig([]byte(`{"model":"sonnet","effort":"high"}`))
+	c, err := parseConfig([]byte(`{"model":"sonnet","reasoning":"high"}`))
 	if err != nil || c.Executable != "claude" {
 		t.Fatalf("%+v %v", c, err)
 	}

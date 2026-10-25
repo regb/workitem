@@ -88,7 +88,7 @@ func parseModelCatalog(raw json.RawMessage) (protocol.ModelCatalog, error) {
 	if err := json.Unmarshal(raw, &response); err != nil {
 		return protocol.ModelCatalog{}, fmt.Errorf("decode Claude models: %w", err)
 	}
-	catalog := protocol.ModelCatalog{ModelSetting: "model", ReasoningSetting: "effort", ReasoningLevels: []string{"low", "medium", "high", "xhigh", "max"}, Models: []protocol.ModelOption{}}
+	catalog := protocol.ModelCatalog{ReasoningLevels: reasoningLevels, Models: []protocol.ModelOption{}}
 	for _, model := range response.Models {
 		if model.Value == "" || model.Value == "default" {
 			continue

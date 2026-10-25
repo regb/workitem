@@ -60,7 +60,7 @@ type ExecSpec struct {
 	Extensions         []string
 	Skills             []string
 	Model              string
-	Thinking           string
+	Reasoning          string
 	AppendSystemPrompt string
 	ProjectTrusted     bool
 }
@@ -144,8 +144,8 @@ func (c Client) ExecMode(ctx context.Context, spec ExecSpec) error {
 	if model := strings.TrimSpace(spec.Model); model != "" {
 		args = append([]string{"--model", model}, args...)
 	}
-	if thinking := strings.TrimSpace(spec.Thinking); thinking != "" {
-		args = append([]string{"--thinking", thinking}, args...)
+	if reasoning := strings.TrimSpace(spec.Reasoning); reasoning != "" {
+		args = append([]string{"--thinking", reasoning}, args...)
 	}
 	for _, extension := range spec.Extensions {
 		if extension = strings.TrimSpace(extension); extension != "" {

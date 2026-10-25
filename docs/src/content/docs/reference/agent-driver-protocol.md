@@ -10,10 +10,10 @@ An agent definition is the user-selected coding agent. A driver is the executabl
 `wi` starts a driver with `WI_AGENT_DRIVER_BOOTSTRAP_SOCKET` set to a user-only Unix socket. The driver connects and sends a hello record:
 
 ```json
-{"protocol_version":2,"driver":"pi","driver_version":"..."}
+{"protocol_version":3,"driver":"pi","driver_version":"..."}
 ```
 
-The process protocol is version 2. Runtime control and event sockets keep their independent version 1, so existing runtimes do not need restarting when conversation transport changes. External drivers must use the version-2 bootstrap and opaque record format.
+The process protocol is version 3; version 3 named the reasoning setting `reasoning` for every driver. Runtime control and event sockets keep their independent version 1, so existing runtimes do not need restarting when conversation transport changes. External drivers must use the version-3 bootstrap and opaque record format.
 
 After checking the driver name and protocol version, `wi` sends a request envelope. Its `operation` selects a runtime launch or conversation operation. The driver sends one response envelope.
 
@@ -56,7 +56,7 @@ Validation must not launch a coding backend, create native content, allocate res
 
 Each profile has a unique lowercase name using letters, digits, and hyphens, an optional label, and an opaque flat configuration object. Values must be strings, booleans, integers, or string arrays supported by Wi's config parser. `default` is reserved for the user's selection. Return an empty profiles list when no suitable installation exists. Rejection or an omitted discovery response means the driver does not support discovery.
 
-Discovery must not launch a coding backend, authenticate, make model requests, create native content, or return credentials. Bundled drivers locate their executable on `PATH` and return an absolute launcher path, preserving installation symlinks. `wi init` validates each discovered profile through `config.validate`, asks the user to select a named default, writes the default_agent pointer, and publishes the config without overwriting an existing file. The operation and response field are additive within protocol version 2.
+Discovery must not launch a coding backend, authenticate, make model requests, create native content, or return credentials. Bundled drivers locate their executable on `PATH` and return an absolute launcher path, preserving installation symlinks. `wi init` validates each discovered profile through `config.validate`, asks the user to select a named default, writes the default_agent pointer, and publishes the config without overwriting an existing file. The operation and response field are additive within protocol version 3.
 
 ### Runtime modes
 
@@ -69,7 +69,7 @@ Discovery must not launch a coding backend, authenticate, make model requests, c
       "tui":      {"control": "emulated",   "terminal": true, "image_input": true},
       "headless": {"control": "structured", "image_input": true}
     },
-    "settings": {"model": {"on_resume": true}, "effort": {"on_resume": true}}
+    "settings": {"model": {"on_resume": true}, "reasoning": {"on_resume": true}}
   }
 }
 ```
@@ -78,25 +78,24 @@ Discovery must not launch a coding backend, authenticate, make model requests, c
 
 **Resume contract:** every listed mode must be able to resume any conversation of the driver with the same profile settings. Wi relies on this to replace a runtime with one in another mode on the same conversation, for example when a browser needs structured control and the running TUI only accepts keystrokes. When no mode offers the channel a client needs, Wi refuses control with an explanation instead of restarting the runtime.
 
-The request may check the installed backend version, but must not start an agent, authenticate, or create native content. The answer is an expectation: a runtime's `Ready` capabilities remain authoritative. Wi caches it per profile for the life of the process. Drivers that do not implement the operation are treated as offering structured control in headless mode and a terminal in TUI mode. The operation and response field are additive within protocol version 2.
+The request may check the installed backend version, but must not start an agent, authenticate, or create native content. The answer is an expectation: a runtime's `Ready` capabilities remain authoritative. Wi caches it per profile for the life of the process. Drivers that do not implement the operation are treated as offering structured control in headless mode and a terminal in TUI mode. The operation and response field are additive within protocol version 3.
 
 ### Model catalog
 
-`config.models` is a stateless request carrying the profile name and merged `config`. It lists the choices for the profile's model setting and its reasoning-depth setting:
+`config.models` is a stateless request carrying the profile name and merged `config`. It lists the models the profile can use and the reasoning levels the driver accepts:
 
 ```json
-{"model_catalog": {"model_setting": "model", "reasoning_setting": "effort",
-  "reasoning_levels": ["low", "medium", "high", "xhigh", "max"],
+{"model_catalog": {"reasoning_levels": ["low", "medium", "high", "xhigh", "max"],
   "models": [{"value": "opus", "label": "Opus 5.5", "description": "…", "reasoning": true, "levels": ["low", "high"]}]}}
 ```
 
-`value` is what the model setting takes. A model's `levels` narrows the reasoning levels; `reasoning: false` means it has none. The driver may run its backend's own catalog command but must not start an agent session or make model requests: bundled Pi parses `pi --list-models`, and bundled Claude reads the `initialize` response of its headless control protocol in an empty directory without saving a session. Wi caches the answer for ten minutes.
+`value` is what the `model` setting takes. A model's `levels` narrows the reasoning levels; `reasoning: false` means it has none. The driver may run its backend's own catalog command but must not start an agent session or make model requests: bundled Pi parses `pi --list-models`, and bundled Claude reads the `initialize` response of its headless control protocol in an empty directory without saving a session. Wi caches the answer for ten minutes.
 
 ## Bundled skills
 
 The host embeds `skills/wi/` in the Wi executable at build time and includes trusted resources in the optional `launch.skills` array. Each skill has a `name` and `files`; each file has a portable relative `path`, base64-encoded `data`, and optional `executable` flag. No backend destination paths are supplied by the host. Payloads are limited to 16 skills, 64 files per skill, and 4 MiB of content in total. Absolute, hidden, escaping, duplicate, and file/directory-colliding paths are rejected.
 
-A supporting driver validates and exports the resources before backend startup in both TUI and headless mode, then passes their absolute paths through its backend's explicit extra-skill mechanism. It advertises `capabilities.bundled_skills: true`. Export failures fail startup; the host warns if a driver lacks support. Optional launch fields and capabilities are additive within process protocol version 2. Skill content is not retained in daemon events.
+A supporting driver validates and exports the resources before backend startup in both TUI and headless mode, then passes their absolute paths through its backend's explicit extra-skill mechanism. It advertises `capabilities.bundled_skills: true`. Export failures fail startup; the host warns if a driver lacks support. Optional launch fields and capabilities are additive within process protocol version 3. Skill content is not retained in daemon events.
 
 The Pi driver creates a private temporary directory per runtime, writes each skill tree with private permissions, and passes a repeated `--skill <absolute-directory>` argument to Pi. The files remain available for the backend's lifetime and are removed when the driver returns, including handled startup failures and shutdown. Abrupt process termination can leave temporary directories for system cleanup. There is no global installation, ownership marker, update operation, or modification of Pi settings. Read-only and symlinked Pi skill directories do not block delivery.
 
@@ -126,7 +125,7 @@ Pi title requests use a temporary working directory and non-persisted print mode
 
 The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. Host-side application control resolves daemon-owned state, verifies current runtime ownership and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. Prompt-like commands may carry generic base64 `images` with MIME types only when the driver advertises `image_input`; each driver translates that payload to its native API. A driver must reject unsupported controls. It may translate supported commands through backend APIs or its own verified TUI input transport. Terminal input belongs inside the driver, not application policy. For the bundled Claude driver, native acceptance is confirmed through TUI lifecycle hooks or headless replay/queue receipts after input delivery; an initial acknowledgement can instead mean a command entered its bounded queue. It does not advertise atomic idle control. Unknown delivery outcomes must not trigger automatic retyping.
 
-`set` changes one profile setting of a running agent: it carries `setting: {"name": "model", "value": "sonnet"}` and no message. Names are the driver's configuration keys; values are one line of at most 256 bytes. A driver lists the settings a runtime can change live in `Ready.capabilities.settings` and rejects others. It confirms or rejects the change through `command.accepted` or `command.rejected` with the command ID; Wi waits briefly for that verdict. Bundled Pi changes `model` (`provider/model`) and `thinking` in both modes, through RPC `set_model`/`set_thinking_level` headless and its extension in the TUI. Bundled Claude changes `model` and `effort` in headless mode through its `set_model` and `apply_flag_settings` control requests; its TUI does not change them live.
+`set` changes one profile setting of a running agent: it carries `setting: {"name": "model", "value": "sonnet"}` and no message. Names are `model` and `reasoning`; values are one line of at most 256 bytes. A driver lists the settings a runtime can change live in `Ready.capabilities.settings` and rejects others. It confirms or rejects the change through `command.accepted` or `command.rejected` with the command ID; Wi waits briefly for that verdict. Bundled Pi changes `model` (`provider/model`) and `reasoning` in both modes, through RPC `set_model`/`set_thinking_level` headless and its extension in the TUI. Bundled Claude changes `model` and `reasoning` in headless mode through its `set_model` and `apply_flag_settings` control requests; its TUI does not change them live.
 
 Control messages are limited to 64 KiB of UTF-8 text and four images totaling at most 8 MiB decoded. Images require nonempty canonical base64 and JPEG, PNG, GIF, or WebP MIME types. Control sockets accept up to 12 MiB of serialized JSON to accommodate base64 and escaping; event sockets retain their 1 MiB limit. The host and bundled drivers validate image content before handing it off. Drivers can restrict the supported formats further; the Claude TUI driver currently accepts PNG and JPEG.
 

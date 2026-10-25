@@ -19,14 +19,14 @@ func TestRuntimeModesReportKeystrokeTUIAndStructuredHeadless(t *testing.T) {
 	if headless := modes.Modes[protocol.ModeHeadless]; headless.Control != protocol.ControlStructured || headless.Terminal {
 		t.Fatalf("headless = %+v", headless)
 	}
-	if !modes.Settings["model"].OnResume || !modes.Settings["effort"].OnResume {
+	if !modes.Settings["model"].OnResume || !modes.Settings["reasoning"].OnResume {
 		t.Fatalf("settings = %+v", modes.Settings)
 	}
 }
 
 func TestModelCatalogFromInitializeOmitsDefault(t *testing.T) {
 	catalog, err := parseModelCatalog([]byte(`{"models":[{"value":"default","displayName":"Default"},{"value":"opus","displayName":"Opus 5.5","description":"complex work","supportsEffort":true,"supportedEffortLevels":["low","high"]},{"value":"claude-haiku-4-5","displayName":"Haiku 4.5"}]}`))
-	if err != nil || catalog.ReasoningSetting != "effort" || len(catalog.Models) != 2 {
+	if err != nil || len(catalog.ReasoningLevels) != 5 || len(catalog.Models) != 2 {
 		t.Fatalf("catalog=%+v err=%v", catalog, err)
 	}
 	if opus := catalog.Models[0]; opus.Value != "opus" || !opus.Reasoning || len(opus.Levels) != 2 {
@@ -65,7 +65,7 @@ func TestHeadlessSettingsUseControlRequestsAndSettleOnResponse(t *testing.T) {
 	if request["subtype"] != "set_model" || request["model"] != "sonnet" {
 		t.Fatalf("model request = %v", model)
 	}
-	if err := s.accept(protocol.ControlCommand{ID: "e", Type: protocol.CommandSet, Setting: &protocol.Setting{Name: "effort", Value: "xhigh"}}); err != nil {
+	if err := s.accept(protocol.ControlCommand{ID: "e", Type: protocol.CommandSet, Setting: &protocol.Setting{Name: "reasoning", Value: "xhigh"}}); err != nil {
 		t.Fatal(err)
 	}
 	effort := <-frames
@@ -87,7 +87,7 @@ func TestHeadlessSettingsUseControlRequestsAndSettleOnResponse(t *testing.T) {
 			t.Fatalf("event the daemon would refuse: %+v", event)
 		}
 	}
-	for _, bad := range []protocol.Setting{{Name: "effort", Value: "extreme"}, {Name: "executable", Value: "x"}} {
+	for _, bad := range []protocol.Setting{{Name: "reasoning", Value: "extreme"}, {Name: "executable", Value: "x"}} {
 		if s.accept(protocol.ControlCommand{ID: "bad-" + bad.Name, Type: protocol.CommandSet, Setting: &bad}) == nil {
 			t.Fatalf("%+v accepted", bad)
 		}

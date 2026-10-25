@@ -74,7 +74,7 @@ func TestSharedRuntimeSetupBothModes(t *testing.T) {
 			locator := filepath.Join(root, "sessions", uuid("shared")+".jsonl")
 			control := filepath.Join(root, "control.sock")
 			request := protocol.LaunchRequest{AppendSystemPrompt: "Custom Wi context\nPreserve this text.", Runtime: protocol.Runtime{Mode: mode, ID: "runtime", WorkItemID: "item", CWD: root, ControlSocketPath: control}, Conversation: protocol.Conversation{Locator: locator}, Environment: map[string]string{"HOME": root, "CLAUDE_CONFIG_DIR": filepath.Join(root, ".claude"), "TMUX": "private socket", "TMUX_PANE": "%1", "TMUX_TMPDIR": root, "WI_ID": "item"}, Skills: []protocol.Skill{{Name: "wi", Files: []protocol.SkillFile{{Path: "SKILL.md", Data: []byte("fixture skill")}}}}}
-			p, err := prepareRuntime(request, Config{Executable: "sh", Model: "haiku", Effort: "low"})
+			p, err := prepareRuntime(request, Config{Executable: "sh", Model: "haiku", Reasoning: "low"})
 			if err != nil {
 				t.Fatal(err)
 			}

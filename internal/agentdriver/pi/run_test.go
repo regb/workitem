@@ -13,14 +13,14 @@ import (
 	"github.com/regb/workitem/skills"
 )
 
-func TestValidThinkingLevel(t *testing.T) {
+func TestValidReasoningLevel(t *testing.T) {
 	for _, level := range []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"} {
-		if !validThinkingLevel(level) {
+		if !validReasoningLevel(level) {
 			t.Fatalf("rejected %q", level)
 		}
 	}
-	if validThinkingLevel("extreme") || validThinkingLevel("") {
-		t.Fatal("accepted invalid thinking level")
+	if validReasoningLevel("extreme") || validReasoningLevel("") {
+		t.Fatal("accepted invalid reasoning level")
 	}
 }
 
@@ -82,7 +82,7 @@ done
 	}
 	t.Setenv("PI_CODING_AGENT_DIR", profileDir)
 	t.Setenv("PI_CODING_AGENT_SESSION_DIR", filepath.Join(dir, "wrong-sessions"))
-	config, _ := json.Marshal(Config{Executable: backend, Extensions: []string{"/tools/web-search.ts"}, Model: "openai-codex/gpt-test", Thinking: "high"})
+	config, _ := json.Marshal(Config{Executable: backend, Extensions: []string{"/tools/web-search.ts"}, Model: "openai-codex/gpt-test", Reasoning: "high"})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	ready := make(chan error, 1)

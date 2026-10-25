@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
@@ -21,7 +22,7 @@ type Config struct {
 	Executable string   `json:"executable,omitempty"`
 	Extensions []string `json:"extensions,omitempty"`
 	Model      string   `json:"model,omitempty"`
-	Thinking   string   `json:"thinking,omitempty"`
+	Reasoning  string   `json:"reasoning,omitempty"`
 }
 
 func Run(ctx context.Context) error {
@@ -101,9 +102,9 @@ func parseConfig(raw json.RawMessage) (Config, error) {
 		config.Executable = "pi"
 	}
 	config.Model = strings.TrimSpace(config.Model)
-	config.Thinking = strings.TrimSpace(config.Thinking)
-	if config.Thinking != "" && !validThinkingLevel(config.Thinking) {
-		return Config{}, fmt.Errorf("invalid Pi thinking level %q", config.Thinking)
+	config.Reasoning = strings.TrimSpace(config.Reasoning)
+	if config.Reasoning != "" && !validReasoningLevel(config.Reasoning) {
+		return Config{}, fmt.Errorf("invalid Pi reasoning level %q", config.Reasoning)
 	}
 	return config, nil
 }
@@ -141,14 +142,11 @@ func launch(ctx context.Context, request driverprotocol.LaunchRequest, reply fun
 	}
 	environment["PI_CODING_AGENT_SESSION_DIR"] = filepath.Dir(request.Conversation.Locator)
 	client := New(resolved)
-	return client.ExecMode(ctx, ExecSpec{SessionPath: request.Conversation.Locator, Mode: mode, CWD: request.Runtime.CWD, LogPath: request.Runtime.LogPath, WorkItemID: request.Runtime.WorkItemID, RuntimeID: request.Runtime.ID, ControlSocketPath: request.Runtime.ControlSocketPath, EventSocketPath: request.Runtime.EventSocketPath, Env: environment, Extensions: config.Extensions, Skills: skillPaths, Model: config.Model, Thinking: config.Thinking, AppendSystemPrompt: request.AppendSystemPrompt, ProjectTrusted: request.ProjectTrusted})
+	return client.ExecMode(ctx, ExecSpec{SessionPath: request.Conversation.Locator, Mode: mode, CWD: request.Runtime.CWD, LogPath: request.Runtime.LogPath, WorkItemID: request.Runtime.WorkItemID, RuntimeID: request.Runtime.ID, ControlSocketPath: request.Runtime.ControlSocketPath, EventSocketPath: request.Runtime.EventSocketPath, Env: environment, Extensions: config.Extensions, Skills: skillPaths, Model: config.Model, Reasoning: config.Reasoning, AppendSystemPrompt: request.AppendSystemPrompt, ProjectTrusted: request.ProjectTrusted})
 }
 
-func validThinkingLevel(value string) bool {
-	switch value {
-	case "off", "minimal", "low", "medium", "high", "xhigh", "max":
-		return true
-	default:
-		return false
-	}
+// validReasoningLevel accepts the whole ladder: Pi's --thinking levels match
+// it, and Pi clamps them to each model.
+func validReasoningLevel(value string) bool {
+	return slices.Contains(driverprotocol.ReasoningLevels, value)
 }

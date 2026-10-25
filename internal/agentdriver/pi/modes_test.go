@@ -20,7 +20,7 @@ func TestRuntimeModesOfferStructuredControlInBothModes(t *testing.T) {
 	if tui.Control != driverprotocol.ControlStructured || !tui.Terminal || headless.Control != driverprotocol.ControlStructured || headless.Terminal {
 		t.Fatalf("modes = %+v", modes.Modes)
 	}
-	if !modes.Settings["model"].OnResume || !modes.Settings["thinking"].OnResume {
+	if !modes.Settings["model"].OnResume || !modes.Settings["reasoning"].OnResume {
 		t.Fatalf("settings = %+v", modes.Settings)
 	}
 }
@@ -54,11 +54,11 @@ func TestLiveSettingsMapToPiRPCCommands(t *testing.T) {
 	if err != nil || model["type"] != "set_model" || model["provider"] != "openai-codex" || model["modelId"] != "gpt-6-sol" {
 		t.Fatalf("model=%v err=%v", model, err)
 	}
-	thinking, err := nativeSetting(driverprotocol.Setting{Name: "thinking", Value: "high"})
-	if err != nil || thinking["type"] != "set_thinking_level" || thinking["level"] != "high" {
-		t.Fatalf("thinking=%v err=%v", thinking, err)
+	reasoning, err := nativeSetting(driverprotocol.Setting{Name: "reasoning", Value: "high"})
+	if err != nil || reasoning["type"] != "set_thinking_level" || reasoning["level"] != "high" {
+		t.Fatalf("reasoning=%v err=%v", reasoning, err)
 	}
-	for _, bad := range []driverprotocol.Setting{{Name: "model", Value: "no-provider"}, {Name: "model", Value: "/x"}, {Name: "thinking", Value: "extreme"}, {Name: "executable", Value: "x"}} {
+	for _, bad := range []driverprotocol.Setting{{Name: "model", Value: "no-provider"}, {Name: "model", Value: "/x"}, {Name: "reasoning", Value: "extreme"}, {Name: "executable", Value: "x"}} {
 		if _, err := nativeSetting(bad); err == nil {
 			t.Fatalf("%+v accepted", bad)
 		}
@@ -67,7 +67,7 @@ func TestLiveSettingsMapToPiRPCCommands(t *testing.T) {
 
 func TestModelListParsesPiTable(t *testing.T) {
 	catalog := parseModelList("provider      model                context  max-out  thinking  images\nopenai-codex  gpt-5.3-codex-spark  128K     128K     yes       no\nlocal         tiny                 8K       4K       no        no\n\n")
-	if catalog.ModelSetting != "model" || catalog.ReasoningSetting != "thinking" || len(catalog.Models) != 2 {
+	if len(catalog.ReasoningLevels) != 7 || len(catalog.Models) != 2 {
 		t.Fatalf("catalog = %+v", catalog)
 	}
 	if first := catalog.Models[0]; first.Value != "openai-codex/gpt-5.3-codex-spark" || !first.Reasoning || first.ImageInput {

@@ -3,6 +3,7 @@ package claude
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -365,10 +366,11 @@ func (s *headlessControls) close() {
 	}
 }
 
-// effortLevels are Claude Code's --effort values.
-var effortLevels = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true, "max": true}
+// reasoningLevels are the reasoning levels Claude accepts, as its --effort
+// values.
+var reasoningLevels = []string{"low", "medium", "high", "xhigh", "max"}
 
-// applySetting changes the model or effort of the running session through
+// applySetting changes the model or reasoning level of the running session through
 // Claude's control requests. The control response confirms or rejects it.
 func (s *headlessControls) applySetting(c protocol.ControlCommand) error {
 	if !s.initialized {
@@ -382,9 +384,9 @@ func (s *headlessControls) applySetting(c protocol.ControlCommand) error {
 	case "model":
 		request = headlessControl("", "set_model")
 		request["request"].(map[string]any)["model"] = c.Setting.Value
-	case "effort":
-		if !effortLevels[c.Setting.Value] {
-			return fmt.Errorf("invalid Claude effort %q", c.Setting.Value)
+	case protocol.SettingReasoning:
+		if !slices.Contains(reasoningLevels, c.Setting.Value) {
+			return fmt.Errorf("invalid Claude reasoning level %q", c.Setting.Value)
 		}
 		request = headlessControl("", "apply_flag_settings")
 		request["request"].(map[string]any)["settings"] = map[string]any{"effortLevel": c.Setting.Value}

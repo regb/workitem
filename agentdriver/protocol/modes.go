@@ -32,15 +32,23 @@ type RuntimeModes struct {
 // for its catalog but must not start an agent session or make model requests.
 const OperationConfigModels = "config.models"
 
-// ModelCatalog lists the choices for the profile's model setting and its
-// reasoning-depth setting (thinking or effort).
+// The settings an item can choose for its agent, as configuration keys.
+// Reasoning is one ladder of depth levels for every driver; each driver maps
+// it onto its backend's own setting.
+const (
+	SettingModel     = "model"
+	SettingReasoning = "reasoning"
+)
+
+// ReasoningLevels is the reasoning ladder, shallowest first. A driver may
+// accept only some levels, and a model fewer still.
+var ReasoningLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"}
+
+// ModelCatalog lists the models a profile can use and the reasoning levels
+// its driver accepts.
 type ModelCatalog struct {
-	// ModelSetting and ReasoningSetting are the configuration keys the
-	// choices apply to, such as "model" and "thinking".
-	ModelSetting     string        `json:"model_setting"`
-	ReasoningSetting string        `json:"reasoning_setting,omitempty"`
-	ReasoningLevels  []string      `json:"reasoning_levels,omitempty"`
-	Models           []ModelOption `json:"models"`
+	ReasoningLevels []string      `json:"reasoning_levels,omitempty"`
+	Models          []ModelOption `json:"models"`
 }
 
 // ModelOption is one selectable model. Value is what the model setting

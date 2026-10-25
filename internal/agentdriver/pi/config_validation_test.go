@@ -25,9 +25,9 @@ func TestConfigValidationIsStatelessAndSharesLaunchRules(t *testing.T) {
 		valid bool
 	}{
 		{"defaults", json.RawMessage(`{}`), true},
-		{"optional overrides", json.RawMessage(`{"model":"provider/model","thinking":" high "}`), true},
+		{"optional overrides", json.RawMessage(`{"model":"provider/model","reasoning":" high "}`), true},
 		{"unknown field", json.RawMessage(`{"unknown":true}`), false},
-		{"invalid thinking", json.RawMessage(`{"thinking":"extreme"}`), false},
+		{"invalid reasoning", json.RawMessage(`{"reasoning":"extreme"}`), false},
 		{"wrong type", json.RawMessage(`{"model":42}`), false},
 		{"malformed", json.RawMessage(`{"model":`), false},
 		{"trailing object", json.RawMessage(`{} {}`), false},
@@ -48,7 +48,7 @@ func TestConfigValidationIsStatelessAndSharesLaunchRules(t *testing.T) {
 			}
 		})
 	}
-	raw, _ := json.Marshal(Config{Executable: executable, Model: "provider/model", Thinking: "high"})
+	raw, _ := json.Marshal(Config{Executable: executable, Model: "provider/model", Reasoning: "high"})
 	if err := client.ValidateConfig(context.Background(), "default", raw); err != nil {
 		t.Fatal(err)
 	}

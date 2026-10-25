@@ -532,8 +532,8 @@ export default function wiBridge(pi: ExtensionAPI) {
             const model = context.modelRegistry.find(setting.value.slice(0, slash), setting.value.slice(slash + 1));
             if (!model) throw new Error(`unknown Pi model ${setting.value}`);
             if (!(await pi.setModel(model))) throw new Error(`no credentials are configured for ${setting.value}`);
-          } else if (setting.name === "thinking") {
-            if (!["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(setting.value)) throw new Error(`invalid Pi thinking level ${setting.value}`);
+          } else if (setting.name === "reasoning") {
+            if (!["off", "minimal", "low", "medium", "high", "xhigh", "max"].includes(setting.value)) throw new Error(`invalid Pi reasoning level ${setting.value}`);
             pi.setThinkingLevel(setting.value as Parameters<typeof pi.setThinkingLevel>[0]);
           } else {
             throw new Error(`Pi cannot change ${setting.name} while running`);

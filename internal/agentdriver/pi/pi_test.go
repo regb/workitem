@@ -59,7 +59,7 @@ func TestExecCommandConstructionByMode(t *testing.T) {
 		t.Run(string(tt.mode), func(t *testing.T) {
 			r := &recordingRunner{}
 			client := pi.Client{Path: "pi", Runner: r}
-			err := client.ExecMode(context.Background(), pi.ExecSpec{SessionPath: "/tmp/item/sessions/pi/session.jsonl", BridgePath: "/tmp/bridge.ts", Mode: tt.mode, CWD: "/tmp/worktree", Env: map[string]string{"WI_ID": "abc"}, LogPath: "/tmp/pi.log", Skills: []string{"/tmp/skill one", "/tmp/skill-two"}, Model: "openai-codex/gpt-test", Thinking: "high"})
+			err := client.ExecMode(context.Background(), pi.ExecSpec{SessionPath: "/tmp/item/sessions/pi/session.jsonl", BridgePath: "/tmp/bridge.ts", Mode: tt.mode, CWD: "/tmp/worktree", Env: map[string]string{"WI_ID": "abc"}, LogPath: "/tmp/pi.log", Skills: []string{"/tmp/skill one", "/tmp/skill-two"}, Model: "openai-codex/gpt-test", Reasoning: "high"})
 			if err != nil {
 				t.Fatal(err)
 			}

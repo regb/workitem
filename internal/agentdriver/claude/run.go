@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -24,7 +25,7 @@ import (
 type Config struct {
 	Executable string `json:"executable,omitempty"`
 	Model      string `json:"model,omitempty"`
-	Effort     string `json:"effort,omitempty"`
+	Reasoning  string `json:"reasoning,omitempty"`
 }
 
 func parseConfig(raw json.RawMessage) (Config, error) {
@@ -47,10 +48,8 @@ func parseConfig(raw json.RawMessage) (Config, error) {
 	if strings.HasPrefix(c.Model, "-") || strings.ContainsAny(c.Model, "\r\n\x00") {
 		return c, fmt.Errorf("invalid Claude model")
 	}
-	switch c.Effort {
-	case "", "low", "medium", "high", "xhigh", "max":
-	default:
-		return c, fmt.Errorf("invalid Claude effort %q", c.Effort)
+	if c.Reasoning != "" && !slices.Contains(reasoningLevels, c.Reasoning) {
+		return c, fmt.Errorf("invalid Claude reasoning level %q; Claude accepts %s", c.Reasoning, strings.Join(reasoningLevels, ", "))
 	}
 	return c, nil
 }

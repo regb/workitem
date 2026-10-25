@@ -98,7 +98,7 @@ func printAgentSettings(cfg Config, view app.AgentSettingsView) {
 		fmt.Fprintf(cfg.Stdout, "runtime: %s, changes live: %s\n", view.RuntimeMode, live)
 	}
 	if view.Catalog != nil {
-		fmt.Fprintf(cfg.Stdout, "models (%s):\n", view.Catalog.ModelSetting)
+		fmt.Fprintln(cfg.Stdout, "models:")
 		for _, model := range view.Catalog.Models {
 			fmt.Fprintf(cfg.Stdout, "  %s", model.Value)
 			if model.Label != "" && model.Label != model.Value {
@@ -106,8 +106,8 @@ func printAgentSettings(cfg Config, view app.AgentSettingsView) {
 			}
 			fmt.Fprintln(cfg.Stdout)
 		}
-		if view.Catalog.ReasoningSetting != "" {
-			fmt.Fprintf(cfg.Stdout, "%s levels: %s\n", view.Catalog.ReasoningSetting, strings.Join(view.Catalog.ReasoningLevels, ", "))
+		if len(view.Catalog.ReasoningLevels) > 0 {
+			fmt.Fprintf(cfg.Stdout, "reasoning levels: %s\n", strings.Join(view.Catalog.ReasoningLevels, ", "))
 		}
 	} else if view.CatalogError != "" {
 		fmt.Fprintf(cfg.Stderr, "warning: model list unavailable: %s\n", view.CatalogError)
