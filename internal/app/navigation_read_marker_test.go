@@ -129,3 +129,52 @@ func TestNavigationRecordsReadWithoutFetchingActivityDetails(t *testing.T) {
 		}
 	}
 }
+
+func TestSwitchingAwayMarksTheLeftItemRead(t *testing.T) {
+	for _, markedUnread := range []bool{false, true} {
+		t.Run(fmt.Sprintf("marked-unread=%t", markedUnread), func(t *testing.T) {
+			ctx := context.Background()
+			native := store.New(t.TempDir())
+			a := newTestApp(native, newFakeGit(t))
+			a.Tmux = &navigationTmux{}
+			var ids []string
+			for _, title := range []string{"Watched reply", "Next item"} {
+				created, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: title, CWD: t.TempDir()})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if _, err := a.StartWorkItem(ctx, app.ResolveOptions{Selector: created.Manifest.ID}, false, false); err != nil {
+					t.Fatal(err)
+				}
+				ids = append(ids, created.Manifest.ID)
+			}
+			a.WorkListObserver = func(context.Context, string) (viewapp.Observation, error) {
+				return viewapp.Observation{Status: "idle"}, nil
+			}
+			read, unread := time.Now().Add(-time.Minute), time.Now()
+			a.AttentionActivityReader = func(context.Context, string) (app.AttentionActivity, error) {
+				if markedUnread {
+					return app.AttentionActivity{LastReadAt: &read, LastUnreadAt: &unread}, nil
+				}
+				return app.AttentionActivity{}, nil
+			}
+			env := map[string]string{"TMUX": "/tmp/tmux-test,1,0", "WI_ID": ids[0]}
+			if _, err := a.SwitchWorkItem(ctx, app.ResolveOptions{Selector: ids[1], Env: env}, true); err != nil {
+				t.Fatal(err)
+			}
+			events, err := native.ReadEvents(ids[0])
+			if err != nil {
+				t.Fatal(err)
+			}
+			marked := 0
+			for _, event := range events {
+				if event.Type == "attention.read" {
+					marked++
+				}
+			}
+			if want := map[bool]int{false: 1, true: 0}[markedUnread]; marked != want {
+				t.Fatalf("left item read marks = %d, want %d", marked, want)
+			}
+		})
+	}
+}

@@ -56,7 +56,30 @@ func (a *App) SwitchWorkItemWithControl(ctx context.Context, opts ResolveOptions
 	if _, _, markErr := a.attentionService().RecordRead(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
 		result.Warnings = append(result.Warnings, "could not mark the conversation read: "+markErr.Error())
 	}
+	result.Warnings = append(result.Warnings, a.markLeftItemRead(ctx, opts, m.ID)...)
 	return result, nil
+}
+
+// markLeftItemRead records that the operator read the item whose terminal
+// they switch away from: a reply that finished while they watched it is not
+// news. A turn still running ends after this mark and stays unread, and an
+// item explicitly marked unread stays so.
+func (a *App) markLeftItemRead(ctx context.Context, opts ResolveOptions, entered string) []string {
+	if !inTmux(opts.Env) {
+		return nil
+	}
+	left, err := a.ResolveItem(ctx, ResolveOptions{CWD: opts.CWD, Env: opts.Env})
+	if err != nil || left.ID == entered || left.State != model.StateActive {
+		return nil
+	}
+	activity, _ := a.attentionActivity(ctx, left.ID)
+	if activity.LastUnreadAt != nil && (activity.LastReadAt == nil || activity.LastUnreadAt.After(*activity.LastReadAt)) {
+		return nil
+	}
+	if _, _, err := a.attentionService().RecordRead(ctx, ResolveOptions{Selector: left.ID, CWD: opts.CWD, Env: opts.Env}); err != nil {
+		return []string{"could not mark the previous conversation read: " + err.Error()}
+	}
+	return nil
 }
 
 // enterTerminalReadOnly attaches to a live TUI runtime as an observer. Pane
@@ -113,6 +136,7 @@ func (a *App) enterTerminalReadOnly(ctx context.Context, m model.Manifest, opts 
 	if _, _, markErr := a.attentionService().RecordRead(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}); markErr != nil {
 		warnings = append(warnings, "could not mark the conversation read: "+markErr.Error())
 	}
+	warnings = append(warnings, a.markLeftItemRead(ctx, opts, m.ID)...)
 	return CompositionResult{WorkItemID: m.ID, Checkout: m.Checkout, Terminal: &terminal, Conversation: m.PrimaryConversation, AgentRuntime: existing, Manifest: m, ReadOnly: true, Warnings: warnings}, nil
 }
 
