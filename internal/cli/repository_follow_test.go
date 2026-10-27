@@ -53,6 +53,8 @@ func TestNewFollowsUpstreamOnlyWhenConfigured(t *testing.T) {
 
 	// Divergence is refused, as wi repo sync does: the item still starts,
 	// from the local branch, with a warning.
+	remoteTestGit(t, source.GitDir, "config", "user.name", "Test")
+	remoteTestGit(t, source.GitDir, "config", "user.email", "test@example.com")
 	local := remoteTestGit(t, source.GitDir, "commit-tree", "-p", published, "-m", "local", published+"^{tree}")
 	remoteTestGit(t, source.GitDir, "update-ref", "refs/heads/main", local, published)
 	remoteTestCommit(t, origin, "other", "other\n", "other")
