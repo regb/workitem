@@ -40,6 +40,7 @@ const (
 	EventSessionChanged   = driverprotocol.EventSessionChanged
 	EventRuntimeStopping  = driverprotocol.EventRuntimeStopping
 	EventRuntimeFailed    = driverprotocol.EventRuntimeFailed
+	EventSettingsChanged  = driverprotocol.EventSettingsChanged
 
 	ReasonSettingApplied  = driverprotocol.ReasonSettingApplied
 	ReasonSettingRejected = driverprotocol.ReasonSettingRejected
@@ -61,15 +62,16 @@ type RuntimeEvent struct {
 	ToolName        string    `json:"tool_name,omitempty"`
 	Outcome         string    `json:"outcome,omitempty"`
 	// AgentState is a native current-state observation, not inferred settlement.
-	AgentState       string          `json:"agent_state,omitempty"`
-	LeafID           string          `json:"leaf_id,omitempty"`
-	Error            string          `json:"error,omitempty"`
-	Failed           bool            `json:"failed,omitempty"`
-	Readiness        string          `json:"readiness,omitempty"`
-	ReasonCode       string          `json:"reason_code,omitempty"`
-	DeliveryState    string          `json:"delivery_state,omitempty"`
-	Data             map[string]any  `json:"data,omitempty"`
-	Backend          string          `json:"backend,omitempty"`
-	BackendEventType string          `json:"backend_event_type,omitempty"`
-	BackendEvent     json.RawMessage `json:"backend_event,omitempty"`
+	AgentState       string            `json:"agent_state,omitempty"`
+	LeafID           string            `json:"leaf_id,omitempty"`
+	Error            string            `json:"error,omitempty"`
+	Failed           bool              `json:"failed,omitempty"`
+	Readiness        string            `json:"readiness,omitempty"`
+	ReasonCode       string            `json:"reason_code,omitempty"`
+	DeliveryState    string            `json:"delivery_state,omitempty"`
+	Settings         map[string]string `json:"settings,omitempty"`
+	Data             map[string]any    `json:"data,omitempty"`
+	Backend          string            `json:"backend,omitempty"`
+	BackendEventType string            `json:"backend_event_type,omitempty"`
+	BackendEvent     json.RawMessage   `json:"backend_event,omitempty"`
 }

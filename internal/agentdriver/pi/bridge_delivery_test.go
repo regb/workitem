@@ -35,7 +35,7 @@ if(fence){fenced++;socket.end(JSON.stringify({accepted:false,error:'runtime owne
 if(event.type==='agent.settled'&&attempts.get(event.event_id)<3){socket.end(JSON.stringify({accepted:false,retryable:true,error:'coordinator temporarily unavailable'})+'\n');return}
 accepted.push(event);socket.end(JSON.stringify({accepted:true})+'\n')})});
 await new Promise(resolve=>server.listen(process.env.WI_AGENT_EVENT_SOCKET,resolve));
-bridge({on:(name,handler)=>hooks.set(name,handler),registerCommand:()=>{}});
+bridge({on:(name,handler)=>hooks.set(name,handler),registerCommand:()=>{},getThinkingLevel:()=>"medium"});
 const ctx={isIdle:()=>false,hasPendingMessages:()=>false,sessionManager:{getLeafId:()=> 'leaf',buildSessionProjection:()=>({messages:[]}),getSessionId:()=> 'session',getSessionFile:()=>undefined}};
 const fire=async(name,event={})=>await hooks.get(name)(event,ctx);
 const until=async predicate=>{for(let i=0;i<300&&!predicate();i++)await new Promise(resolve=>setTimeout(resolve,10));assert.ok(predicate(),'runtime event delivery did not recover')};

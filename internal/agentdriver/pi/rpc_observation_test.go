@@ -3,6 +3,8 @@ package pi
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
@@ -105,5 +107,42 @@ func TestNativeObservationKeepsTheContentBranchCurrent(t *testing.T) {
 	snapshot := content.Snapshot()
 	if snapshot.LeafID != "093285ce" || snapshot.Text != "Updated rules_python." {
 		t.Fatalf("branch or reply lost: %+v", snapshot)
+	}
+}
+
+func TestHeadlessSettingsReportBecomesARuntimeEvent(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "owner", WorkItemID: "item"}, liveContext: ctx, liveNonce: "nonce", liveQueue: make(chan queuedLiveEvent, 8), work: map[string]bool{}}
+	if err := transport.handleOutput([]byte(`{"type":"wi_runtime_settings","runtime_id":"owner","work_item_id":"item","settings":{"model":"openai/gpt","reasoning":"high"}}`)); err != nil {
+		t.Fatal(err)
+	}
+	queued := <-transport.liveQueue
+	if queued.event.Type != agent.EventSettingsChanged || queued.event.Settings["model"] != "openai/gpt" || queued.event.Settings["reasoning"] != "high" {
+		t.Fatalf("event = %+v", queued.event)
+	}
+	for _, record := range []string{
+		`{"type":"wi_runtime_settings","runtime_id":"other","work_item_id":"item","settings":{"model":"openai/gpt"}}`,
+		`{"type":"wi_runtime_settings","runtime_id":"owner","work_item_id":"item","settings":{"reasoning":"extreme"}}`,
+		`{"type":"wi_runtime_settings","runtime_id":"owner","work_item_id":"item"}`,
+	} {
+		if err := transport.handleOutput([]byte(record)); err == nil {
+			t.Fatalf("accepted %s", record)
+		}
+	}
+}
+
+func TestPiDefaultsComeFromItsSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("PI_CODING_AGENT_DIR", dir)
+	catalog := driverprotocol.ModelCatalog{Models: []driverprotocol.ModelOption{{Value: "openai/gpt"}}}
+	if model, reasoning := piDefaults(catalog); model != "" || reasoning != "medium" {
+		t.Fatalf("without settings: %q %q", model, reasoning)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "settings.json"), []byte(`{"defaultProvider":"openai","defaultModel":"gpt","defaultThinkingLevel":"high"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if model, reasoning := piDefaults(catalog); model != "openai/gpt" || reasoning != "high" {
+		t.Fatalf("with settings: %q %q", model, reasoning)
 	}
 }

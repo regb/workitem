@@ -16,13 +16,15 @@ import (
 )
 
 type historyRecord struct {
-	Type           string          `json:"type"`
-	ID             string          `json:"uuid"`
-	Parent         string          `json:"parentUuid"`
-	PromptID       string          `json:"promptId"`
-	Timestamp      string          `json:"timestamp"`
-	Sidechain      bool            `json:"isSidechain"`
-	Meta           bool            `json:"isMeta"`
+	Type      string `json:"type"`
+	ID        string `json:"uuid"`
+	Parent    string `json:"parentUuid"`
+	PromptID  string `json:"promptId"`
+	Timestamp string `json:"timestamp"`
+	Sidechain bool   `json:"isSidechain"`
+	Meta      bool   `json:"isMeta"`
+	// Effort is the reasoning effort of an assistant reply.
+	Effort         string          `json:"effort"`
 	CompactSummary bool            `json:"isCompactSummary"`
 	APIError       bool            `json:"isApiErrorMessage"`
 	Subtype        string          `json:"subtype"`
@@ -32,6 +34,7 @@ type historyRecord struct {
 	} `json:"origin"`
 	Message struct {
 		Content json.RawMessage `json:"content"`
+		Model   string          `json:"model"`
 	} `json:"message"`
 }
 type historyOffset struct {

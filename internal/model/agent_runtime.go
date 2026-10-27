@@ -59,4 +59,7 @@ type AgentRuntime struct {
 	Readiness                string              `json:"readiness,omitempty"`
 	ReadinessReasonCode      string              `json:"readiness_reason_code,omitempty"`
 	ReadinessObservedAt      *time.Time          `json:"readiness_observed_at,omitempty"`
+	// Settings are the model and reasoning level the agent reports running
+	// with. They are an observation; the item's settings remain the intent.
+	Settings map[string]string `json:"settings,omitempty"`
 }

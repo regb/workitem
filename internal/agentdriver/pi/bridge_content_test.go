@@ -38,7 +38,7 @@ const eventPath = process.env.WI_AGENT_EVENT_SOCKET;
 const relay=createServer(socket=>{let data='';socket.on('data',chunk=>{data+=chunk;if(data.includes('\n')) socket.end('{"accepted":true}\n');});});
 await new Promise(resolve=>relay.listen(eventPath,resolve));
 const ctx={isIdle:()=>idle,hasPendingMessages:()=>false,shutdown:()=>{shutDown=true},sessionManager:{buildSessionProjection:()=>({messages:[]}),getLeafId:()=>leaf,getSessionId:()=> 'session',getSessionFile:()=> 'native'},ui:{notify:()=>{}}};
-bridge({on:(name,fn)=>callbacks.set(name,fn),sendUserMessage:(content,options)=>sent.push({content,options}),events:{}});
+bridge({on:(name,fn)=>callbacks.set(name,fn),sendUserMessage:(content,options)=>sent.push({content,options}),events:{},getThinkingLevel:()=>"medium"});
 await callbacks.get('session_start')({},ctx);
 await new Promise(resolve=>setTimeout(resolve,60));
 async function exchange(path,value){return await new Promise((resolve,reject)=>{const socket=createConnection(path);let data='';socket.on('error',reject);socket.on('connect',()=>socket.write(JSON.stringify(value)+'\n'));socket.on('data',chunk=>{data+=chunk;if(data.includes('\n')){socket.destroy();resolve(JSON.parse(data.split('\n')[0]));}});});}

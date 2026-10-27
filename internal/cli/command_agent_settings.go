@@ -77,14 +77,42 @@ func runAgentSettings(ctx context.Context, args []string, cfg Config, jsonOut bo
 	}
 }
 
+func runAgentProfile(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
+	usage := usageErr{errors.New("usage: wi agent profile set [--item <selector>] PROFILE [NAME=VALUE...]")}
+	if len(args) == 0 || args[0] != "set" {
+		return usage
+	}
+	fs := newFlagSet("agent profile set", cfg.Stderr)
+	var item string
+	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
+	if err := fs.Parse(args[1:]); err != nil {
+		return usageErr{err}
+	}
+	if fs.NArg() == 0 {
+		return usage
+	}
+	changes := map[string]string{}
+	for _, arg := range fs.Args()[1:] {
+		name, value, ok := strings.Cut(arg, "=")
+		if !ok || name == "" {
+			return usageErr{fmt.Errorf("setting %q must be NAME=VALUE; an empty VALUE resets it to the profile", arg)}
+		}
+		changes[name] = value
+	}
+	m, err := cfg.App.SetAgentProfile(ctx, app.ResolveOptions{Selector: item, CWD: cfg.CWD, Env: cfg.Env}, fs.Arg(0), changes)
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		return writeJSON(cfg.Stdout, map[string]any{"work_item_id": m.ID, "agent": m.Agent, "agent_settings": m.AgentSettings})
+	}
+	fmt.Fprintf(cfg.Stdout, "%s: agent profile %s\n", m.ID, m.Agent)
+	return nil
+}
+
 func printAgentSettings(cfg Config, view app.AgentSettingsView) {
 	fmt.Fprintf(cfg.Stdout, "agent: %s (%s)\n", view.Agent, view.Driver)
-	keys := make([]string, 0, len(view.Values))
-	for key := range view.Values {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
+	for _, key := range sortedSettingKeys(view.Values) {
 		origin := "profile"
 		if _, ok := view.Overrides[key]; ok {
 			origin = "item"
@@ -97,8 +125,17 @@ func printAgentSettings(cfg Config, view app.AgentSettingsView) {
 			live = strings.Join(view.Live, ", ")
 		}
 		fmt.Fprintf(cfg.Stdout, "runtime: %s, changes live: %s\n", view.RuntimeMode, live)
+		for _, key := range sortedSettingKeys(view.Running) {
+			fmt.Fprintf(cfg.Stdout, "running %s: %s\n", key, view.Running[key])
+		}
 	}
 	if view.Catalog != nil {
+		if view.Values[driverprotocol.SettingModel] == "" && view.Catalog.Default != "" {
+			fmt.Fprintf(cfg.Stdout, "default model: %s\n", view.Catalog.Default)
+		}
+		if view.Values[driverprotocol.SettingReasoning] == "" && view.Catalog.DefaultReasoning != "" {
+			fmt.Fprintf(cfg.Stdout, "default reasoning: %s\n", view.Catalog.DefaultReasoning)
+		}
 		fmt.Fprintln(cfg.Stdout, "models:")
 		for _, model := range view.Catalog.Models {
 			fmt.Fprintf(cfg.Stdout, "  %s", model.Value)
@@ -113,6 +150,15 @@ func printAgentSettings(cfg Config, view app.AgentSettingsView) {
 	} else if view.CatalogError != "" {
 		fmt.Fprintf(cfg.Stderr, "warning: model list unavailable: %s\n", view.CatalogError)
 	}
+}
+
+func sortedSettingKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func printSettingsResult(cfg Config, result app.SetAgentSettingsResult) {

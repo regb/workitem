@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -166,5 +167,72 @@ func TestSettingOutcomesLeaveAgentStatusUnchanged(t *testing.T) {
 		if observation.Status != "idle" {
 			t.Fatalf("after %s the agent is %q: %+v", event.ID, observation.Status, observation)
 		}
+	}
+}
+
+// Reported settings update the runtime record, are kept in the event history
+// and survive a host snapshot of the same runtime; they are not agent work.
+func TestReportedSettingsUpdateTheRuntimeRecord(t *testing.T) {
+	root := t.TempDir()
+	native := store.New(root)
+	if err := native.Ensure(); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	manifest := model.NewManifest(importTestID, "settings", "Settings", nil, false, now, model.Repository{}, model.Checkout{})
+	manifest.State = model.StateActive
+	if err := native.CreateItem(context.Background(), manifest); err != nil {
+		t.Fatal(err)
+	}
+	db, err := OpenDatabase(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := seedManifests(context.Background(), db, root); err != nil {
+		t.Fatal(err)
+	}
+	seedRuntimeOwner(t, db, importTestID, "runtime-1")
+	ingest := func(id string, settings map[string]string) error {
+		_, err := IngestRuntimeEvent(context.Background(), db, RuntimeSemanticEvent{ID: id, RuntimeID: "runtime-1", WorkItemID: importTestID, Type: agent.EventSettingsChanged, Timestamp: now, Settings: settings})
+		return err
+	}
+	if err := ingest("runtime-1:a", map[string]string{"model": "anthropic/opus", "reasoning": "high"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ingest("runtime-1:b", map[string]string{"model": "anthropic/sonnet"}); err != nil {
+		t.Fatal(err)
+	}
+	for name, bad := range map[string]map[string]string{"none": nil, "unknown": {"temperature": "1"}, "level": {"reasoning": "extreme"}, "newline": {"model": "a\nb"}} {
+		var rejection *RuntimeEventRejection
+		if err := ingest("runtime-1:"+name, bad); !errors.As(err, &rejection) {
+			t.Fatalf("%s: err = %v", name, err)
+		}
+	}
+	var owner model.AgentRuntime
+	if _, err := db.ReadProjection(RuntimeOwnershipProjection, importTestID, &owner); err != nil {
+		t.Fatal(err)
+	}
+	if want := map[string]string{"model": "anthropic/sonnet", "reasoning": "high"}; !reflect.DeepEqual(owner.Settings, want) {
+		t.Fatalf("settings = %v, want %v", owner.Settings, want)
+	}
+	var observation AgentObservation
+	if found, _ := db.ReadProjection(AgentObservationProjection, importTestID, &observation); found && observation.Status == "busy" {
+		t.Fatalf("settings made the agent busy: %+v", observation)
+	}
+
+	// A host snapshot taken before the report does not erase it.
+	snapshot := owner
+	snapshot.Settings = nil
+	raw, _ := json.Marshal(snapshot)
+	current, _ := db.CanonicalManifest(importTestID)
+	save := StoreCommand{ID: "snapshot", ProtocolVersion: ProtocolVersion, Operation: StoreAgentRuntimeSave, ItemID: importTestID, ExpectedRevision: &current.Revision, PayloadDigest: StorePayloadDigest(raw), CreatedAt: time.Now().UTC()}
+	if _, err := db.ExecuteStoreCommand(save, raw); err != nil {
+		t.Fatal(err)
+	}
+	owner = model.AgentRuntime{}
+	_, _ = db.ReadProjection(RuntimeOwnershipProjection, importTestID, &owner)
+	if owner.Settings["model"] != "anthropic/sonnet" {
+		t.Fatalf("snapshot erased reported settings: %v", owner.Settings)
 	}
 }

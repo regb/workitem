@@ -614,9 +614,19 @@ var helpDocs = map[string]helpDoc{
 	},
 	"agent": {
 		Summary:     "Inspect, run, monitor, and communicate with the primary agent",
-		Usage:       []string{"wi agent <status|control|runtime|monitor|settings> [options]"},
+		Usage:       []string{"wi agent <status|control|runtime|monitor|settings|profile> [options]"},
 		Description: []string{"Agent commands derive status from runtime events and expose direct runtime control."},
-		SeeAlso:     []string{"agent status", "agent control", "agent runtime", "agent monitor", "agent settings"},
+		SeeAlso:     []string{"agent status", "agent control", "agent runtime", "agent monitor", "agent settings", "agent profile"},
+	},
+	"agent profile": {
+		Summary: "Move an item to another agent profile",
+		Usage:   []string{"wi agent profile set [--item <selector>] PROFILE [NAME=VALUE...]"},
+		Description: []string{
+			"An item keeps the agent profile it was created with. Use this when that profile was removed or renamed in the configuration, or to run the item's conversation with another profile of the same driver, such as another account.",
+			"The conversation belongs to its driver, so only a profile of that driver can take it over; before the item has a conversation, any profile can. No agent may be running for the item. NAME=VALUE changes the item's model or reasoning in the same step, as wi agent settings set does, when they do not suit the new profile; an empty VALUE resets one to the profile.",
+		},
+		Options:  []helpOption{{"--item <selector>", "Select an item explicitly."}},
+		Examples: []string{`wi agent profile set pi-work`, `wi agent profile set --item auth claude model=`},
 	},
 	"agent settings": {
 		Summary: "Show or change an item's model and reasoning level",

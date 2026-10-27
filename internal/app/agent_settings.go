@@ -13,6 +13,7 @@ import (
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
+	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -43,6 +44,8 @@ type AgentSettingsView struct {
 	RuntimeMode   string                       `json:"runtime_mode,omitempty"`
 	// Live lists the settings the running runtime can change in place.
 	Live []string `json:"live"`
+	// Running are the settings the running agent reports using.
+	Running map[string]string `json:"running,omitempty"`
 }
 
 // SetAgentSettingsOptions changes an item's settings. An empty value resets
@@ -119,7 +122,7 @@ func (a *App) AgentSettings(ctx context.Context, opts ResolveOptions) (AgentSett
 	if err != nil {
 		return AgentSettingsView{}, err
 	}
-	name, err := a.resolveAgentName(m.Agent)
+	name, err := a.itemAgentName(m)
 	if err != nil {
 		return AgentSettingsView{}, err
 	}
@@ -139,6 +142,7 @@ func (a *App) AgentSettings(ctx context.Context, opts ResolveOptions) (AgentSett
 	if err == nil && a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive {
 		view.RuntimeOnline, view.RuntimeMode = true, runtime.Mode
 		view.Live = append(view.Live, runtime.Capabilities.Settings...)
+		view.Running = copySettings(runtime.Settings)
 	}
 	return view, nil
 }
@@ -157,7 +161,7 @@ func (a *App) SetAgentSettings(ctx context.Context, opts SetAgentSettingsOptions
 	if m.State == model.StateClosed {
 		return SetAgentSettingsResult{}, fmt.Errorf("work item %s is closed", m.ID)
 	}
-	name, err := a.resolveAgentName(m.Agent)
+	name, err := a.itemAgentName(m)
 	if err != nil {
 		return SetAgentSettingsResult{}, err
 	}
@@ -335,6 +339,41 @@ func (a *App) saveAgentSettings(ctx context.Context, id string, overrides map[st
 		return err
 	}
 	return a.Store.AppendEvent(ctx, m.ID, model.NewEvent(m.UpdatedAt, "agent.settings_changed", "user", map[string]any{"settings": sortedKeys(overrides)}))
+}
+
+// adoptReportedSettings makes reported setting values the item's own. At
+// launch only values that neither the item nor its profile chose are taken,
+// so an item keeps the model its agent first ran with even if the agent's
+// default changes. A later report is a change, made through wi or in the
+// agent's own interface, and is kept wherever it differs, so the next runtime
+// continues with it.
+func (a *App) adoptReportedSettings(ctx context.Context, id string, definition config.AgentDefinitionConfig, reported map[string]string, change bool) error {
+	m, operation, err := a.lockItemOperation(ctx, ResolveOptions{Selector: id})
+	if err != nil {
+		return err
+	}
+	defer operation.Release()
+	values := a.driverConfig(definition, m.AgentSettings)
+	adopted := copySettings(m.AgentSettings)
+	names := []string{}
+	for name, value := range reported {
+		current, _ := values[name].(string)
+		if current == value || current != "" && !change {
+			continue
+		}
+		adopted[name] = value
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return nil
+	}
+	sort.Strings(names)
+	m.AgentSettings = adopted
+	m.UpdatedAt = a.now()
+	if err := a.Store.SaveManifest(ctx, m); err != nil {
+		return err
+	}
+	return a.Store.AppendEvent(ctx, m.ID, model.NewEvent(m.UpdatedAt, "agent.settings_adopted", "runtime", map[string]any{"settings": names}))
 }
 
 // mergeSettings applies changes to an item's overrides and reports which

@@ -122,6 +122,24 @@ function nativeObserver(publish: (state: NativeObservation) => void, reserved: (
   return { start, refresh, stop };
 }
 
+// settingsReporter publishes the model and reasoning level Pi runs with
+// whenever either changes, from wi or in Pi itself. Callers also report when
+// a session starts.
+function settingsReporter(pi: ExtensionAPI, publish: (settings: Record<string, string>) => void) {
+  let previous = "";
+  const report = (ctx: ExtensionContext) => {
+    const settings: Record<string, string> = { reasoning: pi.getThinkingLevel() };
+    if (ctx.model) settings.model = `${ctx.model.provider}/${ctx.model.id}`;
+    const key = JSON.stringify(settings);
+    if (key === previous) return;
+    previous = key;
+    publish(settings);
+  };
+  pi.on("model_select", (_event, ctx) => report(ctx));
+  pi.on("thinking_level_select", (_event, ctx) => report(ctx));
+  return report;
+}
+
 export default function wiBridge(pi: ExtensionAPI) {
   const workItemId = process.env.WI_ID ?? "";
   const runtimeId = process.env.WI_AGENT_RUNTIME_ID ?? "";
@@ -134,7 +152,8 @@ export default function wiBridge(pi: ExtensionAPI) {
   // must be checked in Pi's own event loop, not against delayed host events.
   if (mode === "headless") {
     const observation = nativeObserver(state => writeSync(1, JSON.stringify({ type: "wi_runtime_status", runtime_id: runtimeId, work_item_id: workItemId, ...state }) + "\n"));
-    pi.on("session_start", (_event, ctx) => observation.start(ctx));
+    const reportSettings = settingsReporter(pi, settings => writeSync(1, JSON.stringify({ type: "wi_runtime_settings", runtime_id: runtimeId, work_item_id: workItemId, settings }) + "\n"));
+    pi.on("session_start", (_event, ctx) => { observation.start(ctx); reportSettings(ctx); });
     pi.on("session_tree", (_event, ctx) => observation.refresh(ctx, true));
     let finalFailed = false;
     pi.on("agent_before_settle", event => { finalFailed = event.outcome === "error" || event.outcome === "aborted"; });
@@ -215,7 +234,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   const retainedRuntimeTypes = new Set([
     "runtime.ready", "runtime.stopping", "runtime.failed", "command.accepted", "command.rejected",
     "agent.started", "agent.settled", "turn.started", "turn.ended", "message.completed",
-    "tool.started", "tool.completed", "runtime.status",
+    "tool.started", "tool.completed", "runtime.status", "settings.changed",
   ]);
 
   const drainRuntimeQueue = () => {
@@ -292,6 +311,7 @@ export default function wiBridge(pi: ExtensionAPI) {
       leaf_id: record.leaf_id,
       readiness: record.readiness,
       reason_code: record.reason_code,
+      settings: record.settings,
       failed: record.failed === true || record.type === "runtime.failed" || record.type === "command.rejected",
     });
     drainRuntimeQueue();
@@ -624,7 +644,10 @@ export default function wiBridge(pi: ExtensionAPI) {
     });
     controlServer.on("error", (error) => emit("runtime.failed", { error: `control socket: ${String(error)}` }));
     observation.start(ctx);
+    reportSettings(ctx);
   });
+
+  const reportSettings = settingsReporter(pi, settings => emit("settings.changed", { settings }));
 
   pi.on("input", (event, ctx) => {
     context = ctx;

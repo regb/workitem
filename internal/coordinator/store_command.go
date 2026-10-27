@@ -235,6 +235,10 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 					return "", nil, err
 				}
 			}
+			// Only the driver reports setting values.
+			if current.ID == runtime.ID {
+				runtime.Settings = current.Settings
+			}
 			if current.ID == runtime.ID && current.ReadinessObservedAt != nil && (runtime.ReadinessObservedAt == nil || !runtime.ReadinessObservedAt.After(*current.ReadinessObservedAt)) {
 				runtime.Readiness = current.Readiness
 				runtime.ReadinessReasonCode = current.ReadinessReasonCode

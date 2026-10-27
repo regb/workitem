@@ -3,7 +3,9 @@ package claude
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
 )
@@ -37,6 +39,30 @@ func TestModelCatalogFromInitializeOmitsDefault(t *testing.T) {
 	}
 	if _, err := parseModelCatalog([]byte(`{"models":[]}`)); err == nil {
 		t.Fatal("empty catalog accepted")
+	}
+}
+
+func TestModelCatalogNamesTheDefaultAndAliasModels(t *testing.T) {
+	catalog, err := parseModelCatalog([]byte(`{"models":[{"value":"default","resolvedModel":"claude-opus-5-5"},{"value":"opus","resolvedModel":"claude-opus-5-5"},{"value":"claude-opus-4-8","resolvedModel":"claude-opus-4-8"}]}`))
+	if err != nil || catalog.Default != "claude-opus-5-5" {
+		t.Fatalf("catalog=%+v err=%v", catalog, err)
+	}
+	if catalog.Models[0].Resolved != "claude-opus-5-5" || catalog.Models[1].Resolved != "" {
+		t.Fatalf("models = %+v", catalog.Models)
+	}
+}
+
+func TestSettingsReportResolvesAliasesAndSkipsRepeats(t *testing.T) {
+	var events []protocol.RuntimeEvent
+	report := &settingsReport{emit: func(event protocol.RuntimeEvent) { events = append(events, event) }, aliases: map[string]string{"opus": "claude-opus-5-5"}}
+	report.report(protocol.SettingModel, "opus")
+	report.report(protocol.SettingModel, "claude-opus-5-5")
+	report.report(protocol.SettingModel, "<synthetic>")
+	report.report(protocol.SettingReasoning, "")
+	report.report(protocol.SettingReasoning, "extreme")
+	report.report(protocol.SettingReasoning, "high")
+	if len(events) != 2 || events[0].Type != protocol.EventSettingsChanged || events[0].Settings["model"] != "claude-opus-5-5" || events[1].Settings["reasoning"] != "high" {
+		t.Fatalf("events = %+v", events)
 	}
 }
 
@@ -91,5 +117,28 @@ func TestHeadlessSettingsUseControlRequestsAndSettleOnResponse(t *testing.T) {
 		if s.accept(protocol.ControlCommand{ID: "bad-" + bad.Name, Type: protocol.CommandSet, Setting: &bad}) == nil {
 			t.Fatalf("%+v accepted", bad)
 		}
+	}
+}
+
+func TestTranscriptRepliesReportModelAndEffort(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	start := time.Now().UTC()
+	old := start.Add(-time.Hour).Format(time.RFC3339Nano)
+	recent := start.Add(time.Second).Format(time.RFC3339Nano)
+	records := `{"type":"assistant","uuid":"a","timestamp":"` + old + `","effort":"low","message":{"model":"claude-old","content":[{"type":"text","text":"before"}]}}
+{"type":"assistant","uuid":"b","timestamp":"` + recent + `","effort":"xhigh","message":{"model":"claude-opus-5-5","content":[{"type":"text","text":"now"}]}}
+`
+	if err := os.WriteFile(path, []byte(records), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var events []protocol.RuntimeEvent
+	report := &settingsReport{emit: func(event protocol.RuntimeEvent) { events = append(events, event) }}
+	feed := &transcriptFeed{factAfter: start}
+	if _, err := feed.refresh(path, ignoredTranscript{}); err != nil {
+		t.Fatal(err)
+	}
+	report.replies(feed)
+	if len(events) != 2 || events[0].Settings["model"] != "claude-opus-5-5" || events[1].Settings["reasoning"] != "xhigh" {
+		t.Fatalf("events = %+v", events)
 	}
 }

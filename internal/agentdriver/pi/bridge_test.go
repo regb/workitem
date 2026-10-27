@@ -44,7 +44,7 @@ if(process.env.WI_AGENT_MODE==='tui'){
 }
 let idle=true,pending=false,leaf='good';let messages=[{role:'assistant',stopReason:'stop',content:'native-private-good'}];let scans=0;
 const ctx={isIdle:()=>idle,hasPendingMessages:()=>pending,sessionManager:{getLeafId:()=>leaf,getSessionId:()=> 'session',getSessionFile:()=>undefined,buildSessionProjection:()=>{assert.ok(idle&&!pending,'busy state scanned native history');scans++;return {messages}}},ui:{notify(){}}};
-const setup=()=>{hooks.clear();bridge({on:(name,handler)=>hooks.set(name,handler),registerCommand(){}})};
+const setup=()=>{hooks.clear();bridge({on:(name,handler)=>hooks.set(name,handler),registerCommand(){},getThinkingLevel:()=>"medium"})};
 const fire=async(name,event={})=>{assert.ok(hooks.has(name),name);await hooks.get(name)(event,ctx)};
 const expect=async(state,id)=>{for(let i=0;i<300;i++){const last=statuses.at(-1);if(last?.agent_state===state&&last.leaf_id===id)return;await new Promise(resolve=>setTimeout(resolve,5))}assert.fail('missing native observation '+state+' '+id)};
 setup();await fire('session_start',{reason:'startup'});await expect('idle','good');

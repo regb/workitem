@@ -29,11 +29,11 @@ func TestTUIBridgeKeepsRetryActiveAndReportsSettlementOutcome(t *testing.T) {
 	script := fmt.Sprintf(`import bridge from %q;
 import assert from 'node:assert/strict';
 import {createServer} from 'node:net';
-const events=[];const hooks=new Map();
-const server=createServer(socket=>{let input='';socket.setEncoding('utf8');socket.on('data',chunk=>{input+=chunk;if(input.includes('\n')){const event=JSON.parse(input.split('\n')[0]);if(event.type!=='runtime.status')events.push(event);socket.end(JSON.stringify({accepted:true})+'\n')}})});
+const events=[];const settings=[];const hooks=new Map();
+const server=createServer(socket=>{let input='';socket.setEncoding('utf8');socket.on('data',chunk=>{input+=chunk;if(input.includes('\n')){const event=JSON.parse(input.split('\n')[0]);if(event.type==='settings.changed')settings.push(event.settings);else if(event.type!=='runtime.status')events.push(event);socket.end(JSON.stringify({accepted:true})+'\n')}})});
 await new Promise(resolve=>server.listen(process.env.WI_AGENT_EVENT_SOCKET,resolve));
-bridge({on:(name,handler)=>hooks.set(name,handler),registerCommand:()=>{}});
-const ctx={isIdle:()=>false,hasPendingMessages:()=>false,sessionManager:{getLeafId:()=> 'leaf',buildSessionProjection:()=>({messages:[]}),getSessionId:()=> 'session',getSessionFile:()=>undefined}};
+bridge({on:(name,handler)=>hooks.set(name,handler),registerCommand:()=>{},getThinkingLevel:()=>"medium"});
+const ctx={model:{provider:'openai',id:'gpt'},isIdle:()=>false,hasPendingMessages:()=>false,sessionManager:{getLeafId:()=> 'leaf',buildSessionProjection:()=>({messages:[]}),getSessionId:()=> 'session',getSessionFile:()=>undefined}};
 const fire=async(name,event={})=>{assert.ok(hooks.has(name),name);await hooks.get(name)(event,ctx)};
 const delivered=async count=>{for(let i=0;i<300 && events.length<count;i++) await new Promise(resolve=>setTimeout(resolve,10));assert.ok(events.length>=count,JSON.stringify(events))};
 await fire('session_start');await fire('agent_start');await fire('turn_start');
@@ -50,7 +50,10 @@ assert.equal(events.at(-1).type,'agent.settled');assert.equal(events.at(-1).fail
 await fire('agent_start');await fire('message_end',{message:{role:'assistant',content:[],stopReason:'error'}});await fire('turn_end',{turnIndex:2,message:{role:'assistant',stopReason:'error'},toolResults:[]});await fire('auto_retry_end',{success:false});await fire('agent_before_settle',{outcome:'error'});await fire('agent_settled');await delivered(15);
 assert.equal(events.at(-1).type,'agent.settled');assert.equal(events.at(-1).failed,true);assert.equal(events.at(-1).outcome,'failed');
 for(const event of events){assert.equal(event.backend_event,undefined);assert.equal(event.data,undefined);assert.equal(event.error,undefined)}
+await fire('model_select');await fire('thinking_level_select');
 await fire('session_shutdown');await delivered(16);await new Promise(resolve=>server.close(resolve));
+// The session's settings are reported once; an unchanged selection is not.
+assert.deepEqual(settings,[{reasoning:'medium',model:'openai/gpt'}]);
 `, (&url.URL{Scheme: "file", Path: bridge}).String())
 	path := filepath.Join(root, "test.mjs")
 	if err := os.WriteFile(path, []byte(script), 0600); err != nil {

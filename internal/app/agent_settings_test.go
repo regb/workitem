@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -218,5 +219,54 @@ func TestSetAgentSettingsWaitsForAStartingRuntime(t *testing.T) {
 	result, err := a.SetAgentSettings(ctx, SetAgentSettingsOptions{ResolveOptions: ResolveOptions{Selector: m.ID}, Settings: map[string]string{"model": "other/model"}})
 	if err != nil || len(result.Applied) != 1 || len(result.Pending) != 0 {
 		t.Fatalf("result = %+v err=%v", result, err)
+	}
+}
+
+// A reported value becomes the item's own only where neither the item nor
+// its profile chose one.
+func TestAdoptReportedSettingsKeepsChosenValues(t *testing.T) {
+	a, _, m := settingsApp(t)
+	ctx := context.Background()
+	definition := config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{"executable": "/bin/pi"}}
+	a.DriversConfig = map[string]config.DriverDefinitionConfig{"pi": {}}
+	m.AgentSettings = map[string]string{"reasoning": "high"}
+	if err := a.Store.SaveManifest(ctx, m); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.adoptReportedSettings(ctx, m.ID, definition, map[string]string{"model": "openai/gpt", "reasoning": "medium"}, false); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ := a.Store.LoadManifest(m.ID)
+	if want := map[string]string{"model": "openai/gpt", "reasoning": "high"}; !reflect.DeepEqual(saved.AgentSettings, want) {
+		t.Fatalf("settings = %v, want %v", saved.AgentSettings, want)
+	}
+	// Once chosen, a later report leaves the item's model alone.
+	if err := a.adoptReportedSettings(ctx, m.ID, definition, map[string]string{"model": "openai/other"}, false); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ = a.Store.LoadManifest(m.ID)
+	if saved.AgentSettings["model"] != "openai/gpt" {
+		t.Fatalf("model = %q", saved.AgentSettings["model"])
+	}
+	// A profile's model stays the profile's to change.
+	saved.AgentSettings = nil
+	if err := a.Store.SaveManifest(ctx, saved); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.adoptReportedSettings(ctx, m.ID, a.AgentsConfig["pi"], map[string]string{"model": "profile/model"}, false); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ = a.Store.LoadManifest(m.ID)
+	if len(saved.AgentSettings) != 0 {
+		t.Fatalf("profile model adopted: %v", saved.AgentSettings)
+	}
+	// A later report is a change, such as a model picked in the agent's
+	// own interface, and the item keeps it.
+	if err := a.adoptReportedSettings(ctx, m.ID, a.AgentsConfig["pi"], map[string]string{"model": "other/model", "reasoning": "low"}, true); err != nil {
+		t.Fatal(err)
+	}
+	saved, _ = a.Store.LoadManifest(m.ID)
+	if want := map[string]string{"model": "other/model", "reasoning": "low"}; !reflect.DeepEqual(saved.AgentSettings, want) {
+		t.Fatalf("after a change: %v, want %v", saved.AgentSettings, want)
 	}
 }

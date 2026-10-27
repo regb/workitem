@@ -106,7 +106,9 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 		defer cancel()
 		_ = protocol.SubmitEvent(eventCtx, r.Runtime.EventSocketPath, event)
 	}
-	state := &headlessControls{input: writer, emit: emit, session: session}
+	reported := &settingsReport{emit: emit, aliases: map[string]string{}}
+	replies := &transcriptFeed{factAfter: time.Now()}
+	state := &headlessControls{input: writer, emit: emit, session: session, reported: reported}
 	defer func() {
 		if !processDone {
 			_ = cmd.Process.Kill()
@@ -270,6 +272,21 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 						return err
 					}
 					emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeReady, Readiness: "ready", ReasonCode: "headless_ready"})
+					// Until a turn reports the model, it is the configured one,
+					// or Claude's default, as the model list resolves them.
+					for _, model := range f.Response.Response.Models {
+						if model.Resolved != "" {
+							reported.aliases[model.Value] = model.Resolved
+						}
+					}
+					model := c.Model
+					if model == "" {
+						model = "default"
+					}
+					if model != "default" || reported.aliases[model] != "" {
+						reported.report(protocol.SettingModel, model)
+					}
+					reported.report(protocol.SettingReasoning, c.Reasoning)
 				} else {
 					state.interruptResponse(f)
 					state.settingResponse(f)
@@ -288,6 +305,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 					if !supportedHeadlessCapabilities(f.Capabilities) {
 						return protocolFailure("Claude lacks a required headless capability")
 					}
+					reported.report(protocol.SettingModel, f.Model)
 					state.cancelQueued = true
 				}
 				if f.Subtype == "status" && f.Status == "requesting" {
@@ -350,6 +368,9 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 					contentFault(f.Type, err)
 				}
 			case "result":
+				if _, err := replies.refresh(r.Conversation.Locator, ignoredTranscript{}); err == nil {
+					reported.replies(replies)
+				}
 				matched, failed := state.result(f)
 				if matched || len(state.work) == 0 {
 					started = false

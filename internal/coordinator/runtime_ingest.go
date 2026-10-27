@@ -34,6 +34,8 @@ type RuntimeSemanticEvent struct {
 	// AgentState is a native current-state observation, not inferred settlement.
 	AgentState string `json:"agent_state,omitempty"`
 	LeafID     string `json:"leaf_id,omitempty"`
+	// Settings are the reported setting values of settings.changed.
+	Settings map[string]string `json:"settings,omitempty"`
 }
 
 // RuntimeEventRejection is a definitive validation or workspace-fence error,
@@ -87,6 +89,14 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if !driverprotocol.ValidAgentObservation(event.AgentState, event.LeafID, event.Readiness) || ((event.AgentState != "" || event.LeafID != "") && event.Type != agent.EventRuntimeStatus) {
 		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "invalid native agent state observation"}
 	}
+	if (event.Type == agent.EventSettingsChanged) != (len(event.Settings) > 0) {
+		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "settings are reported only by settings.changed, which requires them"}
+	}
+	if len(event.Settings) > 0 {
+		if err := driverprotocol.ValidSettingValues(event.Settings); err != nil {
+			return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "invalid reported settings: " + err.Error()}
+		}
+	}
 	canonical, err := database.CanonicalManifest(event.WorkItemID)
 	if err != nil {
 		return RuntimeIngestResult{}, err
@@ -114,8 +124,20 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, AgentState: event.AgentState, LeafID: event.LeafID, ReasonCode: compactIdentifier(event.ReasonCode, 64)}
 	// A setting change or an accepted abort is recorded for its requester but
 	// is not agent activity.
-	applied := !driverprotocol.QuietOutcome(event.ReasonCode) && applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
 	updates := []ProjectionUpdate{}
+	if event.Type == agent.EventSettingsChanged {
+		// Setting values are not agent activity; the runtime record keeps
+		// the latest, and the event history every change.
+		if owner.Settings == nil {
+			owner.Settings = map[string]string{}
+		}
+		for name, value := range event.Settings {
+			owner.Settings[name] = value
+		}
+		value, _ := json.Marshal(owner)
+		updates = append(updates, ProjectionUpdate{Projection: RuntimeOwnershipProjection, Key: event.WorkItemID, Value: value})
+	}
+	applied := event.Type != agent.EventSettingsChanged && !driverprotocol.QuietOutcome(event.ReasonCode) && applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
 	readiness := event.Readiness
 	if event.Type == agent.EventRuntimeReady && readiness == "" {
 		readiness = "ready"
@@ -144,7 +166,11 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 		observationBytes, _ := json.Marshal(observation)
 		updates = append(updates, ProjectionUpdate{Projection: AgentObservationProjection, Key: event.WorkItemID, Value: observationBytes})
 	}
-	payload, _ := json.Marshal(map[string]any{"runtime_id": event.RuntimeID, "command_id": compactIdentifier(event.CommandID, 200), "request_id": header.RequestID, "role": header.Role, "tool_name": header.ToolName, "failed": event.Failed, "outcome": event.Outcome, "agent_state": event.AgentState, "leaf_id": event.LeafID, "readiness": event.Readiness, "reason_code": event.ReasonCode, "delivery_state": event.DeliveryState})
+	fields := map[string]any{"runtime_id": event.RuntimeID, "command_id": compactIdentifier(event.CommandID, 200), "request_id": header.RequestID, "role": header.Role, "tool_name": header.ToolName, "failed": event.Failed, "outcome": event.Outcome, "agent_state": event.AgentState, "leaf_id": event.LeafID, "readiness": event.Readiness, "reason_code": event.ReasonCode, "delivery_state": event.DeliveryState}
+	if len(event.Settings) > 0 {
+		fields["settings"] = event.Settings
+	}
+	payload, _ := json.Marshal(fields)
 	commandID := "runtime-event:" + event.ID
 	committed, err := database.Commit(Command{ID: commandID, ProtocolVersion: ProtocolVersion, Type: "runtime.event.ingest", Actor: "runtime", ItemID: event.WorkItemID, ReceivedAt: time.Now().UTC()}, []PendingEvent{{ID: event.ID, ItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), Actor: "runtime", Payload: payload}}, updates)
 	if err != nil {
@@ -164,7 +190,8 @@ func allowedLiveRuntimeEvent(eventType string) bool {
 		agent.EventTurnStarted, agent.EventTurnEnded,
 		agent.EventMessageCompleted,
 		agent.EventToolStarted, agent.EventToolCompleted,
-		agent.EventCommandAccepted, agent.EventCommandRejected:
+		agent.EventCommandAccepted, agent.EventCommandRejected,
+		agent.EventSettingsChanged:
 		return true
 	default:
 		return false

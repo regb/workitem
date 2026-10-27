@@ -22,12 +22,19 @@ type transcriptFeed struct {
 	pending                []byte
 	leaf, text, activity   string
 	textID                 string
-	tool                   *protocol.ContentTool
+	// model and effort are those of the latest reply made since factAfter.
+	model, effort string
+	tool          *protocol.ContentTool
 }
 
 type transcriptPublisher interface {
 	PublishTranscript(string, string, string, *protocol.ContentTool)
 }
+
+// ignoredTranscript reads a transcript only for its facts.
+type ignoredTranscript struct{}
+
+func (ignoredTranscript) PublishTranscript(string, string, string, *protocol.ContentTool) {}
 
 func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]protocol.ConversationFact, error) {
 	file, err := os.Open(path)
@@ -44,7 +51,7 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 	}
 	initial := f.info == nil
 	if initial || !os.SameFile(f.info, info) || info.Size() < f.offset {
-		*f = transcriptFeed{info: info, activity: "Transcript available", factAfter: f.factAfter}
+		*f = transcriptFeed{info: info, activity: "Transcript available", factAfter: f.factAfter, model: f.model, effort: f.effort}
 		if info.Size() > 4<<20 {
 			f.offset = info.Size() - (4 << 20)
 			if _, err = file.Seek(f.offset, io.SeekStart); err != nil {
@@ -109,6 +116,14 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 				f.textPromptID = f.promptID
 				f.textAt, _ = time.Parse(time.RFC3339Nano, record.Timestamp)
 				f.activity = "Message saved"
+				if !f.textAt.IsZero() && !f.textAt.Before(f.factAfter.Truncate(time.Millisecond)) {
+					if record.Message.Model != "" {
+						f.model = record.Message.Model
+					}
+					if record.Effort != "" {
+						f.effort = record.Effort
+					}
+				}
 			} else if len(message.Tools) == 0 && !record.CompactSummary {
 				f.text = ""
 				if len(record.PromptID) <= 128 {

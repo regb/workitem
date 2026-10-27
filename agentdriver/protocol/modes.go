@@ -2,7 +2,9 @@ package driverprotocol
 
 import (
 	"fmt"
+	"slices"
 	"sort"
+	"strings"
 )
 
 // OperationRuntimeModes asks what each runtime mode of a profile offers.
@@ -49,18 +51,45 @@ var ReasoningLevels = []string{"off", "minimal", "low", "medium", "high", "xhigh
 type ModelCatalog struct {
 	ReasoningLevels []string      `json:"reasoning_levels,omitempty"`
 	Models          []ModelOption `json:"models"`
+	// Default is the model the agent uses when no model is set, and
+	// DefaultReasoning its reasoning level when none is set, when the driver
+	// knows them.
+	Default          string `json:"default,omitempty"`
+	DefaultReasoning string `json:"default_reasoning,omitempty"`
 }
 
 // ModelOption is one selectable model. Value is what the model setting
 // takes. Levels, when set, narrows the reasoning levels for this model; an
 // empty list with Reasoning false means it has no reasoning setting.
 type ModelOption struct {
-	Value       string   `json:"value"`
+	Value string `json:"value"`
+	// Resolved is the model Value currently names, when Value is an alias.
+	Resolved    string   `json:"resolved,omitempty"`
 	Label       string   `json:"label,omitempty"`
 	Description string   `json:"description,omitempty"`
 	Reasoning   bool     `json:"reasoning"`
 	Levels      []string `json:"levels,omitempty"`
 	ImageInput  bool     `json:"image_input,omitempty"`
+}
+
+// ValidSettingValues checks reported setting values: only the model and a
+// reasoning level from the ladder, as short single-line text.
+func ValidSettingValues(values map[string]string) error {
+	if len(values) == 0 {
+		return fmt.Errorf("no setting values")
+	}
+	for name, value := range values {
+		if name != SettingModel && name != SettingReasoning {
+			return fmt.Errorf("unknown setting %q", name)
+		}
+		if value == "" || len(value) > 200 || strings.ContainsAny(value, "\r\n\x00") {
+			return fmt.Errorf("invalid %s value", name)
+		}
+		if name == SettingReasoning && !slices.Contains(ReasoningLevels, value) {
+			return fmt.Errorf("invalid reasoning level %q", value)
+		}
+	}
+	return nil
 }
 
 // ModeCapabilities are the channels a runtime in one mode offers.

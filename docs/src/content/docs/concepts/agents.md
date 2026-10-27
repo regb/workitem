@@ -3,7 +3,7 @@ title: Agents and conversations
 description: Agent profiles, driver-owned conversations, and exclusive runtimes.
 ---
 
-An item selects an agent profile, such as `pi` or `claude`. Profiles choose a driver and its configuration; several profiles can use the same driver, for example one per account. Run `wi init` to discover installed agents and select the default. Profiles are explicit in the user config; `default_agent` must point to an existing named profile. Items store the resolved name rather than the pointer, so changing the default does not reassign existing named-profile items. See [Configuration](../../reference/configuration/#coding-agents-and-drivers).
+An item selects an agent profile, such as `pi` or `claude`. Profiles choose a driver and its configuration; several profiles can use the same driver, for example one per account. Run `wi init` to discover installed agents and select the default. Profiles are explicit in the user config; `default_agent` must point to an existing named profile. Items store the resolved name rather than the pointer, so changing the default does not reassign existing named-profile items. If an item's profile is removed or renamed, its agent cannot start until `wi agent profile set PROFILE` moves it to another. The conversation belongs to its driver, so the new profile must use the same driver. See [Configuration](../../reference/configuration/#coding-agents-and-drivers).
 
 An item can also choose its own model and reasoning level, which override its profile's for every runtime of its conversation. Reasoning is one ladder for every driver (`off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`); drivers and models accept a subset.
 
@@ -12,6 +12,8 @@ wi new --model opus --reasoning xhigh --title "Plan the migration"
 wi start --reasoning low item-slug
 wi agent settings set model=sonnet
 ```
+
+A running agent reports the model and reasoning level it uses, and `wi agent settings` shows them. When neither the item nor its profile chooses a model, the item records the one its agent first runs with, so the conversation keeps it even if the agent's default changes. A model or reasoning level changed in the agent's own interface, such as Pi's `/model`, becomes the item's setting too. Resetting the item's settings returns it to the profile, until the next start records again.
 
 Each item has at most one primary conversation and one active runtime owner. A runtime can stop and later resume that conversation. The conversation belongs to one bounded task, not an ongoing project chat: close the item when its objective is settled.
 

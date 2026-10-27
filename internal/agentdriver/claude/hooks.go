@@ -24,6 +24,7 @@ type hookInput struct {
 	Notification string    `json:"notification_type,omitempty"`
 	PromptDigest string    `json:"prompt_digest,omitempty"`
 	PromptID     string    `json:"prompt_id,omitempty"`
+	Model        string    `json:"model,omitempty"`
 	ObservedAt   time.Time `json:"observed_at,omitempty"`
 }
 

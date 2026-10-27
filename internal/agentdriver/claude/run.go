@@ -189,6 +189,8 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 	emit := func(kind string, failed bool, tool string) error {
 		return emitFact(protocol.RuntimeEvent{Type: kind, Failed: failed, ToolName: tool})
 	}
+	reported := &settingsReport{emit: func(event protocol.RuntimeEvent) { _ = emitFact(event) }}
+	reported.report(protocol.SettingReasoning, c.Reasoning)
 	var controls *tuiControls
 	controls = &tuiControls{input: input, emit: func(kind string, c protocol.ControlCommand, failed bool) {
 		state, reason := controls.deliveryFacts(c)
@@ -234,6 +236,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 			if err != nil {
 				contentServer.PublishTranscript(feed.leaf, feed.text, "Transcript inspection failed", feed.tool)
 			}
+			reported.replies(feed)
 			for _, fact := range facts {
 				if !fact.Timestamp.IsZero() && fact.Timestamp.Before(turns.started.Truncate(time.Millisecond)) {
 					continue
@@ -354,6 +357,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 						startExecution = true
 					}
 				case "SessionStart":
+					reported.report(protocol.SettingModel, h.Model)
 					if !readySeen {
 						turns.settled = false
 						turns.executing = false

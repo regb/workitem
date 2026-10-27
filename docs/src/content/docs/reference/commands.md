@@ -147,6 +147,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi agent monitor` | Read normalized runtime events; `--content` follows live message text, tool calls and activity |
 | `wi agent settings [show]` | Show an item's model and reasoning level and the available models |
 | `wi agent settings set [--restart] NAME=VALUE...` | Change them for the item, live where the running agent supports it |
+| `wi agent profile set PROFILE [NAME=VALUE...]` | Move a stopped item to another profile of its conversation's driver |
 | `wi agent control send` | Send steering or follow-up text and optional repeatable `--image` attachments |
 | `wi agent control abort` | Abort the current agent run |
 

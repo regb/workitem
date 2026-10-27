@@ -24,17 +24,18 @@ import (
 const rpcReadyCommandID = "wi-runtime-ready"
 
 type rpcOutput struct {
-	Type       string          `json:"type"`
-	ID         string          `json:"id,omitempty"`
-	Command    string          `json:"command,omitempty"`
-	Success    bool            `json:"success,omitempty"`
-	Error      string          `json:"error,omitempty"`
-	Data       json.RawMessage `json:"data,omitempty"`
-	RuntimeID  string          `json:"runtime_id,omitempty"`
-	WorkItemID string          `json:"work_item_id,omitempty"`
-	AgentState string          `json:"agent_state,omitempty"`
-	LeafID     string          `json:"leaf_id,omitempty"`
-	Readiness  string          `json:"readiness,omitempty"`
+	Type       string            `json:"type"`
+	ID         string            `json:"id,omitempty"`
+	Command    string            `json:"command,omitempty"`
+	Success    bool              `json:"success,omitempty"`
+	Error      string            `json:"error,omitempty"`
+	Data       json.RawMessage   `json:"data,omitempty"`
+	RuntimeID  string            `json:"runtime_id,omitempty"`
+	WorkItemID string            `json:"work_item_id,omitempty"`
+	AgentState string            `json:"agent_state,omitempty"`
+	LeafID     string            `json:"leaf_id,omitempty"`
+	Readiness  string            `json:"readiness,omitempty"`
+	Settings   map[string]string `json:"settings,omitempty"`
 }
 
 type queuedLiveEvent struct {
@@ -274,6 +275,12 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 		}
 		return t.emit(agent.RuntimeEvent{Type: agent.EventRuntimeStatus, AgentState: state, LeafID: output.LeafID, Readiness: readiness, Backend: "pi"})
 	}
+	if output.Type == "wi_runtime_settings" {
+		if output.RuntimeID != t.spec.RuntimeID || output.WorkItemID != t.spec.WorkItemID || driverprotocol.ValidSettingValues(output.Settings) != nil {
+			return fmt.Errorf("invalid native Pi settings report")
+		}
+		return t.emit(agent.RuntimeEvent{Type: agent.EventSettingsChanged, Settings: output.Settings, Backend: "pi"})
+	}
 	if output.Type == "response" || output.Type == "wi_control_result" {
 		if output.Type == "wi_control_result" && (output.RuntimeID != t.spec.RuntimeID || output.WorkItemID != t.spec.WorkItemID) {
 			return fmt.Errorf("native idle-control result owner mismatch")
@@ -482,7 +489,7 @@ func (t *nativeRPCTransport) queueLiveEvent(event agent.RuntimeEvent, ack chan s
 		return false
 	}
 	t.ensureRuntimeEventID(&event)
-	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, Failed: event.Failed || event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
+	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, Settings: event.Settings, Failed: event.Failed || event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
 	select {
 	case t.liveQueue <- queuedLiveEvent{event: semantic, ack: ack}:
 		return true
@@ -540,7 +547,7 @@ func (t *nativeRPCTransport) ensureRuntimeEventID(event *agent.RuntimeEvent) {
 func retainedLiveEvent(eventType string) bool {
 	switch eventType {
 	case agent.EventRuntimeReady, agent.EventRuntimeStatus, agent.EventRuntimeStopping, agent.EventRuntimeFailed, agent.EventCommandAccepted, agent.EventCommandRejected,
-		agent.EventAgentStarted, agent.EventAgentSettled, agent.EventTurnStarted, agent.EventTurnEnded, agent.EventMessageCompleted, agent.EventToolStarted, agent.EventToolCompleted:
+		agent.EventAgentStarted, agent.EventAgentSettled, agent.EventTurnStarted, agent.EventTurnEnded, agent.EventMessageCompleted, agent.EventToolStarted, agent.EventToolCompleted, agent.EventSettingsChanged:
 		return true
 	default:
 		return false

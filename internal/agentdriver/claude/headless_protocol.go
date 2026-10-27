@@ -19,27 +19,29 @@ const maxHeadlessFrame = 16 << 20
 // These objects never go to the compact event socket. In particular init
 // responses include account information and frames include unrestricted text.
 type headlessFrame struct {
-	Type           string          `json:"type"`
-	Subtype        string          `json:"subtype"`
-	SessionID      string          `json:"session_id"`
-	UUID           string          `json:"uuid"`
-	ParentToolID   *string         `json:"parent_tool_use_id"`
-	UserID         string          `json:"user_message_uuid"`
-	UserIDs        []string        `json:"user_message_uuids"`
-	CommandUUID    string          `json:"command_uuid"`
-	State          string          `json:"state"`
-	IsReplay       bool            `json:"isReplay"`
-	IsError        bool            `json:"is_error"`
-	Error          string          `json:"error"`
-	APIErrorStatus int             `json:"api_error_status"`
-	Result         string          `json:"result"`
-	TerminalReason string          `json:"terminal_reason"`
-	StopReason     string          `json:"stop_reason"`
-	NumTurns       int             `json:"num_turns"`
-	Capabilities   []string        `json:"capabilities"`
-	Status         string          `json:"status"`
-	Event          json.RawMessage `json:"event"`
-	Message        struct {
+	Type           string   `json:"type"`
+	Subtype        string   `json:"subtype"`
+	SessionID      string   `json:"session_id"`
+	UUID           string   `json:"uuid"`
+	ParentToolID   *string  `json:"parent_tool_use_id"`
+	UserID         string   `json:"user_message_uuid"`
+	UserIDs        []string `json:"user_message_uuids"`
+	CommandUUID    string   `json:"command_uuid"`
+	State          string   `json:"state"`
+	IsReplay       bool     `json:"isReplay"`
+	IsError        bool     `json:"is_error"`
+	Error          string   `json:"error"`
+	APIErrorStatus int      `json:"api_error_status"`
+	Result         string   `json:"result"`
+	TerminalReason string   `json:"terminal_reason"`
+	StopReason     string   `json:"stop_reason"`
+	NumTurns       int      `json:"num_turns"`
+	Capabilities   []string `json:"capabilities"`
+	Status         string   `json:"status"`
+	// Model is the session's model, on a system init frame.
+	Model   string          `json:"model"`
+	Event   json.RawMessage `json:"event"`
+	Message struct {
 		ID      string          `json:"id"`
 		Content json.RawMessage `json:"content"`
 	} `json:"message"`
@@ -56,6 +58,10 @@ type headlessFrame struct {
 			State     string   `json:"session_state"`
 			Cancelled []string `json:"cancelled"`
 			Queued    []string `json:"still_queued"`
+			Models    []struct {
+				Value    string `json:"value"`
+				Resolved string `json:"resolvedModel"`
+			} `json:"models"`
 		} `json:"response"`
 	} `json:"response"`
 }

@@ -32,7 +32,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 	if !ok {
 		return fmt.Errorf("agent driver %q is not configured", definition.Driver)
 	}
-	// The item's own settings (model, thinking) apply to every runtime.
+	// The item's own settings (model, reasoning) apply to every runtime.
 	configJSON, err := json.Marshal(a.driverConfig(definition, manifest.AgentSettings))
 	if err != nil {
 		return fmt.Errorf("encode agent driver configuration: %w", err)
@@ -62,6 +62,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 		go func() {
 			defer close(relayDone)
 			client := &coordinator.Client{SocketPath: a.DaemonSocketPath}
+			settingsReported := false
 			for request := range events.Requests() {
 				event := request.Event
 				if event.ProtocolVersion != driverprotocol.RuntimeVersion || event.RuntimeID != spec.RuntimeID || event.WorkItemID != spec.WorkItemID {
@@ -69,9 +70,22 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 					continue
 				}
 				forwardCtx, cancel := context.WithTimeout(ctx, 1500*time.Millisecond)
-				_, err := client.IngestRuntimeEvent(forwardCtx, coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState})
+				_, err := client.IngestRuntimeEvent(forwardCtx, coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState, Settings: event.Settings})
 				cancel()
 				request.Respond(runtimeRelayError(err))
+				if err == nil && event.Type == driverprotocol.EventSettingsChanged {
+					// The first report describes the launch; later ones are
+					// changes, possibly made in the agent's own interface.
+					// Adopting waits for the item lock, which a stop may hold
+					// while this runtime exits, so the relay does not wait for it.
+					changes := settingsReported
+					settingsReported = true
+					go func(reported map[string]string) {
+						adoptCtx, cancel := context.WithTimeout(ctx, time.Minute)
+						defer cancel()
+						_ = a.adoptReportedSettings(adoptCtx, spec.WorkItemID, definition, reported, changes)
+					}(event.Settings)
+				}
 			}
 		}()
 		environment := map[string]string{"WI_ID": spec.WorkItemID, "WI_DIR": a.Store.ItemDir(spec.WorkItemID), "WI_WORKTREE": spec.CWD, "WI_AGENT_RUNTIME_ID": spec.RuntimeID, "WI_AGENT_MODE": string(spec.Mode), "WI_AGENT_CONTROL_SOCKET": spec.ControlSocketPath, "WI_AGENT_EVENT_SOCKET": spec.EventSocketPath, "WI_AGENT_CONVERSATION_DIR": spec.ConversationDir}

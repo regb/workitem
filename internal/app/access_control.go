@@ -297,7 +297,7 @@ func (a *App) AcquireControl(ctx context.Context, request ControlRequest) (Contr
 		return result, &ControlConfirmationError{Plan: plan}
 	}
 	if plan.Replace != "" || plan.Start != "" {
-		if err := a.ValidateAgentConfig(ctx, m.Agent, m.AgentSettings); err != nil {
+		if err := a.validateItemAgent(ctx, m); err != nil {
 			return result, err
 		}
 	}

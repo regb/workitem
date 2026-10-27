@@ -27,6 +27,7 @@ type headlessControls struct {
 	queue                             []*headlessDelivery
 	aborting                          *headlessDelivery
 	settings                          map[string]*headlessDelivery
+	reported                          *settingsReport
 	initialized, stopping, nativeBusy bool
 	cancelQueued                      bool
 	emit                              func(protocol.RuntimeEvent)
@@ -429,4 +430,7 @@ func (s *headlessControls) settingResponse(f headlessFrame) {
 	}
 	d.phase = "confirmed"
 	s.fact(protocol.EventCommandAccepted, d, false, "confirmed", protocol.ReasonSettingApplied)
+	if s.reported != nil && d.command.Setting != nil {
+		s.reported.report(d.command.Setting.Name, d.command.Setting.Value)
+	}
 }

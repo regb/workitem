@@ -40,7 +40,7 @@ const callbacks = new Map(); let leaf = 'leaf-1';
 const relay=createServer(socket=>{let data='';socket.on('data',chunk=>{data+=chunk;if(data.includes('\n')) socket.end('{"accepted":true}\n');});});
 await new Promise(resolve=>relay.listen(process.env.WI_AGENT_EVENT_SOCKET,resolve));
 const ctx={isIdle:()=>true,hasPendingMessages:()=>false,shutdown:()=>{},sessionManager:{getBranch:()=>[{type:'message',id:'entry-9',message:{role:'assistant',timestamp:123}}],getLeafId:()=>leaf,buildSessionProjection:()=>({messages:[]}),getSessionId:()=> 'session',getSessionFile:()=> 'native'},ui:{notify:()=>{}}};
-bridge({on:(name,fn)=>callbacks.set(name,fn),sendUserMessage:()=>{},events:{}});
+bridge({on:(name,fn)=>callbacks.set(name,fn),sendUserMessage:()=>{},events:{},getThinkingLevel:()=>"medium"});
 await callbacks.get('session_start')({},ctx);
 await new Promise(resolve=>setTimeout(resolve,60));
 console.log('ready');

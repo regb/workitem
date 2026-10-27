@@ -64,6 +64,10 @@ const (
 	EventSessionChanged   = "session.changed"
 	EventRuntimeStopping  = "runtime.stopping"
 	EventRuntimeFailed    = "runtime.failed"
+	// EventSettingsChanged reports the model or reasoning level the agent
+	// is running with: once the driver learns them, then on every change,
+	// whoever made it.
+	EventSettingsChanged = "settings.changed"
 )
 
 // ValidAgentObservation validates the optional compact native-state snapshot.
@@ -112,4 +116,7 @@ type RuntimeEvent struct {
 	// AgentState is a native current-state observation, not inferred settlement.
 	AgentState string `json:"agent_state,omitempty"`
 	LeafID     string `json:"leaf_id,omitempty"`
+	// Settings are the agent's current setting values (settings.changed),
+	// keyed by setting name. A key left out is unchanged or unknown.
+	Settings map[string]string `json:"settings,omitempty"`
 }

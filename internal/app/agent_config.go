@@ -45,7 +45,7 @@ func (a *App) ValidateItemAgentConfig(ctx context.Context, opts ResolveOptions) 
 	if a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive {
 		return nil
 	}
-	return a.ValidateAgentConfig(ctx, m.Agent, m.AgentSettings)
+	return a.validateItemAgent(ctx, m)
 }
 
 // driverConfigJSON applies agent overrides to driver defaults without changing

@@ -74,11 +74,13 @@ func ModelCatalog(ctx context.Context, config Config) (protocol.ModelCatalog, er
 }
 
 // parseModelCatalog reads the models of Claude's initialize response. The
-// "default" entry is left out: a profile chooses a concrete model or alias.
+// "default" entry is left out of the choices: a profile chooses a concrete
+// model or alias. The model it resolves to is the catalog's default.
 func parseModelCatalog(raw json.RawMessage) (protocol.ModelCatalog, error) {
 	var response struct {
 		Models []struct {
 			Value          string   `json:"value"`
+			Resolved       string   `json:"resolvedModel"`
 			DisplayName    string   `json:"displayName"`
 			Description    string   `json:"description"`
 			SupportsEffort bool     `json:"supportsEffort"`
@@ -90,10 +92,17 @@ func parseModelCatalog(raw json.RawMessage) (protocol.ModelCatalog, error) {
 	}
 	catalog := protocol.ModelCatalog{ReasoningLevels: reasoningLevels, Models: []protocol.ModelOption{}}
 	for _, model := range response.Models {
+		if model.Value == "default" {
+			catalog.Default = model.Resolved
+		}
 		if model.Value == "" || model.Value == "default" {
 			continue
 		}
-		catalog.Models = append(catalog.Models, protocol.ModelOption{Value: model.Value, Label: model.DisplayName, Description: model.Description, Reasoning: model.SupportsEffort, Levels: model.EffortLevels, ImageInput: true})
+		resolved := model.Resolved
+		if resolved == model.Value {
+			resolved = ""
+		}
+		catalog.Models = append(catalog.Models, protocol.ModelOption{Value: model.Value, Resolved: resolved, Label: model.DisplayName, Description: model.Description, Reasoning: model.SupportsEffort, Levels: model.EffortLevels, ImageInput: true})
 	}
 	if len(catalog.Models) == 0 {
 		return catalog, fmt.Errorf("Claude listed no models")
