@@ -98,6 +98,7 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 		NoDefaultLabels: noDefaultLabels, DeepWork: deep, Base: base, CWD: newCWD, Env: cfg.Env, Agent: agentName,
 		AgentSettings: agentSettingFlags(modelName, reasoning),
 	}
+	var followWarnings []string
 	if cfg.RequireOwnedRepository {
 		selector := strings.TrimSpace(repoPath)
 		var current *model.Manifest
@@ -121,6 +122,11 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 		if err != nil {
 			return err
 		}
+		// Only the integration branch follows its upstream; an explicit base
+		// is used as it is.
+		if revision == "" {
+			followWarnings = followUpstream(ctx, cfg, metadata.Repository.ID)
+		}
 		var source coordinator.RepositorySourceResult
 		if err := cfg.Coordinator.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: metadata.Repository.ID, Revision: revision, SkipLabels: noDefaultLabels}, &source); err != nil {
 			return err
@@ -130,7 +136,9 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	}
 	if start {
 		res, err := runCoordinatorNewAgent(ctx, cfg, opts, mode, cfg.App.AgentStartupMessage(prompt))
+		res.New.Warnings = append(followWarnings, res.New.Warnings...)
 		if err != nil {
+			printWarnings(cfg, followWarnings)
 			return err
 		}
 		if jsonOut {
@@ -142,7 +150,9 @@ func runNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 		return nil
 	}
 	res, err := createCoordinatorWorkItem(ctx, cfg, opts)
+	res.Warnings = append(followWarnings, res.Warnings...)
 	if err != nil {
+		printWarnings(cfg, followWarnings)
 		return err
 	}
 	if jsonOut {

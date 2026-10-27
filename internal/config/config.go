@@ -31,6 +31,7 @@ type Config struct {
 	AgentStatus  AgentStatusConfig                 `json:"agent_status"`
 	Attention    AttentionConfig                   `json:"attention"`
 	Daemon       DaemonConfig                      `json:"daemon"`
+	Repo         RepoConfig                        `json:"repo"`
 	Agents       map[string]AgentDefinitionConfig  `json:"agents"`
 	Drivers      map[string]DriverDefinitionConfig `json:"drivers"`
 	Plugins      map[string]plugin.Registration    `json:"plugins,omitempty"`
@@ -46,6 +47,21 @@ type Config struct {
 // the daemon; the service manager restarts it.
 type DaemonConfig struct {
 	Managed bool `json:"managed" toml:"managed"`
+}
+
+// Follow-upstream policies: what wi new does with the integration branch of
+// a repository that has an upstream before recording the new item's base.
+const (
+	FollowUpstreamFastForward = "fast-forward"
+	FollowUpstreamOff         = "off"
+)
+
+// RepoConfig says how registered repositories follow their upstream.
+// FollowUpstream fast-forward fetches and fast-forwards the integration
+// branch when an item is created, as wi repo sync does; off leaves it to
+// explicit syncs and merges.
+type RepoConfig struct {
+	FollowUpstream string `json:"follow_upstream"`
 }
 
 type AgentConfig struct {
@@ -90,7 +106,7 @@ type AgentStatusMarkersConfig struct {
 }
 
 func Default() Config {
-	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, PluginSettings: map[string]map[string]any{}}
+	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Repo: RepoConfig{FollowUpstream: FollowUpstreamFastForward}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, PluginSettings: map[string]map[string]any{}}
 }
 
 // PluginRegistrations reads only installation metadata to build a declarative
@@ -167,7 +183,7 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 	// Validate the typed core and preserve plugin options for registered schemas.
 	known := map[string]map[string]bool{
 		"deep_work": {"max_active": true}, "item": {"defaults": true}, "list": {"repository_folders": true, "labels": true}, "agent": {"startup_message": true, "append_system_prompt": true}, "agent_status": {"markers": true}, "attention": {"priority": true},
-		"daemon": {"managed": true},
+		"daemon": {"managed": true}, "repo": {"follow_upstream": true},
 	}
 	for section, value := range root {
 		if keys, ok := known[section]; ok {
@@ -325,6 +341,9 @@ func Validate(cfg Config) error {
 	}
 	if _, err := priority.Rank(cfg.Attention.Priority, nil); err != nil {
 		return err
+	}
+	if cfg.Repo.FollowUpstream != FollowUpstreamFastForward && cfg.Repo.FollowUpstream != FollowUpstreamOff {
+		return fmt.Errorf("repo.follow_upstream must be %q or %q", FollowUpstreamFastForward, FollowUpstreamOff)
 	}
 	if strings.TrimSpace(cfg.DefaultAgent) == "" {
 		return fmt.Errorf("default_agent must name an agent profile; run 'wi init' to create your configuration, or set default_agent in the existing file")

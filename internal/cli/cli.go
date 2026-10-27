@@ -105,6 +105,7 @@ func Main(ctx context.Context, args []string) int {
 	application.DeepWorkConfig = cfgFile.DeepWork
 	application.ItemConfig = cfgFile.Item
 	application.ListConfig = cfgFile.List
+	application.RepoConfig = cfgFile.Repo
 	application.AgentConfig = cfgFile.Agent
 	application.AgentStatusConfig = cfgFile.AgentStatus
 	application.AttentionConfig = cfgFile.Attention

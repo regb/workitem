@@ -125,6 +125,7 @@ type App struct {
 	DeepWorkConfig                 config.DeepWorkConfig
 	ItemConfig                     config.ItemConfig
 	ListConfig                     config.ListConfig
+	RepoConfig                     config.RepoConfig
 	AgentConfig                    config.AgentConfig
 	AgentStatusConfig              config.AgentStatusConfig
 	AttentionConfig                config.AttentionConfig
@@ -153,7 +154,7 @@ type App struct {
 
 func New(st Store, git Git) *App {
 	cfg := config.Default()
-	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, AgentConfig: cfg.Agent, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DefaultAgent: cfg.DefaultAgent, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
+	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, RepoConfig: cfg.Repo, AgentConfig: cfg.Agent, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DefaultAgent: cfg.DefaultAgent, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
 	return a
 }
 

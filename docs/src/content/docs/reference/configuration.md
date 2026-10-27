@@ -66,6 +66,9 @@ labels = ["+team-one", "-blocked"]
 [attention]
 priority = "recent-request"
 
+[repo]
+follow_upstream = "fast-forward"
+
 [plugins.direnv]
 load = true
 trust = "prompt"
@@ -163,6 +166,10 @@ WI_LIST_LABELS="!,+personal" wi list --json
 ## Attention ranking
 
 `attention.priority` selects the ranking strategy used by `wi list`, `wi attention queue`, `wi switch`, and `wi next`. The current strategy is `recent-request`. Unknown names are rejected so a misspelled strategy cannot silently change queue behavior.
+
+## Following the upstream
+
+`repo.follow_upstream` says what creating an item does with the integration branch of a repository that has an upstream. `fast-forward`, the default, fetches and fast-forwards it first, like `wi repo sync`, and warns instead of failing when it cannot. `off` creates items from the local integration branch as it is. See [Follow the upstream](../../concepts/repositories/#follow-the-upstream).
 
 ## Direnv trust
 

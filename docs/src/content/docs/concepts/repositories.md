@@ -41,7 +41,7 @@ All items use managed slots. Moving or removing an external onboarding checkout 
 
 ## Select a starting commit
 
-Creation resolves the base immediately and records the resulting commit. It does not fetch or copy dirty files.
+Creation resolves the base immediately and records the resulting commit. It does not copy dirty files. Without `--base`, an integration branch with an upstream first follows it: see [Follow the upstream](#follow-the-upstream). An explicit base never fetches.
 
 | Base | Resolution |
 | --- | --- |
@@ -147,6 +147,12 @@ wi repo sync project --reset-to-upstream --yes
 
 All single-repository commands default to the current work item's registered repository, resolved from its checkout or item context. This includes `show`, `status`, `sync`, `upstream`, `rename`, `archive`, and `restore`. Explicit names or IDs override context; outside an item, pass a selector. Use `wi repo rename NEW` to rename the current repository and `wi repo upstream URL` to configure it. `list` remains global and `add` requires a new name.
 
-With an upstream configured, `wi merge` synchronizes the registered integration base before rebasing an item. Use `wi merge --local` for deliberate offline/local integration. Other explicitly selected target branches remain local-only. Creation does not fetch; sync before creating an item if you want its base to include current upstream changes.
+With an upstream configured, `wi merge` synchronizes the registered integration base before rebasing an item. Use `wi merge --local` for deliberate offline/local integration. Other explicitly selected target branches remain local-only.
 
 Publishing stays explicit. Use Git against the store reported by `wi repo show` to push. See [Merge completed work](../../guides/merging/) for integration and rollback rules.
+
+### Follow the upstream
+
+Creating an item from the integration branch first synchronizes it like `wi repo sync` without options, so new work starts from current upstream changes. This applies to `wi new`, backlog items included. A behind branch fast-forwards, an ahead one is left alone, and diverged histories are not reconciled. Creation never fails because of it: when the upstream is unreachable, the fetch takes more than 20 seconds, a reconciliation is pending or the histories diverged, the item starts from the local integration branch and creation reports a warning. Repositories without an upstream are not affected.
+
+Set `follow_upstream = "off"` under `[repo]` in `config.toml` to create items from the local integration branch without fetching. Merges still synchronize first; use `wi merge --local` to skip that.
