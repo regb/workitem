@@ -78,6 +78,7 @@ Use a JSON parser rather than matching serialized whitespace. A working lifecycl
 | --- | --- |
 | `wi new` | Create backlog work or create and delegate with `--start`; `--prompt` starts an agent with that message, without changing the description |
 | `wi show` | Read metadata and the durable description |
+| `wi search` | Find items by title, labels, description, or notes, closed ones included |
 | `wi edit` | Edit title, description, labels, and deep work together; open an editor when no edit flags are supplied |
 | `wi events` | Read append-only item history |
 | `wi note` / `wi notes` | Add to or read the item's log of short progress notes |
@@ -116,6 +117,16 @@ wi attachment cat REPORT.md
 ```
 
 Notes are append-only, timestamped, and at most 2 KB. While the item has a worktree, each note records its `HEAD`. Attaching copies a file of at most 16 MB into the item and adds a note; attaching under an existing name replaces it, and earlier content stays readable with `wi attachment cat DIGEST`, using the digest its note recorded. Options go before the note text. Notes never mark an item unread, raise attention, or reach the agent. The agent endpoint may add notes and attachments. JSON output returns the full records.
+
+### Search
+
+```bash
+wi search cache
+wi search --state closed "session cache"
+wi --json search otto deploy
+```
+
+Search finds items whose title, slug, labels, description, or notes contain every word of the query, ignoring case; a quoted phrase is one term, and attachment names count as notes. Results rank by the strongest field matched (title, labels, description, then notes), then by most recent update, and a description or notes match shows an excerpt around it. All states are searched unless `--state backlog|active|closed` narrows it; `--limit` caps the results (default 50). Search reads descriptions and notes from the item directories on each query, which stays fast at the size of a personal work list. Conversations are not searched yet.
 
 The former title, label, and deep metadata commands have been removed; there are no aliases. Lifecycle and workflow verbs remain separate.
 

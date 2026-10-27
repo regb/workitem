@@ -319,6 +319,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = runNote(ctx, args[1:], cfg, jsonOut)
 	case "notes":
 		err = runNotes(ctx, args[1:], cfg, jsonOut)
+	case "search":
+		err = runSearch(ctx, args[1:], cfg, jsonOut)
 	case "attach":
 		err = runAttach(ctx, args[1:], cfg, jsonOut)
 	case "attachments":

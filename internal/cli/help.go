@@ -384,6 +384,16 @@ var helpDocs = map[string]helpDoc{
 		Examples: []string{`wi note "Dropped the cache approach: invalidation races with merge"`, `wi note --item auth "Waiting on the API team's answer"`},
 		SeeAlso:  []string{"notes", "attach"},
 	},
+	"search": {
+		Summary: "Find work items by text",
+		Usage:   []string{"wi search [--state <state>] [--limit <n>] <query>"},
+		Description: []string{
+			"Finds items whose title, slug, labels, description, or notes contain every word of the query, ignoring case. Quote a phrase to match it as one term. Attachment names count as notes. Results come first by the strongest field matched (title, labels, description, then notes), then by most recent update; a description or notes match shows an excerpt around it. Closed items are included unless --state narrows the search.",
+		},
+		Options:  []helpOption{{"--state <state>", "Only backlog, active, or closed items."}, {"--limit <n>", "Show at most n results (default 50)."}},
+		Examples: []string{`wi search cache`, `wi search --state closed "session cache"`, `wi --json search otto deploy`},
+		SeeAlso:  []string{"list", "notes"},
+	},
 	"notes": {
 		Summary:     "Show an item's notes",
 		Usage:       []string{"wi notes [--item <selector>] [item]"},
@@ -713,7 +723,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  wi help [command [subcommand]]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Work:")
-	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}})
+	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"search", "Find items by text"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
 	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
