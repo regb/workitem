@@ -40,7 +40,7 @@ func TestArchiveReportsTerminalCleanupBeforeCommitFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	application.Store = rejectArchivedStore{st}
-	result, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false)
+	result, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, app.CloseOptions{Resolution: model.ResolutionCompleted})
 	if err == nil || !strings.Contains(err.Error(), "workspace cleanup completed") || result.WorkItemID != created.Manifest.ID || result.State != model.StateBacklog {
 		t.Fatalf("outcome %+v %v", result, err)
 	}
@@ -92,7 +92,7 @@ func TestArchiveReleaseFailureReportsCanonicalClaimAndDoesNotClose(t *testing.T)
 				t.Fatal(err)
 			}
 			a.Store = failWorkspaceReleaseStore{Store: st, commit: committed}
-			result, err := a.Close(ctx, opts, model.ResolutionCompleted, false)
+			result, err := a.Close(ctx, opts, app.CloseOptions{Resolution: model.ResolutionCompleted})
 			if err == nil || !strings.Contains(err.Error(), "injected workspace release failure") {
 				t.Fatal("release failure was hidden", err)
 			}
@@ -142,7 +142,7 @@ func TestArchiveTimeoutRetainsShutdownWarningAndLifecycle(t *testing.T) {
 		}
 		req.Respond(nil)
 	}()
-	result, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false)
+	result, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, app.CloseOptions{Resolution: model.ResolutionCompleted})
 	if err == nil || !strings.Contains(err.Error(), "did not exit") || !containsString(result.Warnings, "driver accepted runtime shutdown") || result.State != model.StateBacklog {
 		t.Fatalf("timeout outcome %+v %v", result, err)
 	}
@@ -197,5 +197,45 @@ func TestShelveStopsAnIdleAgentBeforeReleasingTheCheckout(t *testing.T) {
 	retained, _ := st.LoadManifest(id)
 	if retained.State != model.StateActive {
 		t.Fatal("shelve applied while the agent was still running")
+	}
+}
+
+func TestCloseCommitsUncommittedChangesOnlyWhenAsked(t *testing.T) {
+	st := store.New(t.TempDir())
+	git := newFakeGit(t)
+	application := newTestApp(st, git)
+	application.NewID = func() (string, error) { return testutil.ID(t, 224), nil }
+	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Dirty close", CWD: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := application.EnsureWorkItemWorkspace(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}); err != nil {
+		t.Fatal(err)
+	}
+	git.status = " M file.go\n"
+	opts := app.ResolveOptions{Selector: created.Manifest.ID}
+	if _, err := application.Close(context.Background(), opts, app.CloseOptions{Resolution: model.ResolutionCompleted}); err == nil || !strings.Contains(err.Error(), "uncommitted changes") {
+		t.Fatalf("dirty close was not refused: %v", err)
+	}
+	if len(git.commits) != 0 {
+		t.Fatalf("committed without being asked: %v", git.commits)
+	}
+	result, err := application.Close(context.Background(), opts, app.CloseOptions{Resolution: model.ResolutionCompleted, CommitChanges: true})
+	if err != nil || result.State != model.StateClosed {
+		t.Fatalf("close %+v %v", result, err)
+	}
+	if len(git.commits) != 1 || !containsString(result.Warnings, "committed uncommitted changes to "+created.Manifest.Checkout.Specification.Branch+" as c0ffee012345") {
+		t.Fatalf("commits %v warnings %v", git.commits, result.Warnings)
+	}
+	events, err := st.ReadEvents(created.Manifest.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, event := range events {
+		found = found || event.Type == "workspace.changes_committed"
+	}
+	if !found {
+		t.Fatal("no workspace.changes_committed event")
 	}
 }

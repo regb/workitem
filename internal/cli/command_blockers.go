@@ -276,10 +276,11 @@ func printBlockerResult(cfg Config, res app.BlockerResult) {
 func runClose(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("close", cfg.Stderr)
 	var item, resolution string
-	var force bool
+	var force, commitChanges bool
 	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
 	fs.StringVar(&resolution, "resolution", model.ResolutionCompleted, "how the work ended: completed, abandoned, or superseded")
 	fs.BoolVar(&force, "force", false, "allow closing while retaining an unclosable current terminal")
+	fs.BoolVar(&commitChanges, "commit-changes", false, "commit the checkout's uncommitted changes to the item's branch instead of refusing to close")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
 	}
@@ -291,7 +292,7 @@ func runClose(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 	if !model.ValidResolution(resolution) {
 		return usageErr{fmt.Errorf("invalid resolution %q; expected completed, abandoned, or superseded", resolution)}
 	}
-	res, err := cfg.App.Close(ctx, appResolve(cfg, selector), resolution, force)
+	res, err := cfg.App.Close(ctx, appResolve(cfg, selector), app.CloseOptions{Resolution: resolution, Force: force, CommitChanges: commitChanges})
 	if err != nil {
 		return err
 	}

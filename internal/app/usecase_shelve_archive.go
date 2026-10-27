@@ -51,10 +51,20 @@ func (a *App) Shelve(ctx context.Context, opts ResolveOptions, force bool) (Stat
 	return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Changed: true, Manifest: m, DeepWork: m.DeepWork, Capacity: &cap, Warnings: workspaceWarnings}, nil
 }
 
+// CloseOptions says how an item ends. Force aborts a busy agent's turn.
+// CommitChanges commits the checkout's uncommitted changes to the item's
+// branch instead of refusing to close; reopening the item finds them there.
+type CloseOptions struct {
+	Resolution    string
+	Force         bool
+	CommitChanges bool
+}
+
 // Close stops the runtime, releases the workspace, and records the item as
 // closed with a resolution. Whether the work was completed is independent of
 // the item being closed.
-func (a *App) Close(ctx context.Context, opts ResolveOptions, resolution string, force bool) (StateTransitionResult, error) {
+func (a *App) Close(ctx context.Context, opts ResolveOptions, close CloseOptions) (StateTransitionResult, error) {
+	resolution, force := close.Resolution, close.Force
 	if resolution == "" {
 		resolution = model.ResolutionCompleted
 	}
@@ -70,7 +80,12 @@ func (a *App) Close(ctx context.Context, opts ResolveOptions, resolution string,
 	if m.State == model.StateClosed {
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Changed: false, Manifest: m}, nil
 	}
-	warnings, err := a.prepareArchive(ctx, m, opts, force)
+	var warnings []string
+	if close.CommitChanges {
+		warnings, err = a.commitChangesForClose(ctx, m, opts, force)
+	} else {
+		warnings, err = a.prepareArchive(ctx, m, opts, force)
+	}
 	if err != nil {
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Manifest: m, Warnings: warnings}, err
 	}
@@ -83,6 +98,26 @@ func (a *App) prepareArchive(ctx context.Context, m model.Manifest, opts Resolve
 		return nil, err
 	}
 	return a.stopRuntimeForArchive(ctx, m, opts, force)
+}
+
+// commitChangesForClose stops the agent first, so nothing writes behind the
+// commit, then commits what the checkout still has uncommitted. A commit is
+// kept even if closing later fails.
+func (a *App) commitChangesForClose(ctx context.Context, m model.Manifest, opts ResolveOptions, force bool) ([]string, error) {
+	warnings, err := a.stopRuntimeForArchive(ctx, m, opts, force)
+	if err != nil {
+		return warnings, err
+	}
+	commit, err := a.workspaceService().CommitChanges(ctx, m, "wi: uncommitted changes at close\n\nWi committed the checkout as it was when the item closed.")
+	if err != nil {
+		return warnings, err
+	}
+	if commit != "" {
+		branch := expectedCheckoutBranch(m)
+		_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "workspace.changes_committed", "user", map[string]any{"commit": commit, "branch": branch}))
+		warnings = append(warnings, fmt.Sprintf("committed uncommitted changes to %s as %.12s", branch, commit))
+	}
+	return warnings, a.ensureCheckoutReleasable(ctx, m)
 }
 
 func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, resolution string, env map[string]string, force bool, warnings []string, deferTerminalClose ...bool) (StateTransitionResult, error) {

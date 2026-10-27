@@ -19,6 +19,7 @@ func (fakeGit) CurrentBranch(context.Context, string) (string, error)       { re
 func (fakeGit) BranchExists(context.Context, string, string) (bool, error)  { return false, nil }
 func (fakeGit) WorktreeAdd(context.Context, model.WorktreeAddOptions) error { return nil }
 func (fakeGit) Switch(context.Context, string, string, string, bool) error  { return nil }
+func (fakeGit) CommitAll(context.Context, string, string) (string, error)   { return "", nil }
 
 type recordingStore struct {
 	saved  model.Manifest

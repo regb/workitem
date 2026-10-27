@@ -287,6 +287,37 @@ func (s *Service) EnsureReleasable(ctx context.Context, m model.Manifest) error 
 	return nil
 }
 
+// CommitChanges commits the checkout's uncommitted changes to the item's
+// branch, so releasing the checkout keeps them. It returns the new commit, or
+// "" when there was nothing to commit.
+func (s *Service) CommitChanges(ctx context.Context, m model.Manifest, message string) (string, error) {
+	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
+		return "", nil
+	}
+	if err := validateCheckoutKind(m.Checkout); err != nil {
+		return "", err
+	}
+	path := m.Checkout.Claim.Path
+	if err := s.validateManagedCheckoutPath(path); err != nil {
+		return "", err
+	}
+	if err := s.ensureCheckoutBranch(ctx, m); err != nil {
+		return "", err
+	}
+	status, err := s.git.StatusPorcelain(ctx, path)
+	if err != nil {
+		return "", fmt.Errorf("could not inspect checkout status: %w", err)
+	}
+	if strings.TrimSpace(status) == "" {
+		return "", nil
+	}
+	commit, err := s.git.CommitAll(ctx, path, message)
+	if err != nil {
+		return "", fmt.Errorf("could not commit uncommitted changes: %w", err)
+	}
+	return commit, nil
+}
+
 func validateCheckoutKind(checkout model.Checkout) error {
 	if checkout.Specification.Kind != model.WorkspaceKindManagedSlot {
 		return fmt.Errorf("unsupported checkout kind %q", checkout.Specification.Kind)

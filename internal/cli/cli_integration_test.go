@@ -93,6 +93,10 @@ func (f *fakeGit) WorktreeAdd(ctx context.Context, opts gitpkg.WorktreeAddOption
 	f.worktrees[opts.Path] = branch
 	return nil
 }
+func (f *fakeGit) CommitAll(ctx context.Context, dir, message string) (string, error) {
+	return "", nil
+}
+
 func (f *fakeGit) Switch(ctx context.Context, dir, branch, startPoint string, create bool) error {
 	if create {
 		f.branches[branch] = true
@@ -971,7 +975,7 @@ func TestListArchivedStateAndConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false); err != nil {
+	if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, app.CloseOptions{Resolution: model.ResolutionCompleted}); err != nil {
 		t.Fatal(err)
 	}
 	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}
@@ -1001,7 +1005,7 @@ func TestDeleteArchivedRequiresConfirmationAndSupportsBulk(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false); err != nil {
+		if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, app.CloseOptions{Resolution: model.ResolutionCompleted}); err != nil {
 			t.Fatal(err)
 		}
 	}

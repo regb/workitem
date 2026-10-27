@@ -25,6 +25,7 @@ type Git interface {
 	BranchExists(context.Context, string, string) (bool, error)
 	WorktreeAdd(context.Context, model.WorktreeAddOptions) error
 	Switch(context.Context, string, string, string, bool) error
+	CommitAll(context.Context, string, string) (string, error)
 }
 
 type Tmux interface {

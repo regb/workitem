@@ -216,3 +216,35 @@ func runGit(t *testing.T, dir string, args ...string) {
 		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
 	}
 }
+
+func TestCommitAllKeepsEveryChangeWithoutRunningHooks(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	repo := setupRepo(t)
+	client := git.New("git")
+	before, err := client.Head(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hook := filepath.Join(repo, ".git", "hooks", "pre-commit")
+	if err := os.MkdirAll(filepath.Dir(hook), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "untracked.txt"), []byte("new\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	commit, err := client.CommitAll(context.Background(), repo, "keep this")
+	if err != nil || commit == before || len(commit) != 40 {
+		t.Fatalf("commit %q (was %q): %v", commit, before, err)
+	}
+	if status, _ := client.StatusPorcelain(context.Background(), repo); status != "" {
+		t.Fatalf("checkout still dirty: %q", status)
+	}
+	if files := runGitOutput(t, repo, "show", "--name-only", "--format=%s", commit); !strings.Contains(files, "keep this") || !strings.Contains(files, "untracked.txt") {
+		t.Fatalf("commit content: %s", files)
+	}
+}

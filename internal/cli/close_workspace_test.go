@@ -56,7 +56,7 @@ func TestCoordinatorCloseReleasesWorkspaceBeforeClosing(t *testing.T) {
 						t.Fatal("did not select successor")
 					}
 				} else {
-					result, errClose = a.Close(ctx, opts, resolution, false)
+					result, errClose = a.Close(ctx, opts, app.CloseOptions{Resolution: resolution})
 				}
 				if errClose != nil {
 					t.Fatal(errClose)

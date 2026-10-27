@@ -317,6 +317,22 @@ func (c Client) EnsureNoOperationInProgress(ctx context.Context, dir, action str
 	return nil
 }
 
+// CommitAll commits every change in the worktree, untracked files included,
+// to its current branch and returns the new commit. It skips hooks and signing:
+// the commit preserves work as it is, without anyone there to answer a prompt.
+func (c Client) CommitAll(ctx context.Context, dir, message string) (string, error) {
+	if err := c.EnsureNoOperationInProgress(ctx, dir, "commit uncommitted changes"); err != nil {
+		return "", err
+	}
+	if _, err := c.output(ctx, dir, "add", "--all"); err != nil {
+		return "", err
+	}
+	if _, err := c.output(ctx, dir, "-c", "commit.gpgsign=false", "commit", "--no-verify", "--quiet", "-m", message); err != nil {
+		return "", err
+	}
+	return c.Head(ctx, dir)
+}
+
 func (c Client) Rebase(ctx context.Context, dir, target string) error {
 	_, err := c.output(ctx, dir, "rebase", "refs/heads/"+strings.TrimSpace(target))
 	return err

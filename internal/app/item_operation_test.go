@@ -43,7 +43,7 @@ func TestResourceAndLifecycleOperationsShareTheItemLock(t *testing.T) {
 		},
 		"stop": func(ctx context.Context) error { _, err := a.StopAgentRuntime(ctx, opts, false); return err },
 		"archive": func(ctx context.Context) error {
-			_, err := a.Close(ctx, opts, model.ResolutionCompleted, false)
+			_, err := a.Close(ctx, opts, CloseOptions{Resolution: model.ResolutionCompleted})
 			return err
 		},
 		"shelve": func(ctx context.Context) error { _, err := a.Shelve(ctx, opts, false); return err },

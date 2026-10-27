@@ -80,7 +80,7 @@ Most day-to-day transitions should use the safer composed commands:
 - `wi start` activates backlog work and ensures its workspace and agent.
 - `wi resume` ensures an active item's runtime without changing lifecycle or waiting.
 - `wi shelve` stops using the active resources when safe and returns work to backlog. The item keeps waiting.
-- `wi close` shuts down and releases clean resources before closing with a resolution.
+- `wi close` shuts down and releases clean resources before closing with a resolution. It refuses a checkout with uncommitted changes; `--commit-changes` commits them to the item's branch after the agent stops, so reopening the item finds them.
 - `wi delete` permanently removes an already closed, fully cleaned item.
 
 If the original objective is still unfinished, reopen the closed item by ID. Use a new item for a different objective:

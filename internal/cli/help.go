@@ -567,7 +567,7 @@ var helpDocs = map[string]helpDoc{
 	},
 	"close": {
 		Summary: "Close a work item with a resolution",
-		Usage:   []string{"wi close [--resolution completed|abandoned|superseded] [--item <selector>] [--force] [item]"},
+		Usage:   []string{"wi close [--resolution completed|abandoned|superseded] [--item <selector>] [--force] [--commit-changes] [item]"},
 		Description: []string{
 			"Gracefully stops an idle agent runtime, waits for it to exit, closes terminal access, releases the clean workspace claim, then closes the item, records its resolution, clears its blockers, and clears its active slug. Whether the work was completed is the resolution, independent of closing. Busy runtimes require --force, which aborts before shutdown. Items waiting on this one stop waiting on it; the daemon records this item's resolution in their history.",
 			"To reopen a closed item, run `wi state set backlog --item <item-id>`. Reopening retains its ID and history, assigns a fresh active slug, clears the resolution, and does not recreate workspace or agent resources.",
@@ -576,6 +576,7 @@ var helpDocs = map[string]helpDoc{
 			{"--resolution <name>", "completed (default), abandoned, or superseded."},
 			{"--item <selector>", "Select an item explicitly."},
 			{"--force", "Abort a busy runtime before shutdown and allow closing while retaining an unclosable current terminal."},
+			{"--commit-changes", "Instead of refusing a checkout with uncommitted changes, commit them to the item's branch after the agent stops. Reopening the item finds them there."},
 		},
 		Examples: []string{`wi close add-api-retries`, `wi close --resolution abandoned spike`, `wi state set backlog --item 01KZ39T`},
 	},

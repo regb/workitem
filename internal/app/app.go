@@ -37,6 +37,7 @@ type Git interface {
 	BranchExists(ctx context.Context, repoRoot, branch string) (bool, error)
 	WorktreeAdd(ctx context.Context, opts gitpkg.WorktreeAddOptions) error
 	Switch(ctx context.Context, dir, branch, startPoint string, create bool) error
+	CommitAll(ctx context.Context, dir, message string) (string, error)
 }
 
 type Tmux interface {

@@ -153,6 +153,7 @@ type fakeGit struct {
 	currentBranch string
 	branches      map[string]bool
 	worktrees     map[string]string
+	commits       []string
 }
 
 func newFakeGit(t *testing.T) *fakeGit {
@@ -201,6 +202,12 @@ func (f *fakeGit) WorktreeAdd(ctx context.Context, opts gitpkg.WorktreeAddOption
 	f.worktrees[opts.Path] = branch
 	return nil
 }
+func (f *fakeGit) CommitAll(ctx context.Context, dir, message string) (string, error) {
+	f.commits = append(f.commits, dir)
+	f.status = ""
+	return "c0ffee0123456789c0ffee0123456789c0ffee01", nil
+}
+
 func (f *fakeGit) Switch(ctx context.Context, dir, branch, startPoint string, create bool) error {
 	if create {
 		f.branches[branch] = true
@@ -762,7 +769,7 @@ func TestArchiveRestoreAndListOrdering(t *testing.T) {
 	if _, err := application.StartWorkItem(context.Background(), app.ResolveOptions{Selector: a.Manifest.ID}, false, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: d.Manifest.ID}, model.ResolutionCompleted, false); err != nil {
+	if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: d.Manifest.ID}, app.CloseOptions{Resolution: model.ResolutionCompleted}); err != nil {
 		t.Fatal(err)
 	}
 	list := application.WorkList(app.WorkListOptions{})
@@ -825,7 +832,7 @@ func TestArchivedItemsLoseSlugAndDoNotReserveIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	firstBranch := first.Manifest.Checkout.Specification.Branch
-	archived, err := application.Close(context.Background(), app.ResolveOptions{Selector: first.Manifest.Slug}, model.ResolutionCompleted, false)
+	archived, err := application.Close(context.Background(), app.ResolveOptions{Selector: first.Manifest.Slug}, app.CloseOptions{Resolution: model.ResolutionCompleted})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -867,7 +874,7 @@ func TestCheckoutCreateRejectsArchivedItem(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, model.ResolutionCompleted, false); err != nil {
+	if _, err := application.Close(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}, app.CloseOptions{Resolution: model.ResolutionCompleted}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := application.CheckoutCreate(context.Background(), app.ResolveOptions{Selector: newRes.Manifest.ID}); err == nil || !strings.Contains(err.Error(), "is closed") {
@@ -1596,7 +1603,7 @@ func TestArchiveStopsRuntimeBeforeArchiving(t *testing.T) {
 		request.Respond(nil)
 		proc.setAlive(4321, false)
 	}()
-	archived, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, model.ResolutionCompleted, false)
+	archived, err := application.Close(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID}, app.CloseOptions{Resolution: model.ResolutionCompleted})
 	if err != nil {
 		t.Fatal(err)
 	}
