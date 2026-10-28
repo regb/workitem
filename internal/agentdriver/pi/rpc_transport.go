@@ -658,8 +658,10 @@ func (t *nativeRPCTransport) sendCommand(command agent.ControlCommand) error {
 	// A successful write transfers ownership to Pi's native RPC transport.
 	// Publish compact actionability before replying to the control client; the
 	// later backend response remains separate confirmation evidence.
-	// A setting change starts no work; its response reports the outcome.
-	if command.Type == agent.CommandShutdown || command.Type == agent.CommandSet {
+	// Only work is published early. A setting change, shutdown or abort
+	// starts none; its response reports the outcome, and an early acceptance
+	// would read as new work, leaving an aborted idle agent busy.
+	if !isWork {
 		return nil
 	}
 	t.emitLiveConfirmed(agent.RuntimeEvent{Type: agent.EventCommandAccepted, RequestID: command.RequestID, Timestamp: time.Now().UTC()})

@@ -236,7 +236,7 @@ func startRuntimeTestEventRelay(t *testing.T, path string, client *coordinator.C
 	go func() {
 		for request := range server.Requests() {
 			event := request.Event
-			_, err := client.IngestRuntimeEvent(context.Background(), coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome})
+			_, err := client.IngestRuntimeEvent(context.Background(), coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState, Settings: event.Settings})
 			request.Respond(err)
 		}
 	}()
@@ -323,5 +323,56 @@ func TestLiveEventsKeepTheSettingReasonCode(t *testing.T) {
 	// The daemon needs the reason code to tell a setting change from work.
 	if queued := <-transport.liveQueue; queued.event.ReasonCode != agent.ReasonSettingApplied {
 		t.Fatalf("event=%+v", queued.event)
+	}
+}
+
+// An abort starts no work, so the transport publishes no early acceptance
+// for it: only Pi's response, marked as an accepted abort. An unmarked one
+// would leave an agent aborted while idle reported busy.
+func TestNativeRPCTransportAbortIsNotPublishedAsWork(t *testing.T) {
+	dir := testutil.ShortTempDir(t)
+	fakePi := filepath.Join(dir, "fake-pi")
+	script := `#!/usr/bin/env bash
+set -euo pipefail
+while IFS= read -r line; do
+  case "$line" in
+    *wi-runtime-ready*)
+      printf '%s\n' '{"id":"wi-runtime-ready","type":"response","command":"get_commands","success":true,"data":{"commands":[{"name":"wi-control-idle"}]}}'
+      ;;
+    *command-abort*)
+      printf '%s\n' '{"id":"command-abort","type":"response","command":"abort","success":true}'
+      ;;
+  esac
+done
+`
+	if err := os.WriteFile(fakePi, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	itemID, runtimeID := "01K00000000000000000000000", "rpc-abort"
+	_, daemonClient := startRuntimeTestDaemon(t, itemID, runtimeID)
+	controlPath := filepath.Join(dir, "control.sock")
+	eventPath := startRuntimeTestEventRelay(t, filepath.Join(dir, "events.sock"), daemonClient)
+	go func() {
+		_ = runNativeRPC(context.Background(), fakePi, []string{"--mode", "rpc"}, os.Environ(), ExecSpec{
+			CWD: dir, WorkItemID: itemID, RuntimeID: runtimeID,
+			ControlSocketPath: controlPath, EventSocketPath: eventPath, LogPath: filepath.Join(dir, "runtime.log"),
+		})
+	}()
+	waitForDaemonRuntimeEvent(t, daemonClient, itemID, agent.EventRuntimeReady)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := agent.SubmitControlSocket(ctx, controlPath, agent.ControlCommand{ProtocolVersion: agent.RuntimeProtocolVersion, ID: "command-abort", RuntimeID: runtimeID, WorkItemID: itemID, Type: agent.CommandAbort, CreatedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	waitForDaemonRuntimeEvent(t, daemonClient, itemID, agent.EventCommandAccepted)
+	time.Sleep(200 * time.Millisecond)
+	result, err := daemonClient.RuntimeEvents(context.Background(), coordinator.RuntimeEventsRequest{ItemID: itemID, Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, event := range result.Events {
+		if event.Type == agent.EventCommandAccepted && !strings.Contains(string(event.Payload), `"reason_code":"abort_accepted"`) {
+			t.Fatalf("abort published as work: %s", event.Payload)
+		}
 	}
 }
