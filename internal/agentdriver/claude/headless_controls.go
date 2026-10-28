@@ -215,7 +215,8 @@ func (s *headlessControls) result(f headlessFrame) (bool, bool) {
 	reason := ""
 	switch f.TerminalReason {
 	case "interrupted", "cancelled", "aborted_streaming", "aborted_tools":
-		failed, reason = true, "native_turn_interrupted"
+		// The operator stopped the turn: it ended, without failing.
+		failed = false
 	case "api_error", "model_error":
 		failed, reason = true, "native_api_failed"
 	case "", "completed", "tool_deferred", "background_requested", "hook_stopped", "stop_hook_prevented":

@@ -69,7 +69,7 @@ func TestLiveTranscriptPartialToolFailureAndReplacement(t *testing.T) {
 	_, _ = f.WriteString(`{"type":"user","uuid":"interrupted","message":{"content":"[Request interrupted by user]"}}` + "\n")
 	_ = f.Close()
 	facts, err := feed.refresh(path, server)
-	if err != nil || len(facts) != 1 || !facts[0].Failed || !facts[0].Terminal {
+	if err != nil || len(facts) != 1 || facts[0].Failed || !facts[0].Terminal {
 		t.Fatalf("%+v %v", facts, err)
 	}
 	if !strings.Contains(read().Activity, "interrupted") {
@@ -93,10 +93,11 @@ func TestFailureHookAndCompactInterruptionFacts(t *testing.T) {
 	if kind != protocol.EventAgentSettled || !failed {
 		t.Fatal(kind, failed)
 	}
-	for _, line := range []string{`{"type":"assistant","isApiErrorMessage":true,"message":{"content":"private API error"}}`, `{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}`} {
-		fact, valid := summarize(1, []byte(line))
-		if !valid || !fact.Terminal || !fact.Failed {
-			t.Fatalf("%+v", fact)
-		}
+	if fact, valid := summarize(1, []byte(`{"type":"assistant","isApiErrorMessage":true,"message":{"content":"private API error"}}`)); !valid || !fact.Terminal || !fact.Failed {
+		t.Fatalf("%+v", fact)
+	}
+	// An interrupt ends the turn without failing it.
+	if fact, valid := summarize(1, []byte(`{"type":"user","message":{"content":[{"type":"text","text":"[Request interrupted by user for tool use]"}]}}`)); !valid || !fact.Terminal || fact.Failed || fact.StopReason != "interrupted" {
+		t.Fatalf("%+v", fact)
 	}
 }

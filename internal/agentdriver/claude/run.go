@@ -244,12 +244,13 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 				turns.settled = true
 				turns.executing = false
 				controls.settled()
-				turnFailed = true
+				// An interrupt ends the turn without failing it.
+				turnFailed = fact.Failed
 				reason := settleReason(fact)
 				if reason == "prompt_blocked" {
 					stream.reset()
 				}
-				_ = emitFact(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: true, ReasonCode: reason, CommandID: turns.commandID, RequestID: turns.requestID})
+				_ = emitFact(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: fact.Failed, ReasonCode: reason, CommandID: turns.commandID, RequestID: turns.requestID})
 			}
 			controls.tick(ctx, time.Now())
 			readiness.tick(ctx, controls, time.Now(), emitFact)
@@ -372,7 +373,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 					}
 					facts, _ := feed.refresh(r.Conversation.Locator, stream)
 					for _, fact := range facts {
-						if fact.Timestamp.IsZero() || !fact.Timestamp.Before(turns.started.Truncate(time.Millisecond)) {
+						if fact.Failed && (fact.Timestamp.IsZero() || !fact.Timestamp.Before(turns.started.Truncate(time.Millisecond))) {
 							turnFailed = true
 							if reason := settleReason(fact); reason != "" {
 								turnReason = reason

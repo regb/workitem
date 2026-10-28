@@ -112,3 +112,24 @@ func TestNativeRPCIdleGuardRefusesBeforeWritingOrStopping(t *testing.T) {
 		}
 	}
 }
+
+// A reply the operator stopped keeps its partial text, marked aborted.
+func TestHistoryMarksAnAbortedReply(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "native.jsonl")
+	data := `{"type":"session","version":3,"id":"session"}
+{"type":"message","id":"root","parentId":null,"message":{"role":"user","content":"hello"}}
+{"type":"message","id":"stopped","parentId":"root","message":{"role":"assistant","stopReason":"aborted","content":[{"type":"text","text":"partial"}]}}
+{"type":"message","id":"again","parentId":"stopped","message":{"role":"user","content":"go on"}}
+{"type":"message","id":"done","parentId":"again","message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"complete"}]}}
+`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := ReadHistory(context.Background(), path, "")
+	if err != nil || len(result.Messages) != 4 {
+		t.Fatalf("%+v %v", result, err)
+	}
+	if stopped := result.Messages[1]; !stopped.Aborted || stopped.Text != "partial" || result.Messages[3].Aborted {
+		t.Fatalf("aborted marks: %+v", result.Messages)
+	}
+}

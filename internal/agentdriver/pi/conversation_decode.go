@@ -58,9 +58,11 @@ func SummarizeConversationFact(line uint64, raw []byte) (driverprotocol.Conversa
 		}
 	}
 	stop := strings.ToLower(strings.TrimSpace(fact.StopReason))
-	fact.Failed = stop == "error" || stop == "errored" || stop == "failed" || stop == "aborted" || stop == "abort" || stop == "cancelled" || stop == "canceled" || stop == "length"
+	fact.Failed = stop == "error" || stop == "errored" || stop == "failed" || stop == "length"
 	if fact.Role == "assistant" {
-		fact.Terminal = fact.Failed || !hasTool && hasText && (stop == "" || stop == "stop" || stop == "end_turn" || stop == "complete" || stop == "completed")
+		// An aborted reply ends the turn the operator stopped; it is not a
+		// failure, and the next message continues as usual.
+		fact.Terminal = fact.Failed || abortedStop(stop) || !hasTool && hasText && (stop == "" || stop == "stop" || stop == "end_turn" || stop == "complete" || stop == "completed")
 	}
 	return fact, true
 }
@@ -99,4 +101,9 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// abortedStop reports a stop reason for a reply stopped by an abort.
+func abortedStop(stop string) bool {
+	return stop == "aborted" || stop == "abort" || stop == "cancelled" || stop == "canceled"
 }

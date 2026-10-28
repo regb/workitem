@@ -147,8 +147,12 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 				}
 			}
 			fact, valid := summarize(1, line)
-			if valid && fact.Terminal && fact.Failed {
-				f.activity = "Turn failed or interrupted"
+			// A failure or an interrupt ends the turn without a Stop hook.
+			if valid && fact.Terminal && (fact.Failed || fact.StopReason == "interrupted") {
+				f.activity = "Turn failed"
+				if !fact.Failed {
+					f.activity = "Turn interrupted"
+				}
 				if !initial || !f.factAfter.IsZero() && !fact.Timestamp.IsZero() && !fact.Timestamp.Before(f.factAfter.Truncate(time.Millisecond)) {
 					facts = append(facts, fact)
 				}

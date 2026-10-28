@@ -186,6 +186,11 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		if record.CompactSummary {
 			message.Role = "summary"
 		}
+		// Claude records an interrupt as a user line; it marks where the
+		// operator stopped the reply, not something they wrote.
+		if record.Type == "user" && interruptedContent(record.Message.Content) {
+			message.Role, message.Text, message.Aborted = "assistant", "", true
+		}
 		if record.Type == "system" && record.Subtype == "compact_boundary" {
 			message.Role = "summary"
 			_ = json.Unmarshal(record.Summary, &message.Text)

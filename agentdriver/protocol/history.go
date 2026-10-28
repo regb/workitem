@@ -26,6 +26,9 @@ type HistoryMessage struct {
 	// Error marks a reply the agent's harness wrote in place of the model's,
 	// such as a usage limit notice; clients show it as a notice.
 	Error bool `json:"error,omitempty"`
+	// Aborted marks a reply the operator stopped before it finished; the
+	// turn ended there, and the agent takes the next message as usual.
+	Aborted bool `json:"aborted,omitempty"`
 	// Subagent marks a message reporting a subagent's result, with role
 	// "subagent"; Text is the result the subagent returned.
 	Subagent *HistorySubagent `json:"subagent,omitempty"`

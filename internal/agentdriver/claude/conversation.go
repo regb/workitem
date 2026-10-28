@@ -240,9 +240,10 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 			fact.ContentTypes = []string{"text"}
 		}
 	}
+	// An interrupt ends the turn the operator stopped; it is not a failure,
+	// and the next message continues as usual.
 	if record.Type == "user" && interruptedContent(record.Message.Content) {
 		fact.Terminal = true
-		fact.Failed = true
 		fact.StopReason = "interrupted"
 	} else {
 		fact.Terminal = fact.Role == "assistant" && (record.APIError || (record.Message.Stop != "" && record.Message.Stop != "tool_use"))

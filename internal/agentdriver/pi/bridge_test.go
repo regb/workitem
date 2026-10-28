@@ -49,7 +49,8 @@ const fire=async(name,event={})=>{assert.ok(hooks.has(name),name);await hooks.ge
 const expect=async(state,id)=>{for(let i=0;i<300;i++){const last=statuses.at(-1);if(last?.agent_state===state&&last.leaf_id===id)return;await new Promise(resolve=>setTimeout(resolve,5))}assert.fail('missing native observation '+state+' '+id)};
 setup();await fire('session_start',{reason:'startup'});await expect('idle','good');
 const initial=statuses.length;const initialScans=scans;tick();tick();assert.equal(scans,initialScans,'unchanged leaf was reprojected');
-leaf='aborted';messages=[{role:'assistant',stopReason:'aborted',content:'native-private-aborted'}];await fire('session_tree');await expect('failed','aborted');
+leaf='errored';messages=[{role:'assistant',stopReason:'error',content:'native-private-errored'}];await fire('session_tree');await expect('failed','errored');
+leaf='aborted';messages=[{role:'assistant',stopReason:'aborted',content:'native-private-aborted'}];await fire('session_tree');await expect('idle','aborted');
 leaf='good';messages=[{role:'assistant',stopReason:'stop',content:'native-private-good'}];await fire('session_tree');await expect('idle','good');
 leaf='user';messages.push({role:'user',content:'native-private-prompt'});await fire('session_tree');await expect('idle','user');
 leaf='length';messages=[{role:'assistant',stopReason:'length'}];await fire('session_tree');await expect('idle','length');

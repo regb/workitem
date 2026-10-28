@@ -6,7 +6,7 @@ func TestSummarizeConversationFactUsesPiStopReason(t *testing.T) {
 	tests := []struct {
 		name, reason     string
 		terminal, failed bool
-	}{{"stop", "stop", true, false}, {"error", "error", true, true}, {"aborted", "aborted", true, true}, {"length", "length", true, true}, {"tool use", "toolUse", false, false}}
+	}{{"stop", "stop", true, false}, {"error", "error", true, true}, {"aborted", "aborted", true, false}, {"length", "length", true, true}, {"tool use", "toolUse", false, false}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			raw := []byte(`{"type":"message","timestamp":"2026-08-10T22:04:43.463Z","message":{"role":"assistant","content":[{"type":"text","text":"answer"}],"stopReason":"` + tt.reason + `"}}`)

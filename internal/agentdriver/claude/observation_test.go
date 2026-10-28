@@ -25,7 +25,8 @@ func TestObserveIgnoresPartialWritesAndSummaries(t *testing.T) {
 	_, _ = f.WriteString("\n")
 	_ = f.Close()
 	observation, warnings = observe(path, time.Now())
-	if len(warnings) != 0 || observation.InferredTurnState != "failed" || observation.LastUserPrompt.Timestamp.Minute() != 0 {
+	// The interrupt ends the turn the operator stopped; it is not a failure.
+	if len(warnings) != 0 || observation.InferredTurnState != "idle" || observation.LastTurnActivity.StopReason != "interrupted" || observation.LastUserPrompt.Timestamp.Minute() != 0 {
 		t.Fatalf("%+v %v", observation, warnings)
 	}
 }

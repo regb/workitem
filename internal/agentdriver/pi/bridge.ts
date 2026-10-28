@@ -101,7 +101,8 @@ function nativeObserver(publish: (state: NativeObservation) => void, reserved: (
       for (let i = messages.length - 1; i >= 0; i--) {
         const message = messages[i];
         if (message.role === "assistant") {
-          if (message.stopReason === "error" || message.stopReason === "aborted") state = "failed";
+          // An aborted reply ends a turn the operator stopped; it is not a failure.
+          if (message.stopReason === "error") state = "failed";
           break;
         }
         if (message.role === "toolResult") { if (message.isError) state = "failed"; break; }
@@ -156,7 +157,7 @@ export default function wiBridge(pi: ExtensionAPI) {
     pi.on("session_start", (_event, ctx) => { observation.start(ctx); reportSettings(ctx); });
     pi.on("session_tree", (_event, ctx) => observation.refresh(ctx, true));
     let finalFailed = false;
-    pi.on("agent_before_settle", event => { finalFailed = event.outcome === "error" || event.outcome === "aborted"; });
+    pi.on("agent_before_settle", event => { finalFailed = event.outcome === "error"; });
     pi.on("agent_settled", (_event, ctx) => observation.refresh(ctx, true, finalFailed));
     pi.on("session_compact", (_event, ctx) => observation.refresh(ctx, true));
     pi.on("session_compact_failed", (_event, ctx) => observation.refresh(ctx, true));
@@ -667,7 +668,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   });
   pi.on("agent_before_settle", (event, ctx) => {
     context = ctx;
-    settledFailed = event.outcome === "error" || event.outcome === "aborted";
+    settledFailed = event.outcome === "error";
   });
   pi.on("agent_settled", (event, ctx) => {
     context = ctx;
@@ -706,7 +707,7 @@ export default function wiBridge(pi: ExtensionAPI) {
     const message = event.message;
     markSaved(message);
     linkPrompt(message);
-    if (message.role === "assistant") settledFailed = message.stopReason === "error" || message.stopReason === "aborted";
+    if (message.role === "assistant") settledFailed = message.stopReason === "error";
     emit("message.completed", {
       role: message.role,
       text: message.role === "assistant" ? textFromContent(message.content) : undefined,

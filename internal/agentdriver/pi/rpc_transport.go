@@ -403,7 +403,7 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 	if (output.Type == "message_end" || output.Type == "turn_end") && event.Role == "assistant" {
 		message, _ := event.Data["message"].(map[string]any)
 		reason, _ := message["stopReason"].(string)
-		t.lastAssistantFailed = reason == "error" || reason == "aborted"
+		t.lastAssistantFailed = reason == "error"
 		if timestamp, ok := message["timestamp"].(float64); ok && output.Type == "message_end" && event.Text != "" {
 			t.unsaved = append(t.unsaved, unsavedMessage{role: "assistant", text: event.Text, timestamp: int64(timestamp), since: time.Now()})
 		}

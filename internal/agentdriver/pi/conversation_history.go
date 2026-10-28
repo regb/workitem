@@ -145,6 +145,9 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 		if entry.Type == "message" {
 			message.Role, _ = entry.Message["role"].(string)
 			message.Text, message.Tools, message.Images = historyContent(entry.Message["content"])
+			if stop, _ := entry.Message["stopReason"].(string); message.Role == "assistant" && abortedStop(stop) {
+				message.Aborted = true
+			}
 			if message.Role == "toolResult" {
 				id, _ := entry.Message["toolCallId"].(string)
 				name, _ := entry.Message["toolName"].(string)

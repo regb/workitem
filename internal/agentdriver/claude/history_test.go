@@ -202,3 +202,19 @@ func TestHistoryParallelCallResultsOffTheBranch(t *testing.T) {
 		t.Fatalf("%v", outputs)
 	}
 }
+
+// Claude records an interrupt as a user line; history shows it as the mark
+// of a reply the operator stopped, not as their message.
+func TestHistoryShowsAnInterruptAsAnAbortedReply(t *testing.T) {
+	path := historyFixture(t,
+		`{"type":"user","uuid":"u","parentUuid":null,"message":{"content":"task"}}`,
+		`{"type":"assistant","uuid":"a","parentUuid":"u","message":{"content":[{"type":"text","text":"partial"}]}}`,
+		`{"type":"user","uuid":"stop","parentUuid":"a","message":{"content":[{"type":"text","text":"[Request interrupted by user]"}]}}`)
+	h, err := ReadHistoryPage(context.Background(), path, "stop", "")
+	if err != nil || len(h.Messages) != 3 {
+		t.Fatalf("%+v %v", h, err)
+	}
+	if mark := h.Messages[2]; mark.Role != "assistant" || !mark.Aborted || mark.Text != "" {
+		t.Fatalf("interrupt: %+v", mark)
+	}
+}
