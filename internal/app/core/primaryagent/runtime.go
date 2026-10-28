@@ -41,6 +41,10 @@ func (s *Service) Prepare(ctx context.Context, m model.Manifest, session model.C
 	return runtime, nil
 }
 
+// ErrBusy marks a stop refused because the agent is working and the caller
+// did not ask to abort its turn.
+var ErrBusy = errors.New("primary agent is busy")
+
 func (s *Service) Stop(ctx context.Context, opts contract.ResolveOptions, force bool) (StopResult, error) {
 	m, err := s.resolve(ctx, opts)
 	if err != nil {
@@ -61,7 +65,7 @@ func (s *Service) Stop(ctx context.Context, opts contract.ResolveOptions, force 
 			return result, err
 		}
 		if busy {
-			return result, fmt.Errorf("primary agent is busy; wait for it to settle or pass --force to abort before stopping")
+			return result, fmt.Errorf("%w; wait for it to settle or pass --force to abort before stopping", ErrBusy)
 		}
 	}
 	now := s.now()

@@ -10,6 +10,7 @@ import (
 
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app/contract"
+	agentcore "github.com/regb/workitem/internal/app/core/primaryagent"
 	itemlock "github.com/regb/workitem/internal/lock"
 	"github.com/regb/workitem/internal/model"
 )
@@ -328,7 +329,12 @@ func (a *App) AcquireControl(ctx context.Context, request ControlRequest) (Contr
 		}
 	}
 	if plan.Replace != "" {
-		if err := a.stopRuntimeForReplacement(ctx, m, status.RuntimeID, status.Busy); err != nil {
+		// A confirmed takeover accepts aborting a turn, even one the agent
+		// started after the plan was made.
+		if err := a.stopRuntimeForReplacement(ctx, m, status.RuntimeID, status.Busy || request.Confirm); err != nil {
+			if errors.Is(err, agentcore.ErrBusy) {
+				return result, fmt.Errorf("the agent started a turn while control was being taken; take control again to abort it")
+			}
 			return result, err
 		}
 		result.Warnings = append(result.Warnings, fmt.Sprintf("stopped the %s runtime so it can resume in %s mode", status.RuntimeMode, plan.Replace))
