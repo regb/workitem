@@ -140,11 +140,8 @@ func (validConfigBackend) ValidateConfig(context.Context, string, json.RawMessag
 // wi switch --take promises to abort a turn in flight.
 func TestConfirmedTakeoverAbortsWhenReplacingTheRuntime(t *testing.T) {
 	a, st, m := newCoreTestApp(t, time.Now(), model.StateActive, false)
-	a.Process = process.New()
-	info, err := a.Process.Info(os.Getpid())
-	if err != nil {
-		t.Fatal(err)
-	}
+	a.Process = undyingProcess{}
+	info, _ := a.Process.Info(4242)
 	a.AgentRuntimeSocketRoot = testutil.ShortTempDir(t)
 	a.ArchiveRuntimeStopTimeout = 50 * time.Millisecond
 	a.DefaultAgent = "pi"
@@ -174,7 +171,7 @@ func TestConfirmedTakeoverAbortsWhenReplacingTheRuntime(t *testing.T) {
 	if result.Plan.Replace != string(agent.ModeTUI) || result.Plan.Abort {
 		t.Fatalf("plan = %+v, want a replacement planned without an abort", result.Plan)
 	}
-	// This process is the runtime and never exits; the stop must get past
+	// The runtime never exits; the stop must get past
 	// the busy check and abort first.
 	if err == nil || !strings.Contains(err.Error(), "did not exit") {
 		t.Fatalf("takeover err = %v, want the replacement to wait for the runtime", err)
@@ -182,4 +179,16 @@ func TestConfirmedTakeoverAbortsWhenReplacingTheRuntime(t *testing.T) {
 	if first := <-seen; first != agent.CommandAbort {
 		t.Fatalf("first command = %q, want abort", first)
 	}
+}
+
+// undyingProcess hosts a runtime that never exits, even when terminated.
+type undyingProcess struct{}
+
+func (undyingProcess) Alive(int) bool { return true }
+func (undyingProcess) Info(pid int) (model.ProcessInfo, error) {
+	return model.ProcessInfo{PID: pid, PGRP: pid, StartTime: uint64(pid)}, nil
+}
+func (undyingProcess) TerminateGroup(int) error { return nil }
+func (undyingProcess) FindDescendant(int, []string) (process.Info, bool, error) {
+	return process.Info{}, false, nil
 }
