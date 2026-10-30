@@ -566,6 +566,24 @@ var helpDocs = map[string]helpDoc{
 		},
 		Examples: []string{`wi resume`, `wi resume --item auth`},
 	},
+	"reopen": {
+		Summary: "Reopen a closed work item",
+		Usage:   []string{"wi reopen [--backlog] [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] [--item <item-id>] [item-id]"},
+		Description: []string{
+			"Returns a closed item to work: it keeps its ID, branch, conversation and history, clears its resolution, gets a fresh active slug, and starts as wi start does, materializing the worktree and resuming the conversation. TUI mode attaches terminal access; JSON never attaches.",
+			"With --backlog the item only returns to the backlog, without workspace or agent resources; start it later with wi start <slug>. If starting fails, the item stays reopened in the backlog and the error names its slug.",
+			"Closed items have no active slug, so select one by ID or ID prefix; wi list --closed --ids lists them.",
+		},
+		Options: []helpOption{
+			{"--backlog", "Return the item to the backlog without starting it."},
+			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless mode."},
+			{"--model <model>", "Save the item's model before starting."},
+			{"--reasoning <level>", "Save the item's reasoning level before starting."},
+			{"--force", "Override the deep-work active limit."},
+			{"--item <item-id>", "Select the item explicitly."},
+		},
+		Examples: []string{`wi reopen 01M5VPF`, `wi reopen --agent-mode headless 01M5VPF`, `wi reopen --backlog 01M5VPF`},
+	},
 	"shelve": {
 		Summary:     "Return active work to backlog",
 		Usage:       []string{"wi shelve [--item <selector>] [--force] [item]"},
@@ -580,7 +598,7 @@ var helpDocs = map[string]helpDoc{
 		Usage:   []string{"wi close [--resolution completed|abandoned|superseded] [--item <selector>] [--force] [--commit-changes] [item]"},
 		Description: []string{
 			"Gracefully stops an idle agent runtime, waits for it to exit, closes terminal access, releases the clean workspace claim, then closes the item, records its resolution, clears its blockers, and clears its active slug. Whether the work was completed is the resolution, independent of closing. Busy runtimes require --force, which aborts before shutdown. Items waiting on this one stop waiting on it; the daemon records this item's resolution in their history.",
-			"To reopen a closed item, run `wi state set backlog --item <item-id>`. Reopening retains its ID and history, assigns a fresh active slug, clears the resolution, and does not recreate workspace or agent resources.",
+			"To go back to a closed item, run `wi reopen <item-id>`.",
 		},
 		Options: []helpOption{
 			{"--resolution <name>", "completed (default), abandoned, or superseded."},
@@ -588,7 +606,7 @@ var helpDocs = map[string]helpDoc{
 			{"--force", "Abort a busy runtime before shutdown and allow closing while retaining an unclosable current terminal."},
 			{"--commit-changes", "Instead of refusing a checkout with uncommitted changes, commit them to the item's branch after the agent stops. Reopening the item finds them there."},
 		},
-		Examples: []string{`wi close add-api-retries`, `wi close --resolution abandoned spike`, `wi state set backlog --item 01KZ39T`},
+		Examples: []string{`wi close add-api-retries`, `wi close --resolution abandoned spike`, `wi reopen 01KZ39T`},
 	},
 	"pick": {
 		Summary:     "Choose an item in the picker and print its ID",
@@ -733,7 +751,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  wi help [command [subcommand]]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Work:")
-	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"search", "Find items by text"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}})
+	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"search", "Find items by text"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}, {"reopen", "Reopen closed work"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
 	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})

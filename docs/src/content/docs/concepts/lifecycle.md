@@ -87,10 +87,10 @@ If the original objective is still unfinished, reopen the closed item by ID. Use
 
 ```bash
 wi list --closed --ids
-wi state set backlog --item <item-id>
+wi reopen <item-id>
 ```
 
-Reopening retains the item's ID and history, clears its resolution, and assigns a fresh active slug. It changes lifecycle only. Read its fresh slug with `wi show --item <item-id>`, then run `wi start <active-slug>` to recreate workspace and agent resources. `start` accepts active slugs, not `--item` or IDs.
+Reopening retains the item's ID, branch, conversation and history, clears its resolution, and assigns a fresh active slug. Reopening is for going back to the work, so `wi reopen` then starts the item as `wi start` does, recreating its workspace and agent and resuming the conversation; it takes the same `--agent-mode`, `--model`, `--reasoning` and `--force` options. `wi reopen --backlog` only returns the item to the backlog, as the lifecycle primitive `wi state set backlog --item <item-id>` does; start it later with `wi start <active-slug>`. If starting fails, the item stays reopened in the backlog.
 
 These commands can report partial outcomes. If a durable transition succeeds and a later resource operation fails, `wi` retains the durable result and tells you what remains.
 

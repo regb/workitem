@@ -301,6 +301,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = runShelve(ctx, args[1:], cfg, jsonOut)
 	case "close":
 		err = runClose(ctx, args[1:], cfg, jsonOut)
+	case "reopen":
+		err = runReopen(ctx, args[1:], cfg, jsonOut)
 	case "wait":
 		err = runWait(ctx, args[1:], cfg, jsonOut)
 	case "pick":

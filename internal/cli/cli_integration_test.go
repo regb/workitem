@@ -1285,3 +1285,58 @@ func TestEnabledPluginsProvideSubcommandsWithoutShadowingBuiltins(t *testing.T) 
 		t.Fatalf("plugin shadowed a built-in: code=%d stdout=%q", code, stdout.String())
 	}
 }
+
+func TestReopenStartsAClosedItemUnlessKeptInTheBacklog(t *testing.T) {
+	stdout, stderr, application := configuredApp(t)
+	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Reopen Me", CWD: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := cli.Config{Stdout: stdout, Stderr: stderr, CWD: t.TempDir(), Env: map[string]string{}, App: application}
+	run := func(args ...string) int {
+		stdout.Reset()
+		stderr.Reset()
+		return cli.Run(context.Background(), args, cfg)
+	}
+	if code := run("reopen", created.Manifest.ID); code != cli.ExitError || !strings.Contains(stderr.String(), "not closed") {
+		t.Fatalf("reopening a backlog item: code=%d stderr=%s", code, stderr.String())
+	}
+	var got struct {
+		Reopened app.StateTransitionResult `json:"reopened"`
+		Started  *app.StartResult          `json:"started"`
+	}
+	for _, backlog := range []bool{false, true} {
+		if code := run("--json", "state", "set", model.StateClosed, "--item", created.Manifest.ID); code != cli.ExitOK {
+			t.Fatalf("close code=%d stderr=%s", code, stderr.String())
+		}
+		args := []string{"--json", "reopen", created.Manifest.ID[:10]}
+		if backlog {
+			args = []string{"--json", "reopen", "--backlog", "--item", created.Manifest.ID}
+		}
+		if code := run(args...); code != cli.ExitOK {
+			t.Fatalf("%v code=%d stderr=%s", args, code, stderr.String())
+		}
+		got.Started = nil
+		if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		manifest, err := application.Store.LoadManifest(created.Manifest.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got.Reopened.State != model.StateBacklog || manifest.Slug == "" || manifest.Resolution != "" {
+			t.Fatalf("reopened = %+v, manifest %+v", got.Reopened, manifest)
+		}
+		if backlog && (got.Started != nil || manifest.State != model.StateBacklog) {
+			t.Fatalf("--backlog started the item: %+v", manifest)
+		}
+		if !backlog && (got.Started == nil || manifest.State != model.StateActive) {
+			t.Fatalf("reopen did not start the item: %+v", manifest)
+		}
+		if !backlog {
+			if code := run("--json", "state", "set", model.StateBacklog, "--item", created.Manifest.ID); code != cli.ExitOK {
+				t.Fatalf("return to backlog code=%d stderr=%s", code, stderr.String())
+			}
+		}
+	}
+}

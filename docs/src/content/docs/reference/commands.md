@@ -179,11 +179,12 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi plugin` | List configured plugins or run one once |
 | `wi shelve` | Clean up safely and return work to backlog |
 | `wi close` | Clean up safely and retain history with a resolution |
+| `wi reopen` | Return a closed item to work and start it; `--backlog` only returns it to the backlog |
 | `wi delete` | Permanently remove cleaned closed task records |
 | `wi shutdown` | Stop runtimes, terminals, and the daemon |
 | `wi merge [--local]` | Synchronize a configured upstream base, then integrate the item; `--local` skips remote preflight |
 
-`wi close` retains the record and its resolution. For unfinished work closed by mistake, see [restoration](../../concepts/lifecycle/#composed-workflow-commands). File a new objective as a new item.
+`wi close` retains the record and its resolution. For unfinished work closed by mistake, run `wi reopen <item-id>`; see [restoration](../../concepts/lifecycle/#composed-workflow-commands). File a new objective as a new item.
 
 ## Daemon and diagnostics
 

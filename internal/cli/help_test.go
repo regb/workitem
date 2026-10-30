@@ -30,14 +30,14 @@ func TestCloseHelpExplainsReopening(t *testing.T) {
 		t.Fatal("close help topic is missing")
 	}
 	text := out.String()
-	if !strings.Contains(text, "wi state set backlog --item <item-id>") || !strings.Contains(text, "does not recreate workspace or agent resources") {
+	if !strings.Contains(text, "wi reopen <item-id>") {
 		t.Fatalf("close help does not explain reopening:\n%s", text)
 	}
 }
 
 func TestAllPublicHelpTopicsAreDocumented(t *testing.T) {
 	topics := []string{
-		"config", "config show", "config get", "config agents", "config drivers", "config plugins", "version", "new", "list", "show", "events", "start", "switch", "next", "resume", "merge", "shelve", "close", "wait", "blocker", "blocker add", "blocker list", "blocker clear", "pick", "plugin", "delete", "shutdown", "edit", "note", "notes", "attach", "attachments", "attachment", "attachment cat",
+		"config", "config show", "config get", "config agents", "config drivers", "config plugins", "version", "new", "list", "show", "events", "start", "switch", "next", "resume", "merge", "shelve", "close", "wait", "blocker", "blocker add", "blocker list", "blocker clear", "pick", "plugin", "reopen", "delete", "shutdown", "edit", "note", "notes", "attach", "attachments", "attachment", "attachment cat",
 		"repo", "repo list", "repo rename", "repo archive", "repo restore", "repo settings", "repo settings show", "repo settings set", "repo settings unset",
 		"state", "state show", "state set",
 		"attention", "attention activity", "attention defer", "attention queue", "attention read", "attention unread",
