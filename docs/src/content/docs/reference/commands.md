@@ -77,7 +77,7 @@ Use a JSON parser rather than matching serialized whitespace. A working lifecycl
 | Command | Purpose |
 | --- | --- |
 | `wi new` | Create backlog work or create and delegate with `--start`; `--prompt` starts an agent with that message, without changing the description |
-| `wi show` | Read metadata and the durable description |
+| `wi show` | Read metadata and the durable description, with the repository, its upstream, and how many commits the branch is ahead of and behind it (as of the last fetch) |
 | `wi search` | Find items by title, labels, description, or notes, closed ones included |
 | `wi edit` | Edit title, description, labels, and deep work together; open an editor when no edit flags are supplied |
 | `wi events` | Read append-only item history |

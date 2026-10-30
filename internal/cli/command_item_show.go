@@ -41,7 +41,19 @@ func runShow(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 		fmt.Fprintf(cfg.Stdout, "Description: %s\n", res.Description)
 	}
 	fmt.Fprintf(cfg.Stdout, "Labels: %s\n", strings.Join(m.Labels, ", "))
-	fmt.Fprintf(cfg.Stdout, "Repository: %s\n", m.Repository.OperationalRoot())
+	if repo := res.Repository; repo != nil {
+		fmt.Fprintf(cfg.Stdout, "Repository: %s (%s)\n", repo.Name, m.Repository.OperationalRoot())
+		switch {
+		case repo.UpstreamError != "":
+			fmt.Fprintf(cfg.Stdout, "Upstream configuration problem: %s\n", repo.UpstreamError)
+		case repo.Upstream != nil:
+			fmt.Fprintf(cfg.Stdout, "Upstream: %s\n", repo.Upstream.String())
+		default:
+			fmt.Fprintf(cfg.Stdout, "Upstream: none (local-only, compared with %s)\n", repo.IntegrationBranch)
+		}
+	} else {
+		fmt.Fprintf(cfg.Stdout, "Repository: %s\n", m.Repository.OperationalRoot())
+	}
 	if m.Repository.CurrentRoot != "" {
 		fmt.Fprintf(cfg.Stdout, "Repository at creation: %s\n", m.Repository.RootAtCreation)
 	}
@@ -52,7 +64,11 @@ func runShow(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	fmt.Fprintf(cfg.Stdout, "Workspace kind: %s\n", m.Checkout.Specification.Kind)
 	fmt.Fprintf(cfg.Stdout, "Checkout: %s\n", m.Checkout.Presence())
 	if m.Checkout.Specification.Branch != "" {
-		fmt.Fprintf(cfg.Stdout, "Branch: %s\n", m.Checkout.Specification.Branch)
+		tracking := ""
+		if repo := res.Repository; repo != nil && repo.Ahead != nil {
+			tracking = fmt.Sprintf(" (%d ahead, %d behind %s)", *repo.Ahead, *repo.Behind, repo.Base)
+		}
+		fmt.Fprintf(cfg.Stdout, "Branch: %s%s\n", m.Checkout.Specification.Branch, tracking)
 	}
 	if m.Checkout.Claim != nil {
 		fmt.Fprintf(cfg.Stdout, "Checkout path: %s\n", m.Checkout.Claim.Path)
