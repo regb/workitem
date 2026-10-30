@@ -161,6 +161,10 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 				message.Text = ""
 				message.Images = nil
 			}
+			if message.Role == "bashExecution" {
+				message.Role = "user"
+				message.Tools = []driverprotocol.HistoryTool{operatorCommand(entry.Message)}
+			}
 		} else {
 			message.Role = "summary"
 			message.Text = entry.Summary
@@ -308,4 +312,19 @@ func boundedHistoryText(text string, truncated *bool) string {
 	}
 	*truncated = true
 	return text[:end] + "\n[content truncated]"
+}
+
+// operatorCommand is a shell command the operator ran from Pi's prompt
+// (`!ls`), shown as the bash call it is.
+func operatorCommand(native map[string]any) driverprotocol.HistoryTool {
+	command, _ := native["command"].(string)
+	output, _ := native["output"].(string)
+	exit, _ := native["exitCode"].(float64)
+	cancelled, _ := native["cancelled"].(bool)
+	input, _ := json.Marshal(map[string]string{"command": command})
+	status := "completed"
+	if exit != 0 || cancelled {
+		status = "failed"
+	}
+	return driverprotocol.HistoryTool{Name: "bash", Input: string(input), Output: output, Status: status}
 }

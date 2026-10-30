@@ -133,3 +133,25 @@ func TestHistoryMarksAnAbortedReply(t *testing.T) {
 		t.Fatalf("aborted marks: %+v", result.Messages)
 	}
 }
+
+func TestHistoryShowsAnOperatorCommand(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "native.jsonl")
+	data := `{"type":"session","version":3,"id":"session"}
+{"type":"message","id":"ran","parentId":null,"message":{"role":"bashExecution","command":"ls","output":"README.md\n","exitCode":0,"cancelled":false}}
+{"type":"message","id":"broke","parentId":"ran","message":{"role":"bashExecution","command":"false","output":"","exitCode":1,"cancelled":false}}
+`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := ReadHistory(context.Background(), path, "")
+	if err != nil || len(result.Messages) != 2 {
+		t.Fatalf("%+v %v", result, err)
+	}
+	ran := result.Messages[0]
+	if ran.Role != "user" || len(ran.Tools) != 1 || ran.Tools[0].Name != "bash" || ran.Tools[0].Input != `{"command":"ls"}` || ran.Tools[0].Output != "README.md\n" || ran.Tools[0].Status != "completed" {
+		t.Fatalf("command: %+v", ran)
+	}
+	if broke := result.Messages[1].Tools[0]; broke.Status != "failed" {
+		t.Fatalf("failed command: %+v", broke)
+	}
+}
