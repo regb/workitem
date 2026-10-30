@@ -109,10 +109,13 @@ func TestHistoryCompactionAndResultAcrossPageBoundary(t *testing.T) {
 	if tool.Name != "Bash" || tool.Input == "" || tool.Output != "x" || !h.HasMore {
 		t.Fatalf("tool=%+v page=%+v", tool, h)
 	}
-	compact := historyFixture(t, `{"type":"system","subtype":"compact_boundary","uuid":"boundary","content":"Compacted earlier work"}`, `{"type":"user","isMeta":true,"isCompactSummary":true,"uuid":"summary","parentUuid":"boundary","message":{"content":"summary text"}}`)
+	compact := historyFixture(t, `{"type":"system","subtype":"compact_boundary","uuid":"boundary","content":"Conversation compacted","compactMetadata":{"trigger":"auto","preTokens":288117}}`, `{"type":"user","isMeta":true,"isCompactSummary":true,"uuid":"summary","parentUuid":"boundary","message":{"content":"summary text"}}`)
 	h, err = ReadHistoryPage(context.Background(), compact, "", "")
 	if err != nil || len(h.Messages) != 2 || h.Messages[0].Role != "summary" || h.Messages[1].Role != "summary" || h.Messages[1].Text != "summary text" {
 		t.Fatalf("%+v %v", h, err)
+	}
+	if boundary := h.Messages[0]; boundary.Text != "" || *boundary.Summary != (protocol.HistorySummary{Kind: "compaction", TokensBefore: 288117}) || *h.Messages[1].Summary != (protocol.HistorySummary{Kind: "compaction"}) {
+		t.Fatalf("compaction %+v %+v", h.Messages[0], h.Messages[1].Summary)
 	}
 }
 

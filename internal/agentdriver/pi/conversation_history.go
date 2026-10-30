@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -20,6 +21,8 @@ type historyEntry struct {
 	Timestamp string         `json:"timestamp"`
 	Message   map[string]any `json:"message"`
 	Summary   string         `json:"summary"`
+	// TokensBefore is a compaction's context size before it ran.
+	TokensBefore int `json:"tokensBefore"`
 }
 type historyIndexEntry struct {
 	ID, Parent, Type, Role string
@@ -167,7 +170,11 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 			}
 		} else {
 			message.Role = "summary"
-			message.Text = entry.Summary
+			message.Text = summaryMarkdown(entry.Summary)
+			message.Summary = &driverprotocol.HistorySummary{Kind: "compaction", TokensBefore: entry.TokensBefore}
+			if entry.Type == "branch_summary" {
+				message.Summary = &driverprotocol.HistorySummary{Kind: "branch"}
+			}
 		}
 		message.Text = boundedHistoryText(message.Text, &result.Truncated)
 		size := len(message.Text)
@@ -312,6 +319,28 @@ func boundedHistoryText(text string, truncated *bool) string {
 	}
 	*truncated = true
 	return text[:end] + "\n[content truncated]"
+}
+
+// summaryFiles is a file list Pi appends to a summary, in tags that
+// Markdown would drop as HTML.
+var summaryFiles = regexp.MustCompile(`(?s)<(read|modified)-files>\n?(.*?)\n?</(?:read|modified)-files>`)
+
+// summaryMarkdown turns a summary's file lists into Markdown lists.
+func summaryMarkdown(summary string) string {
+	return summaryFiles.ReplaceAllStringFunc(summary, func(block string) string {
+		match := summaryFiles.FindStringSubmatch(block)
+		heading := "Read files"
+		if match[1] == "modified" {
+			heading = "Modified files"
+		}
+		var list strings.Builder
+		for _, file := range strings.Split(match[2], "\n") {
+			if file = strings.TrimSpace(file); file != "" {
+				fmt.Fprintf(&list, "- `%s`\n", strings.ReplaceAll(file, "`", "'"))
+			}
+		}
+		return "**" + heading + "**\n\n" + list.String()
+	})
 }
 
 // operatorCommand is a shell command the operator ran from Pi's prompt

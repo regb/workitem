@@ -24,12 +24,14 @@ type historyRecord struct {
 	Sidechain bool   `json:"isSidechain"`
 	Meta      bool   `json:"isMeta"`
 	// Effort is the reasoning effort of an assistant reply.
-	Effort         string          `json:"effort"`
-	CompactSummary bool            `json:"isCompactSummary"`
-	APIError       bool            `json:"isApiErrorMessage"`
-	Subtype        string          `json:"subtype"`
-	Summary        json.RawMessage `json:"content"`
-	Origin         struct {
+	Effort         string `json:"effort"`
+	CompactSummary bool   `json:"isCompactSummary"`
+	APIError       bool   `json:"isApiErrorMessage"`
+	Subtype        string `json:"subtype"`
+	CompactInfo    struct {
+		PreTokens int `json:"preTokens"`
+	} `json:"compactMetadata"`
+	Origin struct {
 		Kind string `json:"kind"`
 	} `json:"origin"`
 	Message struct {
@@ -185,6 +187,7 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		}
 		if record.CompactSummary {
 			message.Role = "summary"
+			message.Summary = &protocol.HistorySummary{Kind: "compaction"}
 		}
 		// Claude records an interrupt as a user line; it marks where the
 		// operator stopped the reply, not something they wrote.
@@ -192,11 +195,10 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 			message.Role, message.Text, message.Aborted = "assistant", "", true
 		}
 		if record.Type == "system" && record.Subtype == "compact_boundary" {
+			// The boundary marks the compaction; the summary is the
+			// message after it, and clients show the two as one.
 			message.Role = "summary"
-			_ = json.Unmarshal(record.Summary, &message.Text)
-			if message.Text == "" {
-				message.Text = "Conversation compacted"
-			}
+			message.Summary = &protocol.HistorySummary{Kind: "compaction", TokensBefore: record.CompactInfo.PreTokens}
 		}
 		// Preserve pagination boundaries by deferring a whole message when the
 		// previous messages used this page's budget. Always keep the newest entry.

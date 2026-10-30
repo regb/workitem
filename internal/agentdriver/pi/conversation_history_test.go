@@ -155,3 +155,26 @@ func TestHistoryShowsAnOperatorCommand(t *testing.T) {
 		t.Fatalf("failed command: %+v", broke)
 	}
 }
+
+func TestHistoryTellsACompactionFromABranchSummary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "native.jsonl")
+	data := `{"type":"session","version":3,"id":"session"}
+{"type":"message","id":"root","parentId":null,"message":{"role":"user","content":"hello"}}
+{"type":"compaction","id":"compacted","parentId":"root","summary":"## Goal\nearlier work\n\n<read-files>\nREADME.md\nmain.go\n</read-files>\n\n<modified-files>\nmain.go\n</modified-files>","firstKeptEntryId":"root","tokensBefore":261479}
+{"type":"branch_summary","id":"left","parentId":"compacted","summary":"the abandoned approach","fromId":"root"}
+`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := ReadHistory(context.Background(), path, "")
+	if err != nil || len(result.Messages) != 3 {
+		t.Fatalf("%+v %v", result, err)
+	}
+	compaction, branch := result.Messages[1], result.Messages[2]
+	if compaction.Role != "summary" || compaction.Text != "## Goal\nearlier work\n\n**Read files**\n\n- `README.md`\n- `main.go`\n\n\n**Modified files**\n\n- `main.go`\n" || *compaction.Summary != (driverprotocol.HistorySummary{Kind: "compaction", TokensBefore: 261479}) {
+		t.Fatalf("compaction: %+v", compaction)
+	}
+	if branch.Role != "summary" || *branch.Summary != (driverprotocol.HistorySummary{Kind: "branch"}) {
+		t.Fatalf("branch summary: %+v", branch)
+	}
+}

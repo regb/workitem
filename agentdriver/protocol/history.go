@@ -32,6 +32,17 @@ type HistoryMessage struct {
 	// Subagent marks a message reporting a subagent's result, with role
 	// "subagent"; Text is the result the subagent returned.
 	Subagent *HistorySubagent `json:"subagent,omitempty"`
+	// Summary describes a message with role "summary": what it summarizes
+	// and, for a compaction, how large the context was before it.
+	Summary *HistorySummary `json:"summary,omitempty"`
+}
+
+// HistorySummary is what kind of summary a "summary" message is: a
+// "compaction", which replaced the conversation before it in the agent's
+// context, or a "branch" summary of a branch the conversation left.
+type HistorySummary struct {
+	Kind         string `json:"kind"`
+	TokensBefore int    `json:"tokens_before,omitempty"`
 }
 
 // HistoryTool joins a native tool call and its eventual result so clients can
