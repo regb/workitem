@@ -48,6 +48,8 @@ wi repo files add biskoui certs/dev.pem --from ~/certs/biskoui.pem
 wi repo files list
 ```
 
+Adding or removing a file updates the repository's checkouts at once where it can: `wi repo files remove` deletes unedited copies from checkouts that no item claims, while a claimed checkout keeps its copy until its next claim, still ignored by Git. A copy edited since it was placed is never deleted; Wi reports it instead.
+
 Every new checkout claim is set up before an agent starts in it:
 
 1. The repository files are copied to their paths, replacing what a reused slot held there. A file the branch tracks at the same path wins: the copy is skipped with a warning. Copies of files since removed are deleted unless they were edited. Wi lists the files in the owned store's `info/exclude`, which every worktree reads, so Git ignores them without any `.gitignore` change.

@@ -61,9 +61,12 @@ scripts/install-local
 
 Register a repository, then create and start work from a task description:
 
+No setup command or configuration file is needed: the first `wi` command adds an
+agent profile for each coding agent it finds installed (Pi, Claude Code), Pi's
+as the default. See them with `wi agent profile list`.
+
 ```bash
-wi init
-wi repo add project --from /path/to/git/repository --branch main
+wi repo add project --from /path/to/git/repository
 # Upstream is inferred from the checkout’s origin, if available.
 # Use --local during onboarding for local-only integration.
 wi repo status project --fetch

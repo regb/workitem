@@ -91,6 +91,9 @@ func runRepositoryFiles(ctx context.Context, args []string, cfg Config, jsonOut 
 		if err != nil {
 			return err
 		}
+		if err := syncRepositoryFiles(ctx, cfg, selector); err != nil {
+			return err
+		}
 		if jsonOut {
 			return writeJSON(cfg.Stdout, file)
 		}
@@ -107,10 +110,13 @@ func runRepositoryFiles(ctx context.Context, args []string, cfg Config, jsonOut 
 		if err := cfg.Coordinator.RemoveRepositoryFile(ctx, selector, path); err != nil {
 			return err
 		}
+		if err := syncRepositoryFiles(ctx, cfg, selector); err != nil {
+			return err
+		}
 		if jsonOut {
 			return writeJSON(cfg.Stdout, map[string]string{"removed": path})
 		}
-		fmt.Fprintf(cfg.Stdout, "removed %s; checkouts drop their unedited copy on their next claim\n", path)
+		fmt.Fprintf(cfg.Stdout, "removed %s; checkouts not in use lost their unedited copy, the others lose it at their next claim\n", path)
 		return nil
 	}
 }
@@ -136,4 +142,21 @@ func readFileSource(cfg Config, from, path string) ([]byte, error) {
 		return nil, fmt.Errorf("%s is %d bytes; the limit is %d", from, info.Size(), repofiles.MaxBytes)
 	}
 	return os.ReadFile(from)
+}
+
+// syncRepositoryFiles updates the repository's checkouts and info/exclude
+// after a change, reporting copies it left because they were edited.
+func syncRepositoryFiles(ctx context.Context, cfg Config, selector string) error {
+	listed, err := cfg.Coordinator.RepositoryFiles(ctx, selector)
+	if err != nil {
+		return err
+	}
+	warnings, err := cfg.App.SyncRepositoryFiles(ctx, listed.RepositoryID)
+	for _, warning := range warnings {
+		fmt.Fprintf(cfg.Stderr, "warning: %s\n", warning)
+	}
+	if err != nil {
+		return fmt.Errorf("the repository files changed, but updating its checkouts failed: %w", err)
+	}
+	return nil
 }
