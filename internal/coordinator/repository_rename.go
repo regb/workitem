@@ -93,23 +93,9 @@ func (d *Database) RenameRepository(command RenameRepositoryCommand) (RenameRepo
 			if err != nil {
 				return err
 			}
-			sequence := decodeUint64(tx.Bucket(bucketMeta).Get(keyGlobalSequence)) + 1
 			payload, _ := json.Marshal(map[string]any{"repository_id": repo.ID, "previous_name": command.PreviousName, "name": repo.Name})
-			event := DomainEvent{Sequence: sequence, ID: domainEventID(command.ID, 0), Type: "repository.renamed", Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload}
-			if tx.Bucket(bucketEventIDs).Get([]byte(event.ID)) != nil {
-				return fmt.Errorf("event identity %s already exists", event.ID)
-			}
-			encoded, err := json.Marshal(event)
+			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: "repository.renamed", Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload})
 			if err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketEvents).Put(encodeUint64(sequence), encoded); err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketEventIDs).Put([]byte(event.ID), encodeUint64(sequence)); err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketMeta).Put(keyGlobalSequence, encodeUint64(sequence)); err != nil {
 				return err
 			}
 			value, err := json.Marshal(repo)

@@ -78,17 +78,12 @@ func (a *App) materializeTransitionAgent(ctx context.Context, opts ResolveOption
 	}
 	runtimeOpts := opts
 	runtimeOpts.Selector = transition.Manifest.ID
-	// Setup runs before the agent, without holding the item lock; the item
-	// stays active and claimed when it fails.
-	setup, err := a.SetupWorkspace(ctx, runtimeOpts, false)
+	// The runtime's checkout is set up first; the item stays active and
+	// claimed when setup fails.
+	runtime, err := a.EnsureAgentRuntime(ctx, runtimeOpts, mode)
 	if err != nil {
 		return StartResult{Transition: transition}, err
 	}
-	runtime, err := a.EnsureAgentRuntime(ctx, runtimeOpts, mode)
-	if err != nil {
-		return StartResult{}, err
-	}
-	runtime.Warnings = append(setup.Warnings, runtime.Warnings...)
 	manifest, err := a.Store.LoadManifest(transition.Manifest.ID)
 	if err != nil {
 		return StartResult{}, err

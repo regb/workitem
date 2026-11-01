@@ -17,6 +17,7 @@ import (
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
 	"github.com/regb/workitem/internal/runtimepath"
+	"github.com/regb/workitem/internal/store"
 	tmuxpkg "github.com/regb/workitem/internal/tmux"
 	"github.com/regb/workitem/internal/xdg"
 )
@@ -81,6 +82,9 @@ type ExternalObserver struct {
 	git               gitpkg.Client
 	tmux              tmuxpkg.Client
 	runtimeSocketRoot string
+	// setupRuns are the records of checkout setups, which can make a
+	// checkout a problem.
+	setupRuns store.SetupRuns
 }
 
 func NewExternalObserver(database *Database, dataRoot string) *ExternalObserver {
@@ -89,6 +93,7 @@ func NewExternalObserver(database *Database, dataRoot string) *ExternalObserver 
 	key, keyErr := dataroot.Key(dataRoot)
 	if err == nil && keyErr == nil {
 		observer.runtimeSocketRoot = filepath.Join(paths.RuntimeDir, "wi", key)
+		observer.setupRuns = store.SetupRuns{Dir: filepath.Join(paths.StateRoot, key, "setup")}
 	}
 	return observer
 }
@@ -567,6 +572,12 @@ func (o *ExternalObserver) observeWorktree(ctx context.Context, manifest model.M
 	}
 	result.Head = head
 	result.CurrentBranch = branch
+	// A checkout whose setup failed waits for the operator: no agent starts.
+	if run, err := o.setupRuns.Read(manifest.ID); err == nil && run.ClaimID == manifest.Checkout.Claim.ID && run.Status == store.SetupFailed {
+		result.Status = "problem"
+		result.Reason = "workspace setup failed: " + run.Error
+		return result
+	}
 	result.BranchMatches = expected != "" && branch == expected
 	result.BranchMismatch = expected != "" && branch != expected
 	result.Dirty = strings.TrimSpace(status) != ""

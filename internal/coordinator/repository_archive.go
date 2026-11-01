@@ -76,27 +76,13 @@ func (d *Database) SetRepositoryArchived(command SetRepositoryArchivedCommand) (
 		result = SetRepositoryArchivedResult{Repository: repo, Changed: repo.Archived != command.Archived}
 		if result.Changed {
 			repo.Archived = command.Archived
-			sequence := decodeUint64(tx.Bucket(bucketMeta).Get(keyGlobalSequence)) + 1
 			payload, _ := json.Marshal(map[string]any{"repository_id": repo.ID, "name": repo.Name})
 			eventType := "repository.restored"
 			if repo.Archived {
 				eventType = "repository.archived"
 			}
-			event := DomainEvent{Sequence: sequence, ID: domainEventID(command.ID, 0), Type: eventType, Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload}
-			if tx.Bucket(bucketEventIDs).Get([]byte(event.ID)) != nil {
-				return fmt.Errorf("event identity %s already exists", event.ID)
-			}
-			encoded, err := json.Marshal(event)
+			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: eventType, Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload})
 			if err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketEvents).Put(encodeUint64(sequence), encoded); err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketEventIDs).Put([]byte(event.ID), encodeUint64(sequence)); err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketMeta).Put(keyGlobalSequence, encodeUint64(sequence)); err != nil {
 				return err
 			}
 			value, err := json.Marshal(repo)

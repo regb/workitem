@@ -2,11 +2,9 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,34 +17,18 @@ import (
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/plugin"
 	"github.com/regb/workitem/internal/repofiles"
+	"github.com/regb/workitem/internal/store"
 )
 
-// Setup statuses. A run still "running" when its lock is free was
-// interrupted.
+// The setup record lives in the store, where the daemon reads it too.
 const (
-	SetupRunning   = "running"
-	SetupSucceeded = "succeeded"
-	SetupFailed    = "failed"
-	SetupSkipped   = "skipped"
+	SetupRunning   = store.SetupRunning
+	SetupSucceeded = store.SetupSucceeded
+	SetupFailed    = store.SetupFailed
+	SetupSkipped   = store.SetupSkipped
 )
 
-// SetupRun records the setup of one checkout claim: an execution fact kept
-// under XDG state, never item lifecycle. Its output is only in Log.
-type SetupRun struct {
-	ClaimID    string     `json:"claim_id"`
-	Generation uint64     `json:"generation"`
-	Status     string     `json:"status"`
-	StartedAt  time.Time  `json:"started_at"`
-	FinishedAt *time.Time `json:"finished_at,omitempty"`
-	Error      string     `json:"error,omitempty"`
-	Warnings   []string   `json:"warnings,omitempty"`
-	Log        string     `json:"log,omitempty"`
-}
-
-// Ready reports whether an agent may start on this run's claim.
-func (r SetupRun) Ready(claimID string) bool {
-	return r.ClaimID == claimID && (r.Status == SetupSucceeded || r.Status == SetupSkipped)
-}
+type SetupRun = store.SetupRun
 
 type SetupResult struct {
 	WorkItemID string   `json:"work_item_id"`
@@ -287,55 +269,26 @@ func (a *App) setupStatus(m model.Manifest) SetupStatus {
 	}
 	status.Run = &run
 	status.Current = m.Checkout.Claim != nil && m.Checkout.Claim.ID == run.ClaimID
-	if run.Status == SetupRunning {
-		// A run is only running while its lock is held.
-		if lock, err := itemlock.TryAcquire(a.setupPath(m.ID, ".lock")); err == nil {
-			_ = lock.Release()
-			status.Run.Status, status.Run.Error = SetupFailed, "setup was interrupted"
-		}
-	}
 	if run.Log != "" {
 		status.LogTail = tailFile(run.Log, 4<<10)
 	}
 	return status
 }
 
-func (a *App) setupDir() string {
+func (a *App) setupRuns() store.SetupRuns {
 	if a.AgentRuntimeStateRoot == "" {
-		return ""
+		return store.SetupRuns{}
 	}
-	return filepath.Join(a.AgentRuntimeStateRoot, "setup")
+	return store.SetupRuns{Dir: filepath.Join(a.AgentRuntimeStateRoot, "setup")}
 }
 
-func (a *App) setupPath(id, suffix string) string {
-	return filepath.Join(a.setupDir(), id+suffix)
-}
+func (a *App) setupDir() string { return a.setupRuns().Dir }
 
-func (a *App) readSetupRun(id string) (SetupRun, error) {
-	var run SetupRun
-	if a.setupDir() == "" {
-		return run, nil
-	}
-	content, err := os.ReadFile(a.setupPath(id, ".json"))
-	if errors.Is(err, fs.ErrNotExist) {
-		return run, nil
-	}
-	if err != nil {
-		return run, err
-	}
-	return run, json.Unmarshal(content, &run)
-}
+func (a *App) setupPath(id, suffix string) string { return a.setupRuns().Path(id, suffix) }
 
-func (a *App) writeSetupRun(id string, run SetupRun) error {
-	if err := os.MkdirAll(a.setupDir(), 0o700); err != nil {
-		return err
-	}
-	encoded, err := json.Marshal(run)
-	if err != nil {
-		return err
-	}
-	return repofiles.WriteFile(a.setupPath(id, ".json"), encoded)
-}
+func (a *App) readSetupRun(id string) (SetupRun, error) { return a.setupRuns().Read(id) }
+
+func (a *App) writeSetupRun(id string, run SetupRun) error { return a.setupRuns().Write(id, run) }
 
 // tailFile returns about the last limit bytes of a file, from a line start.
 func tailFile(path string, limit int64) string {
@@ -376,4 +329,24 @@ func worktreeGitDir(checkout string) (string, error) {
 		dir = filepath.Join(checkout, dir)
 	}
 	return dir, nil
+}
+
+// WaitWorkspaceSetup waits for a setup of the item that is running, as one
+// a request detached from, to end, and reports whether its current checkout
+// is now set up. A failed setup is not retried here.
+func (a *App) WaitWorkspaceSetup(ctx context.Context, opts ResolveOptions) (bool, error) {
+	m, err := a.ResolveItem(ctx, opts)
+	if err != nil || a.setupDir() == "" {
+		return false, err
+	}
+	lock, err := itemlock.Acquire(ctx, a.setupPath(m.ID, ".lock"))
+	if err != nil {
+		return false, err
+	}
+	_ = lock.Release()
+	if m, err = a.Store.LoadManifest(m.ID); err != nil {
+		return false, err
+	}
+	run, err := a.readSetupRun(m.ID)
+	return err == nil && m.Checkout.Claim != nil && run.Ready(m.Checkout.Claim.ID), err
 }

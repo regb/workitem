@@ -42,7 +42,7 @@ func run(ctx context.Context, request plugin.SetupRequest, settings map[string]a
 	command, _ := settings["run"].(string)
 	command = strings.TrimSpace(command)
 	if command == "" {
-		declared, err := declaredCommand(ctx, request)
+		declared, err := DeclaredCommand(ctx, request.RepositoryRoot, request.DefaultBranch)
 		if err != nil {
 			return nil, err
 		}
@@ -77,20 +77,20 @@ func run(ctx context.Context, request plugin.SetupRequest, settings map[string]a
 	return nil, nil
 }
 
-// declaredCommand reads the setup command the repository declares on its
+// DeclaredCommand reads the setup command a repository declares on its
 // default branch, so a branch cannot change what runs.
-func declaredCommand(ctx context.Context, request plugin.SetupRequest) (string, error) {
-	if request.RepositoryRoot == "" || request.DefaultBranch == "" {
+func DeclaredCommand(ctx context.Context, root, branch string) (string, error) {
+	if root == "" || branch == "" {
 		return "", nil
 	}
-	content, err := gitpkg.New("git").ReadBlob(ctx, request.RepositoryRoot, "refs/heads/"+request.DefaultBranch, config.ProjectConfigRelativePath)
+	content, err := gitpkg.New("git").ReadBlob(ctx, root, "refs/heads/"+branch, config.ProjectConfigRelativePath)
 	if err != nil {
 		// No project configuration on the default branch declares nothing.
 		return "", nil
 	}
 	project, _, err := config.ReadProject(strings.NewReader(content))
 	if err != nil {
-		return "", fmt.Errorf("read %s on %s: %w", config.ProjectConfigRelativePath, request.DefaultBranch, err)
+		return "", fmt.Errorf("read %s on %s: %w", config.ProjectConfigRelativePath, branch, err)
 	}
 	return strings.TrimSpace(project.Workspace.Setup.Run), nil
 }

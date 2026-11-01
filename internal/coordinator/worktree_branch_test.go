@@ -125,3 +125,32 @@ func TestWorktreeInspectionAppliesOnlyToTheSameCheckout(t *testing.T) {
 		t.Fatalf("stale inspection applied: %+v", got)
 	}
 }
+
+func TestAFailedSetupMakesTheCheckoutAProblem(t *testing.T) {
+	path := t.TempDir()
+	if out, err := exec.Command("git", "-C", path, "init", "-q", "-b", "main").CombinedOutput(); err != nil {
+		t.Fatalf("%s %v", out, err)
+	}
+	if out, err := exec.Command("git", "-C", path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c").CombinedOutput(); err != nil {
+		t.Fatalf("%s %v", out, err)
+	}
+	observer := NewExternalObserver(nil, t.TempDir())
+	observer.setupRuns = store.SetupRuns{Dir: t.TempDir()}
+	m := model.Manifest{ID: "item", Checkout: model.Checkout{Specification: model.CheckoutSpecification{Kind: model.WorkspaceKindManagedSlot, Branch: "main"}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}
+	if got := observer.observeWorktree(context.Background(), m); got.Status == "problem" {
+		t.Fatalf("no setup = %+v", got)
+	}
+	if err := observer.setupRuns.Write("item", store.SetupRun{ClaimID: "claim", Status: store.SetupFailed, Error: "command failed: exit status 1"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := observer.observeWorktree(context.Background(), m); got.Status != "problem" || !strings.Contains(got.Reason, "exit status 1") {
+		t.Fatalf("failed setup = %+v", got)
+	}
+	// Only the current claim's setup counts.
+	if err := observer.setupRuns.Write("item", store.SetupRun{ClaimID: "earlier", Status: store.SetupFailed}); err != nil {
+		t.Fatal(err)
+	}
+	if got := observer.observeWorktree(context.Background(), m); got.Status == "problem" {
+		t.Fatalf("earlier claim = %+v", got)
+	}
+}

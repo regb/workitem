@@ -45,6 +45,22 @@ func (a *App) ensureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	if !mode.Valid() {
 		return EnsureAgentRuntimeResult{}, fmt.Errorf("invalid agent runtime mode %q", mode)
 	}
+	// Set the checkout up first, without the item lock: setup can take
+	// minutes, and the item stays usable meanwhile.
+	setupWarnings := []string{}
+	if current, err := a.ResolveItem(ctx, opts); err == nil && current.State == model.StateActive {
+		// An agent that cannot start must not claim a checkout first.
+		if existing, err := a.Store.LoadAgentRuntime(current.ID); err == nil && !a.primaryAgentService().ObserveOwnership(existing).ProcessAlive {
+			if err := a.validateItemAgent(ctx, current); err != nil {
+				return EnsureAgentRuntimeResult{}, err
+			}
+		}
+		setup, err := a.SetupWorkspace(ctx, opts, false)
+		if err != nil {
+			return EnsureAgentRuntimeResult{}, err
+		}
+		setupWarnings = setup.Warnings
+	}
 	m, operation, err := a.lockItemOperation(ctx, opts)
 	if err != nil {
 		return EnsureAgentRuntimeResult{}, err
@@ -69,6 +85,7 @@ func (a *App) ensureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 	if err != nil {
 		return EnsureAgentRuntimeResult{}, err
 	}
+	warnings = append(setupWarnings, warnings...)
 	if ownership := a.primaryAgentService().ObserveOwnership(existing); ownership.ProcessAlive {
 		if ownership.Mode != string(mode) {
 			return EnsureAgentRuntimeResult{}, fmt.Errorf("agent runtime %s is active in %s mode; stop it before starting %s mode", existing.ID, existing.Mode, mode)
@@ -91,9 +108,10 @@ func (a *App) ensureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 		}
 		return result, nil
 	}
-	// An agent starts only once its claim is set up.
-	setupWarnings, err := a.ensureWorkspaceSetup(ctx, m)
-	warnings = append(warnings, setupWarnings...)
+	// An agent starts only once its claim is set up; this only runs setup
+	// when the claim changed since the step above.
+	lateWarnings, err := a.ensureWorkspaceSetup(ctx, m)
+	warnings = append(warnings, lateWarnings...)
 	if err != nil {
 		return EnsureAgentRuntimeResult{}, err
 	}
