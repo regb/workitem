@@ -221,3 +221,23 @@ func TestHistoryShowsAnInterruptAsAnAbortedReply(t *testing.T) {
 		t.Fatalf("interrupt: %+v", mark)
 	}
 }
+
+func TestHistoryKeepsThatClaudeReasonedAndForHowLong(t *testing.T) {
+	path := historyFixture(t,
+		`{"type":"user","uuid":"ask","timestamp":"2026-10-14T15:11:30.000Z","message":{"content":"why?"}}`,
+		`{"type":"assistant","uuid":"intro","parentUuid":"ask","timestamp":"2026-10-14T15:11:30.500Z","message":{"id":"m","content":[{"type":"text","text":"Let me see."}]}}`,
+		`{"type":"assistant","uuid":"think","parentUuid":"intro","timestamp":"2026-10-14T15:11:31.776Z","message":{"id":"m","content":[{"type":"thinking","thinking":"","signature":"sig"}]}}`,
+		`{"type":"assistant","uuid":"answer","parentUuid":"think","timestamp":"2026-10-14T15:11:33.195Z","message":{"id":"m","content":[{"type":"text","text":"because"}]}}`)
+	h, err := ReadHistoryPage(context.Background(), path, "", "")
+	if err != nil || len(h.Messages) != 4 {
+		t.Fatalf("%+v %v", h, err)
+	}
+	// Measured from the question, not the earlier block of the same reply.
+	thought := h.Messages[2]
+	if thought.Text != "" || thought.Reasoning == nil || thought.Reasoning.Text != "" || thought.Reasoning.DurationMS != 1776 {
+		t.Fatalf("reasoning %+v %+v", thought, thought.Reasoning)
+	}
+	if h.Messages[3].Reasoning != nil || h.Messages[3].Text != "because" {
+		t.Fatalf("answer %+v", h.Messages[3])
+	}
+}

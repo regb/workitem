@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
@@ -35,15 +36,16 @@ type historyRecord struct {
 		Kind string `json:"kind"`
 	} `json:"origin"`
 	Message struct {
+		ID      string          `json:"id"`
 		Content json.RawMessage `json:"content"`
 		Model   string          `json:"model"`
 	} `json:"message"`
 }
 type historyOffset struct {
-	parent, typ string
-	offset      int64
-	length      int
-	visible     bool
+	parent, typ, timestamp, reply string
+	offset                        int64
+	length                        int
+	visible                       bool
 }
 
 // ReadHistoryPage indexes the native parent graph without retaining message
@@ -119,7 +121,7 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		if r.ID == "" || r.Sidechain != sidechain {
 			continue
 		}
-		index[r.ID] = historyOffset{parent: r.Parent, typ: r.Type, offset: start, length: len(line), visible: (!r.Meta && (r.Type == "user" || r.Type == "assistant")) || r.CompactSummary || (r.Type == "system" && r.Subtype == "compact_boundary")}
+		index[r.ID] = historyOffset{parent: r.Parent, typ: r.Type, timestamp: r.Timestamp, reply: r.Message.ID, offset: start, length: len(line), visible: (!r.Meta && (r.Type == "user" || r.Type == "assistant")) || r.CompactSummary || (r.Type == "system" && r.Subtype == "compact_boundary")}
 		last = r.ID
 	}
 	if leaf == "" {
@@ -185,6 +187,16 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		if record.Origin.Kind == "task-notification" {
 			taskNotification(&message)
 		}
+		// Claude writes a reasoning block once it ends; it began when the
+		// last record before its reply, the prompt or tool result, was
+		// written. Earlier blocks of the same reply do not count.
+		if message.Reasoning != nil {
+			before := record.Parent
+			for steps := 0; steps < 64 && record.Message.ID != "" && index[before].reply == record.Message.ID; steps++ {
+				before = index[before].parent
+			}
+			message.Reasoning.DurationMS = elapsedMS(index[before].timestamp, record.Timestamp)
+		}
 		if record.CompactSummary {
 			message.Role = "summary"
 			message.Summary = &protocol.HistorySummary{Kind: "compaction"}
@@ -211,6 +223,9 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 			break
 		}
 		message.Text = historyText(message.Text, &textRemaining, &result.Truncated)
+		if message.Reasoning != nil {
+			message.Reasoning.Text = historyText(message.Reasoning.Text, &textRemaining, &result.Truncated)
+		}
 		for j := range message.Tools {
 			t := &message.Tools[j]
 			t.Input = historyText(t.Input, &textRemaining, &result.Truncated)
@@ -314,8 +329,12 @@ func contentDepth(raw json.RawMessage, message *protocol.HistoryMessage, truncat
 		switch b.Type {
 		case "text":
 			texts = append(texts, b.Text)
-		case "thinking":
-			texts = append(texts, b.Thinking)
+		case "thinking", "redacted_thinking":
+			// Claude saves reasoning without its text; keep what there is.
+			if message.Reasoning == nil {
+				message.Reasoning = &protocol.HistoryReasoning{}
+			}
+			message.Reasoning.Text += b.Thinking
 		case "image":
 			if b.Source.Type == "base64" {
 				message.Images = append(message.Images, protocol.HistoryImage{MIMEType: b.Source.MIME, Data: b.Source.Data})
@@ -388,4 +407,22 @@ func historyImages(images []protocol.HistoryImage, budget *int, truncated *bool)
 		out = append(out, im)
 	}
 	return out
+}
+
+// elapsedMS is the time between two transcript timestamps, or 0 when either
+// is unreadable or the gap is implausible for one reasoning step.
+func elapsedMS(from, to string) int64 {
+	start, err := time.Parse(time.RFC3339Nano, from)
+	if err != nil {
+		return 0
+	}
+	end, err := time.Parse(time.RFC3339Nano, to)
+	if err != nil {
+		return 0
+	}
+	elapsed := end.Sub(start)
+	if elapsed <= 0 || elapsed > time.Hour {
+		return 0
+	}
+	return elapsed.Milliseconds()
 }

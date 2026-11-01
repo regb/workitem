@@ -147,7 +147,12 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 		message := driverprotocol.HistoryMessage{ID: entry.ID, Timestamp: entry.Timestamp}
 		if entry.Type == "message" {
 			message.Role, _ = entry.Message["role"].(string)
-			message.Text, message.Tools, message.Images = historyContent(entry.Message["content"])
+			var reasoning string
+			var reasoned bool
+			message.Text, message.Tools, message.Images, reasoning, reasoned = historyContent(entry.Message["content"])
+			if reasoned {
+				message.Reasoning = &driverprotocol.HistoryReasoning{Text: boundedHistoryText(reasoning, &result.Truncated)}
+			}
 			if stop, _ := entry.Message["stopReason"].(string); message.Role == "assistant" && abortedStop(stop) {
 				message.Aborted = true
 			}
@@ -256,12 +261,14 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 	return result, nil
 }
 
-func historyContent(content any) (string, []driverprotocol.HistoryTool, []driverprotocol.HistoryImage) {
+// historyContent reads a message's text, tool calls, images, and the
+// reasoning before it, reporting whether there was any.
+func historyContent(content any) (string, []driverprotocol.HistoryTool, []driverprotocol.HistoryImage, string, bool) {
 	if s, ok := content.(string); ok {
-		return s, nil, nil
+		return s, nil, nil, "", false
 	}
 	blocks, _ := content.([]any)
-	parts := []string{}
+	parts, thoughts, reasoned := []string{}, []string{}, false
 	tools := []driverprotocol.HistoryTool{}
 	images := []driverprotocol.HistoryImage{}
 	for _, raw := range blocks {
@@ -286,14 +293,17 @@ func historyContent(content any) (string, []driverprotocol.HistoryTool, []driver
 				images = append(images, driverprotocol.HistoryImage{MIMEType: mimeType, Data: data, Alt: "Attached image"})
 			}
 		case "thinking":
-			// Deliberation is private and intentionally absent from history.
+			reasoned = true
+			if s, _ := b["thinking"].(string); s != "" {
+				thoughts = append(thoughts, s)
+			}
 		default:
 			if typ != "" {
 				parts = append(parts, "["+typ+" content omitted]")
 			}
 		}
 	}
-	return strings.Join(parts, "\n"), tools, images
+	return strings.Join(parts, "\n"), tools, images, strings.Join(thoughts, "\n\n"), reasoned
 }
 
 func boundedHistoryImages(images []driverprotocol.HistoryImage, total *int, truncated *bool) []driverprotocol.HistoryImage {

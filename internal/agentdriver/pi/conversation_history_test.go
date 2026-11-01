@@ -178,3 +178,25 @@ func TestHistoryTellsACompactionFromABranchSummary(t *testing.T) {
 		t.Fatalf("branch summary: %+v", branch)
 	}
 }
+
+func TestHistoryKeepsPiReasoning(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "native.jsonl")
+	data := `{"type":"session","version":3,"id":"session"}
+{"type":"message","id":"ask","parentId":null,"message":{"role":"user","content":"why?"}}
+{"type":"message","id":"answer","parentId":"ask","message":{"role":"assistant","content":[{"type":"thinking","thinking":"**Weighing it**","thinkingSignature":"x"},{"type":"thinking","thinking":""},{"type":"text","text":"because"}]}}
+`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := ReadHistory(context.Background(), path, "")
+	if err != nil || len(result.Messages) != 2 {
+		t.Fatalf("%+v %v", result, err)
+	}
+	answer := result.Messages[1]
+	if answer.Text != "because" || answer.Reasoning == nil || answer.Reasoning.Text != "**Weighing it**" {
+		t.Fatalf("answer %+v %+v", answer, answer.Reasoning)
+	}
+	if result.Messages[0].Reasoning != nil {
+		t.Fatal("the question reasoned")
+	}
+}

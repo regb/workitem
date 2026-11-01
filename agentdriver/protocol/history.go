@@ -35,6 +35,17 @@ type HistoryMessage struct {
 	// Summary describes a message with role "summary": what it summarizes
 	// and, for a compaction, how large the context was before it.
 	Summary *HistorySummary `json:"summary,omitempty"`
+	// Reasoning marks a message the model reasoned before; it is best
+	// effort, holding the text and duration the agent saved, if any.
+	Reasoning *HistoryReasoning `json:"reasoning,omitempty"`
+}
+
+// HistoryReasoning is the model's reasoning for a message: Text when the
+// agent saves it (Pi does; Claude saves only that it reasoned), DurationMS
+// when the transcript tells how long it took.
+type HistoryReasoning struct {
+	Text       string `json:"text,omitempty"`
+	DurationMS int64  `json:"duration_ms,omitempty"`
 }
 
 // HistorySummary is what kind of summary a "summary" message is: a
