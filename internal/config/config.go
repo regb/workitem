@@ -23,18 +23,16 @@ const (
 )
 
 type Config struct {
-	DefaultAgent string                            `json:"default_agent"`
-	DeepWork     DeepWorkConfig                    `json:"deep_work"`
-	Item         ItemConfig                        `json:"item"`
-	List         ListConfig                        `json:"list"`
-	Agent        AgentConfig                       `json:"agent"`
-	AgentStatus  AgentStatusConfig                 `json:"agent_status"`
-	Attention    AttentionConfig                   `json:"attention"`
-	Daemon       DaemonConfig                      `json:"daemon"`
-	Repo         RepoConfig                        `json:"repo"`
-	Agents       map[string]AgentDefinitionConfig  `json:"agents"`
-	Drivers      map[string]DriverDefinitionConfig `json:"drivers"`
-	Plugins      map[string]plugin.Registration    `json:"plugins,omitempty"`
+	DeepWork    DeepWorkConfig                    `json:"deep_work"`
+	Item        ItemConfig                        `json:"item"`
+	List        ListConfig                        `json:"list"`
+	Agent       AgentConfig                       `json:"agent"`
+	AgentStatus AgentStatusConfig                 `json:"agent_status"`
+	Attention   AttentionConfig                   `json:"attention"`
+	Daemon      DaemonConfig                      `json:"daemon"`
+	Repo        RepoConfig                        `json:"repo"`
+	Drivers     map[string]DriverDefinitionConfig `json:"drivers"`
+	Plugins     map[string]plugin.Registration    `json:"plugins,omitempty"`
 	// PluginSettings holds the registered options from [plugins.NAME] tables,
 	// resolved with schema defaults. Registration fields are in Plugins.
 	PluginSettings map[string]map[string]any `json:"-"`
@@ -67,11 +65,6 @@ type RepoConfig struct {
 type AgentConfig struct {
 	AppendSystemPrompt string `json:"append_system_prompt"`
 	StartupMessage     string `json:"startup_message"`
-}
-type AgentDefinitionConfig struct {
-	Driver string         `json:"driver"`
-	Label  string         `json:"label,omitempty"`
-	Config map[string]any `json:"config,omitempty"`
 }
 type DriverDefinitionConfig struct {
 	Command  string         `json:"command,omitempty"`
@@ -116,7 +109,7 @@ type AgentStatusMarkersConfig struct {
 }
 
 func Default() Config {
-	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Repo: RepoConfig{FollowUpstream: FollowUpstreamFastForward}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Agents: map[string]AgentDefinitionConfig{}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, PluginSettings: map[string]map[string]any{}}
+	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Repo: RepoConfig{FollowUpstream: FollowUpstreamFastForward}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, PluginSettings: map[string]map[string]any{}}
 }
 
 // PluginRegistrations reads only installation metadata to build a declarative
@@ -165,6 +158,11 @@ func LoadDaemon(path string) (DaemonConfig, error) {
 	}
 	return file.Daemon, nil
 }
+
+// errAgentProfilesMoved points configuration that still defines agent
+// profiles to where they live now.
+var errAgentProfilesMoved = fmt.Errorf("agent profiles moved from config.toml to Wi's daemon: remove default_agent and the [agents.NAME] tables from config.toml, then add profiles with wi agent profile add NAME --driver DRIVER (see wi help agent profile) or in wi web Settings → Agents")
+
 func LoadWithRegistry(path string, registry *options.Registry) (Config, []string, error) {
 	cfg := Default()
 	root := map[string]any{}
@@ -207,10 +205,16 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 			continue
 		}
 		switch section {
-		case "default_agent", "agents", "drivers", "plugins", "repositories":
+		case "drivers", "plugins", "repositories", "agents", "default_agent":
 		default:
 			warnings = append(warnings, "ignored unknown key "+section)
 		}
+	}
+	if _, exists := root["agents"]; exists {
+		return cfg, warnings, errAgentProfilesMoved
+	}
+	if _, exists := root["default_agent"]; exists {
+		return cfg, warnings, errAgentProfilesMoved
 	}
 	if _, exists := root["repositories"]; exists {
 		return cfg, warnings, fmt.Errorf("repository overrides no longer belong in config.toml; use wi repo settings set NAME plugins.PLUGIN.OPTION VALUE explicitly")
@@ -223,12 +227,6 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 	decoder.UseNumber()
 	if err := decoder.Decode(&cfg); err != nil {
 		return cfg, warnings, fmt.Errorf("decode config: %w", err)
-	}
-	for name, d := range cfg.Agents {
-		for key, value := range d.Config {
-			d.Config[key] = normalizeArray(value)
-		}
-		cfg.Agents[name] = d
 	}
 	for name, d := range cfg.Drivers {
 		for key, value := range d.Defaults {
@@ -354,26 +352,6 @@ func Validate(cfg Config) error {
 	}
 	if cfg.Repo.FollowUpstream != FollowUpstreamFastForward && cfg.Repo.FollowUpstream != FollowUpstreamOff {
 		return fmt.Errorf("repo.follow_upstream must be %q or %q", FollowUpstreamFastForward, FollowUpstreamOff)
-	}
-	if strings.TrimSpace(cfg.DefaultAgent) == "" {
-		return fmt.Errorf("default_agent must name an agent profile; run 'wi init' to create your configuration, or set default_agent in the existing file")
-	}
-	if _, ok := cfg.Agents[cfg.DefaultAgent]; !ok {
-		return fmt.Errorf("default_agent references unconfigured profile %q", cfg.DefaultAgent)
-	}
-	if _, ok := cfg.Agents["default"]; ok {
-		return fmt.Errorf("agents.default is no longer supported; rename it and set default_agent to its profile name")
-	}
-	for name, d := range cfg.Agents {
-		if strings.TrimSpace(name) == "" || strings.TrimSpace(d.Driver) == "" {
-			return fmt.Errorf("agent definitions require a name and driver")
-		}
-		if len([]rune(d.Label)) > 80 {
-			return fmt.Errorf("agent %q label is too long", name)
-		}
-		if _, ok := cfg.Drivers[d.Driver]; !ok {
-			return fmt.Errorf("agent %q selects unconfigured driver %q", name, d.Driver)
-		}
 	}
 	for name, plugin := range cfg.Plugins {
 		if _, err := options.New(options.Definition{Name: name}); err != nil {

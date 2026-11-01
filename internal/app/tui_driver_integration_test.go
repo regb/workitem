@@ -88,7 +88,7 @@ func TestAgentExecTUIDriverUsesPublicControlAndEventProtocol(t *testing.T) {
 		t.Fatalf("primary conversation before exec=%+v err=%v", loaded.PrimaryConversation, err)
 	}
 	application := app.New(st, nil)
-	application.AgentsConfig = map[string]config.AgentDefinitionConfig{"test": {Driver: "test"}}
+	application.StaticAgentProfiles.Profiles = []model.AgentProfile{{Name: "test", Driver: "test"}}
 	application.DriversConfig = map[string]config.DriverDefinitionConfig{"test": {}}
 	application.BundledDriverCommands["test"] = app.BundledDriverCommand{Path: os.Args[0], Args: []string{"-test.run=TestTUIDriverHelperProcess"}}
 	application.DaemonSocketPath = socket

@@ -114,10 +114,9 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 	if err := os.MkdirAll(configDir, 0700); err != nil {
 		t.Fatal(err)
 	}
-	defaultProfile := "default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n"
-	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(defaultProfile), 0600); err != nil {
-		t.Fatal(err)
-	}
+	defaultProfile := ""
+	// Without Pi installed nothing is discovered: add the profile by hand.
+	runWiE2E(t, binary, repository, env, "agent", "profile", "add", "pi", "--driver", "pi")
 	runWiE2E(t, binary, repository, env, "repo", "add", "test", "--from", repository)
 	if output := runWiE2E(t, binary, repository, env, "repo", "settings", "show", "test", "--json"); !strings.Contains(string(output), "\"trust\": \"prompt\"") {
 		t.Fatalf("repository configuration lookup=%s", output)
@@ -125,21 +124,11 @@ func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
 	exerciseRepositorySettingsE2E(t, binary, repository, env)
 	exercisePluginCatalogE2E(t, binary, repository, env, configDir, defaultProfile)
 	// Validate through the real bundled driver process, with neither Pi nor
-	// tmux on PATH. Invalid settings must fail before any item is created.
-	if err := os.WriteFile(filepath.Join(configDir, "config.toml"), []byte(defaultProfile+"[agents.invalid]\ndriver = \"pi\"\n[agents.invalid.config]\nreasoning = \"extreme\"\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	emptyList := string(runWiE2E(t, binary, repository, env, "list", "--ids"))
-	for _, mode := range []string{"tui", "headless"} {
-		invalid := exec.Command(binary, "new", "--repo", "test", "--title", "Invalid startup", "--agent", "invalid", "--start", "--agent-mode", mode)
-		invalid.Dir, invalid.Env = repository, env
-		output, err := invalid.CombinedOutput()
-		if err == nil || !strings.Contains(string(output), "invalid Pi reasoning level") || strings.Contains(string(output), "created work item") {
-			t.Fatalf("preflight mode=%s err=%v output=%s", mode, err, output)
-		}
-		if list := string(runWiE2E(t, binary, repository, env, "list", "--ids")); list != emptyList {
-			t.Fatalf("preflight changed the work list: %s", list)
-		}
+	// tmux on PATH: a profile with invalid settings is refused when saved.
+	invalid := exec.Command(binary, "agent", "profile", "add", "invalid", "--driver", "pi", "reasoning=extreme")
+	invalid.Dir, invalid.Env = repository, env
+	if output, err := invalid.CombinedOutput(); err == nil || !strings.Contains(string(output), "invalid Pi reasoning level") {
+		t.Fatalf("invalid profile err=%v output=%s", err, output)
 	}
 	createdJSON := runWiE2E(t, binary, repository, env, "new", "--repo", "test", "--json", "--title", "State and attention E2E")
 	var created struct {

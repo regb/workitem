@@ -37,8 +37,8 @@ func settingsApp(t *testing.T) (*App, *settingsBackend, model.Manifest) {
 	t.Helper()
 	a, _, m := newCoreTestApp(t, time.Now(), model.StateActive, false)
 	backend := &settingsBackend{}
-	a.DefaultAgent = "pi"
-	a.AgentsConfig = map[string]config.AgentDefinitionConfig{"pi": {Driver: "pi", Config: map[string]any{"model": "profile/model", "executable": "/bin/pi"}}}
+	a.StaticAgentProfiles.Default = "pi"
+	a.StaticAgentProfiles.Profiles = []model.AgentProfile{{Name: "pi", Driver: "pi", Config: map[string]any{"model": "profile/model", "executable": "/bin/pi"}}}
 	a.DriversConfig = map[string]config.DriverDefinitionConfig{"pi": {Defaults: map[string]any{"reasoning": "low"}}}
 	a.ConversationBackends = map[string]ConversationBackend{"pi": backend}
 	return a, backend, m
@@ -227,7 +227,7 @@ func TestSetAgentSettingsWaitsForAStartingRuntime(t *testing.T) {
 func TestAdoptReportedSettingsKeepsChosenValues(t *testing.T) {
 	a, _, m := settingsApp(t)
 	ctx := context.Background()
-	definition := config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{"executable": "/bin/pi"}}
+	definition := model.AgentProfile{Driver: "pi", Config: map[string]any{"executable": "/bin/pi"}}
 	a.DriversConfig = map[string]config.DriverDefinitionConfig{"pi": {}}
 	m.AgentSettings = map[string]string{"reasoning": "high"}
 	if err := a.Store.SaveManifest(ctx, m); err != nil {
@@ -253,7 +253,7 @@ func TestAdoptReportedSettingsKeepsChosenValues(t *testing.T) {
 	if err := a.Store.SaveManifest(ctx, saved); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.adoptReportedSettings(ctx, m.ID, a.AgentsConfig["pi"], map[string]string{"model": "profile/model"}, false); err != nil {
+	if err := a.adoptReportedSettings(ctx, m.ID, a.Agents()["pi"], map[string]string{"model": "profile/model"}, false); err != nil {
 		t.Fatal(err)
 	}
 	saved, _ = a.Store.LoadManifest(m.ID)
@@ -262,7 +262,7 @@ func TestAdoptReportedSettingsKeepsChosenValues(t *testing.T) {
 	}
 	// A later report is a change, such as a model picked in the agent's
 	// own interface, and the item keeps it.
-	if err := a.adoptReportedSettings(ctx, m.ID, a.AgentsConfig["pi"], map[string]string{"model": "other/model", "reasoning": "low"}, true); err != nil {
+	if err := a.adoptReportedSettings(ctx, m.ID, a.Agents()["pi"], map[string]string{"model": "other/model", "reasoning": "low"}, true); err != nil {
 		t.Fatal(err)
 	}
 	saved, _ = a.Store.LoadManifest(m.ID)

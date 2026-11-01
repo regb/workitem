@@ -13,7 +13,6 @@ import (
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
-	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -102,7 +101,7 @@ func (a *App) agentModelCatalog(ctx context.Context, name string) (driverprotoco
 	if entry, ok := a.modelCatalogs.entries[name]; ok && time.Since(entry.at) < 10*time.Minute {
 		return entry.catalog, entry.err
 	}
-	definition := a.AgentsConfig[name]
+	definition := a.Agents()[name]
 	reporter, ok := a.ConversationBackends[definition.Driver].(ModelCatalogReporter)
 	if !ok {
 		return driverprotocol.ModelCatalog{}, fmt.Errorf("driver %q does not list models", definition.Driver)
@@ -126,7 +125,7 @@ func (a *App) AgentSettings(ctx context.Context, opts ResolveOptions) (AgentSett
 	if err != nil {
 		return AgentSettingsView{}, err
 	}
-	definition := a.AgentsConfig[name]
+	definition := a.Agents()[name]
 	view := AgentSettingsView{WorkItemID: m.ID, Agent: name, Driver: definition.Driver, Values: map[string]string{}, Overrides: copySettings(m.AgentSettings), Live: []string{}}
 	for key, value := range a.driverConfig(definition, m.AgentSettings) {
 		if text, ok := value.(string); ok && key != "executable" {
@@ -173,7 +172,7 @@ func (a *App) SetAgentSettings(ctx context.Context, opts SetAgentSettingsOptions
 	if len(changed) == 0 {
 		return result, nil
 	}
-	definition := a.AgentsConfig[name]
+	definition := a.Agents()[name]
 	backend := a.ConversationBackends[definition.Driver]
 	if backend == nil {
 		return result, fmt.Errorf("driver %q is not configured", definition.Driver)
@@ -347,7 +346,7 @@ func (a *App) saveAgentSettings(ctx context.Context, id string, overrides map[st
 // default changes. A later report is a change, made through wi or in the
 // agent's own interface, and is kept wherever it differs, so the next runtime
 // continues with it.
-func (a *App) adoptReportedSettings(ctx context.Context, id string, definition config.AgentDefinitionConfig, reported map[string]string, change bool) error {
+func (a *App) adoptReportedSettings(ctx context.Context, id string, definition model.AgentProfile, reported map[string]string, change bool) error {
 	m, operation, err := a.lockItemOperation(ctx, ResolveOptions{Selector: id})
 	if err != nil {
 		return err

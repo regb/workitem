@@ -93,7 +93,7 @@ func (b *modesBackend) RuntimeModes(context.Context, string, json.RawMessage) (d
 func TestAgentRuntimeModesAsksTheDriverOnceAndFallsBack(t *testing.T) {
 	reported := driverprotocol.RuntimeModes{Modes: map[driverprotocol.Mode]driverprotocol.ModeCapabilities{driverprotocol.ModeTUI: {Control: driverprotocol.ControlStructured, Terminal: true}}}
 	backend := &modesBackend{modes: reported}
-	a := &App{DefaultAgent: "pi", AgentsConfig: map[string]config.AgentDefinitionConfig{"pi": {Driver: "pi"}}, DriversConfig: map[string]config.DriverDefinitionConfig{"pi": {}}, ConversationBackends: map[string]ConversationBackend{"pi": backend}}
+	a := &App{StaticAgentProfiles: model.AgentProfiles{Default: "pi", Profiles: []model.AgentProfile{{Name: "pi", Driver: "pi"}}}, DriversConfig: map[string]config.DriverDefinitionConfig{"pi": {}}, ConversationBackends: map[string]ConversationBackend{"pi": backend}}
 	for i := 0; i < 3; i++ {
 		if got := a.AgentRuntimeModes(context.Background(), "pi"); len(got.Modes) != 1 || got.Modes[driverprotocol.ModeTUI].Control != driverprotocol.ControlStructured {
 			t.Fatalf("modes = %+v", got)
@@ -103,7 +103,7 @@ func TestAgentRuntimeModesAsksTheDriverOnceAndFallsBack(t *testing.T) {
 		t.Fatalf("driver asked %d times, want once", backend.calls)
 	}
 	old := &modesBackend{err: errors.New("unsupported operation")}
-	b := &App{DefaultAgent: "pi", AgentsConfig: map[string]config.AgentDefinitionConfig{"pi": {Driver: "pi"}}, DriversConfig: map[string]config.DriverDefinitionConfig{"pi": {}}, ConversationBackends: map[string]ConversationBackend{"pi": old}}
+	b := &App{StaticAgentProfiles: model.AgentProfiles{Default: "pi", Profiles: []model.AgentProfile{{Name: "pi", Driver: "pi"}}}, DriversConfig: map[string]config.DriverDefinitionConfig{"pi": {}}, ConversationBackends: map[string]ConversationBackend{"pi": old}}
 	if got := b.AgentRuntimeModes(context.Background(), "pi"); got.Modes[driverprotocol.ModeHeadless].Control != driverprotocol.ControlStructured || !got.Modes[driverprotocol.ModeTUI].Terminal {
 		t.Fatalf("older driver did not fall back to legacy modes: %+v", got)
 	}

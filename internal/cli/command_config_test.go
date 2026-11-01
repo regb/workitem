@@ -13,20 +13,12 @@ import (
 func configQueryFixture(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.toml")
-	text := `default_agent = "pi"
-[agents.pi]
-driver = "pi"
-label = "My Pi"
-[agents.pi.config]
-model = "private-model"
-api_key = "profile-secret"
-extensions = ["private-extension"]
-[agents.web-search]
-driver = "pi"
-[drivers.pi]
+	text := `[drivers.pi]
 command = "/private/driver --token command-secret"
 [drivers.pi.defaults]
 credential = "default-secret"
+model = "private-model"
+extensions = ["private-extension"]
 `
 	if err := os.WriteFile(path, []byte(text), 0600); err != nil {
 		t.Fatal(err)
@@ -41,14 +33,10 @@ func TestConfigQueryDefaultsScalarsAndSections(t *testing.T) {
 		json bool
 		want string
 	}{
-		{[]string{"get", "default_agent"}, false, "pi\n"},
 		{[]string{"get", "agent.append_system_prompt"}, false, "This conversation belongs to a Wi work item."},
-		{[]string{"get", "default_agent"}, true, "\"pi\"\n"},
 		{[]string{"get", "deep_work.max_active"}, true, "2\n"},
-		{[]string{"get", "agents.pi.label"}, false, "My Pi\n"},
 		{[]string{"get", "plugins.direnv.trust"}, true, "\"prompt\"\n"},
 		{[]string{"get", "drivers.claude.defaults"}, true, "{}\n"},
-		{[]string{"get", "agents.web-search.config"}, true, "{}\n"},
 		{[]string{"get", "agent"}, false, "agent.startup_message = "},
 		{nil, false, "attention.priority = \"recent-request\""},
 	} {
@@ -84,13 +72,13 @@ func TestConfigQueryOpaqueValuesAreOptIn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{nil, {"show"}, {"get", "agents.pi.config"}, {"drivers"}, {"get", "drivers.pi.command"}, {"agents"}} {
+	for _, args := range [][]string{nil, {"show"}, {"get", "drivers.pi.defaults"}, {"drivers"}, {"get", "drivers.pi.command"}} {
 		for _, jsonOut := range []bool{false, true} {
 			var out, errout bytes.Buffer
 			if code := runConfigMain(args, path, &out, &errout, jsonOut); code != ExitOK {
 				t.Fatalf("%v code=%d %s", args, code, &errout)
 			}
-			for _, secret := range []string{"profile-secret", "private-model", "private-extension", "command-secret", "default-secret"} {
+			for _, secret := range []string{"private-model", "private-extension", "command-secret", "default-secret"} {
 				if strings.Contains(out.String(), secret) {
 					t.Fatalf("%v exposed %q: %s", args, secret, &out)
 				}
@@ -101,7 +89,7 @@ func TestConfigQueryOpaqueValuesAreOptIn(t *testing.T) {
 		}
 	}
 	var out, errout bytes.Buffer
-	if code := runConfigMain([]string{"get", "agents.pi.config.api_key", "--show-sensitive"}, path, &out, &errout, false); code != ExitOK || out.String() != "profile-secret\n" {
+	if code := runConfigMain([]string{"get", "drivers.pi.defaults.credential", "--show-sensitive"}, path, &out, &errout, false); code != ExitOK || out.String() != "default-secret\n" {
 		t.Fatalf("%d %s %s", code, &out, &errout)
 	}
 	out.Reset()
@@ -114,22 +102,9 @@ func TestConfigQueryOpaqueValuesAreOptIn(t *testing.T) {
 	}
 }
 
-func TestConfigAgentsAreSortedAndMarkDefault(t *testing.T) {
+func TestConfigAgentsPointToTheDaemon(t *testing.T) {
 	var out, errout bytes.Buffer
-	path := configQueryFixture(t)
-	code := runConfigMain([]string{"agents"}, path, &out, &errout, true)
-	var result struct {
-		DefaultAgent string               `json:"default_agent"`
-		Agents       []configAgentProfile `json:"agents"`
-	}
-	if err := json.Unmarshal(out.Bytes(), &result); err != nil || code != ExitOK {
-		t.Fatalf("%v %d %s %s", err, code, &out, &errout)
-	}
-	if result.DefaultAgent != "pi" || len(result.Agents) != 2 || result.Agents[0].Name != "pi" || !result.Agents[0].Default || result.Agents[0].Label != "My Pi" || result.Agents[1].Default || result.Agents[1].Name != "web-search" {
-		t.Fatalf("%+v", result)
-	}
-	out.Reset()
-	if code := runConfigMain([]string{"agents"}, path, &out, &errout, false); code != ExitOK || !strings.Contains(out.String(), "DEFAULT") || !strings.Contains(out.String(), "*") {
+	if code := runConfigMain([]string{"agents"}, configQueryFixture(t), &out, &errout, false); code != ExitUsage || !strings.Contains(errout.String(), "wi agent profile list") {
 		t.Fatalf("%d %s %s", code, &out, &errout)
 	}
 }
@@ -174,14 +149,14 @@ func TestConfigQueryErrors(t *testing.T) {
 		code int
 	}{
 		{[]string{"edit"}, ExitUsage}, {[]string{"get"}, ExitUsage}, {[]string{"get", ""}, ExitUsage}, {[]string{"show", "extra"}, ExitUsage}, {[]string{"agents", "pi"}, ExitUsage}, {[]string{"--unknown"}, ExitUsage},
-		{[]string{"get", "missing"}, ExitNotFound}, {[]string{"get", "deep_work.missing"}, ExitNotFound}, {[]string{"get", "default_agent.child"}, ExitNotFound}, {[]string{"get", "agents..driver"}, ExitNotFound},
+		{[]string{"get", "missing"}, ExitNotFound}, {[]string{"get", "deep_work.missing"}, ExitNotFound}, {[]string{"get", "drivers..defaults"}, ExitNotFound},
 	} {
 		var out, errout bytes.Buffer
 		if code := runConfigMain(tt.args, path, &out, &errout, true); code != tt.code || out.Len() != 0 || errout.Len() == 0 {
 			t.Fatalf("%v code=%d want=%d out=%s err=%s", tt.args, code, tt.code, &out, &errout)
 		}
 	}
-	for _, content := range []string{"default_agent = broken", "[deep_work]\nmax_active = -1"} {
+	for _, content := range []string{"default_agent = broken", "[agents.pi]\ndriver = \"pi\"", "[deep_work]\nmax_active = -1"} {
 		bad := filepath.Join(t.TempDir(), "bad.toml")
 		if err := os.WriteFile(bad, []byte(content), 0600); err != nil {
 			t.Fatal(err)

@@ -16,7 +16,7 @@ type createConversationResult = agentcore.CreateConversationResult
 
 func (a *App) createConversation(ctx context.Context, m model.Manifest) (createConversationResult, error) {
 	agentName := a.agentProfileName(m.Agent)
-	definition, ok := a.AgentsConfig[agentName]
+	definition, ok := a.Agents()[agentName]
 	if !ok || strings.TrimSpace(definition.Driver) == "" {
 		return createConversationResult{}, fmt.Errorf("agent definition %q has no conversation driver", agentName)
 	}
@@ -80,7 +80,7 @@ func (a *App) conversationBackend(m model.Manifest, conversation model.Conversat
 	driver := conversation.Driver
 	if driver == "" {
 		agentName := a.agentProfileName(m.Agent)
-		driver = a.AgentsConfig[agentName].Driver
+		driver = a.Agents()[agentName].Driver
 	}
 	return a.ConversationBackends[driver]
 }
@@ -125,7 +125,7 @@ func (a *App) ensureConversationCheckout(ctx context.Context, m model.Manifest) 
 		return model.Manifest{}, model.Conversation{}, nil, err
 	}
 	agentName := a.agentProfileName(m.Agent)
-	definition := a.AgentsConfig[agentName]
+	definition := a.Agents()[agentName]
 	configJSON, err := a.driverConfigJSON(definition)
 	if err != nil {
 		return model.Manifest{}, model.Conversation{}, nil, err

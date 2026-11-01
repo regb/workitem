@@ -24,7 +24,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 		return err
 	}
 	agentName := a.agentProfileName(manifest.Agent)
-	definition, ok := a.AgentsConfig[agentName]
+	definition, ok := a.Agents()[agentName]
 	if !ok {
 		return fmt.Errorf("agent definition %q is not configured", agentName)
 	}

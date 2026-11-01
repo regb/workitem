@@ -8,8 +8,7 @@ Pick one small task with an observable definition of done. This walkthrough impl
 First [register a repository](../../concepts/repositories/):
 
 ```bash
-wi init
-wi repo add project --from /path/to/repository --branch main
+wi repo add project --from /path/to/repository
 ```
 
 Outside an existing Wi item, pass `--repo project` when creating work. There are two useful ways to begin: work interactively in Pi, or delegate a prompt without entering the agent session.

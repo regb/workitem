@@ -56,7 +56,7 @@ Validation must not launch a coding backend, create native content, allocate res
 
 Each profile has a unique lowercase name using letters, digits, and hyphens, an optional label, and an opaque flat configuration object. Values must be strings, booleans, integers, or string arrays supported by Wi's config parser. `default` is reserved for the user's selection. Return an empty profiles list when no suitable installation exists. Rejection or an omitted discovery response means the driver does not support discovery.
 
-Discovery must not launch a coding backend, authenticate, make model requests, create native content, or return credentials. Bundled drivers locate their executable on `PATH` and return an absolute launcher path, preserving installation symlinks. `wi init` validates each discovered profile through `config.validate`, asks the user to select a named default, writes the default_agent pointer, and publishes the config without overwriting an existing file. The operation and response field are additive within protocol version 3.
+Discovery must not launch a coding backend, authenticate, make model requests, create native content, or return credentials. Bundled drivers locate their executable on `PATH` and return an absolute launcher path, preserving installation symlinks. When the daemon has no agent profiles, Wi validates each discovered profile through `config.validate` and adds it to the daemon; the first one, Pi's when found, becomes the default. The operation and response field are additive within protocol version 3.
 
 ### Runtime modes
 

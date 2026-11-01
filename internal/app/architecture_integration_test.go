@@ -31,8 +31,8 @@ import (
 
 func newTestApp(st *store.Store, git app.Git) *app.App {
 	application := app.New(st, git)
-	application.DefaultAgent = "pi"
-	application.AgentsConfig["pi"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{}}
+	application.StaticAgentProfiles.Default = "pi"
+	application.StaticAgentProfiles.Profiles = append(application.StaticAgentProfiles.Profiles, model.AgentProfile{Name: "pi", Driver: "pi", Config: map[string]any{}})
 	application.ConversationBackends["pi"] = fakeConversationBackend{}
 	application.ConversationProjectionObserver = piadapter.ObserveConversation(st.ItemDir)
 	return application

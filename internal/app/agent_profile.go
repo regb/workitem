@@ -33,7 +33,7 @@ func (e *MissingAgentProfileError) Error() string {
 // when the profile was removed from the configuration.
 func (a *App) itemAgentName(m model.Manifest) (string, error) {
 	name := a.agentProfileName(m.Agent)
-	if _, ok := a.AgentsConfig[name]; !ok {
+	if _, ok := a.Agents()[name]; !ok {
 		driver := conversationDriver(m)
 		return "", &MissingAgentProfileError{WorkItemID: m.ID, Profile: name, Driver: driver, Choices: a.profilesFor(driver)}
 	}
@@ -61,7 +61,7 @@ func conversationDriver(m model.Manifest) string {
 // profilesFor lists the configured profiles of a driver, or all of them.
 func (a *App) profilesFor(driver string) []string {
 	names := []string{}
-	for name, definition := range a.AgentsConfig {
+	for name, definition := range a.Agents() {
 		if driver == "" || definition.Driver == driver {
 			names = append(names, name)
 		}
@@ -88,7 +88,7 @@ func (a *App) SetAgentProfile(ctx context.Context, opts ResolveOptions, profile 
 	if err != nil {
 		return model.Manifest{}, err
 	}
-	if driver := conversationDriver(m); driver != "" && a.AgentsConfig[name].Driver != driver {
+	if driver := conversationDriver(m); driver != "" && a.Agents()[name].Driver != driver {
 		return model.Manifest{}, fmt.Errorf("the conversation of work item %s belongs to driver %q, which profile %q does not use; profiles that can resume it: %s", m.ID, driver, name, strings.Join(a.profilesFor(driver), ", "))
 	}
 	overrides, changed, err := mergeSettings(m.AgentSettings, settings)

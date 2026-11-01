@@ -22,13 +22,6 @@ type helpDoc struct {
 }
 
 var helpDocs = map[string]helpDoc{
-	"init": {
-		Summary:     "Set up Wi and select a default coding agent",
-		Usage:       []string{"wi init [--default PROFILE]"},
-		Description: []string{"Asks bundled drivers to discover installed agents on PATH, then prompts for the default profile. Writes explicit profiles with absolute executable paths to $XDG_CONFIG_HOME/wi/config.toml, or ~/.config/wi/config.toml. Never overwrites an existing configuration and does not start a daemon or agent."},
-		Options:     []helpOption{{"--default PROFILE", "Select a detected profile without prompting. Required with --json."}},
-		Examples:    []string{"wi init", "wi init --default pi", "wi init --default claude --json"},
-	},
 	"repo": {
 		Summary:     "Manage named Wi-owned repositories",
 		Usage:       []string{"wi repo <add|list|show|rename|archive|restore|upstream|status|sync|settings|files|env>"},
@@ -158,16 +151,15 @@ var helpDocs = map[string]helpDoc{
 	},
 	"config": {
 		Summary:     "Inspect global configuration without starting services",
-		Usage:       []string{"wi config [show] [--origins] [--show-sensitive]", "wi config get KEY [--origins] [--show-sensitive]", "wi config agents", "wi config drivers [--show-sensitive]", "wi config plugins"},
-		Description: []string{"Read-only queries of global user configuration with built-in defaults. Never starts or contacts a daemon, driver, plugin, or direnv; does not evaluate project files or environment rules. Repository policy is managed by wi repo settings, not configuration files. Configuration must be valid.", "Driver-specific settings and custom driver commands are redacted by default because they can contain secrets. --show-sensitive reveals them, including in JSON. get returns the selected JSON value with --json, or a plain scalar/dotted settings in text; unknown keys exit 3."},
+		Usage:       []string{"wi config [show] [--origins] [--show-sensitive]", "wi config get KEY [--origins] [--show-sensitive]", "wi config drivers [--show-sensitive]", "wi config plugins"},
+		Description: []string{"Read-only queries of global user configuration with built-in defaults. Never starts or contacts a daemon, driver, plugin, or direnv; does not evaluate project files or environment rules. Repository policy is managed by wi repo settings and agent profiles by wi agent profile, not configuration files. A missing file means the built-in defaults; a file that exists must be valid.", "Driver-specific settings and custom driver commands are redacted by default because they can contain secrets. --show-sensitive reveals them, including in JSON. get returns the selected JSON value with --json, or a plain scalar/dotted settings in text; unknown keys exit 3."},
 		Options:     []helpOption{{"--origins", "Wrap output with effective value and plugin option origins."}, {"--show-sensitive", "Reveal sensitive plugin settings, opaque driver settings, and custom commands."}},
-		Examples:    []string{"wi config agents", "wi config get default_agent", "wi config get deep_work.max_active", "wi config show --json"},
-		SeeAlso:     []string{"init", "info", "config show", "config get", "config agents", "config drivers", "config plugins"},
+		Examples:    []string{"wi config get deep_work.max_active", "wi config show --json"},
+		SeeAlso:     []string{"info", "config show", "config get", "config drivers", "config plugins", "agent profile"},
 	},
 	"config show":    {Summary: "Show global settings with built-in defaults", Usage: []string{"wi config show [--show-sensitive]"}, Description: []string{"Outputs sorted dotted settings in text or a configuration object with --json. Driver-specific values and commands are redacted unless --show-sensitive is supplied. Repository entity settings are separate; project files and environment rules are not evaluated."}, SeeAlso: []string{"config"}},
-	"config get":     {Summary: "Query one configuration key or section", Usage: []string{"wi config get KEY [--show-sensitive]"}, Description: []string{"Use dot-separated JSON keys, such as default_agent, deep_work.max_active, item.defaults.labels, agent.startup_message, agents.pi.config, or drivers.pi.defaults. Unknown keys exit 3. Scalars print directly in text; --json always emits the selected value as JSON."}, SeeAlso: []string{"config"}},
+	"config get":     {Summary: "Query one configuration key or section", Usage: []string{"wi config get KEY [--show-sensitive]"}, Description: []string{"Use dot-separated JSON keys, such as deep_work.max_active, item.defaults.labels, agent.startup_message, or drivers.pi.defaults. Unknown keys exit 3. Scalars print directly in text; --json always emits the selected value as JSON."}, SeeAlso: []string{"config"}},
 	"config plugins": {Summary: "Inspect registered plugin option schemas", Usage: []string{"wi config plugins [--json]"}, Description: []string{"Returns option schemas from the common native/executable plugin catalog, including declarative third-party manifests. Includes defaults, types, bounds, sensitivity and repository scope. Never executes plugin code."}, SeeAlso: []string{"config"}},
-	"config agents":  {Summary: "List configured agent profiles and the default", Usage: []string{"wi config agents"}, Description: []string{"Lists profiles sorted by name, with driver, optional label, and a default marker. JSON returns default_agent and an agents array containing name, driver, label when set, and default. Does not discover installations, check authentication, or inspect runtime availability."}, SeeAlso: []string{"config", "agent", "init"}},
 	"config drivers": {Summary: "Inspect configured drivers and their defaults", Usage: []string{"wi config drivers [--show-sensitive]"}, Description: []string{"Queries the drivers section, including built-in drivers. Custom commands and opaque defaults are redacted unless --show-sensitive is supplied. No driver executable is resolved or launched."}, SeeAlso: []string{"config"}},
 	"info": {
 		Summary:     "Show resolved paths for the current wi data root",
@@ -673,14 +665,22 @@ var helpDocs = map[string]helpDoc{
 		SeeAlso:     []string{"agent status", "agent control", "agent runtime", "agent monitor", "agent settings", "agent profile"},
 	},
 	"agent profile": {
-		Summary: "Move an item to another agent profile",
-		Usage:   []string{"wi agent profile set [--item <selector>] PROFILE [NAME=VALUE...]"},
-		Description: []string{
-			"An item keeps the agent profile it was created with. Use this when that profile was removed or renamed in the configuration, or to run the item's conversation with another profile of the same driver, such as another account.",
-			"The conversation belongs to its driver, so only a profile of that driver can take it over; before the item has a conversation, any profile can. No agent may be running for the item. NAME=VALUE changes the item's model or reasoning in the same step, as wi agent settings set does, when they do not suit the new profile; an empty VALUE resets one to the profile.",
+		Summary: "Manage agent profiles, or move an item to another",
+		Usage: []string{
+			"wi agent profile list",
+			"wi agent profile add NAME --driver DRIVER [--label LABEL] [KEY=VALUE...]",
+			"wi agent profile edit NAME [--label LABEL] [KEY=VALUE...]",
+			"wi agent profile remove NAME",
+			"wi agent profile default NAME",
+			"wi agent profile set [--item <selector>] PROFILE [NAME=VALUE...]",
 		},
-		Options:  []helpOption{{"--item <selector>", "Select an item explicitly."}},
-		Examples: []string{`wi agent profile set pi-work`, `wi agent profile set --item auth claude model=`},
+		Description: []string{
+			"An agent profile names a coding agent setup: a driver (pi or claude) and the settings it launches with, such as executable, model, reasoning, and Pi's extensions. Profiles are kept by the daemon, not in config.toml, and the web Settings → Agents page edits the same list. When there are none, the first wi command adds one for each agent its drivers find installed, Pi's first, which becomes the default. New items use the default profile unless created with --agent. Agents log in on their own; profiles hold no credentials.",
+			"KEY=VALUE sets a driver setting and KEY= removes it; the driver validates the settings before they are saved, and executable must be an absolute path to an executable file. A removed profile's items keep its name and ask to move when they next start. The default profile cannot be removed while another exists.",
+			"set moves an item to another profile: when its profile was removed or renamed, or to run its conversation with another profile of the same driver, such as another account. The conversation belongs to its driver, so only a profile of that driver can take it over; before the item has a conversation, any profile can. No agent may be running for the item. NAME=VALUE changes the item's model or reasoning in the same step, as wi agent settings set does; an empty VALUE resets one to the profile.",
+		},
+		Options:  []helpOption{{"--driver DRIVER", "With add: the driver, pi or claude."}, {"--label LABEL", "The name shown for the profile."}, {"--item <selector>", "With set: select an item explicitly."}},
+		Examples: []string{`wi agent profile list`, `wi agent profile add pi-work --driver pi --label "Pi (work)" executable=/usr/local/bin/pi model=anthropic/claude-sonnet`, `wi agent profile default pi-work`, `wi agent profile set --item auth claude model=`},
 	},
 	"agent settings": {
 		Summary: "Show or change an item's model and reasoning level",
@@ -796,7 +796,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Administration:")
-	printCommandRows(w, [][2]string{{"init", "Set up agent profiles and select the default"}, {"config", "Inspect global settings and agent profiles"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete closed work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"plugin", "List and run optional plugins"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
+	printCommandRows(w, [][2]string{{"config", "Inspect global settings"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete closed work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"plugin", "List and run optional plugins"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "States:")
 	fmt.Fprintln(w, "  backlog | active | closed   (waiting active work stays out of the attention queue)")

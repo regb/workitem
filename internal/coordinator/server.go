@@ -839,6 +839,27 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			return
 		}
 		result = note
+	case MethodAgentProfiles:
+		value, err := s.database.AgentProfiles()
+		if err != nil {
+			s.writeError(conn, request.ID, "command_error", err.Error())
+			return
+		}
+		result = value
+	case MethodChangeAgentProfile:
+		var command ChangeAgentProfileCommand
+		if err := json.Unmarshal(request.Payload, &command); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		s.domainMu.Lock()
+		value, err := s.database.ChangeAgentProfile(command)
+		s.domainMu.Unlock()
+		if err != nil {
+			s.writeError(conn, request.ID, "command_error", err.Error())
+			return
+		}
+		result = value
 	case MethodRepositoryEnvironment:
 		var query RepositoryEnvironmentRequest
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
@@ -1110,6 +1131,9 @@ func agentMethodAllowed(method string) bool {
 	case MethodRepositorySource:
 		return true
 	case MethodPing, MethodStatus, MethodListManifests, MethodCreateItem:
+		return true
+	// Profiles hold no secrets; new items need the default one.
+	case MethodAgentProfiles:
 		return true
 	// Agents keep their items' notes and attachments.
 	case MethodAddNote, MethodAttach:

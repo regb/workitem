@@ -93,14 +93,17 @@ func (a *App) NewWorkItem(ctx context.Context, opts NewWorkItemOptions) (NewWork
 // used the old implicit "default" profile. New items persist the named profile.
 func (a *App) agentProfileName(value string) string {
 	if value == "" || value == "default" {
-		return a.DefaultAgent
+		return a.DefaultProfile()
 	}
 	return value
 }
 
 func (a *App) resolveAgentName(value string) (string, error) {
 	value = a.agentProfileName(value)
-	definition, ok := a.AgentsConfig[value]
+	if value == "" {
+		return "", fmt.Errorf("there is no agent profile yet: install Pi or Claude Code and run any wi command to add one for it, or add one with wi agent profile add NAME --driver DRIVER")
+	}
+	definition, ok := a.Agents()[value]
 	if !ok {
 		return "", fmt.Errorf("agent definition %q is not configured", value)
 	}

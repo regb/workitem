@@ -17,8 +17,6 @@ Finish and close items rather than continually expanding them. Merge, close, and
 
 | Command | Purpose |
 | --- | --- |
-| `wi init` | Discover installed agents and select the default, then write the initial user config |
-| `wi init --default PROFILE [--json]` | Select a detected profile without prompting |
 
 Setup refuses to overwrite an existing config and does not start agents or the coordinator. A missing default profile is a configuration error; run setup before repository or item commands.
 
@@ -28,7 +26,6 @@ Setup refuses to overwrite an existing config and does not start agents or the c
 | --- | --- |
 | `wi config [show] [--json]` | Inspect global settings with built-in defaults |
 | `wi config get KEY [--json]` | Query a scalar or section by dot-separated key |
-| `wi config agents [--json]` | List configured agent profiles and mark the default |
 | `wi config drivers [--json]` | Inspect driver definitions and defaults |
 | `wi config plugins` | Inspect registered plugin options, defaults, types, and scopes |
 | `wi config get KEY [--origins]` | Inspect a global value and optional extension-default provenance |
@@ -150,6 +147,10 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi agent monitor` | Read normalized runtime events; `--content` follows live message text, tool calls and activity |
 | `wi agent settings [show]` | Show an item's model and reasoning level and the available models |
 | `wi agent settings set [--restart] NAME=VALUE...` | Change them for the item, live where the running agent supports it |
+| `wi agent profile list` | List agent profiles and the default |
+| `wi agent profile add NAME --driver DRIVER [--label LABEL] [KEY=VALUE...]` | Add an agent profile; the driver validates its settings |
+| `wi agent profile edit NAME [--label LABEL] [KEY=VALUE...]` | Change a profile's label or settings; `KEY=` removes one |
+| `wi agent profile remove NAME` / `wi agent profile default NAME` | Remove a profile, or make one the default |
 | `wi agent profile set PROFILE [NAME=VALUE...]` | Move a stopped item to another profile of its conversation's driver |
 | `wi agent control send` | Send steering or follow-up text and optional repeatable `--image` attachments |
 | `wi agent control abort` | Abort the current agent run |

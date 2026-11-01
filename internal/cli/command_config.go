@@ -8,9 +8,7 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"text/tabwriter"
 
-	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/plugins/bundled"
 )
 
@@ -57,9 +55,12 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 	}
 	command := positional[0]
 	if (command == "get" && (len(positional) != 2 || strings.TrimSpace(positional[1]) == "")) || (command != "get" && len(positional) != 1) {
-		return usageErr{fmt.Errorf("usage: wi config <show|get KEY|agents|drivers|plugins> [--origins] [--show-sensitive]")}
+		return usageErr{fmt.Errorf("usage: wi config <show|get KEY|drivers|plugins> [--origins] [--show-sensitive]")}
 	}
-	if command != "show" && command != "get" && command != "agents" && command != "drivers" && command != "plugins" {
+	if command == "agents" {
+		return usageErr{fmt.Errorf("agent profiles moved to the daemon: list them with wi agent profile list")}
+	}
+	if command != "show" && command != "get" && command != "drivers" && command != "plugins" {
 		return usageErr{fmt.Errorf("unknown config command %q", command)}
 	}
 	self, _ := os.Executable()
@@ -70,11 +71,8 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 	for _, warning := range warnings {
 		fmt.Fprintf(stderr, "warning: config: %s\n", warning)
 	}
-	if showOrigins && (command == "agents" || command == "plugins") {
+	if showOrigins && command == "plugins" {
 		return usageErr{fmt.Errorf("--origins applies to configuration value queries, not profile/schema summaries")}
-	}
-	if command == "agents" {
-		return printConfigAgents(stdout, cfg, jsonOut)
 	}
 	if command == "plugins" {
 		definitions := pluginHost.Registry.Options().Definitions()
@@ -99,13 +97,6 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 	}
 	// Optional JSON fields still represent queryable settings when unset.
 	tree["item"].(map[string]any)["defaults"].(map[string]any)["labels"] = cfg.Item.Defaults.Labels
-	for name, profile := range cfg.Agents {
-		definition := tree["agents"].(map[string]any)[name].(map[string]any)
-		definition["label"] = profile.Label
-		if _, ok := definition["config"]; !ok {
-			definition["config"] = map[string]any{}
-		}
-	}
 	for name, driver := range cfg.Drivers {
 		definition := tree["drivers"].(map[string]any)[name].(map[string]any)
 		definition["command"] = driver.Command
@@ -186,7 +177,7 @@ func queryConfig(args []string, path string, stdout, stderr io.Writer, jsonOut b
 // Driver settings and executable command lines are opaque. Plugin behavior
 // options are redacted separately through their shared registered schemas.
 func redactConfigDriverSettings(tree map[string]any) {
-	for _, section := range []string{"agents", "drivers", "plugins"} {
+	for _, section := range []string{"drivers", "plugins"} {
 		definitions, _ := tree[section].(map[string]any)
 		for _, value := range definitions {
 			definition, _ := value.(map[string]any)
@@ -253,42 +244,6 @@ func printConfigTree(w io.Writer, prefix string, value any) error {
 	}
 	_, err = fmt.Fprintf(w, "%s = %s\n", prefix, encoded)
 	return err
-}
-
-type configAgentProfile struct {
-	Name    string `json:"name"`
-	Driver  string `json:"driver"`
-	Label   string `json:"label,omitempty"`
-	Default bool   `json:"default"`
-}
-
-func printConfigAgents(w io.Writer, cfg config.Config, jsonOut bool) error {
-	names := make([]string, 0, len(cfg.Agents))
-	for name := range cfg.Agents {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	profiles := make([]configAgentProfile, 0, len(names))
-	for _, name := range names {
-		definition := cfg.Agents[name]
-		profiles = append(profiles, configAgentProfile{Name: name, Driver: definition.Driver, Label: definition.Label, Default: name == cfg.DefaultAgent})
-	}
-	if jsonOut {
-		return writeJSON(w, struct {
-			DefaultAgent string               `json:"default_agent"`
-			Agents       []configAgentProfile `json:"agents"`
-		}{cfg.DefaultAgent, profiles})
-	}
-	table := tabwriter.NewWriter(w, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(table, "NAME\tDRIVER\tDEFAULT\tLABEL")
-	for _, profile := range profiles {
-		marker := ""
-		if profile.Default {
-			marker = "*"
-		}
-		fmt.Fprintf(table, "%s\t%s\t%s\t%s\n", profile.Name, profile.Driver, marker, profile.Label)
-	}
-	return table.Flush()
 }
 
 func decodeConfigTree(raw []byte, target *map[string]any) error {

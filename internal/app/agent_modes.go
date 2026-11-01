@@ -50,7 +50,7 @@ func (a *App) AgentRuntimeModes(ctx context.Context, name string) driverprotocol
 		return modes
 	}
 	modes := legacyRuntimeModes()
-	definition := a.AgentsConfig[name]
+	definition := a.Agents()[name]
 	if reporter, ok := a.ConversationBackends[definition.Driver].(RuntimeModesReporter); ok {
 		if raw, err := a.driverConfigJSON(definition); err == nil {
 			if reported, err := reporter.RuntimeModes(ctx, name, raw); err == nil {

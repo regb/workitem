@@ -47,13 +47,7 @@ wi info
 
 When Go supplies VCS metadata, development versions include the Git revision and dirty-checkout status. Managed-worktree builds may instead report `devel` without a revision. This identifies the code behind a local installation without a manual development version number.
 
-Run first-time setup before using ordinary commands:
-
-```bash
-wi init
-```
-
-Setup detects installed agents through their drivers and asks you to choose the default. It writes profiles with absolute executable paths to `~/.config/wi/config.toml`, or `$XDG_CONFIG_HOME/wi/config.toml`. For scripts, use `wi init --default pi` or `wi init --default claude`. Setup does not launch agents, test authentication, or overwrite an existing config. If you already have a config, set `default_agent = "pi"` to an existing named profile; a missing or dangling pointer is an error.
+No setup command is needed, and no configuration file. The first `wi` command adds an agent profile for each coding agent the bundled drivers find installed on `PATH` (Pi, Claude Code), with its absolute executable path; Pi's becomes the default. Check them with `wi agent profile list`, or in the web Settings → Agents page. If you install an agent later, add it with `wi agent profile add NAME --driver DRIVER`. Profiles hold no credentials: each agent logs in on its own.
 
 The daemon starts automatically when an ordinary command needs it. You do not need to start tmux before running `wi`; TUI operations create or reuse the required server and sessions.
 

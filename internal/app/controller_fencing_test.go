@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/regb/workitem/internal/agent"
 	viewapp "github.com/regb/workitem/internal/app/view"
-	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/process"
 	"github.com/regb/workitem/internal/testutil"
@@ -144,8 +143,8 @@ func TestConfirmedTakeoverAbortsWhenReplacingTheRuntime(t *testing.T) {
 	info, _ := a.Process.Info(4242)
 	a.AgentRuntimeSocketRoot = testutil.ShortTempDir(t)
 	a.ArchiveRuntimeStopTimeout = 50 * time.Millisecond
-	a.DefaultAgent = "pi"
-	a.AgentsConfig = map[string]config.AgentDefinitionConfig{"pi": {Driver: "pi"}}
+	a.StaticAgentProfiles.Default = "pi"
+	a.StaticAgentProfiles.Profiles = []model.AgentProfile{{Name: "pi", Driver: "pi"}}
 	a.ConversationBackends["pi"] = validConfigBackend{}
 	a.WorkListObserver = func(context.Context, string) (viewapp.Observation, error) {
 		return viewapp.Observation{Status: "idle"}, nil

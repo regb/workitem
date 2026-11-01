@@ -44,8 +44,8 @@ func TestDefaultAgentIsResolvedAndStoredAtCreation(t *testing.T) {
 	if first.Manifest.Agent != "pi" {
 		t.Fatalf("stored agent %q", first.Manifest.Agent)
 	}
-	a.AgentsConfig["review"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{}}
-	a.DefaultAgent = "review"
+	a.StaticAgentProfiles.Profiles = append(a.StaticAgentProfiles.Profiles, model.AgentProfile{Name: "review", Driver: "pi", Config: map[string]any{}})
+	a.StaticAgentProfiles.Default = "review"
 	second, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "Second", CWD: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
@@ -69,7 +69,7 @@ func TestAgentConfigValidationMergesSettingsWithoutResources(t *testing.T) {
 	backend := &configCheckingBackend{}
 	a.ConversationBackends["pi"] = backend
 	a.DriversConfig["pi"] = config.DriverDefinitionConfig{Defaults: map[string]any{"required": "present", "setting": "default"}}
-	a.AgentsConfig["review"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{"setting": "override"}}
+	a.StaticAgentProfiles.Profiles = append(a.StaticAgentProfiles.Profiles, model.AgentProfile{Name: "review", Driver: "pi", Config: map[string]any{"setting": "override"}})
 	if err := a.ValidateAgentConfig(context.Background(), "review", nil); err != nil {
 		t.Fatal(err)
 	}

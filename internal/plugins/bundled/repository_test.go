@@ -70,7 +70,7 @@ func TestUnavailablePluginOptionsSurviveCatalogLoading(t *testing.T) {
 	for _, activation := range []string{"", "enabled = false\n"} {
 		t.Run(activation, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "config.toml")
-			body := "default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n[plugins.future]\n" + activation + "load = false\napi_key = \"private\"\n"
+			body := "[plugins.future]\n" + activation + "load = false\napi_key = \"private\"\n"
 			if err := os.WriteFile(path, []byte(body), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -96,7 +96,7 @@ func TestUnavailablePluginOptionsSurviveCatalogLoading(t *testing.T) {
 func TestUnavailablePluginCannotActivateWithoutManifest(t *testing.T) {
 	for _, activation := range []string{"enabled = true", "command = \"do-not-run\"", "load = true"} {
 		path := filepath.Join(t.TempDir(), "config.toml")
-		body := "default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n[plugins.future]\n" + activation + "\n"
+		body := "[plugins.future]\n" + activation + "\n"
 		if err := os.WriteFile(path, []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +115,7 @@ func TestDirenvTableTakesOptionsButCannotBeDisabledOrReplaced(t *testing.T) {
 		"[plugins.direnv]\ncommand = \"direnv-wrapper\"\n": false,
 	} {
 		path := filepath.Join(dir, "config.toml")
-		if err := os.WriteFile(path, []byte("default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n"+body), 0o600); err != nil {
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		cfg, _, _, err := Load(path, "wi")

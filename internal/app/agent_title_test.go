@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/regb/workitem/internal/config"
+	"github.com/regb/workitem/internal/model"
 	"testing"
 )
 
@@ -20,7 +21,7 @@ func (b *titleBackend) GenerateTitle(_ context.Context, prompt, agent string, co
 }
 func TestTitleUsesDefaultAgentDriverConfigWithoutAcquiringConversation(t *testing.T) {
 	backend := &titleBackend{}
-	a := &App{DefaultAgent: "pi", AgentsConfig: map[string]config.AgentDefinitionConfig{"pi": {Driver: "pi", Config: map[string]any{"executable": "override"}}}, DriversConfig: map[string]config.DriverDefinitionConfig{"pi": {Defaults: map[string]any{"executable": "default", "extensions": []string{"configured"}}}}, ConversationBackends: map[string]ConversationBackend{"pi": backend}}
+	a := &App{StaticAgentProfiles: model.AgentProfiles{Default: "pi", Profiles: []model.AgentProfile{{Name: "pi", Driver: "pi", Config: map[string]any{"executable": "override"}}}}, DriversConfig: map[string]config.DriverDefinitionConfig{"pi": {Defaults: map[string]any{"executable": "default", "extensions": []string{"configured"}}}}, ConversationBackends: map[string]ConversationBackend{"pi": backend}}
 	title, err := a.GenerateConversationTitle(context.Background(), "task")
 	if err != nil || title != "Generated conversation title" || backend.prompt != "task" {
 		t.Fatalf("title=%q err=%v", title, err)

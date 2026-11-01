@@ -13,8 +13,8 @@ import (
 func TestRemovedProfileExplainsHowToMoveTheItem(t *testing.T) {
 	a, _, m := settingsApp(t)
 	ctx := context.Background()
-	a.AgentsConfig["pi-work"] = config.AgentDefinitionConfig{Driver: "pi", Config: map[string]any{"executable": "/bin/pi"}}
-	a.AgentsConfig["claude"] = config.AgentDefinitionConfig{Driver: "claude"}
+	a.StaticAgentProfiles.Profiles = append(a.StaticAgentProfiles.Profiles, model.AgentProfile{Name: "pi-work", Driver: "pi", Config: map[string]any{"executable": "/bin/pi"}})
+	a.StaticAgentProfiles.Profiles = append(a.StaticAgentProfiles.Profiles, model.AgentProfile{Name: "claude", Driver: "claude"})
 	a.DriversConfig["claude"] = config.DriverDefinitionConfig{}
 	m.Agent = "pi-old"
 	m.PrimaryConversation = &model.Conversation{Driver: "pi", ID: "conversation"}
@@ -53,7 +53,7 @@ func TestRemovedProfileExplainsHowToMoveTheItem(t *testing.T) {
 func TestItemWithoutConversationCanMoveToAnyDriver(t *testing.T) {
 	a, _, m := settingsApp(t)
 	ctx := context.Background()
-	a.AgentsConfig["claude"] = config.AgentDefinitionConfig{Driver: "claude"}
+	a.StaticAgentProfiles.Profiles = append(a.StaticAgentProfiles.Profiles, model.AgentProfile{Name: "claude", Driver: "claude"})
 	a.DriversConfig["claude"] = config.DriverDefinitionConfig{}
 	a.ConversationBackends["claude"] = &settingsBackend{}
 	m.PrimaryConversation = nil

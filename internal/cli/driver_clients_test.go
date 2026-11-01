@@ -21,7 +21,4 @@ func TestBundledDriverClients(t *testing.T) {
 	if client.Path != "/trusted/custom-driver" || len(client.Args) != 0 {
 		t.Fatalf("explicit command ignored: %+v", client)
 	}
-	if len(cfg.Agents) != 0 {
-		t.Fatalf("profiles: %+v", cfg.Agents)
-	}
 }

@@ -9,17 +9,11 @@ User configuration lives at:
 ${XDG_CONFIG_HOME:-$HOME/.config}/wi/config.toml
 ```
 
-Run `wi init` once on a new machine. Wi asks each bundled driver to discover installed agents on `PATH`, lists the detected profiles, and lets you select the default. It writes explicit profiles and absolute executable paths to this file without launching an agent or starting the coordinator. Discovery does not check authentication or make model requests.
-
-For noninteractive setup, use `wi init --default pi` or `wi init --default claude`. Only detected profiles can be selected. If no agents are installed, setup reports an error without writing a config. Existing files are never overwritten; edit them directly.
-
-A missing `default_agent`, or a reference to an undefined profile, is a configuration error. Agent profiles are not implicit defaults. A repository may also provide `.config/wi.toml` for supported project settings, but it cannot define user agent profiles.
+The file is optional: without it every setting has its built-in default. Agent profiles are not configured here; Wi's daemon keeps them, managed with `wi agent profile` or in the web Settings → Agents page (see [Coding agents and drivers](#coding-agents-and-drivers)). A file that still sets `default_agent` or `[agents.NAME]` is refused with a message saying how to move them. A repository may also provide `.config/wi.toml` for supported project settings.
 
 ## Inspect configuration
 
 ```bash
-wi config agents
-wi config get default_agent
 wi config get deep_work.max_active
 wi config get list.labels --json
 wi config get agent.startup_message
@@ -35,24 +29,19 @@ wi config show --json
 
 `wi config plugins` displays registered plugin options, defaults, types, and repository-scope permissions as JSON. `--origins` wraps a query result in `value` and `origins`, identifying global plugin values supplied by a default or user configuration. Plugin settings marked sensitive, and values belonging to unregistered plugins, are redacted unless `--show-sensitive` is supplied.
 
-`agents` lists configured profiles sorted by name, their drivers, optional labels, and the default marker. Its JSON object contains `default_agent` and an `agents` array with `name`, `driver`, optional `label`, and `default`. A configured profile does not imply that its executable is installed or authenticated.
-
 `get KEY` accepts dot-separated configuration keys or sections. Text scalars print directly; sections print sorted dotted settings. `--json` emits the selected JSON value, without a wrapper. An unknown key exits with code 3; invalid arguments exit with code 2.
 
-Driver-specific profile settings, driver defaults, plugin settings, and custom commands may contain secrets. Wi hides their values by default, retaining the setting names. Use `--show-sensitive` only when you intend to reveal them, including in JSON output:
+Driver defaults, plugin settings, and custom commands may contain secrets. Wi hides their values by default, retaining the setting names. Use `--show-sensitive` only when you intend to reveal them, including in JSON output:
 
 ```bash
-wi config get agents.pi.config --show-sensitive --json
 wi config get drivers.pi.defaults --show-sensitive --json
 ```
 
-`wi info config-file` prints the configuration path. `wi init` remains the first-time setup command; configuration queries never rewrite the file.
+`wi info config-file` prints the configuration path. Configuration queries never rewrite the file.
 
 ## Example
 
 ```toml
-default_agent = "pi"
-
 [deep_work]
 max_active = 2
 
@@ -82,15 +71,6 @@ idle = "review"
 problem = "problem"
 
 [drivers.pi.defaults]
-executable = "/home/me/bin/pi"
-
-[agents.pi]
-driver = "pi"
-
-[agents.web-search]
-driver = "pi"
-
-[agents.web-search.config]
 extensions = ["/home/me/tools/web-search.ts"]
 ```
 
@@ -232,30 +212,33 @@ append_system_prompt = "Read the task with `wi show`. Ask before changing other 
 
 ## Coding agents and drivers
 
-Every new item records a named agent profile. When `wi new` omits `--agent`, Wi resolves the top-level `default_agent` pointer and stores that profile name on the item. Changing `default_agent` affects future creation, not items already stored with named profiles. Editing the selected profile changes its settings without duplicating configuration. `wi init` creates named profiles for detected agents and writes the pointer; it does not create an `agents.default` profile. Missing or dangling pointers are configuration errors.
+An agent profile names a coding agent setup: a driver (`pi` or `claude`), an optional display label, and the settings the driver launches with. Wi's daemon keeps the profiles and the default one; they are not part of `config.toml`. Several profiles can use the same driver, for example one per account. Profiles hold no credentials: each agent logs in on its own.
 
-Older items recorded the special name `default`; those records still resolve through the configured pointer. Their records and native conversations are not rewritten. Keep the pointer on their original agent when resuming them. Wi bundles the Pi and Claude adapters, not implicit profiles.
+```sh
+wi agent profile list
+wi agent profile add pi-work --driver pi --label "Pi (work)" executable=/usr/local/bin/pi model=openai-codex/gpt-5.4
+wi agent profile edit pi-work reasoning=high model=
+wi agent profile default pi-work
+wi agent profile remove pi-work
+```
 
-`[agents.<name>]` defines a flat selectable agent profile and selects a registered driver. An optional `label` provides display text; clients should fall back to the profile name when it is blank. The nested `config` belongs to the driver, which can require fields and reject missing or invalid values. Wi passes this table as opaque JSON and checks it through the driver's stateless `config.validate` operation before starting a new owner. There is no generic required-field schema. Invalid configuration fails before startup creates resources; `new --start` also validates before creating the item. Plain backlog capture does not require a driver process, and existing owners are not reconfigured.
+`KEY=VALUE` sets a driver setting and `KEY=` removes it. Before a profile is saved, the driver checks its settings through its stateless `config.validate` operation, and `executable` must be an absolute path to an executable file. The web Settings → Agents page edits the same list. When the daemon has no profiles, the first `wi` command adds one for each agent the bundled drivers find installed on `PATH`, with its absolute executable path; Pi's comes first and becomes the default. If none is found, commands that need an agent say how to add one.
+
+Every new item records a named profile: the default unless `wi new --agent NAME` chooses another. Changing the default affects future items only. Removing a profile does not change items that use it: they keep its name and, when they next start, ask to move to another with `wi agent profile set`. The default profile cannot be removed while another exists. Older items that recorded the special name `default` resolve to the current default.
 
 Every driver takes the same two choices: `model`, and `reasoning`, one level of `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. Each driver maps `reasoning` onto its backend, as Pi's thinking level or Claude's effort, and accepts a subset of the levels. A profile's values are defaults; an item chooses its own with `wi new --model M --reasoning L`, `wi start`, or `wi agent settings set`, so a profile per model or level is not needed.
 
-Pi accepts optional `executable`, `extensions`, `model`, and `reasoning`. The executable defaults to `pi`; omitted model and reasoning settings leave the choice to Pi, which accepts every level. `[drivers.<name>.defaults]` provides settings shared by every agent using that driver; agent configuration overrides those defaults.
+Pi accepts optional `executable`, `extensions`, `model`, and `reasoning`. The executable defaults to `pi`; omitted model and reasoning settings leave the choice to Pi, which accepts every level. `[drivers.<name>.defaults]` in `config.toml` provides settings shared by every profile using that driver; a profile's own settings override them.
 
-```toml
-[agents.pi]
-driver = "pi"
-label = "Pi"
-[agents.pi.config]
-model = "openai-codex/gpt-5.4"
-reasoning = "high"
+```sh
+wi agent profile add pi --driver pi --label Pi model=openai-codex/gpt-5.4 reasoning=high
 ```
 
 Items retain the selected profile name. Runtime startup resolves the profile, applies the item's own model and reasoning, and passes the configuration through the selected driver.
 
 Select a profile with `wi new --agent NAME`.
 
-External driver programs use wi's versioned bootstrap protocol. The bundled drivers run as separate `wi internal-driver pi` and `wi internal-driver claude` processes from the installed `wi` binary, so the adapters are always present and have the same build version. The underlying `pi` or `claude` executable must still be installed. A configured `drivers.<name>.command` selects a trusted external driver executable; repository configuration cannot register drivers or agent definitions.
+External driver programs use wi's versioned bootstrap protocol. The bundled drivers run as separate `wi internal-driver pi` and `wi internal-driver claude` processes from the installed `wi` binary, so the adapters are always present and have the same build version. The underlying `pi` or `claude` executable must still be installed. A configured `drivers.<name>.command` selects a trusted external driver executable; repository configuration cannot register drivers or agent profiles.
 
 ### Claude Code
 
@@ -263,14 +246,8 @@ Claude accepts optional `executable`, `model`, and `reasoning`. The executable d
 
 The bundled Claude driver always passes `--dangerously-skip-permissions`, on both creation and resume, to match Pi's execution without per-tool approvals. Permission mode is not configurable; `permission_mode` is rejected as an unknown field. Claude executes with the host account's access. A managed worktree is not a sandbox.
 
-```toml
-[agents.claude]
-driver = "claude"
-label = "Claude Code"
-[agents.claude.config]
-executable = "/Users/me/.local/bin/claude"
-model = "sonnet"
-reasoning = "high"
+```sh
+wi agent profile add claude --driver claude --label "Claude Code" executable=/Users/me/.local/bin/claude model=sonnet reasoning=high
 ```
 
 ```sh

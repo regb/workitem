@@ -10,41 +10,24 @@ import (
 	"github.com/regb/workitem/internal/plugins/bundled"
 )
 
-func TestMissingDefaultProfileIsConfigurationError(t *testing.T) {
+func TestAMissingConfigurationFileIsTheDefaults(t *testing.T) {
 	cfg, warnings, err := config.Load(filepath.Join(t.TempDir(), "missing.toml"))
-	if err == nil || !strings.Contains(err.Error(), "default_agent") || !strings.Contains(err.Error(), "wi init") || len(cfg.Agents) != 0 {
-		t.Fatalf("cfg=%+v err=%v", cfg, err)
-	}
-	if len(warnings) != 0 {
-		t.Fatalf("warnings = %+v", warnings)
+	if err != nil || len(warnings) != 0 {
+		t.Fatalf("err=%v warnings=%+v", err, warnings)
 	}
 	if cfg.DeepWork.MaxActive != 2 || cfg.List.RepositoryFolders != 2 || cfg.Attention.Priority != "recent-request" {
 		t.Fatalf("cfg = %+v", cfg)
 	}
 }
 
-func TestExistingConfigWithoutDefaultProfileFails(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[agents.pi]\ndriver = \"pi\"\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "default_agent") {
-		t.Fatalf("expected missing default error: %v", err)
-	}
-}
-
-func TestDefaultAgentReferenceValidation(t *testing.T) {
-	for _, content := range []string{
-		"default_agent = \"missing\"\n[agents.pi]\ndriver = \"pi\"\n",
-		"default_agent = \"\"\n[agents.pi]\ndriver = \"pi\"\n",
-		"default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n[agents.default]\ndriver = \"pi\"\n",
-	} {
+func TestAgentProfilesInConfigurationPointToTheDaemon(t *testing.T) {
+	for _, content := range []string{"default_agent = \"pi\"\n", "[agents.pi]\ndriver = \"pi\"\n"} {
 		path := filepath.Join(t.TempDir(), "config.toml")
 		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := config.Load(path); err == nil {
-			t.Fatalf("accepted %q", content)
+		if _, _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "wi agent profile add") {
+			t.Fatalf("%q: %v", content, err)
 		}
 	}
 }
@@ -65,28 +48,18 @@ func TestLoadRejectsRelativeDirenvAutoTrustRepository(t *testing.T) {
 	}
 }
 
-func TestLoadAgentDefinitionsAndDriverDefaults(t *testing.T) {
+func TestLoadDriverDefaults(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	writeFile(t, path, "[drivers.pi.defaults]\nexecutable = \"/opt/pi/bin/pi\"\n\n[agents.web-search]\ndriver = \"pi\"\nlabel = \"Pi · Web search\"\n\n[agents.web-search.config]\nextensions = [\"/opt/pi/web-search.ts\"]\nmodel = \"openai-codex/gpt-test\"\nreasoning = \"high\"\n")
+	writeFile(t, path, "[drivers.pi.defaults]\nexecutable = \"/opt/pi/bin/pi\"\nextensions = [\"/opt/pi/web-search.ts\"]\n")
 	cfg, warnings, err := config.Load(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(warnings) != 0 {
-		t.Fatalf("warnings=%v", warnings)
-	}
-	if cfg.DefaultAgent != "pi" || cfg.Agents["pi"].Driver != "pi" || cfg.Agents["web-search"].Driver != "pi" || cfg.Agents["web-search"].Label != "Pi · Web search" {
-		t.Fatalf("agents=%+v", cfg.Agents)
+	if err != nil || len(warnings) != 0 {
+		t.Fatalf("err=%v warnings=%v", err, warnings)
 	}
 	if cfg.Drivers["pi"].Defaults["executable"] != "/opt/pi/bin/pi" {
 		t.Fatalf("drivers=%+v", cfg.Drivers)
 	}
-	extensions, ok := cfg.Agents["web-search"].Config["extensions"].([]string)
-	if !ok || len(extensions) != 1 || extensions[0] != "/opt/pi/web-search.ts" {
-		t.Fatalf("extensions=%#v", cfg.Agents["web-search"].Config["extensions"])
-	}
-	if cfg.Agents["web-search"].Config["model"] != "openai-codex/gpt-test" || cfg.Agents["web-search"].Config["reasoning"] != "high" {
-		t.Fatalf("model config=%#v", cfg.Agents["web-search"].Config)
+	if extensions, ok := cfg.Drivers["pi"].Defaults["extensions"].([]string); !ok || len(extensions) != 1 {
+		t.Fatalf("extensions=%#v", cfg.Drivers["pi"].Defaults["extensions"])
 	}
 }
 
@@ -148,9 +121,6 @@ func TestRejectNegativeLimit(t *testing.T) {
 
 func writeFile(t *testing.T, path, content string) {
 	t.Helper()
-	if filepath.Base(path) == "config.toml" && !strings.Contains(content, "default_agent =") {
-		content = "default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n" + content
-	}
 	if err := osWriteFile(path, []byte(content)); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +132,7 @@ var osWriteFile = func(path string, b []byte) error {
 
 func TestPluginTablesHoldRegistrationAndRegisteredOptions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	base := "default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n"
+	base := ""
 	if err := os.WriteFile(path, []byte(base+"[plugins.github]\nenabled = true\nignore_authors = [\"codecov\"]\n[plugins.jira]\nmanifest = \"jira/plugin.json\"\ncommand = [\"jira-sync\",\"--quiet\"]\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +169,7 @@ func TestDaemonManagedSetting(t *testing.T) {
 	if daemon, err := config.LoadDaemon(path); err != nil || !daemon.Managed {
 		t.Fatalf("incomplete file: %+v %v", daemon, err)
 	}
-	if err := os.WriteFile(path, []byte("default_agent = \"pi\"\n[agents.pi]\ndriver = \"pi\"\n[daemon]\nmanaged = true\n"), 0600); err != nil {
+	if err := os.WriteFile(path, []byte("[daemon]\nmanaged = true\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	cfg, warnings, err := config.Load(path)

@@ -72,12 +72,8 @@ func Main(ctx context.Context, args []string) int {
 		return runConfigMain(filtered[1:], paths.ConfigFile, os.Stdout, os.Stderr, jsonOut)
 	}
 	if filtered[0] == "init" {
-		self, err := os.Executable()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			return ExitError
-		}
-		return runInitMain(ctx, filtered[1:], paths.ConfigFile, self, env, os.Stdin, os.Stdout, os.Stderr, jsonOut)
+		fmt.Fprintln(os.Stderr, "wi init is gone: wi needs no configuration file, and the first command adds a profile for each coding agent it finds installed (see wi agent profile list)")
+		return ExitUsage
 	}
 	if infoCommandRequested(args) {
 		filtered, jsonOut := extractGlobals(args)
@@ -109,8 +105,6 @@ func Main(ctx context.Context, args []string) int {
 	application.AgentConfig = cfgFile.Agent
 	application.AgentStatusConfig = cfgFile.AgentStatus
 	application.AttentionConfig = cfgFile.Attention
-	application.DefaultAgent = cfgFile.DefaultAgent
-	application.AgentsConfig = cfgFile.Agents
 	application.DriversConfig = cfgFile.Drivers
 	application.Plugins = pluginHost
 	terminalApprovals.Store(!jsonOut && inputIsTerminal(os.Stdin))
@@ -176,6 +170,16 @@ func Main(ctx context.Context, args []string) int {
 		return ExitError
 	}
 	BindCoordinatorApp(application, st, runConfig.Coordinator)
+	application.LoadAgentProfiles = client.AgentProfiles
+	if runConfig.ControlAccess != coordinator.AccessAgent {
+		discoverers := map[string]configDiscoverer{}
+		for name, driver := range configuredDriverClients(cfgFile, application.SelfPath, env) {
+			discoverers[name] = driver
+		}
+		if err := seedAgentProfiles(ctx, client, discoverers, os.Stderr); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: agent profiles: %v\n", err)
+		}
+	}
 	application.RepositoryEnvironment = func(ctx context.Context, id string) ([]model.EnvVar, error) {
 		result, err := client.RepositoryEnvironment(ctx, id)
 		return result.Environment.Vars, err

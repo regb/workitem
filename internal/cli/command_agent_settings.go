@@ -79,8 +79,11 @@ func runAgentSettings(ctx context.Context, args []string, cfg Config, jsonOut bo
 
 func runAgentProfile(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	usage := usageErr{errors.New("usage: wi agent profile set [--item <selector>] PROFILE [NAME=VALUE...]")}
-	if len(args) == 0 || args[0] != "set" {
-		return usage
+	if len(args) == 0 {
+		return usageErr{errors.New(agentProfileUsage)}
+	}
+	if args[0] != "set" {
+		return runAgentProfiles(ctx, args[0], args[1:], cfg, jsonOut)
 	}
 	fs := newFlagSet("agent profile set", cfg.Stderr)
 	var item string

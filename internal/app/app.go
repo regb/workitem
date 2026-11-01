@@ -130,10 +130,10 @@ type App struct {
 	AgentConfig                config.AgentConfig
 	AgentStatusConfig          config.AgentStatusConfig
 	AttentionConfig            config.AttentionConfig
-	DefaultAgent               string
-	AgentsConfig               map[string]config.AgentDefinitionConfig
-	// RepositoryEnvironment reads a repository's environment variables.
-	RepositoryEnvironment          func(context.Context, string) ([]model.EnvVar, error)
+	// LoadAgentProfiles reads the daemon's agent profiles. Without it, as in
+	// tests, the app uses StaticAgentProfiles.
+	LoadAgentProfiles              func(context.Context) (model.AgentProfiles, error)
+	StaticAgentProfiles            model.AgentProfiles
 	DriversConfig                  map[string]config.DriverDefinitionConfig
 	BundledDriverCommands          map[string]BundledDriverCommand
 	AgentRuntimeLauncher           agent.Launcher
@@ -141,6 +141,8 @@ type App struct {
 	ConversationProjectionObserver agentcore.ConversationObserver
 	WorkListObserver               viewapp.Observe
 	AttentionActivityReader        func(context.Context, string) (AttentionActivity, error)
+	// RepositoryEnvironment reads a repository's environment variables.
+	RepositoryEnvironment func(context.Context, string) ([]model.EnvVar, error)
 	// Leases is the coordinator's controller lease table; nil disables
 	// single-controller enforcement.
 	Leases ControlLeases
@@ -157,7 +159,7 @@ type App struct {
 
 func New(st Store, git Git) *App {
 	cfg := config.Default()
-	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, RepoConfig: cfg.Repo, AgentConfig: cfg.Agent, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DefaultAgent: cfg.DefaultAgent, AgentsConfig: cfg.Agents, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
+	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, RepoConfig: cfg.Repo, AgentConfig: cfg.Agent, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
 	return a
 }
 
