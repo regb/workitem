@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 	"github.com/regb/workitem/internal/model"
@@ -49,7 +50,7 @@ func ReadProject(reader io.Reader) (ProjectConfig, []string, error) {
 		}
 	}
 	// Other sections remain ignored; only the safe subset is decoded.
-	safe := map[string]any{"item": root["item"]}
+	safe := map[string]any{"item": root["item"], "workspace": root["workspace"]}
 	b, err := json.Marshal(safe)
 	if err != nil {
 		return cfg, nil, err
@@ -59,6 +60,9 @@ func ReadProject(reader io.Reader) (ProjectConfig, []string, error) {
 	}
 	if _, err := model.NormalizeLabels(cfg.Item.Defaults.Labels); err != nil {
 		return cfg, nil, fmt.Errorf("project item.defaults.labels: %w", err)
+	}
+	if command := cfg.Workspace.Setup.Run; len(command) > 4096 || strings.ContainsRune(command, 0) {
+		return cfg, nil, fmt.Errorf("project workspace.setup.run must be text of at most 4096 bytes")
 	}
 	return cfg, nil, nil
 }

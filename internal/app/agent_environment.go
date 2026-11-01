@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -69,6 +70,9 @@ func (a *App) agentRuntimeEnvironment(ctx context.Context, m model.Manifest, mod
 	if err != nil {
 		return nil, scrub, warnings, err
 	}
+	if err := a.applyRepositoryEnvironment(ctx, m.Repository.ID, base); err != nil {
+		return nil, scrub, warnings, err
+	}
 	overrides, removed, runtimeWarnings, err := a.Preparation.Environment(ctx, "runtime", plugin.EnvironmentRequest{Subject: subject, Values: base})
 	warnings = append(warnings, runtimeWarnings...)
 	scrub = append(scrub, removed...)
@@ -109,4 +113,21 @@ func (a *App) agentRuntimeEnvironment(ctx context.Context, m model.Manifest, mod
 		}
 	}
 	return base, scrub, warnings, nil
+}
+
+// applyRepositoryEnvironment sets the repository's environment variables in
+// env. Runtime extensions such as direnv apply after it, so a repository's
+// .envrc can build on them.
+func (a *App) applyRepositoryEnvironment(ctx context.Context, repositoryID string, env map[string]string) error {
+	if a.RepositoryEnvironment == nil || repositoryID == "" {
+		return nil
+	}
+	vars, err := a.RepositoryEnvironment(ctx, repositoryID)
+	if err != nil {
+		return fmt.Errorf("read the repository's environment variables: %w", err)
+	}
+	for _, v := range vars {
+		env[v.Key] = v.Value
+	}
+	return nil
 }

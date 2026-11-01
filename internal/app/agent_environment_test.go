@@ -212,3 +212,19 @@ func TestAgentRuntimeEnvironmentWarnsWithoutEvaluatingUntrustedEnvrc(t *testing.
 		t.Fatalf("token=%q warnings=%v calls=%d", env["TOKEN"], warnings, d.envCalls)
 	}
 }
+
+func TestAgentRuntimeEnvironmentSetsTheRepositoryVariablesBeforeDirenv(t *testing.T) {
+	repository := "01KZYHGDCECSFS4BJ2SNTQP49V"
+	path := t.TempDir()
+	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, Allowed: true, RCPath: path + "/.envrc"}, env: map[string]string{"PORT": "from-envrc"}}
+	a := &App{Preparation: runtimeHooks(t, d), RepositoryEnvironment: func(_ context.Context, id string) ([]model.EnvVar, error) {
+		if id != repository {
+			t.Fatalf("repository %q", id)
+		}
+		return []model.EnvVar{{Key: "DATABASE_URL", Value: "postgres://db"}, {Key: "PORT", Value: "8080"}}, nil
+	}}
+	env, _, _, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Repository: model.Repository{ID: repository}, Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, agent.ModeHeadless)
+	if err != nil || env["DATABASE_URL"] != "postgres://db" || env["PORT"] != "from-envrc" {
+		t.Fatalf("env=%v err=%v", env, err)
+	}
+}

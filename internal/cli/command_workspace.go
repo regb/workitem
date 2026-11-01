@@ -10,7 +10,7 @@ import (
 
 func runWorkspace(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	if len(args) == 0 {
-		return usageErr{errors.New("usage: wi workspace <status|ensure|release> [options] [item]")}
+		return usageErr{errors.New("usage: wi workspace <status|ensure|setup|release> [options] [item]")}
 	}
 	switch args[0] {
 	case "status":
@@ -19,6 +19,8 @@ func runWorkspace(ctx context.Context, args []string, cfg Config, jsonOut bool) 
 		return runWorkspaceEnsure(ctx, args[1:], cfg, jsonOut)
 	case "release":
 		return runWorkspaceRelease(ctx, args[1:], cfg, jsonOut)
+	case "setup":
+		return runWorkspaceSetup(ctx, args[1:], cfg, jsonOut)
 	default:
 		return usageErr{fmt.Errorf("unknown workspace command %q", args[0])}
 	}
@@ -48,6 +50,15 @@ func runWorkspaceStatus(ctx context.Context, args []string, cfg Config, jsonOut 
 	fmt.Fprintf(cfg.Stdout, "checkout: %s\n", res.Checkout.Presence())
 	if res.Checkout.Claim != nil {
 		fmt.Fprintf(cfg.Stdout, "checkout path: %s\n", res.Checkout.Claim.Path)
+	}
+	if setup, err := cfg.App.WorkspaceSetupStatus(ctx, app.ResolveOptions{Selector: res.WorkItemID}); err == nil && setup.Current && setup.Run != nil {
+		fmt.Fprintf(cfg.Stdout, "setup: %s\n", setup.Run.Status)
+		if setup.Run.Error != "" {
+			fmt.Fprintf(cfg.Stdout, "setup error: %s\n", setup.Run.Error)
+		}
+		if setup.Run.Log != "" {
+			fmt.Fprintf(cfg.Stdout, "setup log: %s\n", setup.Run.Log)
+		}
 	}
 	status, reason := workspaceDiagnostic(res)
 	fmt.Fprintf(cfg.Stdout, "worktree: %s\n", status)
@@ -165,4 +176,34 @@ func printCompositionResult(cfg Config, res app.CompositionResult) {
 	for _, warning := range res.Warnings {
 		fmt.Fprintf(cfg.Stdout, "warning: %s\n", warning)
 	}
+}
+
+// runWorkspaceSetup sets the item's checkout up again: its repository files
+// are copied and its setup command runs, as for a new claim.
+func runWorkspaceSetup(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
+	fs := newFlagSet("workspace setup", cfg.Stderr)
+	var item string
+	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
+	if err := fs.Parse(args); err != nil {
+		return usageErr{err}
+	}
+	selector, err := itemSelectorFromFlag(fs, item)
+	if err != nil {
+		return usageErr{err}
+	}
+	res, err := cfg.App.SetupWorkspace(ctx, app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env}, true)
+	if jsonOut && err == nil {
+		return writeJSON(cfg.Stdout, res)
+	}
+	for _, warning := range res.Warnings {
+		fmt.Fprintf(cfg.Stdout, "warning: %s\n", warning)
+	}
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(cfg.Stdout, "set up workspace for %s\n", res.WorkItemID)
+	if res.Run.Log != "" {
+		fmt.Fprintf(cfg.Stdout, "setup log: %s\n", res.Run.Log)
+	}
+	return nil
 }

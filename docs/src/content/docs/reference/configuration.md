@@ -200,7 +200,18 @@ The daemon checks schema permissions and a settings revision on each mutation, d
 
 For commands that consume project-scoped CLI settings, the extension reads only `WI_LIST_LABELS` and `WI_ITEM_DEFAULT_LABELS` from an already allowed `.envrc`. Explicit caller values win. It does not approve files during these reads. Slot reuse revokes previous approval before publishing the new claim; approvals are not shared by file hash.
 
-Checked-in `.config/wi.toml` cannot configure plugins, enable executables, or grant trust. The former `[direnv] auto_trust_repositories` path allowlist and `[repositories.ID...]` user-config tables are rejected with actionable errors. Copy any intended overrides aside, remove those tables, then apply them explicitly using `wi repo settings set`. Wi does not infer or migrate approvals from files or paths.
+Checked-in `.config/wi.toml` cannot configure plugins, enable executables, or grant trust. It may declare a setup command under `[workspace.setup] run`, which runs only once the operator enables it, as described below. The former `[direnv] auto_trust_repositories` path allowlist and `[repositories.ID...]` user-config tables are rejected with actionable errors. Copy any intended overrides aside, remove those tables, then apply them explicitly using `wi repo settings set`. Wi does not infer or migrate approvals from files or paths.
+
+## Workspace setup
+
+Two more bundled plugins set up each new checkout claim before its agent starts; see [Repository files and setup](../../concepts/workspaces/#repository-files-and-setup).
+
+- `plugins.files.skip`: repository files (from `wi repo files`) not copied into checkouts. Setup still reads them from `$WI_FILES`.
+- `plugins.setup.run`: the setup command, run with `/bin/sh` in the checkout. It replaces a command the repository declares.
+- `plugins.setup.trust = "never" | "always"`: whether to run the `[workspace.setup] run` command declared in the repository's `.config/wi.toml` on its default branch. `never`, the default, only reports that one is declared.
+- `plugins.setup.timeout_seconds`: how long setup may take, 600 by default.
+
+All are repository-scoped, so set them with `wi repo settings set NAME plugins.setup.run '...'`.
 
 ## Initial agent message
 

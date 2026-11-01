@@ -555,3 +555,28 @@ func decodeUint64(value []byte) uint64 {
 	}
 	return binary.BigEndian.Uint64(value)
 }
+
+// appendDomainEventTx appends one compact event with the next global
+// sequence, refusing an event identity already recorded.
+func appendDomainEventTx(tx *bolt.Tx, event DomainEvent) (uint64, error) {
+	sequence := decodeUint64(tx.Bucket(bucketMeta).Get(keyGlobalSequence))
+	if sequence == ^uint64(0) {
+		return 0, fmt.Errorf("global event sequence exhausted")
+	}
+	sequence++
+	event.Sequence = sequence
+	if tx.Bucket(bucketEventIDs).Get([]byte(event.ID)) != nil {
+		return 0, fmt.Errorf("event identity already exists")
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		return 0, err
+	}
+	if err := tx.Bucket(bucketEvents).Put(encodeUint64(sequence), data); err != nil {
+		return 0, err
+	}
+	if err := tx.Bucket(bucketEventIDs).Put([]byte(event.ID), encodeUint64(sequence)); err != nil {
+		return 0, err
+	}
+	return sequence, tx.Bucket(bucketMeta).Put(keyGlobalSequence, encodeUint64(sequence))
+}

@@ -15,7 +15,7 @@ wi repo show project
 
 Local onboarding imports committed Git state into an independent store under `$DATA_ROOT/repositories/<id>.git`. It does not copy dirty files, change your external checkout, or depend on it afterward. The import does not use hardlinks or object alternates.
 
-`--branch` selects the integration branch. When omitted for a local source, Wi discovers it once from the local branch corresponding to `origin/HEAD`, then `main`, `master`, `develop`, or `trunk`. If discovery fails, choose explicitly. URL onboarding always requires `--branch`:
+`--branch` selects the integration branch. When omitted for a local source, Wi discovers it once from the local branch corresponding to `origin/HEAD`, then `main`, `master`, `develop`, or `trunk`. If discovery fails, choose explicitly. For a URL, Wi asks the remote for its default branch (the branch its `HEAD` names); pass `--branch` to choose another:
 
 ```bash
 wi repo add project --from https://github.com/example/project.git --branch main

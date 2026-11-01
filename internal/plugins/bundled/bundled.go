@@ -11,6 +11,8 @@ import (
 	"github.com/regb/workitem/internal/options"
 	"github.com/regb/workitem/internal/plugin"
 	direnvplugin "github.com/regb/workitem/internal/plugins/direnv"
+	filesplugin "github.com/regb/workitem/internal/plugins/files"
+	setupplugin "github.com/regb/workitem/internal/plugins/setup"
 	githubplugin "github.com/regb/workitem/plugins/github"
 )
 
@@ -19,13 +21,20 @@ func Catalog(self string, registrations map[string]plugin.Registration, configDi
 	min, max := int64(30), int64(86400)
 	definitions := []plugin.Definition{
 		{Name: schema.Name, Options: schema.Options, RetiredSections: schema.RetiredSections, Required: true, Native: func(approve plugin.Approver) plugin.Hooks { return direnvplugin.New(adapter.New("direnv"), approve) }},
+		{Name: "files", Options: filesplugin.Definition().Options, Required: true, Native: func(plugin.Approver) plugin.Hooks { return filesplugin.New() }},
+		{Name: "setup", Options: setupplugin.Definition().Options, Required: true, Native: func(plugin.Approver) plugin.Hooks { return setupplugin.New() }},
 		{Name: "github", Options: []options.Option{{Name: "ignore_authors", Type: "strings", Default: []string{}, Repository: true, Description: "Authors whose comments or reviews do not satisfy a wait."}, {Name: "interval_seconds", Type: "integer", Default: int64(300), Min: &min, Max: &max, Description: "Polling interval in seconds."}}, Commands: []string{"wait", "sync"}, Jobs: []plugin.Job{{Name: "check", Args: []string{"sync"}, IntervalOption: "interval_seconds", Repository: true}}, Command: []string{filepath.Join(filepath.Dir(self), "wi-github")}, Instructions: githubplugin.Skill},
 	}
-	known := map[string]bool{"direnv": true, "github": true}
+	known := map[string]bool{"direnv": true, "files": true, "github": true, "setup": true}
 	for name, registration := range registrations {
 		if known[name] {
 			if registration.Manifest != "" {
 				return nil, fmt.Errorf("bundled plugin %s cannot be replaced by a manifest", name)
+			}
+			if name == "files" || name == "setup" {
+				if registration.EnabledSet && !registration.Enabled || len(registration.Command) > 0 {
+					return nil, fmt.Errorf("plugin %s is part of workspace setup and stays registered; configure it through its options", name)
+				}
 			}
 			if name == "direnv" {
 				if registration.EnabledSet && !registration.Enabled || len(registration.Command) > 0 {

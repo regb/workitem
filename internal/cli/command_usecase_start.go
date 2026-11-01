@@ -14,8 +14,9 @@ import (
 func runStart(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("start", cfg.Stderr)
 	var agentMode, modelName, reasoning string
-	var force bool
+	var force, skipSetup bool
 	fs.StringVar(&agentMode, "agent-mode", "tui", "agent runtime mode: tui or headless")
+	fs.BoolVar(&skipSetup, "skip-setup", false, "start the agent without setting up a new checkout")
 	fs.StringVar(&modelName, "model", "", "set the item's model before starting")
 	fs.StringVar(&reasoning, "reasoning", "", "set the item's reasoning level before starting")
 	fs.BoolVar(&force, "force", false, "override deep work active limit")
@@ -23,7 +24,7 @@ func runStart(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 		return usageErr{err}
 	}
 	if fs.NArg() != 1 {
-		return usageErr{errors.New("usage: wi start [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] <slug>")}
+		return usageErr{errors.New("usage: wi start [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] [--skip-setup] <slug>")}
 	}
 	input := strings.TrimSpace(fs.Arg(0))
 	if input == "" {
@@ -43,6 +44,9 @@ func runStart(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 		if _, err := cfg.App.SetAgentSettings(ctx, app.SetAgentSettingsOptions{ResolveOptions: app.ResolveOptions{Selector: manifest.ID, CWD: cfg.CWD, Env: cfg.Env}, Settings: settings}); err != nil {
 			return err
 		}
+	}
+	if skipSetup {
+		ctx = app.WithSkipSetup(ctx)
 	}
 	res, err := coordinatorStartWorkItem(ctx, cfg, manifest.ID, force, !jsonOut && mode == agent.ModeTUI, mode, "work_item.started")
 	if err != nil {

@@ -78,7 +78,17 @@ type DriverDefinitionConfig struct {
 	Defaults map[string]any `json:"defaults,omitempty"`
 }
 type ProjectConfig struct {
-	Item ItemConfig `json:"item"`
+	Item      ItemConfig             `json:"item"`
+	Workspace ProjectWorkspaceConfig `json:"workspace"`
+}
+
+// ProjectWorkspaceConfig declares how a checkout is set up. Declaring runs
+// nothing: the operator enables it with plugins.setup.trust.
+type ProjectWorkspaceConfig struct {
+	Setup ProjectSetupConfig `json:"setup"`
+}
+type ProjectSetupConfig struct {
+	Run string `json:"run,omitempty"`
 }
 type ItemConfig struct {
 	Defaults ItemDefaultsConfig `json:"defaults"`

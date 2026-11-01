@@ -31,9 +31,31 @@ var helpDocs = map[string]helpDoc{
 	},
 	"repo": {
 		Summary:     "Manage named Wi-owned repositories",
-		Usage:       []string{"wi repo <add|list|show|rename|archive|restore|upstream|status|sync|settings>"},
+		Usage:       []string{"wi repo <add|list|show|rename|archive|restore|upstream|status|sync|settings|files|env>"},
 		Description: []string{"Single-repository commands default to the current item's registered repository when NAME is omitted; explicit names or IDs override context. Rename accepts only NEW for the current repository. Outside an item, pass a selector. List remains global and add requires a new name. Repository names are unique human-facing selectors. Stable repository IDs determine Git store paths and item references. Registering a repository authorizes project-local agent resources in its verified managed worktrees. Pi receives per-launch approval; direnv shell-code approval remains separate."},
-		SeeAlso:     []string{"repo list", "repo rename", "repo archive", "repo restore", "repo settings"},
+		SeeAlso:     []string{"repo list", "repo rename", "repo archive", "repo restore", "repo settings", "repo files", "repo env"},
+	},
+	"repo env": {
+		Summary: "Manage a repository's environment variables",
+		Usage:   []string{"wi repo env list [NAME] [--show-values]", "wi repo env set [NAME] KEY=VALUE...", "wi repo env unset [NAME] KEY"},
+		Description: []string{
+			"Environment variables belong to a registered repository and are kept by the daemon, not in a file. Wi sets them for every agent runtime (TUI and headless, including the item's tmux session) and setup command it starts in the repository's checkouts, wherever the checkout runs. A repository's .envrc, when direnv loads it, applies after them. Changes apply to agents and setup started afterwards; a running agent keeps the environment it started with. Wi never writes a .env file: a project that needs one can write it in its setup command.",
+			"Values may be secrets: list hides them unless --show-values is given, and history records which keys changed, never values. WI_* names, TMUX and TMUX_PANE are reserved. Settings → Environment variables in wi web edits the same list. These commands are operator-only.",
+		},
+		Options:  []helpOption{{"--show-values", "Print values with list."}},
+		Examples: []string{"wi repo env set DATABASE_URL=postgres://localhost/app PORT=8080", "wi repo env list biskoui", "wi repo env unset PORT"},
+		SeeAlso:  []string{"repo files", "workspace setup"},
+	},
+	"repo files": {
+		Summary: "Manage files wi copies into each checkout",
+		Usage:   []string{"wi repo files list [NAME]", "wi repo files add [NAME] PATH [--from FILE|-]", "wi repo files cat [NAME] PATH", "wi repo files remove [NAME] PATH"},
+		Description: []string{
+			"Repository files are untracked files a checkout needs, such as a .env, kept by wi instead of Git. Each is stored at the path it takes in a checkout, and copied there on every new claim, before the setup command runs. wi lists them in the owned store's info/exclude, so Git ignores them in every worktree. A file the branch tracks at the same path wins: the copy is skipped with a warning. plugins.files.skip lists files not copied; setup still reads every file from $WI_FILES.",
+			"add reads PATH from the current directory unless --from names another file, or - for standard input, and replaces a stored file. remove deletes the stored file; checkouts drop an unedited copy on their next claim. Content is private: list shows paths and sizes, and only cat prints content. These commands are operator-only.",
+		},
+		Options:  []helpOption{{"--from FILE|-", "Read the content from FILE or standard input instead of PATH."}},
+		Examples: []string{"wi repo files add .env", "wi repo files add biskoui certs/dev.pem --from ~/certs/biskoui.pem", "wi repo files list"},
+		SeeAlso:  []string{"workspace setup", "repo settings"},
 	},
 	"repo settings":       {Summary: "Manage operator-owned repository settings", Usage: []string{"wi repo settings show [NAME] [--show-sensitive]", "wi repo settings set [NAME] plugins.PLUGIN.OPTION VALUE", "wi repo settings unset [NAME] plugins.PLUGIN.OPTION"}, Description: []string{"Repository names or IDs select stable daemon-owned settings. Omitted selectors use the current item repository. The daemon validates registered options and repository-scope permissions, fences concurrent changes by revision, and records compact change facts without setting values. These endpoints are operator-only. Rename and archive preserve settings. Changes apply to future operations, never reconfigure a running agent."}, SeeAlso: []string{"repo settings show", "repo settings set", "repo settings unset", "config plugins"}},
 	"repo settings show":  {Summary: "Inspect stored overrides and effective plugin settings", Usage: []string{"wi repo settings show [NAME] [--show-sensitive]"}, Description: []string{"Includes stored overrides, effective plugin values, origins, revision, and warnings. JSON namespaces use plugins.NAME. Sensitive and unavailable values are hidden unless --show-sensitive is supplied. Does not execute plugin hooks or load a checkout."}, Options: []helpOption{{"--show-sensitive", "Reveal private stored/effective values; may expose secrets."}}, SeeAlso: []string{"repo settings"}},
@@ -62,7 +84,7 @@ var helpDocs = map[string]helpDoc{
 		Summary:     "Import an independent owned Git store",
 		Usage:       []string{"wi repo add NAME --from SOURCE [--branch BRANCH] [--local | --upstream URL] [--upstream-branch BRANCH]"},
 		Description: []string{"Creates an independent owned store without retaining the onboarding location or modifying the source checkout. URL onboarding sets upstream to that URL and the integration branch. Local onboarding uses its origin URL and origin tracking branch when configured, otherwise the integration branch name. Without an origin it stays local-only. --local leaves branch tracking unset; --upstream and --upstream-branch override the Git tracking destination. No extra upstream fetch is performed during onboarding."},
-		Options:     []helpOption{{"--from SOURCE", "Local source checkout or credential-free Git URL."}, {"--branch BRANCH", "Integration branch; required for URL onboarding."}, {"--local", "Onboard without an upstream."}, {"--upstream URL", "Override the inferred integration destination."}, {"--upstream-branch BRANCH", "Override the remote branch name."}},
+		Options:     []helpOption{{"--from SOURCE", "Local source checkout or credential-free Git URL."}, {"--branch BRANCH", "Integration branch; defaults to the source's default branch."}, {"--local", "Onboard without an upstream."}, {"--upstream URL", "Override the inferred integration destination."}, {"--upstream-branch BRANCH", "Override the remote branch name."}},
 	},
 	"repo show": {
 		Summary: "Show registered repository metadata", Usage: []string{"wi repo show [NAME]"},
@@ -462,7 +484,7 @@ var helpDocs = map[string]helpDoc{
 	},
 	"start": {
 		Summary: "Start an existing backlog item",
-		Usage:   []string{"wi start [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] <slug>"},
+		Usage:   []string{"wi start [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] [--skip-setup] <slug>"},
 		Description: []string{
 			"Resolves an exact active slug or one unambiguous active-slug substring. Exact matches take precedence; ambiguous substrings fail with candidate IDs and slugs. IDs, title keywords, implicit current-item selection, and --item are not accepted.",
 			"Transitions backlog -> active, enforces deep-work capacity, materializes the worktree, and ensures the selected primary runtime. TUI mode attaches terminal access; headless mode remains tmux-independent. JSON never attaches. Starting an existing item does not send a message.",
@@ -473,6 +495,7 @@ var helpDocs = map[string]helpDoc{
 			{"--model <model>", "Save the item's model before starting, as wi agent settings set model=MODEL does."},
 			{"--reasoning <level>", "Save the item's reasoning level before starting."},
 			{"--force", "Override the deep-work active limit."},
+			{"--skip-setup", "Start the agent without setting up a new checkout claim."},
 		},
 		Examples: []string{`wi start auth-race`, `wi start --agent-mode headless audit`, `wi start --reasoning high auth-race`},
 	},
@@ -504,9 +527,20 @@ var helpDocs = map[string]helpDoc{
 	},
 	"workspace": {
 		Summary:     "Inspect and manage the repository worktree",
-		Usage:       []string{"wi workspace <status|ensure|release> [options] [item]"},
+		Usage:       []string{"wi workspace <status|ensure|setup|release> [options] [item]"},
 		Description: []string{"This core area owns only repository checkout claims and materialization. Tmux access and agent runtimes are separate resources."},
-		SeeAlso:     []string{"workspace status", "workspace ensure", "workspace release", "terminal", "agent runtime"},
+		SeeAlso:     []string{"workspace status", "workspace ensure", "workspace setup", "workspace release", "terminal", "agent runtime"},
+	},
+	"workspace setup": {
+		Summary: "Set the item's checkout up again",
+		Usage:   []string{"wi workspace setup [--item <selector>] [item]"},
+		Description: []string{
+			"Every new checkout claim is set up before an agent starts in it: the repository files are copied in, then the setup command runs in the checkout. The command is plugins.setup.run, or the [workspace.setup] run command declared in the repository's .config/wi.toml on its default branch once plugins.setup.trust is always. It runs with /bin/sh, without the direnv environment, with WI_ID, WI_WORKTREE, WI_REPOSITORY_ID, WI_SLOT, WI_SLOT_REUSED and WI_FILES, a private copy of the repository files that lives for the run. Its output goes to a log under XDG state.",
+			"If setup fails, the item stays active with its checkout claimed and no agent starts. This command reruns setup, claiming a checkout first if there is none; it refuses while an agent runs in the checkout. wi start, resume and reopen accept --skip-setup to start the agent without setting up a new claim.",
+		},
+		Options:  []helpOption{{"--item <selector>", "Select an item explicitly."}},
+		Examples: []string{"wi workspace setup", "wi repo settings set biskoui plugins.setup.run 'cp \"$WI_FILES/.env\" .env && npm install'"},
+		SeeAlso:  []string{"repo files", "workspace status"},
 	},
 	"workspace status": {
 		Summary:     "Inspect worktree and Git condition",
@@ -558,17 +592,18 @@ var helpDocs = map[string]helpDoc{
 
 	"resume": {
 		Summary:     "Ensure an active item's agent runtime",
-		Usage:       []string{"wi resume [--item <selector>] [--agent-mode <tui|headless>] [item]"},
+		Usage:       []string{"wi resume [--item <selector>] [--agent-mode <tui|headless>] [--skip-setup] [item]"},
 		Description: []string{"Ensures the selected primary-agent runtime of an active item like wi start, without changing lifecycle state or waiting. Backlog items must use wi start. JSON output never attaches."},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
 			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless Headless mode."},
+			{"--skip-setup", "Start the agent without setting up a new checkout claim."},
 		},
 		Examples: []string{`wi resume`, `wi resume --item auth`},
 	},
 	"reopen": {
 		Summary: "Reopen a closed work item",
-		Usage:   []string{"wi reopen [--backlog] [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] [--item <item-id>] [item-id]"},
+		Usage:   []string{"wi reopen [--backlog] [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] [--skip-setup] [--item <item-id>] [item-id]"},
 		Description: []string{
 			"Returns a closed item to work: it keeps its ID, branch, conversation and history, clears its resolution, gets a fresh active slug, and starts as wi start does, materializing the worktree and resuming the conversation. TUI mode attaches terminal access; JSON never attaches.",
 			"With --backlog the item only returns to the backlog, without workspace or agent resources; start it later with wi start <slug>. If starting fails, the item stays reopened in the backlog and the error names its slug.",
@@ -580,6 +615,7 @@ var helpDocs = map[string]helpDoc{
 			{"--model <model>", "Save the item's model before starting."},
 			{"--reasoning <level>", "Save the item's reasoning level before starting."},
 			{"--force", "Override the deep-work active limit."},
+			{"--skip-setup", "Start the agent without setting up a new checkout claim."},
 			{"--item <item-id>", "Select the item explicitly."},
 		},
 		Examples: []string{`wi reopen 01M5VPF`, `wi reopen --agent-mode headless 01M5VPF`, `wi reopen --backlog 01M5VPF`},

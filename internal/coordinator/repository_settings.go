@@ -242,28 +242,10 @@ func (d *Database) SetRepositorySetting(command SetRepositorySettingCommand, reg
 			if err := bucket.Put([]byte(repo.ID), data); err != nil {
 				return err
 			}
-			sequence := decodeUint64(tx.Bucket(bucketMeta).Get(keyGlobalSequence))
-			if sequence == ^uint64(0) {
-				return fmt.Errorf("global event sequence exhausted")
-			}
-			sequence++
 			// Values may contain secrets. History records the fact, never their contents.
 			payload, _ := json.Marshal(map[string]any{"repository_id": repo.ID, "namespace": command.Namespace, "key": command.Key, "unset": command.Unset, "revision": settings.Revision})
-			event := DomainEvent{Sequence: sequence, ID: domainEventID(command.ID, 0), Type: "repository.setting_changed", Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload}
-			if tx.Bucket(bucketEventIDs).Get([]byte(event.ID)) != nil {
-				return fmt.Errorf("event identity already exists")
-			}
-			data, err = json.Marshal(event)
+			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: "repository.setting_changed", Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload})
 			if err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketEvents).Put(encodeUint64(sequence), data); err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketEventIDs).Put([]byte(event.ID), encodeUint64(sequence)); err != nil {
-				return err
-			}
-			if err := tx.Bucket(bucketMeta).Put(keyGlobalSequence, encodeUint64(sequence)); err != nil {
 				return err
 			}
 			result.Revision = settings.Revision

@@ -37,6 +37,7 @@ func (s *recordingStore) AppendEvent(_ context.Context, _ string, event model.Ev
 func (*recordingStore) LoadAgentRuntime(string) (*model.AgentRuntime, error) { return nil, nil }
 func (*recordingStore) ListManifests() ([]model.Manifest, []error)           { return nil, nil }
 func (*recordingStore) WorktreesDir() string                                 { return "" }
+func (*recordingStore) RepositoryFilesDir(string) string                     { return "" }
 
 func TestCheckoutPreparationCanStopClaimPublication(t *testing.T) {
 	called := false

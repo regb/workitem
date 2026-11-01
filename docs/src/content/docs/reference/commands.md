@@ -48,6 +48,8 @@ Single-repository commands default to the current item's registered repository w
 | `wi repo settings show [NAME] [--json] [--show-sensitive]` | Inspect stored repository overrides and effective plugin settings |
 | `wi repo settings set [NAME] plugins.PLUGIN.OPTION VALUE` | Set a registered repository-scoped option through the daemon |
 | `wi repo settings unset [NAME] plugins.PLUGIN.OPTION` | Remove an override and restore global/default inheritance |
+| `wi repo files list\|add\|cat\|remove [NAME] [PATH]` | Manage untracked files, such as a `.env`, that Wi copies into each checkout |
+| `wi repo env list\|set\|unset [NAME] [KEY=VALUE...\|KEY]` | Manage a repository's environment variables, set for the agents and setup commands Wi starts |
 | `wi repo upstream [NAME] URL [--branch BRANCH]` | Edit origin and integration branch tracking in Git; `--clear` removes tracking but keeps origin |
 | `wi repo status [NAME] [--fetch]` | Inspect cached ahead/behind history, optionally fetching without integrating |
 | `wi repo sync [NAME]` | Fetch and fast-forward integration, refusing divergence; defaults to the current item’s repository |
@@ -136,6 +138,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | --- | --- |
 | `wi workspace status` | Inspect checkout assignment and Git state |
 | `wi workspace ensure` | Materialize or reclaim a checkout |
+| `wi workspace setup` | Set the checkout up again: copy repository files and run the setup command |
 | `wi workspace release` | Release the item's checkout claim when safe |
 
 ## Agents
@@ -172,7 +175,7 @@ The former title, label, and deep metadata commands have been removed; there are
 
 | Command | Purpose |
 | --- | --- |
-| `wi start` | Activate an existing backlog item by active slug |
+| `wi start` | Activate an existing backlog item by active slug; `--skip-setup` starts the agent without setting up a new checkout |
 | `wi resume` | Ensure an active item's agent runtime |
 | `wi wait` | Wait for a time, another item, or something external; `--clear` stops waiting |
 | `wi blocker` | Add, list, or clear individual typed blockers with metadata |

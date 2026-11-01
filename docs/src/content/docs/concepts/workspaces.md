@@ -36,6 +36,51 @@ wi workspace release add-pagination
 
 Release refuses while an active runtime or terminal depends on the checkout. It also requires the recorded implementation branch and a clean worktree. The slot directory is retained for reuse, and the task branch survives release.
 
+A reused slot keeps its untracked and ignored files, such as `node_modules` or build caches, so it starts warm. A setup command that wants a fresh slot can run `git clean` itself.
+
+## Repository files and setup
+
+Some files a checkout needs are deliberately not in Git, such as a `.env`. Wi keeps them per repository instead, at the path they take in a checkout:
+
+```bash
+wi repo files add .env                       # from the current directory
+wi repo files add biskoui certs/dev.pem --from ~/certs/biskoui.pem
+wi repo files list
+```
+
+Every new checkout claim is set up before an agent starts in it:
+
+1. The repository files are copied to their paths, replacing what a reused slot held there. A file the branch tracks at the same path wins: the copy is skipped with a warning. Copies of files since removed are deleted unless they were edited. Wi lists the files in the owned store's `info/exclude`, which every worktree reads, so Git ignores them without any `.gitignore` change.
+2. The setup command runs in the checkout with `/bin/sh`, if one is configured.
+
+The setup command is the repository setting `plugins.setup.run`. A repository may also declare one in its checked-in `.config/wi.toml`, read from its default branch so a branch cannot change it; it runs only once the operator sets `plugins.setup.trust` to `always`:
+
+```toml
+[workspace.setup]
+run = "script/setup"
+```
+
+```bash
+wi repo settings set biskoui plugins.setup.run 'npm install'
+wi repo settings set biskoui plugins.setup.trust always
+```
+
+The command runs without the direnv environment, since it may create files an `.envrc` needs. It gets `WI_ID`, `WI_WORKTREE`, `WI_REPOSITORY_ID`, `WI_SLOT`, `WI_SLOT_REUSED` (`1` when another claim used the slot before), and `WI_FILES`, a private copy of every repository file that lives only for the run. List files that should not be copied automatically in `plugins.files.skip`; setup can still copy or transform them from `$WI_FILES`. It must finish within `plugins.setup.timeout_seconds` (600 by default). Its output goes to a log under XDG state, and `wi workspace status` shows the outcome.
+
+Setup runs once per claim; resuming an agent on the same claim does not repeat it. If it fails, the item stays active with its checkout claimed and no agent starts. Fix the cause and run `wi workspace setup`, which repeats setup and refuses while an agent runs in the checkout. `wi start`, `wi resume` and `wi reopen` accept `--skip-setup` to start the agent without setting up a new claim.
+
+## Environment variables
+
+A repository can have environment variables, kept by the daemon rather than in a file:
+
+```bash
+wi repo env set DATABASE_URL=postgres://localhost/app PORT=8080
+wi repo env list            # values hidden; --show-values prints them
+wi repo env unset PORT
+```
+
+Wi sets them for every agent runtime (TUI and headless, including the item's tmux session) and setup command it starts in the repository's checkouts. A repository's `.envrc`, when direnv loads it, applies after them. They are passed to the process as it starts, never written to a file, so they work the same wherever the checkout runs; a project that needs a `.env` on disk can write one in its setup command. Common `.env` loaders leave variables that are already set alone, so these take precedence over a committed `.env`. Changes apply to agents and setup started afterwards. Values may be secrets: history records which keys changed, never values. `WI_*` names, `TMUX` and `TMUX_PANE` are reserved.
+
 ## Branch divergence
 
 Checking out another branch or detaching HEAD in an assigned slot is reported as `changed`, with branch-divergence details. Inspection, navigation, and agent access remain available. Release and merge still require the recorded implementation branch. Wi does not automatically switch branches to repair divergence.

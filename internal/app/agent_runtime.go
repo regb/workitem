@@ -91,6 +91,12 @@ func (a *App) ensureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 		}
 		return result, nil
 	}
+	// An agent starts only once its claim is set up.
+	setupWarnings, err := a.ensureWorkspaceSetup(ctx, m)
+	warnings = append(warnings, setupWarnings...)
+	if err != nil {
+		return EnsureAgentRuntimeResult{}, err
+	}
 	m, session, conversationWarnings, err := a.ensureConversationCheckout(ctx, m)
 	if err != nil {
 		return EnsureAgentRuntimeResult{}, err

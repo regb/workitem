@@ -14,12 +14,16 @@ func runResume(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 	var item, agentMode string
 	fs.StringVar(&item, "item", "", "work item selector (default: current item)")
 	fs.StringVar(&agentMode, "agent-mode", "tui", "agent runtime mode: tui or headless")
+	skipSetup := fs.Bool("skip-setup", false, "start the agent without setting up a new checkout")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
 	}
 	selector, err := itemSelectorFromFlag(fs, item)
 	if err != nil {
 		return usageErr{err}
+	}
+	if *skipSetup {
+		ctx = app.WithSkipSetup(ctx)
 	}
 	mode, err := agent.ParseMode(agentMode)
 	if err != nil {

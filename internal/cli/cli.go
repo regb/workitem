@@ -176,6 +176,10 @@ func Main(ctx context.Context, args []string) int {
 		return ExitError
 	}
 	BindCoordinatorApp(application, st, runConfig.Coordinator)
+	application.RepositoryEnvironment = func(ctx context.Context, id string) ([]model.EnvVar, error) {
+		result, err := client.RepositoryEnvironment(ctx, id)
+		return result.Environment.Vars, err
+	}
 	pluginHost.ReadRepository = func(ctx context.Context, id string) (model.RepositorySettings, error) {
 		result, err := client.RepositorySettings(ctx, id)
 		return result.Settings, err

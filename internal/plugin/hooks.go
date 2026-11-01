@@ -5,6 +5,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"io"
 	"maps"
 	"sort"
 	"strings"
@@ -54,12 +55,38 @@ type Patch struct {
 	Unset    []string
 	Warnings []string
 }
+
+// SetupRequest is a published claim being made ready for work, after the
+// checkout is claimed and before an agent starts in it. Hooks share its
+// environment and log; each run belongs to one claim generation.
+type SetupRequest struct {
+	Subject Subject
+	// Slot names the managed slot; Reused says another claim used it before.
+	Slot   string
+	Reused bool
+	// RepositoryRoot is the owned bare store; DefaultBranch its integration
+	// branch, which holds the repository's checked-in configuration.
+	RepositoryRoot, DefaultBranch string
+	// FilesDir holds the repository's files (internal/repofiles). Hooks read it.
+	FilesDir string
+	// Environment is the base environment for processes a hook runs, with
+	// the run's WI_* variables. Hooks never change it.
+	Environment map[string]string
+	// Log receives what hooks and their processes print.
+	Log io.Writer
+}
+
 type Hooks struct {
 	Name               string
 	Sanitize           func(context.Context, EnvironmentRequest, map[string]any) (Patch, error)
 	CommandEnvironment func(context.Context, EnvironmentRequest, map[string]any) (Patch, error)
 	RuntimeEnvironment func(context.Context, EnvironmentRequest, map[string]any) (Patch, error)
 	PrepareCheckout    func(context.Context, contract.CheckoutPreparation, map[string]any) ([]string, error)
+	// SetupCheckout runs after claim publication, in catalog order; an error
+	// stops the run and keeps the agent from starting.
+	SetupCheckout func(context.Context, SetupRequest, map[string]any) ([]string, error)
+	// SetupOrder places the hook among SetupCheckout hooks, lowest first.
+	SetupOrder int
 }
 type Pipeline struct {
 	Hooks   []Hooks
@@ -204,4 +231,47 @@ func (p Pipeline) PrepareCheckout(ctx context.Context, request contract.Checkout
 		}
 	}
 	return warnings, nil
+}
+
+// SetupCheckout runs every SetupCheckout hook in SetupOrder, stopping at the
+// first error.
+func (p Pipeline) SetupCheckout(ctx context.Context, request SetupRequest) ([]string, error) {
+	warnings := []string{}
+	if err := p.check(); err != nil {
+		return warnings, err
+	}
+	hooks := append([]Hooks(nil), p.Hooks...)
+	sort.SliceStable(hooks, func(i, j int) bool { return hooks[i].SetupOrder < hooks[j].SetupOrder })
+	for _, h := range hooks {
+		if err := ctx.Err(); err != nil {
+			return warnings, err
+		}
+		if h.SetupCheckout == nil {
+			continue
+		}
+		settings, err := p.settings(ctx, request.Subject.RepositoryID, h.Name)
+		if err != nil {
+			return warnings, err
+		}
+		w, err := h.SetupCheckout(ctx, request, settings)
+		if err == nil {
+			err = ctx.Err()
+		}
+		warnings = append(warnings, w...)
+		if err != nil {
+			return warnings, fmt.Errorf("%s: %w", h.Name, err)
+		}
+	}
+	return warnings, nil
+}
+
+// RunShell runs a shell command in dir as its own process group, which is
+// killed when ctx ends, with exactly env.
+func RunShell(ctx context.Context, name, dir, command string, env map[string]string, output io.Writer) error {
+	entries := make([]string, 0, len(env))
+	for key, value := range env {
+		entries = append(entries, key+"="+value)
+	}
+	sort.Strings(entries)
+	return RunCommand(ctx, Spec{Name: name, Command: []string{"/bin/sh", "-c", command}}, nil, entries, dir, nil, output, output)
 }

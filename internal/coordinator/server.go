@@ -839,6 +839,39 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			return
 		}
 		result = note
+	case MethodRepositoryEnvironment:
+		var query RepositoryEnvironmentRequest
+		if err := json.Unmarshal(request.Payload, &query); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		value, err := s.database.RepositoryEnvironment(query.Selector)
+		if err != nil {
+			s.writeError(conn, request.ID, "repository_error", err.Error())
+			return
+		}
+		result = value
+	case MethodSetRepositoryEnvironment:
+		var command SetRepositoryEnvironmentCommand
+		if err := json.Unmarshal(request.Payload, &command); err != nil {
+			s.writeError(conn, request.ID, "invalid_request", err.Error())
+			return
+		}
+		s.domainMu.Lock()
+		value, err := s.database.SetRepositoryEnvironment(command)
+		s.domainMu.Unlock()
+		if err != nil {
+			s.writeError(conn, request.ID, "repository_error", err.Error())
+			return
+		}
+		result = value
+	case MethodRepositoryFiles, MethodRepositoryFileRead, MethodRepositoryFilePut, MethodRepositoryFileRemove:
+		value, err := s.repositoryFile(request.Method, request.Payload)
+		if err != nil {
+			s.writeError(conn, request.ID, "repository_error", err.Error())
+			return
+		}
+		result = value
 	case MethodEditItem:
 		var editRequest EditItemRequest
 		if err := json.Unmarshal(request.Payload, &editRequest); err != nil {

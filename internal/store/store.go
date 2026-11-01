@@ -49,6 +49,11 @@ func (s *Store) ItemsDir() string { return filepath.Join(s.Root, "items") }
 
 func (s *Store) WorktreesDir() string { return filepath.Join(s.Root, "worktrees") }
 
+// RepositoryFilesDir holds a registered repository's files (internal/repofiles).
+func (s *Store) RepositoryFilesDir(id string) string {
+	return filepath.Join(s.Root, "repository-files", id)
+}
+
 func (s *Store) LocksDir() string { return filepath.Join(s.Root, "locks") }
 
 func (s *Store) CreationLockPath() string { return filepath.Join(s.LocksDir(), "create.lock") }

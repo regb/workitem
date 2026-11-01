@@ -88,6 +88,7 @@ type Store interface {
 	FindByWorktree(path string) (model.Manifest, error)
 	ItemDir(id string) string
 	WorktreesDir() string
+	RepositoryFilesDir(id string) string
 }
 
 type AgentDriverRunner func(context.Context, string, []string, driverprotocol.LaunchRequest, []string, func(driverprotocol.Ready) error) error
@@ -106,31 +107,33 @@ type realClock struct{}
 func (realClock) Now() time.Time { return time.Now() }
 
 type App struct {
-	Store                          Store
-	Git                            Git
-	Tmux                           Tmux
-	ConversationBackends           map[string]ConversationBackend
-	Preparation                    plugin.Pipeline
-	Process                        ProcessInspector
-	Clock                          Clock
-	NewID                          func() (string, error)
-	SelfPath                       string
-	DaemonSocketPath               string
-	AgentRuntimeStateRoot          string
-	AgentRuntimeSocketRoot         string
-	AgentRuntimeReadyTimeout       time.Duration
-	AgentRuntimeReadyInterval      time.Duration
-	ArchiveRuntimeStopTimeout      time.Duration
-	ShutdownRuntimeStopTimeout     time.Duration
-	DeepWorkConfig                 config.DeepWorkConfig
-	ItemConfig                     config.ItemConfig
-	ListConfig                     config.ListConfig
-	RepoConfig                     config.RepoConfig
-	AgentConfig                    config.AgentConfig
-	AgentStatusConfig              config.AgentStatusConfig
-	AttentionConfig                config.AttentionConfig
-	DefaultAgent                   string
-	AgentsConfig                   map[string]config.AgentDefinitionConfig
+	Store                      Store
+	Git                        Git
+	Tmux                       Tmux
+	ConversationBackends       map[string]ConversationBackend
+	Preparation                plugin.Pipeline
+	Process                    ProcessInspector
+	Clock                      Clock
+	NewID                      func() (string, error)
+	SelfPath                   string
+	DaemonSocketPath           string
+	AgentRuntimeStateRoot      string
+	AgentRuntimeSocketRoot     string
+	AgentRuntimeReadyTimeout   time.Duration
+	AgentRuntimeReadyInterval  time.Duration
+	ArchiveRuntimeStopTimeout  time.Duration
+	ShutdownRuntimeStopTimeout time.Duration
+	DeepWorkConfig             config.DeepWorkConfig
+	ItemConfig                 config.ItemConfig
+	ListConfig                 config.ListConfig
+	RepoConfig                 config.RepoConfig
+	AgentConfig                config.AgentConfig
+	AgentStatusConfig          config.AgentStatusConfig
+	AttentionConfig            config.AttentionConfig
+	DefaultAgent               string
+	AgentsConfig               map[string]config.AgentDefinitionConfig
+	// RepositoryEnvironment reads a repository's environment variables.
+	RepositoryEnvironment          func(context.Context, string) ([]model.EnvVar, error)
 	DriversConfig                  map[string]config.DriverDefinitionConfig
 	BundledDriverCommands          map[string]BundledDriverCommand
 	AgentRuntimeLauncher           agent.Launcher

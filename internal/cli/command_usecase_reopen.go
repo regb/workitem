@@ -22,13 +22,14 @@ type ReopenResult struct {
 func runReopen(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("reopen", cfg.Stderr)
 	var item, agentMode, modelName, reasoning string
-	var backlog, force bool
+	var backlog, force, skipSetup bool
 	fs.StringVar(&item, "item", "", "closed work item ID")
 	fs.BoolVar(&backlog, "backlog", false, "return the item to the backlog without starting it")
 	fs.StringVar(&agentMode, "agent-mode", "tui", "agent runtime mode: tui or headless")
 	fs.StringVar(&modelName, "model", "", "set the item's model before starting")
 	fs.StringVar(&reasoning, "reasoning", "", "set the item's reasoning level before starting")
 	fs.BoolVar(&force, "force", false, "override deep work active limit")
+	fs.BoolVar(&skipSetup, "skip-setup", false, "start the agent without setting up a new checkout")
 	if err := fs.Parse(args); err != nil {
 		return usageErr{err}
 	}
@@ -37,14 +38,17 @@ func runReopen(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 		return usageErr{err}
 	}
 	if selector == "" {
-		return usageErr{errors.New("usage: wi reopen [--backlog] [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] <item-id>")}
+		return usageErr{errors.New("usage: wi reopen [--backlog] [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] [--skip-setup] <item-id>")}
 	}
 	mode, err := agent.ParseMode(agentMode)
 	if err != nil {
 		return usageErr{err}
 	}
-	if backlog && (modelName != "" || reasoning != "" || force) {
-		return usageErr{errors.New("--model, --reasoning and --force start the item; they do not combine with --backlog")}
+	if backlog && (modelName != "" || reasoning != "" || force || skipSetup) {
+		return usageErr{errors.New("--model, --reasoning, --force and --skip-setup start the item; they do not combine with --backlog")}
+	}
+	if skipSetup {
+		ctx = app.WithSkipSetup(ctx)
 	}
 	opts := app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env}
 	state, err := cfg.App.WorkItemState(ctx, opts)
