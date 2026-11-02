@@ -40,7 +40,20 @@ type historyRecord struct {
 		Content json.RawMessage `json:"content"`
 		Model   string          `json:"model"`
 	} `json:"message"`
+	// Attachment is context Claude adds to a turn. A queued_command prompt
+	// is a message the operator sent while the turn ran, steering it.
+	Attachment struct {
+		Type   string          `json:"type"`
+		Prompt json.RawMessage `json:"prompt"`
+		Mode   string          `json:"commandMode"`
+	} `json:"attachment"`
 }
+
+// steered reports a message the operator sent into a running turn.
+func (r historyRecord) steered() bool {
+	return r.Type == "attachment" && r.Attachment.Type == "queued_command" && (r.Attachment.Mode == "" || r.Attachment.Mode == "prompt") && len(r.Attachment.Prompt) > 0
+}
+
 type historyOffset struct {
 	parent, typ, timestamp, reply string
 	offset                        int64
@@ -121,7 +134,7 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		if r.ID == "" || r.Sidechain != sidechain {
 			continue
 		}
-		index[r.ID] = historyOffset{parent: r.Parent, typ: r.Type, timestamp: r.Timestamp, reply: r.Message.ID, offset: start, length: len(line), visible: (!r.Meta && (r.Type == "user" || r.Type == "assistant")) || r.CompactSummary || (r.Type == "system" && r.Subtype == "compact_boundary")}
+		index[r.ID] = historyOffset{parent: r.Parent, typ: r.Type, timestamp: r.Timestamp, reply: r.Message.ID, offset: start, length: len(line), visible: (!r.Meta && (r.Type == "user" || r.Type == "assistant")) || r.steered() || r.CompactSummary || (r.Type == "system" && r.Subtype == "compact_boundary")}
 		last = r.ID
 	}
 	if leaf == "" {
@@ -183,7 +196,12 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 			return result, fmt.Errorf("invalid Claude history timestamp")
 		}
 		message := protocol.HistoryMessage{ID: record.ID, Role: record.Type, Timestamp: record.Timestamp, Error: record.APIError}
-		content(record.Message.Content, &message, &result.Truncated)
+		if record.steered() {
+			message.Role = "user"
+			content(record.Attachment.Prompt, &message, &result.Truncated)
+		} else {
+			content(record.Message.Content, &message, &result.Truncated)
+		}
 		if record.Origin.Kind == "task-notification" {
 			taskNotification(&message)
 		}

@@ -241,3 +241,26 @@ func TestHistoryKeepsThatClaudeReasonedAndForHowLong(t *testing.T) {
 		t.Fatalf("answer %+v", h.Messages[3])
 	}
 }
+
+// A message sent into a running turn is recorded as a queued_command
+// attachment; it shows as the operator's message where it was delivered.
+func TestHistoryShowsSteeredMessages(t *testing.T) {
+	path := historyFixture(t,
+		`{"type":"user","uuid":"u","parentUuid":null,"message":{"content":"task"}}`,
+		`{"type":"assistant","uuid":"a","parentUuid":"u","message":{"content":[{"type":"text","text":"working"}]}}`,
+		`{"type":"attachment","uuid":"s","parentUuid":"a","attachment":{"type":"queued_command","commandMode":"prompt","prompt":[{"type":"text","text":"also check this"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"eA=="}}]}}`,
+		`{"type":"attachment","uuid":"n","parentUuid":"s","attachment":{"type":"queued_command","commandMode":"task-notification","prompt":"<task-notification>done</task-notification>"}}`,
+		`{"type":"attachment","uuid":"p","parentUuid":"n","attachment":{"type":"queued_command","prompt":"plain text"}}`,
+		`{"type":"assistant","uuid":"done","parentUuid":"p","message":{"content":[{"type":"text","text":"checked"}]}}`)
+	h, err := ReadHistoryPage(context.Background(), path, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := []string{}
+	for _, m := range h.Messages {
+		got = append(got, m.Role+":"+m.Text)
+	}
+	if strings.Join(got, "|") != "user:task|assistant:working|user:also check this|user:plain text|assistant:checked" || len(h.Messages[2].Images) != 1 {
+		t.Fatalf("%v %+v", got, h.Messages[2])
+	}
+}
