@@ -8,7 +8,11 @@ import (
 // Git operations in this adapter select their repository explicitly. Inherited
 // hook/agent repository variables must not redirect them to a different index,
 // working tree, namespace, or object store. Keep normal Git config and auth env.
-func repositoryEnvironment() []string {
+func repositoryEnvironment() []string { return RepositoryEnvironment() }
+
+// RepositoryEnvironment removes inherited repository selectors while preserving config and authentication.
+// Use it for Git commands outside this adapter too.
+func RepositoryEnvironment() []string {
 	result := []string{}
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/regb/workitem/internal/agent"
+	gitpkg "github.com/regb/workitem/internal/git"
 	itemlock "github.com/regb/workitem/internal/lock"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/plugin"
@@ -245,7 +246,9 @@ func defaultBranch(ctx context.Context, repository model.Repository) string {
 	if root == "" {
 		return ""
 	}
-	output, err := exec.CommandContext(ctx, "git", "--git-dir", root, "symbolic-ref", "--short", "HEAD").Output()
+	command := exec.CommandContext(ctx, "git", "--git-dir", root, "symbolic-ref", "--short", "HEAD")
+	command.Env = gitpkg.RepositoryEnvironment()
+	output, err := command.Output()
 	if err != nil {
 		return ""
 	}

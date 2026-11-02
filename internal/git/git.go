@@ -370,6 +370,7 @@ func (c Client) IsAncestor(ctx context.Context, repoRoot, ancestor, descendant s
 		path = "git"
 	}
 	cmd := exec.CommandContext(ctx, path, "-C", repoRoot, "merge-base", "--is-ancestor", ancestor, descendant)
+	cmd.Env = repositoryEnvironment()
 	b, err := cmd.CombinedOutput()
 	if err == nil {
 		return true, nil

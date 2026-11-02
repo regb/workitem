@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	gitpkg "github.com/regb/workitem/internal/git"
 )
 
 // A checkout's copies of repository files are recorded in its own Git
@@ -172,7 +174,9 @@ func UpdateExclude(ctx context.Context, root, filesDir string) error {
 
 // Worktrees lists the linked worktrees of a bare store.
 func Worktrees(ctx context.Context, root string) ([]string, error) {
-	output, err := exec.CommandContext(ctx, "git", "--git-dir", root, "worktree", "list", "--porcelain").Output()
+	command := exec.CommandContext(ctx, "git", "--git-dir", root, "worktree", "list", "--porcelain")
+	command.Env = gitpkg.RepositoryEnvironment()
+	output, err := command.Output()
 	if err != nil {
 		return nil, fmt.Errorf("list worktrees: %w", err)
 	}
@@ -267,7 +271,9 @@ func trackedPaths(ctx context.Context, checkout string, paths []string) (map[str
 	if len(paths) == 0 {
 		return tracked, nil
 	}
-	output, err := exec.CommandContext(ctx, "git", append([]string{"-C", checkout, "ls-files", "-z", "--"}, paths...)...).Output()
+	command := exec.CommandContext(ctx, "git", append([]string{"-C", checkout, "ls-files", "-z", "--"}, paths...)...)
+	command.Env = gitpkg.RepositoryEnvironment()
+	output, err := command.Output()
 	if err != nil {
 		return nil, fmt.Errorf("list tracked files: %w", err)
 	}

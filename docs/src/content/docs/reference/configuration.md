@@ -78,6 +78,12 @@ extensions = ["/home/me/tools/web-search.ts"]
 
 `deep_work.max_active` limits active items marked as deep work, waiting or not. A value of `0` prevents starting deep backlog work unless you pass `--force`.
 
+## Daemon startup environment
+
+An unmanaged daemon started automatically or by `wi daemon start` restores the environment from before the launching shell's direnv changes, including its original PATH. It drops direnv state, all `WI_*` context, `TMUX`, `TMUX_PANE`, and current-directory variables, and starts in its state directory. Normal login variables such as HOME, SSH_AUTH_SOCK, locale, and XDG roots remain unless direnv had changed them. Invalid `DIRENV_DIFF` state refuses startup rather than retaining project secrets.
+
+The environment is captured once at startup, not refreshed by later clients. Foreground `wi daemon serve` and service-managed daemons keep the environment supplied by their launcher.
+
 ## Managed daemon
 
 By default, wi starts its daemon when a command needs it, and a command

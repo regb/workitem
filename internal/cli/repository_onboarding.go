@@ -149,7 +149,9 @@ func onboardRepository(ctx context.Context, cfg Config, opts repositoryOnboardin
 
 // remoteDefaultBranch asks a remote which branch its HEAD names.
 func remoteDefaultBranch(ctx context.Context, url string) (string, error) {
-	output, err := exec.CommandContext(ctx, "git", "ls-remote", "--symref", url, "HEAD").Output()
+	command := exec.CommandContext(ctx, "git", "ls-remote", "--symref", url, "HEAD")
+	command.Env = gitpkg.RepositoryEnvironment()
+	output, err := command.Output()
 	if err != nil {
 		return "", fmt.Errorf("read the default branch of %s: %w", url, err)
 	}

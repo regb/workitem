@@ -89,7 +89,14 @@ func ensureDaemonRunning(ctx context.Context, paths xdg.Paths, socketPath string
 	if err != nil {
 		return coordinator.Status{}, false, fmt.Errorf("open daemon log: %w", err)
 	}
+	bootstrap, err := daemonBootstrapEnvironment(os.Environ())
+	if err != nil {
+		logFile.Close()
+		return coordinator.Status{}, false, err
+	}
 	command := exec.Command(self, "daemon", "serve", "--json")
+	command.Env = bootstrap
+	command.Dir = paths.DataStateRoot
 	command.Stdin = nil
 	command.Stdout = logFile
 	command.Stderr = logFile

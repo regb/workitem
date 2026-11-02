@@ -63,7 +63,7 @@ func (f *fakeGit) DefaultBranch(context.Context, string) (string, error) { retur
 func (f *fakeGit) Head(ctx context.Context, dir string) (string, error) {
 	return strings.Repeat("b", 40), nil
 }
-func (f *fakeGit) UntrackedFiles(context.Context, string) ([]string, error) { return nil, nil }
+func (f *fakeGit) UntrackedFiles(context.Context, string) ([]string, error)        { return nil, nil }
 func (f *fakeGit) StatusPorcelain(ctx context.Context, dir string) (string, error) { return "", nil }
 func (f *fakeGit) CurrentBranch(ctx context.Context, dir string) (string, error) {
 	if f.worktrees != nil {
