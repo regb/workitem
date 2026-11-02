@@ -127,6 +127,8 @@ func (d *Database) SetRepositoryEnvironment(command SetRepositoryEnvironmentComm
 			return nil
 		}
 		environment.Revision++
+		now := time.Now().UTC()
+		environment.ChangedAt = &now
 		data, err := json.Marshal(environment)
 		if err != nil {
 			return err
@@ -144,7 +146,7 @@ func (d *Database) SetRepositoryEnvironment(command SetRepositoryEnvironmentComm
 		result.Environment = environment
 		payload, _ := json.Marshal(map[string]any{"repository_id": id, "keys": changed, "revision": environment.Revision})
 		eventID := fmt.Sprintf("repository-environment-%s-%d", id, environment.Revision)
-		_, err = appendDomainEventTx(tx, DomainEvent{ID: eventID, Type: "repository.environment_changed", Timestamp: time.Now().UTC(), Actor: "user", Payload: payload})
+		_, err = appendDomainEventTx(tx, DomainEvent{ID: eventID, Type: "repository.environment_changed", Timestamp: now, Actor: "user", Payload: payload})
 		return err
 	})
 	return result, err

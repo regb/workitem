@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 )
 
 // RepositoryEnvironment is a registered repository's environment variables,
@@ -14,6 +15,9 @@ type RepositoryEnvironment struct {
 	RepositoryID string   `json:"repository_id"`
 	Revision     uint64   `json:"revision"`
 	Vars         []EnvVar `json:"vars"`
+	// ChangedAt is when the variables last changed; agents started earlier
+	// run with the previous ones.
+	ChangedAt *time.Time `json:"changed_at,omitempty"`
 }
 
 // EnvVar is one environment variable.

@@ -245,7 +245,7 @@ func (a *App) SetAgentSettings(ctx context.Context, opts SetAgentSettingsOptions
 		}
 	}
 	if len(result.Pending) > 0 && opts.Restart {
-		if err := a.restartForSettings(ctx, m, runtime, opts); err != nil {
+		if err := a.restartRuntime(ctx, m, runtime, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}); err != nil {
 			return result, fmt.Errorf("settings saved, but the restart failed: %w", err)
 		}
 		result.Restarted = true
@@ -302,9 +302,10 @@ func without(values, remove []string) []string {
 	return result
 }
 
-// restartForSettings stops the runtime and resumes the same conversation in
-// the same mode, which picks up the saved settings. A busy agent refuses.
-func (a *App) restartForSettings(ctx context.Context, m model.Manifest, runtime *model.AgentRuntime, opts SetAgentSettingsOptions) error {
+// restartRuntime stops the runtime and resumes the same conversation in the
+// same mode, which picks up the saved settings and the repository's current
+// variables. A busy agent refuses.
+func (a *App) restartRuntime(ctx context.Context, m model.Manifest, runtime *model.AgentRuntime, resolve ResolveOptions) error {
 	if a.AgentBusy(ctx, m.ID) {
 		return errors.New("the agent is working; wait for it to finish before restarting")
 	}
@@ -317,7 +318,7 @@ func (a *App) restartForSettings(ctx context.Context, m model.Manifest, runtime 
 	if err := a.stopRuntimeForReplacement(ctx, m, runtime.ID, false); err != nil {
 		return err
 	}
-	resolve := ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}
+	resolve.Selector = m.ID
 	ensured, err := a.EnsureAgentRuntime(ctx, resolve, mode)
 	if err != nil {
 		return err
