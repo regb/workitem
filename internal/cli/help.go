@@ -421,6 +421,7 @@ var helpDocs = map[string]helpDoc{
 		Usage:   []string{"wi attach [--item <selector>] [--as <name>] [-m <note>] <file>"},
 		Description: []string{
 			"Copies a file into the item, outside Git: a report, a screenshot, evidence. The original is left alone. Attaching under an existing name replaces it; earlier content stays readable by the digest its note recorded. Each attach adds a note. Files are at most 16 MB. The agent endpoint may attach files.",
+			"A file inside the item's checkout is recorded with its path there. Shelving or closing the item removes an untracked file that is still the latest content attached from its path, since the item keeps it; an edited file still counts as uncommitted.",
 		},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item; defaults to the current item."},

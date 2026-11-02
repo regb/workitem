@@ -70,11 +70,24 @@ func (a *App) ReleaseWorkItemWorkspace(ctx context.Context, opts ResolveOptions)
 	}
 	defer operation.Release()
 	opts.Selector = m.ID
-	return a.workspaceService().Release(ctx, opts)
+	removed, err := a.removeAttachedCopies(ctx, m)
+	if err != nil {
+		return WorkspaceReleaseResult{Warnings: removed}, err
+	}
+	result, err := a.workspaceService().Release(ctx, opts)
+	result.Warnings = append(removed, result.Warnings...)
+	return result, err
 }
 
-func (a *App) ensureCheckoutReleasable(ctx context.Context, m model.Manifest) error {
-	return a.workspaceService().EnsureReleasable(ctx, m)
+// ensureCheckoutReleasable removes unchanged copies of the item's
+// attachments, then checks that nothing uncommitted is left. It returns what
+// it removed.
+func (a *App) ensureCheckoutReleasable(ctx context.Context, m model.Manifest) ([]string, error) {
+	removed, err := a.removeAttachedCopies(ctx, m)
+	if err != nil {
+		return removed, err
+	}
+	return removed, a.workspaceService().EnsureReleasable(ctx, m)
 }
 
 func (a *App) releaseCheckout(ctx context.Context, m model.Manifest) (checkoutRelease, error) {

@@ -29,6 +29,8 @@ type AttachRequest struct {
 	Name    string `json:"name"`
 	Content []byte `json:"content"`
 	Text    string `json:"text,omitempty"`
+	// Path is where the file was attached from inside the item's checkout.
+	Path string `json:"path,omitempty"`
 }
 
 func (c *Client) AddNote(ctx context.Context, request AddNoteRequest) (itemnotes.Note, error) {
@@ -55,6 +57,11 @@ func (s *Server) attach(ctx context.Context, request AttachRequest) (itemnotes.N
 	if err := itemnotes.ValidName(request.Name); err != nil {
 		return itemnotes.Note{}, err
 	}
+	if request.Path != "" {
+		if err := itemnotes.ValidPath(request.Path); err != nil {
+			return itemnotes.Note{}, err
+		}
+	}
 	if len(request.Content) > itemnotes.MaxAttachmentBytes {
 		return itemnotes.Note{}, fmt.Errorf("attachment is %d bytes; the limit is %d", len(request.Content), itemnotes.MaxAttachmentBytes)
 	}
@@ -65,7 +72,7 @@ func (s *Server) attach(ctx context.Context, request AttachRequest) (itemnotes.N
 			return itemnotes.Note{}, err
 		}
 	}
-	note := itemnotes.Note{Text: text, Attachment: &itemnotes.Attachment{Name: request.Name, Size: int64(len(request.Content)), Type: itemnotes.ContentType(request.Name, request.Content)}}
+	note := itemnotes.Note{Text: text, Attachment: &itemnotes.Attachment{Name: request.Name, Size: int64(len(request.Content)), Type: itemnotes.ContentType(request.Name, request.Content), Path: request.Path}}
 	return s.appendNote(ctx, request.ItemID, note, request.Content)
 }
 

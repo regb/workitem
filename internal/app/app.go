@@ -33,6 +33,7 @@ type Git interface {
 	DefaultBranch(ctx context.Context, repoRoot string) (string, error)
 	Head(ctx context.Context, dir string) (string, error)
 	StatusPorcelain(ctx context.Context, dir string) (string, error)
+	UntrackedFiles(ctx context.Context, dir string) ([]string, error)
 	CurrentBranch(ctx context.Context, dir string) (string, error)
 	BranchExists(ctx context.Context, repoRoot, branch string) (bool, error)
 	WorktreeAdd(ctx context.Context, opts gitpkg.WorktreeAddOptions) error

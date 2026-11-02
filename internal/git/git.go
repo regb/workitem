@@ -148,6 +148,22 @@ func (c Client) StatusPorcelain(ctx context.Context, dir string) (string, error)
 	return out, nil
 }
 
+// UntrackedFiles lists every untracked file Git does not ignore, each
+// file inside a new directory on its own, relative to the checkout root.
+func (c Client) UntrackedFiles(ctx context.Context, dir string) ([]string, error) {
+	out, err := c.output(ctx, dir, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		return nil, err
+	}
+	files := []string{}
+	for _, file := range strings.Split(out, "\x00") {
+		if file != "" {
+			files = append(files, file)
+		}
+	}
+	return files, nil
+}
+
 func (c Client) CurrentBranch(ctx context.Context, dir string) (string, error) {
 	out, err := c.output(ctx, dir, "branch", "--show-current")
 	if err != nil {

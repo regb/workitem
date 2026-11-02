@@ -171,6 +171,7 @@ func (f *fakeGit) Head(ctx context.Context, dir string) (string, error) {
 	}
 	return f.info.Commit, nil
 }
+func (f *fakeGit) UntrackedFiles(context.Context, string) ([]string, error) { return nil, nil }
 func (f *fakeGit) StatusPorcelain(ctx context.Context, dir string) (string, error) {
 	return f.status, nil
 }

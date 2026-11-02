@@ -94,10 +94,12 @@ func (a *App) Close(ctx context.Context, opts ResolveOptions, close CloseOptions
 
 func (a *App) prepareArchive(ctx context.Context, m model.Manifest, opts ResolveOptions, force bool) ([]string, error) {
 	// Validate worktree safety before changing any live runtime state.
-	if err := a.ensureCheckoutReleasable(ctx, m); err != nil {
-		return nil, err
+	removed, err := a.ensureCheckoutReleasable(ctx, m)
+	if err != nil {
+		return removed, err
 	}
-	return a.stopRuntimeForArchive(ctx, m, opts, force)
+	warnings, err := a.stopRuntimeForArchive(ctx, m, opts, force)
+	return append(removed, warnings...), err
 }
 
 // commitChangesForClose stops the agent first, so nothing writes behind the
@@ -105,6 +107,12 @@ func (a *App) prepareArchive(ctx context.Context, m model.Manifest, opts Resolve
 // kept even if closing later fails.
 func (a *App) commitChangesForClose(ctx context.Context, m model.Manifest, opts ResolveOptions, force bool) ([]string, error) {
 	warnings, err := a.stopRuntimeForArchive(ctx, m, opts, force)
+	if err != nil {
+		return warnings, err
+	}
+	// Unchanged copies of attachments are kept by the item, not the branch.
+	removed, err := a.removeAttachedCopies(ctx, m)
+	warnings = append(warnings, removed...)
 	if err != nil {
 		return warnings, err
 	}
@@ -117,7 +125,8 @@ func (a *App) commitChangesForClose(ctx context.Context, m model.Manifest, opts 
 		_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "workspace.changes_committed", "user", map[string]any{"commit": commit, "branch": branch}))
 		warnings = append(warnings, fmt.Sprintf("committed uncommitted changes to %s as %.12s", branch, commit))
 	}
-	return warnings, a.ensureCheckoutReleasable(ctx, m)
+	removed, err = a.ensureCheckoutReleasable(ctx, m)
+	return append(warnings, removed...), err
 }
 
 func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, resolution string, env map[string]string, force bool, warnings []string, deferTerminalClose ...bool) (StateTransitionResult, error) {
@@ -196,7 +205,9 @@ func (a *App) releaseWorkspaceBeforeDeferredTerminalClose(ctx context.Context, m
 	} else if a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive {
 		return m, warnings, false, "", fmt.Errorf("agent runtime %s is still active", runtime.ID)
 	}
-	if err := a.ensureCheckoutReleasable(ctx, m); err != nil {
+	removed, err := a.ensureCheckoutReleasable(ctx, m)
+	warnings = append(warnings, removed...)
+	if err != nil {
 		return m, warnings, false, "", err
 	}
 	if m.Checkout.Present() && m.Checkout.Claim != nil && !workspacecore.IsSlotPathName(m.Checkout.Claim.Path) {
@@ -278,7 +289,9 @@ func (a *App) closeWorkspace(ctx context.Context, m model.Manifest, force bool, 
 	if terminal == nil && (runtime == nil || runtime.Mode != "tui") {
 		tmuxSession = ""
 	}
-	if err := a.ensureCheckoutReleasable(ctx, m); err != nil {
+	removed, err := a.ensureCheckoutReleasable(ctx, m)
+	warnings = append(warnings, removed...)
+	if err != nil {
 		return m, warnings, changed, err
 	}
 

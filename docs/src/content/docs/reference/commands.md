@@ -123,7 +123,7 @@ wi attachments
 wi attachment cat REPORT.md
 ```
 
-Notes are append-only, timestamped, and at most 2 KB. While the item has a worktree, each note records its `HEAD`. Attaching copies a file of at most 16 MB into the item and adds a note; attaching under an existing name replaces it, and earlier content stays readable with `wi attachment cat DIGEST`, using the digest its note recorded. Options go before the note text. Notes never mark an item unread, raise attention, or reach the agent. The agent endpoint may add notes and attachments. JSON output returns the full records.
+Notes are append-only, timestamped, and at most 2 KB. While the item has a worktree, each note records its `HEAD`. Attaching copies a file of at most 16 MB into the item and adds a note; attaching under an existing name replaces it, and earlier content stays readable with `wi attachment cat DIGEST`, using the digest its note recorded. A file attached from inside the item's checkout also records its path there: shelving, closing or releasing the checkout removes an untracked file that is unchanged since it was last attached from that path, and says so, because the item keeps its content. A file edited since, or any other uncommitted file, still blocks as before. Options go before the note text. Notes never mark an item unread, raise attention, or reach the agent. The agent endpoint may add notes and attachments. JSON output returns the full records.
 
 ### Search
 

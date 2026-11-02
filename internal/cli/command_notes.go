@@ -109,7 +109,7 @@ func runAttach(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 		return err
 	}
 	requestCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
-	note, err := cfg.Coordinator.Attach(requestCtx, coordinator.AttachRequest{ItemID: m.ID, Name: name, Content: content, Text: message})
+	note, err := cfg.Coordinator.Attach(requestCtx, coordinator.AttachRequest{ItemID: m.ID, Name: name, Content: content, Text: message, Path: checkoutPath(m, path)})
 	cancel()
 	if err != nil {
 		return err
@@ -119,6 +119,32 @@ func runAttach(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 	}
 	fmt.Fprintf(cfg.Stdout, "attached %s to %s (%s)\n", name, m.ID, byteSize(note.Attachment.Size))
 	return nil
+}
+
+// checkoutPath is where file is inside the item's checkout, or "" when it
+// is outside it.
+func checkoutPath(m model.Manifest, file string) string {
+	if m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
+		return ""
+	}
+	resolve := func(p string) string {
+		if real, err := filepath.EvalSymlinks(p); err == nil {
+			return real
+		}
+		if real, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
+			return filepath.Join(real, filepath.Base(p))
+		}
+		return filepath.Clean(p)
+	}
+	rel, err := filepath.Rel(resolve(m.Checkout.Claim.Path), resolve(file))
+	if err != nil {
+		return ""
+	}
+	rel = filepath.ToSlash(rel)
+	if itemnotes.ValidPath(rel) != nil {
+		return ""
+	}
+	return rel
 }
 
 // readAttachment reads a file to attach, refusing what is not a regular file

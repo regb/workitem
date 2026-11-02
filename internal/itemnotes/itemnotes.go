@@ -16,6 +16,7 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -54,6 +55,10 @@ type Attachment struct {
 	SHA256 string `json:"sha256"`
 	Size   int64  `json:"size"`
 	Type   string `json:"type"`
+	// Path is where the file was attached from, relative to the item's
+	// checkout, when it was inside it. An unchanged untracked file at that
+	// path is a copy of the attachment, so releasing the checkout removes it.
+	Path string `json:"path,omitempty"`
 }
 
 // Current is an attachment name's latest content.
@@ -81,6 +86,20 @@ func CleanText(text string) (string, error) {
 		}
 	}
 	return text, nil
+}
+
+// ValidPath reports whether p is a clean path inside a checkout, outside
+// .git, as an attachment records where it came from.
+func ValidPath(p string) error {
+	if p == "" || len(p) > 1024 || !utf8.ValidString(p) || strings.ContainsAny(p, "\\\x00\n\r") || strings.HasPrefix(p, "/") || path.Clean(p) != p {
+		return fmt.Errorf("attachment path %q must be a clean relative path", p)
+	}
+	for _, part := range strings.Split(p, "/") {
+		if part == "." || part == ".." || part == ".git" {
+			return fmt.Errorf("attachment path %q must stay inside the checkout and outside .git", p)
+		}
+	}
+	return nil
 }
 
 // ValidName reports whether name is a plain file name for an attachment.
