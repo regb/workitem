@@ -39,7 +39,7 @@ if [ -n "$dirty" ]; then
     echo "install-local: warning: installing a dirty development build" >&2
 fi
 
-go install -buildvcs=true ./cmd/wi ./cmd/wi-github
+go install -buildvcs=true ./cmd/wi ./cmd/wi-github ./cmd/wi-usage
 
 gobin=$(go env GOBIN)
 if [ -z "$gobin" ]; then
@@ -51,4 +51,5 @@ if [ "$quiet" -eq 0 ]; then
     "$gobin/wi" version
     echo "installed: $gobin/wi"
     echo "installed: $gobin/wi-github (optional plugin, enabled through [plugins.github])"
+    echo "installed: $gobin/wi-usage (optional plugin, enabled through [plugins.usage])"
 fi

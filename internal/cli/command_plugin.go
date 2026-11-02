@@ -169,6 +169,10 @@ func runPluginCommand(ctx context.Context, name string, args []string, cfg Confi
 		if spec.Name != name || !spec.Enabled {
 			continue
 		}
+		// Without a subcommand, or with only options, a plugin runs its first.
+		if (len(args) == 0 || strings.HasPrefix(args[0], "-")) && len(spec.Commands) > 0 {
+			args = append([]string{spec.Commands[0]}, args...)
+		}
 		if len(args) == 0 {
 			fmt.Fprintln(cfg.Stderr, "plugin subcommand is required")
 			return ExitUsage, true

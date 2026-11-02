@@ -23,9 +23,10 @@ func Catalog(self string, registrations map[string]plugin.Registration, configDi
 		{Name: schema.Name, Options: schema.Options, RetiredSections: schema.RetiredSections, Required: true, Native: func(approve plugin.Approver) plugin.Hooks { return direnvplugin.New(adapter.New("direnv"), approve) }},
 		{Name: "files", Options: filesplugin.Definition().Options, Required: true, Native: func(plugin.Approver) plugin.Hooks { return filesplugin.New() }},
 		{Name: "setup", Options: setupplugin.Definition().Options, Required: true, Native: func(plugin.Approver) plugin.Hooks { return setupplugin.New() }},
+		{Name: "usage", Commands: []string{"show"}, Command: []string{filepath.Join(filepath.Dir(self), "wi-usage")}, Instructions: "wi usage shows how much of each subscription's quota is left (Claude, OpenAI through Codex, OpenCode Go). Run `wi usage --json` before starting a large task to check that the subscription you rely on has room."},
 		{Name: "github", Options: []options.Option{{Name: "ignore_authors", Type: "strings", Default: []string{}, Repository: true, Description: "Authors whose comments or reviews do not satisfy a wait."}, {Name: "interval_seconds", Type: "integer", Default: int64(300), Min: &min, Max: &max, Description: "Polling interval in seconds."}}, Commands: []string{"wait", "sync"}, Jobs: []plugin.Job{{Name: "check", Args: []string{"sync"}, IntervalOption: "interval_seconds", Repository: true}}, Command: []string{filepath.Join(filepath.Dir(self), "wi-github")}, Instructions: githubplugin.Skill},
 	}
-	known := map[string]bool{"direnv": true, "files": true, "github": true, "setup": true}
+	known := map[string]bool{"direnv": true, "files": true, "github": true, "setup": true, "usage": true}
 	for name, registration := range registrations {
 		if known[name] {
 			if registration.Manifest != "" {

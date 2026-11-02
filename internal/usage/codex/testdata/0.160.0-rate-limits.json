@@ -1,0 +1,39 @@
+{
+  "accountId": "fixture-account-not-for-export",
+  "ordinaryUsageAllowed": true,
+  "rateLimits": {
+    "limitId": "codex",
+    "limitName": "Codex",
+    "planType": "pro",
+    "primary": {"usedPercent": 5, "windowDurationMins": 300, "resetsAt": 1792699200},
+    "secondary": {"usedPercent": 7, "windowDurationMins": 10080, "resetsAt": 1793293800},
+    "credits": {"hasCredits": false, "unlimited": false, "balance": null},
+    "individualLimit": null,
+    "spendControlReached": false,
+    "rateLimitReachedType": null
+  },
+  "rateLimitsByLimitId": {
+    "codex": {
+      "limitId": "codex",
+      "limitName": "Codex",
+      "planType": "pro",
+      "normalModelSlug": null,
+      "primary": {"usedPercent": 5, "windowDurationMins": 300, "resetsAt": 1792699200},
+      "secondary": {"usedPercent": 7, "windowDurationMins": 10080, "resetsAt": 1793293800},
+      "credits": {"hasCredits": false, "unlimited": false, "balance": null},
+      "individualLimit": null,
+      "spendControlReached": false,
+      "rateLimitReachedType": null
+    },
+    "codex_code_review": {
+      "limitId": "codex_code_review",
+      "limitName": "Code review",
+      "planType": "pro",
+      "primary": null,
+      "secondary": {"usedPercent": 80, "windowDurationMins": 10080, "resetsAt": 1793293800},
+      "credits": null
+    }
+  },
+  "rateLimitResetCredits": {"availableCount": 1, "credits": null},
+  "rateLimitUpsell": {"private": "fixture-secret"}
+}

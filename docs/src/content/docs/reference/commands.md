@@ -32,6 +32,14 @@ Setup refuses to overwrite an existing config and does not start agents or the c
 
 These commands are read-only and do not start a daemon, agent, or extension, load checked-in project overrides, or discover installations. Config queries are local. Repository policy is managed separately through `wi repo settings`. Opaque driver settings, custom commands, and sensitive extension values are redacted unless `--show-sensitive` is supplied. See [Configuration](../configuration/) for examples.
 
+## Provider usage
+
+| Command | Purpose |
+| --- | --- |
+| `wi usage [show] [--provider anthropic\|openai\|opencode-go] [--account ID] [--refresh] [--json]` | Show remaining subscription quota and reset times without model prompts or credential extraction |
+
+`wi usage` is the bundled usage plugin; enable it with `[plugins.usage] enabled = true`. Default text shows each subscription's quota periods with remaining-capacity bars and reset countdowns; `--json` gives the machine-readable export. Discovery uses installed Claude Code, Codex, and OpenCode clients, not Pi credentials. The aliases `claude`, `codex`, and `opencode` are also accepted. See [Provider usage](../provider-usage/).
+
 ## Repositories
 
 Single-repository commands default to the current item's registered repository when the selector is omitted. Explicit names or IDs override context. Outside an item, pass a selector. `rename NEW` renames the current repository; `upstream URL` configures its upstream. `list` remains global and `add` still requires a new name.
