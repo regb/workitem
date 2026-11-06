@@ -7,7 +7,7 @@ description: Capture, delegate, review, and finish short-lived development tasks
 
 The active task is short-lived; its record is durable. Descriptions, branches, conversations, and history survive restarts and remain after closing. Worktrees, agent processes, and terminals are replaceable resources.
 
-A local daemon runs every operation: it owns the work items, the Git stores and checkouts, the agents and their tmux terminals. The `wi` command and any other tool are clients of its [API](reference/api/).
+A local daemon runs every operation: it owns the work items, the Git stores and checkouts, the agents and their tmux terminals. The `wi` command, the `wi web` browser client and any other tool are clients of its [API](reference/api/).
 
 :::note[Start here]
 Follow [Installation](getting-started/installation/) and the [Quick start](getting-started/quick-start/) for interactive and headless workflows.

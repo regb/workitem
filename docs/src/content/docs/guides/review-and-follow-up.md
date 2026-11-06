@@ -13,7 +13,7 @@ wi agent monitor --content --item add-api-retries
 wi switch add-api-retries
 ```
 
-The monitor follows the reply being written, shared reasoning, tool calls and activity while the agent works; it keeps nothing. The TUI provides the full conversation.
+The monitor follows the reply being written, shared reasoning, tool calls and activity while the agent works; it keeps nothing. The TUI, or the conversation in `wi web`, provides the full conversation.
 
 ## Inspect the checkout
 

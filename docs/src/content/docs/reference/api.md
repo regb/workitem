@@ -3,7 +3,7 @@ title: Daemon API
 description: The wi.core.v1 API the daemon serves, how to call it, and its conventions.
 ---
 
-Wi's daemon serves one public API, `wi.core.v1`, and runs every operation behind it: creating and changing items, claiming and setting up checkouts, starting and stopping agents, Git integration, plugins' hooks, and tmux. The CLI, plugins' automation and any other tool are clients of this API and only of this API. None of them reads Wi's storage or runs its adapters.
+Wi's daemon serves one public API, `wi.core.v1`, and runs every operation behind it: creating and changing items, claiming and setting up checkouts, starting and stopping agents, Git integration, plugins' hooks, and tmux. The CLI, the `wi web` backend, plugins' automation and any other tool are clients of this API and only of this API. None of them reads Wi's storage or runs its adapters.
 
 The contract is protobuf, in [`proto/wi/core/v1/`](https://github.com/regb/workitem/tree/main/proto/wi/core/v1); the comments there are the reference for every message and field. The daemon serves it with [Connect](https://connectrpc.com/), so one endpoint speaks Connect (JSON or binary protobuf over HTTP), gRPC and gRPC-Web. JSON uses the proto field names (`api_version`, not `apiVersion`), enum values by name (`ITEM_STATE_ACTIVE`), timestamps as RFC 3339 strings and bytes as base64; fields at their default value (empty, zero, false) are left out.
 
@@ -14,7 +14,7 @@ The daemon listens on Unix sockets only, each with its own access level. Access 
 | Socket | Path | Access |
 | --- | --- | --- |
 | Operator | `$XDG_RUNTIME_DIR/wi/<data-root-key>.sock` | Everything |
-| Web adapter | `web-<data-root-key>.sock` next to the operator socket | Operator access, identified as the web adapter |
+| Web adapter | `web-<data-root-key>.sock` next to the operator socket | Operator access, identified as the web adapter; `wi web` uses it |
 | Agent | `$XDG_RUNTIME_DIR/wi-agent/<data-root-key>/daemon.sock` | Restricted, for sandboxed agents |
 
 On macOS, where socket paths are limited to 104 bytes, a path that would be too long moves under `/tmp/wi-<uid>/`. `wi info operator-socket` prints the operator socket's path. The daemon also has a private endpoint for the agent processes it starts; it is not part of this API.
@@ -108,4 +108,4 @@ The daemon enforces lifecycle invariants in the plumbing itself, so no order of 
 
 ## What stays in clients
 
-Clients keep only what belongs to their medium: argument parsing and selector resolution (through `ResolveItem`), default labels and label filters from configuration and environment, reading files and standard input, the editor for `wi edit`, fzf selection in `wi switch`, `wi next` and `wi pick`, attaching to tmux with the terminal the daemon reports, rendering and exit codes, `wi daemon start|stop`, and plugin commands such as `wi usage`, which [is not part of the API](../provider-usage/).
+The CLI and `wi web` keep only what belongs to their medium: argument parsing and selector resolution (through `ResolveItem`), default labels and label filters from configuration and environment, reading files and standard input, the editor for `wi edit`, fzf selection in `wi switch`, `wi next` and `wi pick`, attaching to tmux with the terminal the daemon reports, rendering and exit codes, `wi daemon start|stop`, and plugin commands such as `wi usage`, which [is not part of the API](../provider-usage/).

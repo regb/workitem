@@ -135,7 +135,7 @@ LaunchAgent running `wi daemon serve` with `KeepAlive` and
 
 ## Default labels
 
-Default labels are client policy. `wi new` combines labels from `item.defaults.labels` in user configuration, `WI_ITEM_DEFAULT_LABELS` in its own environment, and explicit `--label` flags, and sends the result; the daemon adds no labels of its own, and a repository's `.config/wi.toml` no longer supplies any. `--no-default-labels` suppresses configured and environment defaults.
+Default labels are client policy. `wi new` combines labels from `item.defaults.labels` in user configuration, `WI_ITEM_DEFAULT_LABELS` in its own environment, and explicit `--label` flags, and sends the result; the daemon adds no labels of its own, and a repository's `.config/wi.toml` no longer supplies any. Items created in `wi web` get none. `--no-default-labels` suppresses configured and environment defaults.
 
 ```bash
 WI_ITEM_DEFAULT_LABELS="jira,backend" wi new --title "Fix issue"
@@ -157,7 +157,7 @@ WI_LIST_LABELS="!,+personal" wi list --json
 
 ## Attention ranking
 
-`attention.priority` selects the strategy of the daemon's built-in ranking, the attention order of `ListItems` used by `wi list`, `wi attention queue`, `wi switch` and `wi next`. The current strategy is `recent-request`. Unknown names are rejected so a misspelled strategy cannot silently change queue behavior. Other clients may rank items differently from the same state; see [Attention](../../concepts/attention/#state-in-the-daemon-ranking-in-clients).
+`attention.priority` selects the strategy of the daemon's built-in ranking, the attention order of `ListItems` used by `wi list`, `wi attention queue`, `wi switch`, `wi next` and `wi web`. The current strategy is `recent-request`. Unknown names are rejected so a misspelled strategy cannot silently change queue behavior. Other clients may rank items differently from the same state; see [Attention](../../concepts/attention/#state-in-the-daemon-ranking-in-clients).
 
 ## Following the upstream
 
@@ -169,7 +169,7 @@ Direnv is a bundled plugin that runs inside the daemon. Its registered options a
 
 - `load = true`, the default, loads approved project environments before an agent starts, in TUI or headless mode.
 - `load = false` skips evaluation, but still removes inherited direnv state and revokes stale approval when reusing a slot.
-- `trust = "prompt"`, the default, asks before approving an untrusted worktree `.envrc` when an agent starts. The daemon's start job waits for an answer: `wi` asks on its terminal, and other clients answer with `JobService.AnswerApproval`. Declining starts the agent without that environment and reports a warning; an unanswered question expires after ten minutes and the start fails.
+- `trust = "prompt"`, the default, asks before approving an untrusted worktree `.envrc` when an agent starts. The daemon's start job waits for an answer: `wi` asks on its terminal, `wi web` in the browser, and other clients answer with `JobService.AnswerApproval`. Declining starts the agent without that environment and reports a warning; an unanswered question expires after ten minutes and the start fails.
 - `trust = "always"` automatically approves the current worktree `.envrc`, including changed contents. This is an explicit permission to execute shell code.
 - `trust = "never"` does not prompt or grant new approval. Existing direnv approvals remain usable; disable `load` to prevent evaluation altogether.
 

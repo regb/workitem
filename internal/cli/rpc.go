@@ -300,6 +300,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = rpcNavigation(ctx, args[0], args[1:], cfg, jsonOut)
 	case "info", "version", "config", "shutdown":
 		err = rpcSystem(ctx, args[0], args[1:], cfg, jsonOut)
+	case "web":
+		err = runWeb(ctx, args[1:], cfg, jsonOut)
 	case "plugin":
 		if len(args) > 1 && args[1] == "list" {
 			value, e := cfg.API.System.ListPlugins(ctx, rpcRequest(cfg, &v1.ListPluginsRequest{}))

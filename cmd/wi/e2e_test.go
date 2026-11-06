@@ -2,10 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -261,5 +265,83 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	}
 	f.tui(repo)
 	f.cliTUICompatibility(repo)
+	f.web(repo, item)
 	f.restartJobs(repo, added.Job.Id)
+}
+func (f *binaryFixture) web(repo, item string) {
+	f.t.Helper()
+	log, err := os.Create(filepath.Join(f.root, "web.log"))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	defer log.Close()
+	cmd := exec.Command(f.wi, "web")
+	cmd.Env = f.env
+	cmd.Dir = f.root
+	cmd.Stdout = log
+	cmd.Stderr = log
+	if err := cmd.Start(); err != nil {
+		f.t.Fatal(err)
+	}
+	defer func() { _ = cmd.Process.Signal(os.Interrupt); _ = cmd.Wait() }()
+	pattern := regexp.MustCompile(`Serving (http://127\.0\.0\.1:\d+)`)
+	url := ""
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		data, _ := os.ReadFile(log.Name())
+		match := pattern.FindStringSubmatch(string(data))
+		if len(match) > 1 {
+			url = match[1]
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if url == "" {
+		data, _ := os.ReadFile(log.Name())
+		f.t.Fatalf("web did not start: %s", data)
+	}
+	curl := func(path string, body any) []byte {
+		f.t.Helper()
+		args := []string{"--fail", "--silent", "--show-error", "--max-time", "15"}
+		if body != nil {
+			data, _ := json.Marshal(body)
+			args = append(args, "-H", "Origin: "+url, "-H", "Content-Type: application/json", "-H", "X-Wi-Client: smoke-tab", "--data", string(data))
+		}
+		args = append(args, url+path)
+		command := exec.Command("curl", args...)
+		command.Env = f.env
+		out, err := command.CombinedOutput()
+		if err != nil {
+			f.t.Fatalf("curl %s: %v %s", path, err, out)
+		}
+		return out
+	}
+	for _, path := range []string{"/", "/items/" + item, "/settings/general", "/repositories/" + repo + "/settings/general"} {
+		if !strings.Contains(strings.ToLower(string(curl(path, nil))), "<html") {
+			f.t.Fatal("page missing HTML", path)
+		}
+	}
+	for _, path := range []string{"/api/items", "/api/settings", "/api/repositories", "/api/agent-profiles", "/api/items/" + item + "/chat", "/api/items/" + item + "/settings", "/api/projects/" + repo + "/setup", "/api/projects/" + repo + "/env"} {
+		if !json.Valid(curl(path, nil)) {
+			f.t.Fatal("invalid backend JSON", path)
+		}
+	}
+	curl("/api/items/"+item+"/notes", map[string]string{"text": "web RPC note"})
+	curl("/api/backlog", map[string]string{"project_id": repo, "title": "Browser backlog", "description": "created through the adapter"})
+	// Sending from a tab starts this active, currently released item in the daemon.
+	curl("/api/items/"+item+"/messages", map[string]string{"text": "browser prompt", "delivery": "prompt", "client_id": "web-message-1"})
+	f.historyReady(item, 2)
+	f.idle(item)
+	curl("/api/items/"+item+"/settings", map[string]any{"settings": map[string]string{"reasoning": "medium"}})
+	f.idle(item)
+	response, err := http.Get(url + "/api/items/" + item + "/chat")
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	data, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != 200 || !strings.Contains(string(data), "Echo: browser prompt") {
+		f.t.Fatalf("browser conversation: %d %s", response.StatusCode, data)
+	}
+	curl("/api/items/"+item+"/close", map[string]any{"resolution": "completed", "force": true})
 }
