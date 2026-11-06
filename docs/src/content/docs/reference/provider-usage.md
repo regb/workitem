@@ -18,7 +18,7 @@ It is a bundled plugin, installed with wi as `wi-usage`. Enable it in Wi's confi
 enabled = true
 ```
 
-`wi usage` then runs it; `wi usage show` is the same. The web Settings → Usage page shows the same results, with a Refresh button. Usage is not part of the [daemon API](../api/): it reads the native clients installed for your user, so `wi usage` runs the plugin itself; the daemon does not run it.
+`wi usage` then runs it; `wi usage show` is the same. The web Settings → Usage page shows the same results, with a Refresh button. Usage is not part of the [daemon API](../api/): it reads the native clients installed for your user, so `wi usage` and `wi web` run the plugin themselves; the daemon does not run it.
 
 ## Text summary
 

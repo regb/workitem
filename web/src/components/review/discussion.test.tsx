@@ -1,0 +1,154 @@
+import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { Discussion } from './discussion'
+import { reviewUI, type CheckpointSelection } from '@/lib/review'
+import type { ReviewDrafts, ReviewThreads } from '@/lib/review-discussion'
+
+const selected: CheckpointSelection = { revision: 'r2', fromRevision: 'r1' }
+let client: QueryClient
+let threads: ReviewThreads
+let drafts: ReviewDrafts
+let sent: { url: string; body: Record<string, any> }[]
+const json = (value: unknown) => new Response(JSON.stringify(value))
+function mount() {
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return render(
+    <QueryClientProvider client={client}>
+      <Discussion id="item" selected={selected} paths={['a.ts']} path="a.ts" />
+    </QueryClientProvider>,
+  )
+}
+beforeEach(() => {
+  reviewUI.set(state => ({ ...state, comments: new Map(), panels: new Map() }))
+  threads = { version: 1, threads: [], rounds: [] }
+  drafts = { version: 1, drafts: [] }
+  sent = []
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method !== 'POST') return json(url.includes('review-threads') ? threads : drafts)
+      sent.push({ url, body: JSON.parse(String(init.body)) })
+      return json({ result: { draft_id: 'd1' } })
+    }),
+  )
+})
+afterEach(() => {
+  cleanup()
+  client?.clear()
+  vi.unstubAllGlobals()
+})
+
+it('saves a comment against immutable comparison endpoints and an explicit side/range', async () => {
+  mount()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Review comment' }), { target: { value: 'Check this case' } })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Comment first line' }), { target: { value: '2' } })
+  fireEvent.change(screen.getByRole('textbox', { name: 'Comment last line' }), { target: { value: '3' } })
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Save comment draft' }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: 'Save comment draft' }))
+  await screen.findByText('Saved d1. Publish feedback when ready.')
+  expect(sent[0].body).toMatchObject({
+    expected_version: 1,
+    draft: { body: 'Check this case', anchor: { revision_id: 'r2', from_revision_id: 'r1', path: 'a.ts', side: 'new', start_line: 2, end_line: 3 } },
+  })
+  expect((screen.getByRole('textbox', { name: 'Review comment' }) as HTMLTextAreaElement).value).toBe('')
+})
+
+it('retries uncertain operations with the exact original payload and keeps newer typing', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method !== 'POST') return json(url.includes('review-threads') ? threads : drafts)
+      sent.push({ url, body: JSON.parse(String(init.body)) })
+      if (sent.length === 1) throw new Error('network lost')
+      return json({ result: { draft_id: 'd1' } })
+    }),
+  )
+  mount()
+  const input = screen.getByRole('textbox', { name: 'Review comment' }) as HTMLTextAreaElement
+  fireEvent.change(input, { target: { value: 'original comment' } })
+  await waitFor(() => expect((screen.getByRole('button', { name: 'Save comment draft' }) as HTMLButtonElement).disabled).toBe(false))
+  fireEvent.click(screen.getByRole('button', { name: 'Save comment draft' }))
+  await screen.findByText('network lost')
+  fireEvent.change(input, { target: { value: 'newer comment while waiting' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Retry review operation' }))
+  await screen.findByText('Saved d1. Publish feedback when ready.')
+  expect(sent).toHaveLength(2)
+  expect(sent[1].body).toEqual(sent[0].body)
+  expect(input.value).toBe('newer comment while waiting')
+})
+
+it('preserves unsaved comment buffers when the code panel unmounts', () => {
+  const first = mount()
+  fireEvent.change(screen.getByRole('textbox', { name: 'Review comment' }), { target: { value: 'keep this unsaved thought' } })
+  first.unmount()
+  client.clear()
+  mount()
+  expect((screen.getByRole('textbox', { name: 'Review comment' }) as HTMLTextAreaElement).value).toBe('keep this unsaved thought')
+})
+
+it('treats addressed as unresolved and publishes a reviewer decision only as a round', async () => {
+  threads.threads = [
+    {
+      id: 't1',
+      anchor: { revision_id: 'r1', path: 'a.ts', side: 'new', start_line: 1, end_line: 1 },
+      status: 'addressed',
+      messages: [
+        { id: 'm1', role: 'reviewer', body: 'Check this', revision_id: 'r1' },
+        { id: 'm2', role: 'agent', body: 'Fixed', addressed: true, revision_id: 'r2' },
+      ],
+    },
+  ]
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method !== 'POST') return json(url.includes('review-threads') ? threads : drafts)
+      const body = JSON.parse(String(init.body))
+      sent.push({ url, body })
+      if (url.endsWith('review-draft')) {
+        drafts.drafts = [{ id: 'd2', thread_id: 't1', anchor: body.draft.anchor, resolution: 'resolved' }]
+        return json({ result: { draft_id: 'd2' } })
+      }
+      threads.threads![0].status = 'resolved'
+      drafts.drafts = []
+      return json({ result: { round_id: 'q2' } })
+    }),
+  )
+  mount()
+  await screen.findByText('Agent addressed, awaiting reviewer')
+  fireEvent.click(screen.getByRole('button', { name: 'Draft resolution' }))
+  await screen.findByRole('button', { name: 'Publish feedback (1)' })
+  expect(screen.getByText('Agent addressed, awaiting reviewer')).toBeTruthy()
+  expect(sent).toHaveLength(1)
+  expect(sent[0].body.draft).toMatchObject({ thread_id: 't1', resolution: 'resolved', anchor: { revision_id: 'r2', from_revision_id: 'r1' } })
+  fireEvent.click(screen.getByRole('button', { name: 'Publish feedback (1)' }))
+  await screen.findByText('Published q2.')
+  expect(sent[1].body).toMatchObject({ draft_ids: ['d2'], revision_id: 'r2', from_revision_id: 'r1' })
+  expect(threads.threads![0].anchor.revision_id).toBe('r1')
+})
+
+it('refreshes a durably published round after notification fails', async () => {
+  drafts.drafts = [{ id: 'd1', anchor: { revision_id: 'r2', from_revision_id: 'r1' }, body: 'Saved concern' }]
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method !== 'POST') return json(url.includes('review-threads') ? threads : drafts)
+      drafts.drafts = []
+      threads.rounds = [{ id: 'q1', revision_id: 'r2' }]
+      return json({ error: 'Published q1; no agent is running' })
+    }),
+  )
+  mount()
+  fireEvent.click(await screen.findByRole('button', { name: 'Publish feedback (1)' }))
+  await screen.findByText('Published q1; no agent is running')
+  expect(await screen.findByRole('article', { name: 'Published round q1' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Publish feedback (1)' })).toBeNull()
+})
+it('does not publish drafts anchored to another comparison', async () => {
+  drafts.drafts = [{ id: 'd1', anchor: { revision_id: 'r1' }, body: 'Older feedback' }]
+  mount()
+  const button = (await screen.findByRole('button', { name: 'Publish feedback (0)' })) as HTMLButtonElement
+  expect(button.disabled).toBe(true)
+  fireEvent.click(screen.getByRole('button', { name: 'd1 at r1' }))
+  expect(reviewUI.get().panels.get('item')?.checkpoint).toMatchObject({ revision: 'r1' })
+})
