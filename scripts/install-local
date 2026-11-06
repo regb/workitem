@@ -70,12 +70,16 @@ fi
 if [ -n "${WI_ITEM_CREDENTIAL_FILE:-}" ] && [ "$shared" -eq 0 ]; then
     private="${XDG_STATE_HOME:-$HOME/.local/state}/wi/builds/${WI_ID:-item}/bin"
     mkdir -p "$private"
+    scripts/build-web
     GOBIN="$private" go install -ldflags "$ldflags" ./cmd/wi ./cmd/wi-github ./cmd/wi-usage
     echo "built: $private/wi ($("$private/wi" version 2>/dev/null | head -1 || true))"
     echo "The shared wi and its daemon are unchanged: run that build by its path,"
     echo "with its own HOME and XDG roots, or install it with --shared."
     exit 0
 fi
+
+# The wi binary embeds the browser client built from web/.
+scripts/build-web
 
 # The daemon accepts only agents of its own build: stop it with the build
 # that started it, and start it again with the new one.

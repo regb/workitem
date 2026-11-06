@@ -25,11 +25,17 @@ remote invocation, use `nix run github:regb/workitem/main -- --help`.
 That command resolves main when invoked. Use a locked consumer input for a
 repeatable installation.
 
-The package contains the Wi executable and its embedded resources. It does
-not wrap PATH or install an agent. Supply Git on PATH for repository operations,
-tmux for interactive TUI agents, and fzf 0.71 or newer for `wi switch` and file
-search. The daemon runs Git, tmux, the agents and the file search, so they must
-be on the daemon's PATH; the `wi switch` picker runs fzf in the command itself.
+The package contains the Wi executable and its embedded resources, including
+the `wi web` browser client. The flake builds the client from
+`web/package-lock.json` with Node.js (`packages.web-client`) and embeds it;
+running Wi needs no Node.js. A plain `go build` or `go install` embeds only a
+placeholder page: build the client first with `scripts/build-web`, as
+`scripts/install-local` does. The package does not wrap PATH or install an
+agent. Supply Git on PATH for repository operations,
+tmux for interactive TUI agents, and fzf 0.71 or newer for `wi switch` and
+`@` file mentions in `wi web`. The daemon runs Git, tmux, the agents and the
+file search, so they must be on the daemon's PATH; the `wi switch` picker runs
+fzf in the command itself.
 Headless operation needs neither tmux nor fzf. Install your chosen agent
 separately and select its executable through Wi configuration or PATH. Optional
 direnv integration also requires direnv. Plugins and editors may need their own

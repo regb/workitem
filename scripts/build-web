@@ -1,0 +1,42 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    cat <<'EOF2'
+usage: scripts/build-web [--test]
+
+Build the browser client in web/ into internal/web/dist/app, which the wi
+binary embeds. Dependencies are reinstalled from web/package-lock.json only
+when it changed. Requires Node.js and npm to build, not to run wi.
+
+  --test  Also run the client's unit tests before building.
+EOF2
+}
+
+test=0
+case "${1:-}" in
+    --test) test=1 ;;
+    "") ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+esac
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "build-web: not inside a Git checkout" >&2
+    exit 1
+}
+cd "$root/web"
+
+if ! command -v npm >/dev/null 2>&1; then
+    echo "build-web: npm is required to build the web client (Node.js 24 or later)" >&2
+    exit 1
+fi
+
+# npm records the installed tree in node_modules/.package-lock.json.
+if [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+    npm ci --no-audit --no-fund --loglevel=error
+fi
+if [ "$test" -eq 1 ]; then
+    npm test --silent
+fi
+npm run build --silent

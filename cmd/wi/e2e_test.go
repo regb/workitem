@@ -2,16 +2,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/gen/wi/core/v1/corev1connect"
 	"github.com/regb/workitem/internal/apitest"
 	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/coordinator"
@@ -233,4 +237,136 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	if len(listed.Items) != 1 || listed.Items[0].Id != item {
 		t.Fatalf("items after restart: %s", listed.String())
 	}
+	f.web(repo, item)
+}
+
+// webHeaders sends what a tab sends with each call.
+type webHeaders struct{ origin string }
+
+func (h webHeaders) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Origin", h.origin)
+	r.Header.Set("X-Wi-Client", "smoke-tab")
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+// webWatch follows the stream a tab opens for an item through wi web: it
+// starts with where the change feed is, the unfinished jobs and the item's
+// live content.
+func (f *binaryFixture) webWatch(url, item string) {
+	f.t.Helper()
+	events := corev1connect.NewEventServiceClient(&http.Client{Transport: webHeaders{url}}, url)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	stream, err := events.Watch(ctx, connect.NewRequest(&v1.WatchRequest{ItemId: item}))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	defer stream.Close()
+	seen := map[string]bool{}
+	for len(seen) < 3 && stream.Receive() {
+		switch stream.Msg().Event.(type) {
+		case *v1.WatchResponse_Changes:
+			seen["changes"] = true
+		case *v1.WatchResponse_Jobs:
+			seen["jobs"] = stream.Msg().GetJobs().Snapshot || seen["jobs"]
+		case *v1.WatchResponse_Content:
+			seen["content"] = stream.Msg().GetContent().GetSnapshot() != nil || seen["content"]
+		}
+	}
+	if !seen["changes"] || !seen["jobs"] || !seen["content"] {
+		f.t.Fatalf("watch through wi web saw %v: %v", seen, stream.Err())
+	}
+}
+
+func (f *binaryFixture) web(repo, item string) {
+	f.t.Helper()
+	log, err := os.Create(filepath.Join(f.root, "web.log"))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	defer log.Close()
+	cmd := exec.Command(f.wi, "web")
+	cmd.Env = f.env
+	cmd.Dir = f.root
+	cmd.Stdout = log
+	cmd.Stderr = log
+	if err := cmd.Start(); err != nil {
+		f.t.Fatal(err)
+	}
+	defer func() { _ = cmd.Process.Signal(os.Interrupt); _ = cmd.Wait() }()
+	pattern := regexp.MustCompile(`Serving (http://127\.0\.0\.1:\d+)`)
+	url := ""
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		data, _ := os.ReadFile(log.Name())
+		match := pattern.FindStringSubmatch(string(data))
+		if len(match) > 1 {
+			url = match[1]
+			break
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	if url == "" {
+		data, _ := os.ReadFile(log.Name())
+		f.t.Fatalf("web did not start: %s", data)
+	}
+	curl := func(path string, body any) []byte {
+		f.t.Helper()
+		args := []string{"--fail", "--silent", "--show-error", "--max-time", "15"}
+		if body != nil {
+			data, _ := json.Marshal(body)
+			args = append(args, "-H", "Origin: "+url, "-H", "Content-Type: application/json", "-H", "X-Wi-Client: smoke-tab", "--data", string(data))
+		}
+		args = append(args, url+path)
+		command := exec.Command("curl", args...)
+		command.Env = f.env
+		out, err := command.CombinedOutput()
+		if err != nil {
+			f.t.Fatalf("curl %s: %v %s", path, err, out)
+		}
+		return out
+	}
+	for _, path := range []string{"/", "/items/" + item, "/settings/general", "/repositories/" + repo + "/settings/general"} {
+		if !strings.Contains(strings.ToLower(string(curl(path, nil))), "<html") {
+			f.t.Fatal("page missing HTML", path)
+		}
+	}
+	if settings := curl("/wi.core.v1.AgentService/GetAgentSettings", map[string]string{"item_id": item}); !strings.Contains(string(settings), `"agent_profile"`) {
+		f.t.Fatalf("item settings through wi web: %s", settings)
+	}
+	// The page calls the daemon's API through wi web, as a Connect client:
+	// the dashboard, the conversation, and one stream for what changes.
+	if list := curl("/wi.core.v1.ItemService/ListItems", map[string]any{"order": "LIST_ORDER_ATTENTION", "states": []string{"ITEM_STATE_ACTIVE", "ITEM_STATE_BACKLOG", "ITEM_STATE_CLOSED"}}); !strings.Contains(string(list), item) || !strings.Contains(string(list), `"section":"LIST_SECTION_`) {
+		f.t.Fatalf("dashboard through wi web: %s", list)
+	}
+	if view := curl("/wi.core.v1.ViewService/GetItemView", map[string]string{"item_id": item}); !strings.Contains(string(view), item) {
+		f.t.Fatalf("conversation through wi web: %s", view)
+	}
+	f.webWatch(url, item)
+	if profiles := curl("/wi.core.v1.AgentProfileService/ListAgentProfiles", map[string]string{}); !strings.Contains(string(profiles), `"default_profile":"pi"`) {
+		f.t.Fatalf("API through wi web: %s", profiles)
+	}
+	if repos := curl("/wi.core.v1.RepositoryService/ListRepositories", map[string]string{}); !strings.Contains(string(repos), repo) {
+		f.t.Fatalf("repositories through wi web: %s", repos)
+	}
+	if setup := curl("/wi.core.v1.RepositoryService/GetCheckoutSetup", map[string]string{"repositoryId": repo}); !strings.Contains(string(setup), `"setup"`) {
+		f.t.Fatalf("checkout setup through wi web: %s", setup)
+	}
+	curl("/wi.core.v1.ItemService/AddNote", map[string]string{"itemId": item, "text": "web RPC note"})
+	curl("/wi.core.v1.ItemService/CreateItem", map[string]string{"repository_id": repo, "title": "Browser backlog", "description": "created through wi web", "request_id": "web-backlog-1"})
+	// Sending from a tab starts this active, currently released item in the
+	// daemon: the call answers with the job starting it.
+	if sent := curl("/wi.core.v1.AgentService/SendMessage", map[string]string{"item_id": item, "text": "browser prompt", "delivery": "DELIVERY_PROMPT", "client_message_id": "web-message-1", "start_mode": "AGENT_MODE_HEADLESS"}); !strings.Contains(string(sent), `"job"`) {
+		f.t.Fatalf("send to a released item: %s", sent)
+	}
+	f.historyReady(item, 2)
+	f.idle(item)
+	curl("/wi.core.v1.AgentService/UpdateAgentSettings", map[string]any{"item_id": item, "settings": map[string]string{"reasoning": "medium"}})
+	f.idle(item)
+	if view := curl("/wi.core.v1.ViewService/GetItemView", map[string]string{"item_id": item}); !strings.Contains(string(view), "Echo: browser prompt") {
+		f.t.Fatalf("browser conversation: %s", view)
+	}
+	f.reviewWeb(item, url, curl)
+	curl("/wi.core.v1.LifecycleService/CloseItem", map[string]any{"item_id": item, "resolution": "RESOLUTION_COMPLETED", "force": true})
 }

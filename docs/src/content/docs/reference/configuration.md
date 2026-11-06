@@ -136,7 +136,7 @@ LaunchAgent running `wi daemon serve` with `KeepAlive` and
 
 ## Default labels
 
-Default labels are client policy. `wi new` combines labels from `item.defaults.labels` in user configuration, `WI_ITEM_DEFAULT_LABELS` in its own environment, and explicit `--label` flags, and sends the result; the daemon adds no labels of its own, and a repository's `.config/wi.toml` no longer supplies any. `--no-default-labels` suppresses configured and environment defaults.
+Default labels are client policy. `wi new` combines labels from `item.defaults.labels` in user configuration, `WI_ITEM_DEFAULT_LABELS` in its own environment, and explicit `--label` flags, and sends the result; the daemon adds no labels of its own, and a repository's `.config/wi.toml` no longer supplies any. Items created in `wi web` get none. `--no-default-labels` suppresses configured and environment defaults.
 
 ```bash
 WI_ITEM_DEFAULT_LABELS="jira,backend" wi new --title "Fix issue"
@@ -158,7 +158,7 @@ WI_LIST_LABELS="!,+personal" wi list --json
 
 ## Attention ranking
 
-`attention.priority` selects the strategy of the daemon's built-in ranking, the attention order of `ListItems` used by `wi list`, `wi attention queue`, `wi switch` and `wi next`. The current strategy is `recent-request`. Unknown names are rejected so a misspelled strategy cannot silently change queue behavior. Other clients may rank items differently from the same state; see [Attention](../../concepts/attention/#state-in-the-daemon-ranking-in-clients).
+`attention.priority` selects the strategy of the daemon's built-in ranking, the attention order of `ListItems` used by `wi list`, `wi attention queue`, `wi switch`, `wi next` and `wi web`. The current strategy is `recent-request`. Unknown names are rejected so a misspelled strategy cannot silently change queue behavior. Other clients may rank items differently from the same state; see [Attention](../../concepts/attention/#state-in-the-daemon-ranking-in-clients).
 
 ## Following the upstream
 

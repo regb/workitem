@@ -19,7 +19,7 @@ Durability protects interruptions and preserves completed work; it does not mean
 wi new --desc-file task.md --title "Investigate cache invalidation"
 ```
 
-Supply `--title` or explicitly use `--untitled`. The latter creates an editable `Untitled task` title and derives a slug such as `item-933sga1r` from the last eight characters of the item ID. The flags are mutually exclusive. `--slug` overrides either default; generated slug collisions receive numeric suffixes. The CLI never infers a title or slug from a description or prompt; a client may ask the daemon to suggest one with `AgentService.SuggestTitle`.
+Supply `--title` or explicitly use `--untitled`. The latter creates an editable `Untitled task` title and derives a slug such as `item-933sga1r` from the last eight characters of the item ID. The flags are mutually exclusive. `--slug` overrides either default; generated slug collisions receive numeric suffixes. The CLI never infers a title or slug from a description or prompt; `wi web` asks the daemon to generate a title in the background (see [Starting conversations](../../guides/web-chat/#starting-conversations)).
 
 `--untitled` is only a creation option, not a durable classification. Later title edits leave the active slug and branch unchanged. Restore follows the normal current-title allocation policy. Creation selects a [registered repository](../repositories/) from the current item or an explicit `--repo NAME`.
 
