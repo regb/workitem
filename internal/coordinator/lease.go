@@ -48,8 +48,8 @@ func validateLeaseRequest(request model.LeaseRequest) error {
 	if !model.ValidID(request.ItemID) {
 		return errors.New("valid item_id is required")
 	}
-	if request.Holder != model.LeaseHolderWeb && request.Holder != model.LeaseHolderTerminal {
-		return errors.New("lease holder must be web or terminal")
+	if request.Holder != model.LeaseHolderWeb && request.Holder != model.LeaseHolderTerminal && request.Holder != model.LeaseHolderCLI {
+		return errors.New("lease holder must be web, terminal or cli")
 	}
 	if strings.TrimSpace(request.ClientID) == "" || compactIdentifier(request.ClientID, 128) != request.ClientID {
 		return errors.New("valid client_id is required")

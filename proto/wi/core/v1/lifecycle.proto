@@ -1,0 +1,128 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "wi/core/v1/common.proto";
+import "wi/core/v1/items.proto";
+import "wi/core/v1/jobs.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// LifecycleService is the porcelain for an item's lifecycle: each operation
+// moves the item and its resources together. Each one is documented as the
+// plumbing it performs; a client wanting different behavior can call that
+// plumbing itself. Durable steps are kept when a later one fails, reported as
+// a PartialOutcome or by the job. Every response can carry a job when work
+// continues past the request. Final state is read through domain getters.
+service LifecycleService {
+  // CreateAndStartItem creates an item and starts it:
+  // ItemService.CreateItem, then StartItem. The item exists when this
+  // returns; the job sets up its checkout and starts the agent.
+  rpc CreateAndStartItem(CreateAndStartItemRequest) returns (CreateAndStartItemResponse);
+  // StartItem makes a backlog item active and starts its agent:
+  // ItemService.SetItemState(ACTIVE), WorkspaceService.EnsureWorkspace (claim
+  // and setup, unless skip_setup), then AgentService.SendMessage with the
+  // prompt or the configured startup message, which starts the agent. An
+  // active item whose setup failed is set up again and then started.
+  rpc StartItem(StartItemRequest) returns (StartItemResponse);
+  // ShelveItem returns active work to the backlog: AgentService.StopAgent
+  // (refused while busy), WorkspaceService.ReleaseWorkspace (refused while the
+  // checkout has uncommitted changes), then ItemService.SetItemState(BACKLOG).
+  rpc ShelveItem(ShelveItemRequest) returns (ShelveItemResponse);
+  // CloseItem ends an item: AgentService.StopAgent (force aborts a busy
+  // turn), WorkspaceService.CommitWorkspace when commit_changes is set,
+  // WorkspaceService.ReleaseWorkspace, then ItemService.SetItemState(CLOSED)
+  // with the resolution.
+  rpc CloseItem(CloseItemRequest) returns (CloseItemResponse);
+  // ReopenItem returns a closed item to work:
+  // ItemService.SetItemState(BACKLOG), then with start StartItem without a
+  // message, resuming the conversation on the same branch.
+  rpc ReopenItem(ReopenItemRequest) returns (ReopenItemResponse);
+}
+
+// StartOptions says how to start an item's agent.
+message StartOptions {
+  // prompt is the first message; empty sends the configured startup
+  // message. Description and prompt stay separate.
+  string prompt = 1;
+  // send_nothing starts the agent without a message, as reopening does.
+  bool send_nothing = 2;
+  AgentMode mode = 3;
+  // skip_setup starts the agent without setting up a new checkout.
+  bool skip_setup = 4;
+  // client_message_id lets the client match the prompt to its history entry
+  // once the agent records it, and keeps a retried start from sending the
+  // prompt twice.
+  string client_message_id = 5;
+  // override_capacity bypasses deep-work capacity only for operator callers.
+  bool override_capacity = 6;
+}
+
+message CreateAndStartItemRequest {
+  CreateItemRequest item = 1;
+  StartOptions start = 2;
+}
+
+message CreateAndStartItemResponse {
+  Item item = 1;
+  Job job = 2;
+}
+
+message StartItemRequest {
+  string item_id = 1;
+  StartOptions start = 2;
+  uint32 expected_revision = 3;
+}
+
+message StartItemResponse {
+  Item item = 1;
+  Job job = 2;
+}
+
+message ShelveItemRequest {
+  string item_id = 1;
+  // confirm_attached_terminal acknowledges disconnecting clients attached
+  // to the agent's terminal.
+  bool confirm_attached_terminal = 2;
+}
+
+message ShelveItemResponse {
+  Item item = 1;
+  repeated string warnings = 2;
+  // job is set while shelving continues; read final state through GetItem.
+  Job job = 3;
+}
+
+message CloseItemRequest {
+  string item_id = 1;
+  Resolution resolution = 2;
+  // force aborts a busy agent's turn so it can be stopped.
+  bool force = 3;
+  // commit_changes commits uncommitted changes to the item's branch before
+  // releasing the checkout. Unchanged copies of attachments are removed
+  // instead.
+  bool commit_changes = 4;
+  bool confirm_attached_terminal = 5;
+}
+
+message CloseItemResponse {
+  Item item = 1;
+  // commit is the commit made by commit_changes, if any.
+  string commit = 2;
+  repeated string warnings = 3;
+  // job is set while closing continues; read final state through GetItem.
+  Job job = 4;
+}
+
+message ReopenItemRequest {
+  string item_id = 1;
+  // start also starts the item; otherwise it stays in the backlog.
+  bool start = 2;
+  AgentMode mode = 3;
+}
+
+message ReopenItemResponse {
+  Item item = 1;
+  // job is set when start was requested.
+  Job job = 2;
+}

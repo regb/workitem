@@ -13,6 +13,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 )
 
 // Skill is the Markdown this plugin adds to the wi skill when it is enabled.
@@ -76,15 +79,12 @@ type Blocker struct {
 	CreatedAt time.Time         `json:"created_at"`
 }
 
-type item struct {
-	ID           string    `json:"id"`
-	RepositoryID string    `json:"repository_id"`
-	Slug         string    `json:"slug"`
-	Blockers     []Blocker `json:"blockers"`
-}
-
-type list struct {
-	Sections map[string][]item `json:"sections"`
+func blockerFromAPI(value *v1.Blocker) Blocker {
+	blocker := Blocker{ID: value.Id, Kind: strings.ToLower(strings.TrimPrefix(value.Kind.String(), "BLOCKER_KIND_")), Event: value.Event, Meta: value.Meta}
+	if value.CreatedAt != nil {
+		blocker.CreatedAt = value.CreatedAt.AsTime()
+	}
+	return blocker
 }
 
 // PullRequest identifies one pull request.
@@ -190,6 +190,10 @@ func Decide(blocker Blocker, state State, authors Authors) (bool, string) {
 	case "CLOSED":
 		return true, "closed"
 	}
+	// Missing start times must not make historical posts count as new activity.
+	if blocker.CreatedAt.IsZero() {
+		return false, ""
+	}
 	var first time.Time
 	why := ""
 	consider := func(at time.Time, login, what string) {
@@ -217,11 +221,11 @@ func (p Plugin) Sync(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list work items: %w", err)
 	}
-	var listed list
-	if err := json.Unmarshal(output, &listed); err != nil {
+	var listed v1.ListItemsResponse
+	if err := protojson.Unmarshal(output, &listed); err != nil {
 		return fmt.Errorf("decode wi list: %w", err)
 	}
-	if !p.hasTaggedBlockers(listed) {
+	if !p.hasTaggedBlockers(&listed) {
 		// Most repositories have nothing to check; skip GitHub entirely.
 		fmt.Fprintln(p.Out, "checked 0 pull request blocker(s) across 0 pull request(s)")
 		return nil
@@ -238,38 +242,37 @@ func (p Plugin) Sync(ctx context.Context) error {
 	states := map[PullRequest]*State{}
 	failures := 0
 	checked := 0
-	for _, section := range []string{"active", "waiting", "backlog"} {
-		for _, entry := range listed.Sections[section] {
-			if p.RepositoryID != "" && entry.RepositoryID != p.RepositoryID {
-				continue
-			}
-			for _, blocker := range entry.Blockers {
-				for _, pr := range PullRequests(blocker) {
-					state, ok := states[pr]
-					if !ok {
-						state, err = p.view(ctx, pr)
-						if err != nil {
-							fmt.Fprintf(p.Out, "%s: %s: %v\n", entry.Slug, pr, err)
-							failures++
-						}
-						states[pr] = state
-					}
-					if state == nil {
-						continue
-					}
-					checked++
-					done, why := Decide(blocker, *state, authors)
-					if !done {
-						continue
-					}
-					if _, err := p.Run(ctx, p.Wi, "blocker", "clear", "--id", blocker.ID, entry.ID); err != nil {
-						fmt.Fprintf(p.Out, "%s: could not clear blocker %s: %v\n", entry.Slug, blocker.ID, err)
+	for _, entry := range listed.Items {
+		if p.RepositoryID != "" && entry.RepositoryId != p.RepositoryID {
+			continue
+		}
+		for _, value := range entry.Blockers {
+			blocker := blockerFromAPI(value)
+			for _, pr := range PullRequests(blocker) {
+				state, ok := states[pr]
+				if !ok {
+					state, err = p.view(ctx, pr)
+					if err != nil {
+						fmt.Fprintf(p.Out, "%s: %s: %v\n", entry.Slug, pr, err)
 						failures++
-						continue
 					}
-					fmt.Fprintf(p.Out, "%s: cleared blocker %s: %s %s\n", entry.Slug, blocker.ID, pr, why)
-					break
+					states[pr] = state
 				}
+				if state == nil {
+					continue
+				}
+				checked++
+				done, why := Decide(blocker, *state, authors)
+				if !done {
+					continue
+				}
+				if _, err := p.Run(ctx, p.Wi, "blocker", "clear", "--id", blocker.ID, entry.Id); err != nil {
+					fmt.Fprintf(p.Out, "%s: could not clear blocker %s: %v\n", entry.Slug, blocker.ID, err)
+					failures++
+					continue
+				}
+				fmt.Fprintf(p.Out, "%s: cleared blocker %s: %s %s\n", entry.Slug, blocker.ID, pr, why)
+				break
 			}
 		}
 	}
@@ -282,16 +285,14 @@ func (p Plugin) Sync(ctx context.Context) error {
 
 // hasTaggedBlockers reports whether any item in this run's scope waits on a
 // pull request, before the run spends GitHub API calls.
-func (p Plugin) hasTaggedBlockers(listed list) bool {
-	for _, section := range []string{"active", "waiting", "backlog"} {
-		for _, entry := range listed.Sections[section] {
-			if p.RepositoryID != "" && entry.RepositoryID != p.RepositoryID {
-				continue
-			}
-			for _, blocker := range entry.Blockers {
-				if len(PullRequests(blocker)) > 0 {
-					return true
-				}
+func (p Plugin) hasTaggedBlockers(listed *v1.ListItemsResponse) bool {
+	for _, entry := range listed.Items {
+		if p.RepositoryID != "" && entry.RepositoryId != p.RepositoryID {
+			continue
+		}
+		for _, blocker := range entry.Blockers {
+			if len(PullRequests(blockerFromAPI(blocker))) > 0 {
+				return true
 			}
 		}
 	}

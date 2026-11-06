@@ -19,6 +19,7 @@ func TestControlPlanTakesVacantLeaseSilentlyAndConfirmsInterruptions(t *testing.
 	web := ControlRequest{Holder: model.LeaseHolderWeb, ClientID: "tab", EnsureRuntime: true}
 	terminal := ControlRequest{Holder: model.LeaseHolderTerminal, ClientID: "terminal"}
 	otherTab := &model.ControlLease{Holder: model.LeaseHolderWeb, ClientID: "other"}
+	cli := ControlRequest{Holder: model.LeaseHolderCLI, ClientID: "cli", EnsureRuntime: true}
 	for _, tc := range []struct {
 		name    string
 		status  ControlStatus
@@ -33,6 +34,10 @@ func TestControlPlanTakesVacantLeaseSilentlyAndConfirmsInterruptions(t *testing.
 		{"attached terminal is displaced", ControlStatus{Holder: model.LeaseHolderTerminal, Implicit: true, RuntimeOnline: true, RuntimeMode: "tui", Channels: structuredTUI}, web, ControlPlan{DisplacesTerminal: true, NeedsConfirmation: true}},
 		{"other tab is displaced and its turn aborted", ControlStatus{Lease: otherTab, Holder: model.LeaseHolderWeb, RuntimeOnline: true, Channels: headless, Busy: true}, web, ControlPlan{Displaces: otherTab, Abort: true, NeedsConfirmation: true}},
 		{"terminal replaces idle headless runtime", ControlStatus{RuntimeOnline: true, RuntimeMode: "headless", Channels: headless}, terminal, ControlPlan{Replace: "tui"}},
+		{"command line types into a keystroke TUI", ControlStatus{RuntimeOnline: true, RuntimeMode: "tui", Channels: emulatedTUI}, cli, ControlPlan{}},
+		{"command line does not displace an attached terminal", ControlStatus{Holder: model.LeaseHolderTerminal, Implicit: true, RuntimeOnline: true, RuntimeMode: "tui", Channels: emulatedTUI}, cli, ControlPlan{}},
+		{"command line keeps a headless runtime", ControlStatus{RuntimeOnline: true, RuntimeMode: "headless", Channels: headless}, cli, ControlPlan{}},
+		{"command line starts an offline agent headless", ControlStatus{Channels: model.Channels{Observe: true}}, cli, ControlPlan{Start: "headless"}},
 		{"terminal over web lease", ControlStatus{Lease: otherTab, Holder: model.LeaseHolderWeb, RuntimeOnline: true, RuntimeMode: "headless", Channels: headless}, terminal, ControlPlan{Displaces: otherTab, Replace: "tui", NeedsConfirmation: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

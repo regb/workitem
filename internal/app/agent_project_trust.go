@@ -30,7 +30,7 @@ func (a *App) agentProjectTrusted(ctx context.Context, itemID, cwd string) (bool
 	requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 	var source coordinator.RepositorySourceResult
-	client := &coordinator.Client{SocketPath: a.DaemonSocketPath}
+	client := a.coordinatorClient()
 	if err := client.Call(requestCtx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: m.Repository.ID, MetadataOnly: true}, &source); err != nil {
 		return false, err
 	}

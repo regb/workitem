@@ -3,7 +3,7 @@ title: Merge completed work
 description: Fast-forward a local target, rebasing only when needed.
 ---
 
-`wi merge` integrates the committed work of one active item into an existing local branch. Uncommitted source changes are not included.
+`wi merge` integrates the committed work of one active item into an existing local branch. Uncommitted source changes are not included. The daemon performs it as a job (`RepositoryService.IntegrateItem`), which finishes even if the command is interrupted.
 
 ```bash
 wi merge --item auth main
@@ -21,7 +21,7 @@ When the target is already an ancestor, Wi preserves all commit IDs and merge hi
 
 When a rebase is needed and the source has local changes or ignored files, Wi replays its committed tip onto the target in a private temporary checkout. It advances the target to that rebased copy, leaving the original source branch, index, and files unchanged. Conflicts stop integration without disturbing your checkout. No automatic commit, stash, or cleanup of source files occurs. A clean source without ignored files retains the existing in-place rebase behavior.
 
-The JSON result sets `source_preserved: true` for a rebased copy. In that case, `source_new_sha` identifies the integrated copy, not a new tip of the source branch. Text output also reports that the source was left untouched. Temporary checkouts are removed on success, failure, or cancellation; cleanup failures report their retained paths.
+With `--json`, the command prints the `IntegrateItemResponse` with its finished `job`: its state, warnings and, on failure, the error and what was kept. The job carries no integrated commit; read the target branch with Git or `wi repo status`. Temporary checkouts are removed on success, failure, or cancellation; cleanup failures report their retained paths.
 
 Rebase can flatten merge history and require manual conflict resolution.
 

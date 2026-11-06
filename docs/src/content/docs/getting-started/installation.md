@@ -11,11 +11,11 @@ Install these programs before building `wi`:
 
 - [Go](https://go.dev/doc/install) 1.24 or newer
 - [Git](https://git-scm.com/)
-- [Pi](https://pi.dev) or [Claude Code](https://code.claude.com/) for coding-agent runtimes
+- [Pi](https://pi.dev) or [Claude Code](https://code.claude.com/) for coding agents
 - [tmux](https://github.com/tmux/tmux) for interactive TUI mode
 - [fzf](https://github.com/junegunn/fzf) 0.71+ for the optional `wi switch` picker
 
-Headless agents do not require tmux or fzf. Pi and Claude support TUI and headless modes. Claude headless requires Claude Code 2.1.299 or later and the native receipt/identity capabilities used by the adapter. Configure your chosen agent's normal authentication before starting a runtime. The Wi skill is embedded in the Wi executable. At runtime startup, the Pi driver exports a private temporary copy and passes it explicitly with `--skill`; do not add a separate copy to Pi configuration. Global skills and settings are not modified.
+Headless agents do not require tmux or fzf. Pi and Claude support TUI and headless modes. Claude headless requires Claude Code 2.1.299 or later and the native receipt/identity capabilities used by the adapter. Configure your chosen agent's normal authentication before starting an agent. The Wi skill is embedded in the Wi executable. When an agent starts, the Pi driver exports a private temporary copy and passes it explicitly with `--skill`; do not add a separate copy to Pi configuration. Global skills and settings are not modified.
 
 Check the prerequisites available for your workflow:
 
@@ -49,7 +49,7 @@ When Go supplies VCS metadata, development versions include the Git revision and
 
 No setup command is needed, and no configuration file. The first `wi` command adds an agent profile for each coding agent the bundled drivers find installed on `PATH` (Pi, Claude Code), with its absolute executable path; Pi's becomes the default. Check them with `wi agent profile list`, or in the web Settings → Agents page. If you install an agent later, add it with `wi agent profile add NAME --driver DRIVER`. Profiles hold no credentials: each agent logs in on its own.
 
-The daemon starts automatically when an ordinary command needs it. You do not need to start tmux before running `wi`; TUI operations create or reuse the required server and sessions.
+The daemon starts automatically when an ordinary command needs it. It runs every operation: `wi` commands only parse arguments, call its [API](../../reference/api/), and render the answer. Agents, setup commands and Git run in the daemon with its environment, not your shell's; see [Daemon startup environment](../../reference/configuration/#daemon-startup-environment). You do not need to start tmux before running `wi`; starting a TUI agent creates or reuses the required server and sessions.
 
 ## Update
 
@@ -62,7 +62,7 @@ scripts/install-local
 wi version
 ```
 
-For a build mismatch within the same supported database schema, stop the old daemon and retry:
+Commands keep using a running daemon as long as it speaks the same major API version, even if it is an older build, so stop it after installing:
 
 ```bash
 wi daemon stop
@@ -73,7 +73,7 @@ The next ordinary command starts the installed version. A schema mismatch requir
 
 ## Uninstall
 
-First stop wi-owned runtimes, terminals, and the daemon:
+First stop wi-owned agents, terminals, and the daemon:
 
 ```bash
 wi shutdown

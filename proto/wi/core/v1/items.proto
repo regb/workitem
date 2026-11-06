@@ -1,0 +1,501 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "wi/core/v1/common.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// ItemService owns durable work items: their metadata, description,
+// lifecycle record, attention state, blockers, notes and attachments. It
+// never starts agents or claims checkouts; LifecycleService composes those.
+service ItemService {
+  // CreateItem saves a new item to the backlog.
+  rpc CreateItem(CreateItemRequest) returns (CreateItemResponse);
+  // GetItem reads one item with its description and current observations.
+  rpc GetItem(GetItemRequest) returns (GetItemResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ResolveItem turns a selector (ID, ID prefix, slug, or a path inside an
+  // item's checkout) into an exact item ID, as the CLI resolves its argument
+  // or current directory. Ambiguity is an error listing the candidates.
+  rpc ResolveItem(ResolveItemRequest) returns (ResolveItemResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListItems reads items matching filters, in the requested order. The
+  // attention order is the daemon's built-in ranking; clients may request
+  // another order and rank items themselves from the same state.
+  rpc ListItems(ListItemsRequest) returns (ListItemsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SearchItems finds items by title, labels, description and notes.
+  rpc SearchItems(SearchItemsRequest) returns (SearchItemsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // UpdateItem edits title, description, labels and deep work.
+  rpc UpdateItem(UpdateItemRequest) returns (UpdateItemResponse);
+  // SetItemState changes the lifecycle record only, without cleaning up
+  // resources. Workflow operations are the normal way to change state.
+  rpc SetItemState(SetItemStateRequest) returns (SetItemStateResponse);
+  // DeleteItem permanently removes a closed, cleaned-up item.
+  rpc DeleteItem(DeleteItemRequest) returns (DeleteItemResponse);
+  // MarkRead marks the item's latest response read or unread.
+  rpc MarkRead(MarkReadRequest) returns (MarkReadResponse);
+  // DeferItem records that the operator put a ready item off, so rankings
+  // can move it behind other candidates until something new happens.
+  rpc DeferItem(DeferItemRequest) returns (DeferItemResponse);
+  // ListItemEvents reads the item's append-only history.
+  rpc ListItemEvents(ListItemEventsRequest) returns (ListItemEventsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AddBlocker makes the item wait for a time, another item, or an event.
+  rpc AddBlocker(AddBlockerRequest) returns (AddBlockerResponse);
+  // ClearBlocker removes one blocker, or all with clear_all.
+  rpc ClearBlocker(ClearBlockerRequest) returns (ClearBlockerResponse);
+  // AddNote appends a note to the item's log. Notes never reach the agent.
+  rpc AddNote(AddNoteRequest) returns (AddNoteResponse);
+  // Attach stores content with the item and adds a note.
+  rpc Attach(AttachRequest) returns (AttachResponse);
+  // ListNotes reads the item's notes, oldest first, and each attachment
+  // name's current content.
+  rpc ListNotes(ListNotesRequest) returns (ListNotesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ReadAttachment streams attached content in chunks, by digest.
+  rpc ReadAttachment(ReadAttachmentRequest) returns (stream ReadAttachmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// Item is a work item's durable record.
+message Item {
+  string id = 1;
+  string slug = 2;
+  string title = 3;
+  ItemState state = 4;
+  Resolution resolution = 5;
+  repeated string labels = 6;
+  bool deep_work = 7;
+  RepositoryRef repository = 8;
+  // created_from_commit is the immutable commit the item started from.
+  string created_from_commit = 9;
+  Checkout checkout = 10;
+  ConversationRef conversation = 11;
+  // agent_profile is the profile the item's agent uses.
+  string agent_profile = 12;
+  // agent_settings override the profile, such as model and reasoning.
+  map<string, string> agent_settings = 13;
+  repeated Blocker blockers = 14;
+  google.protobuf.Timestamp created_at = 15;
+  google.protobuf.Timestamp updated_at = 16;
+  google.protobuf.Timestamp state_changed_at = 17;
+  // revision increases with every change; mutations may expect it.
+  uint32 revision = 18;
+  // priority, pinned and snoozed_until are ranking knobs: durable intent
+  // set by people or automation, which any ranking may read. Higher
+  // priority ranks first.
+  int32 priority = 19;
+  bool pinned = 20;
+  google.protobuf.Timestamp snoozed_until = 21;
+}
+
+// Checkout is where the item's work happens: its branch and, while active,
+// the claimed worktree.
+message Checkout {
+  string branch = 1;
+  // kind is how checkouts are provided, such as "managed-slot".
+  string kind = 2;
+  // executor is where the checkout lives, such as "local".
+  string executor = 3;
+  // claim is the current worktree claim, absent when none is held.
+  WorkspaceClaim claim = 4;
+}
+
+// WorkspaceClaim is a generation-fenced claim on a worktree.
+message WorkspaceClaim {
+  string id = 1;
+  uint32 generation = 2;
+  string path = 3;
+  string slot = 4;
+}
+
+// ConversationRef identifies the item's primary agent conversation. Its
+// native content belongs to the driver.
+message ConversationRef {
+  string id = 1;
+  string driver = 2;
+}
+
+// BlockerKind is what an item waits for.
+enum BlockerKind {
+  BLOCKER_KIND_UNSPECIFIED = 0;
+  BLOCKER_KIND_TIME = 1;
+  BLOCKER_KIND_ITEM = 2;
+  BLOCKER_KIND_EXTERNAL = 3;
+}
+
+// Blocker is durable intent that an item waits. The daemon clears time and
+// item blockers; external ones are cleared explicitly.
+message Blocker {
+  string id = 1;
+  BlockerKind kind = 2;
+  google.protobuf.Timestamp until = 3;
+  string item_id = 4;
+  string event = 5;
+  // label is a short display form, such as "#1234".
+  string label = 6;
+  map<string, string> meta = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+// ItemObservation is what the daemon last observed about an item's agent and
+// checkout. Observations can be stale; they never replace durable intent.
+message ItemObservation {
+  AgentStatus agent_status = 1;
+  // agent_reason explains a problem, or a question the agent is asking.
+  string agent_reason = 2;
+  // asking means the agent paused its turn on a question answered in its
+  // terminal.
+  bool asking = 3;
+  WorktreeStatus worktree_status = 4;
+  string worktree_reason = 5;
+  bool worktree_dirty = 6;
+  bool branch_mismatch = 7;
+  // unread means a response arrived since the operator last read the item.
+  bool unread = 8;
+  google.protobuf.Timestamp observed_at = 9;
+  // needs_attention means the operator is needed: an unread response, an
+  // idle agent waiting for input, a question, or a problem. A waiting item
+  // (with an open blocker) needs attention only for an unread response.
+  bool needs_attention = 10;
+  AttentionActivity activity = 11;
+}
+
+// AttentionActivity is when the operator and the agent last acted on an
+// item, the facts rankings work from.
+message AttentionActivity {
+  google.protobuf.Timestamp last_requested_at = 1;
+  google.protobuf.Timestamp last_completed_at = 2;
+  google.protobuf.Timestamp last_read_at = 3;
+  google.protobuf.Timestamp last_unread_at = 4;
+  google.protobuf.Timestamp last_deferred_at = 5;
+}
+
+// AttentionGroup is the built-in ranking's group for an item.
+enum AttentionGroup {
+  ATTENTION_GROUP_UNSPECIFIED = 0;
+  ATTENTION_GROUP_NEEDS_ATTENTION = 1;
+  ATTENTION_GROUP_WORKING = 2;
+  ATTENTION_GROUP_WAITING = 3;
+  ATTENTION_GROUP_BACKLOG = 4;
+  ATTENTION_GROUP_CLOSED = 5;
+}
+
+// ItemSummary is a work list row.
+message ItemSummary {
+  string id = 1;
+  string slug = 2;
+  string title = 3;
+  ItemState state = 4;
+  Resolution resolution = 5;
+  repeated string labels = 6;
+  bool deep_work = 7;
+  string repository_id = 8;
+  repeated Blocker blockers = 9;
+  ItemObservation observation = 10;
+  int32 priority = 11;
+  bool pinned = 12;
+  google.protobuf.Timestamp snoozed_until = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  // attention_group is set when the list is in attention order.
+  AttentionGroup attention_group = 15;
+}
+
+message CreateItemRequest {
+  string repository_id = 1;
+  // title is required unless generate_title is set.
+  string title = 2;
+  // generate_title derives a title from the description, in the
+  // background; the item starts with a placeholder title.
+  bool generate_title = 3;
+  string description = 4;
+  // labels are the item's labels, exactly; clients add their own defaults.
+  repeated string labels = 5;
+  bool deep_work = 6;
+  // base is a branch, tag or commit in the repository's store; empty uses
+  // the integration branch, synchronized with its upstream when configured.
+  // Creation remains synchronous. If synchronization fails, creation uses the
+  // local integration branch and returns a warning.
+  string base = 7;
+  string agent_profile = 8;
+  map<string, string> agent_settings = 9;
+  // slug overrides the slug derived from the title.
+  string slug = 10;
+  // request_id makes creation idempotent: a retry with the same request_id
+  // returns the item the first attempt created instead of a second one.
+  string request_id = 11;
+}
+
+message CreateItemResponse {
+  Item item = 1;
+  repeated string warnings = 2;
+}
+
+message GetItemRequest {
+  string item_id = 1;
+  // include_description also returns the description text.
+  bool include_description = 2;
+}
+
+message GetItemResponse {
+  Item item = 1;
+  string description = 2;
+  ItemObservation observation = 3;
+}
+
+message ResolveItemRequest {
+  // selector is an ID, ID prefix or slug. Empty resolves from path.
+  string selector = 1;
+  // path is an absolute path that may be inside an item's checkout.
+  string path = 2;
+}
+
+message ResolveItemResponse {
+  string item_id = 1;
+}
+
+// LabelRule filters by label: require, exclude, or require no labels.
+message LabelRule {
+  oneof rule {
+    string require = 1;
+    string exclude = 2;
+    bool unlabeled = 3;
+  }
+}
+
+// ListOrder is the order ListItems returns items in.
+enum ListOrder {
+  LIST_ORDER_UNSPECIFIED = 0;
+  // UPDATED is most recently updated first.
+  LIST_ORDER_UPDATED = 1;
+  // ATTENTION is the daemon's built-in ranking, grouped by AttentionGroup.
+  LIST_ORDER_ATTENTION = 2;
+}
+
+message ListItemsRequest {
+  // states narrows the list; empty means backlog and active.
+  repeated ItemState states = 1;
+  repeated LabelRule label_rules = 2;
+  repeated string repository_ids = 3;
+  // inspect re-observes agents, worktrees and conversations first;
+  // otherwise the daemon answers from its latest observations.
+  bool inspect = 4;
+  ListOrder order = 5;
+  // closed_limit bounds how many closed items are returned, most recent
+  // first; zero uses the daemon's default.
+  uint32 closed_limit = 6;
+  uint32 page_size = 7;
+  // Offset-based, best-effort under concurrent changes; later pages may shift.
+  string page_token = 8;
+}
+
+message ListItemsResponse {
+  repeated ItemSummary items = 1;
+  string next_page_token = 2;
+  repeated string warnings = 3;
+}
+
+message SearchItemsRequest {
+  string query = 1;
+  repeated ItemState states = 2;
+  uint32 limit = 3;
+}
+
+// SearchHit is an item that matched and the strongest field it matched in,
+// with an excerpt for a description or notes match.
+message SearchHit {
+  ItemSummary item = 1;
+  string field = 2;
+  string excerpt = 3;
+}
+
+message SearchItemsResponse {
+  repeated SearchHit hits = 1;
+  // total counts every match, beyond the returned hits.
+  uint32 total = 2;
+}
+
+message UpdateItemRequest {
+  string item_id = 1;
+  uint32 expected_revision = 2;
+  optional string title = 3;
+  // description replaces the whole description; an empty string clears it.
+  optional string description = 4;
+  repeated string add_labels = 5;
+  repeated string remove_labels = 6;
+  optional bool deep_work = 7;
+  optional int32 priority = 8;
+  optional bool pinned = 9;
+  // snoozed_until sets the snooze; clear_snooze removes it.
+  google.protobuf.Timestamp snoozed_until = 10;
+  bool clear_snooze = 11;
+}
+
+message UpdateItemResponse {
+  Item item = 1;
+}
+
+message SetItemStateRequest {
+  string item_id = 1;
+  ItemState state = 2;
+  Resolution resolution = 3;
+  uint32 expected_revision = 4;
+  // override_capacity bypasses deep-work capacity only for operator callers.
+  bool override_capacity = 5;
+}
+
+message SetItemStateResponse {
+  Item item = 1;
+}
+
+message DeleteItemRequest {
+  string item_id = 1;
+  // confirm acknowledges that deletion cannot be undone.
+  bool confirm = 2;
+}
+
+message DeleteItemResponse {}
+
+message MarkReadRequest {
+  string item_id = 1;
+  bool unread = 2;
+  // history_leaf_id is the conversation entry read up to, when known.
+  string history_leaf_id = 3;
+}
+
+message MarkReadResponse {}
+
+message DeferItemRequest {
+  string item_id = 1;
+}
+
+message DeferItemResponse {}
+
+// ItemEvent is one fact of an item's append-only history.
+message ItemEvent {
+  string id = 1;
+  string type = 2;
+  string actor = 3;
+  google.protobuf.Timestamp time = 4;
+  // payload is the event's facts as JSON, by event type.
+  string payload_json = 5;
+}
+
+message ListItemEventsRequest {
+  string item_id = 1;
+  uint32 page_size = 2;
+  // Offset-based, best-effort under concurrent changes; later pages may shift.
+  string page_token = 3;
+}
+
+message ListItemEventsResponse {
+  repeated ItemEvent events = 1;
+  string next_page_token = 2;
+}
+
+message AddBlockerRequest {
+  string item_id = 1;
+  BlockerKind kind = 2;
+  // until is an absolute instant; clients parse human times themselves.
+  google.protobuf.Timestamp until = 3;
+  string blocking_item_id = 4;
+  string event = 5;
+  string label = 6;
+  map<string, string> meta = 7;
+}
+
+message AddBlockerResponse {
+  Item item = 1;
+  Blocker blocker = 2;
+}
+
+message ClearBlockerRequest {
+  string item_id = 1;
+  string blocker_id = 2;
+  bool clear_all = 3;
+}
+
+message ClearBlockerResponse {
+  Item item = 1;
+}
+
+// Attachment is content stored with an item.
+message Attachment {
+  string name = 1;
+  string sha256 = 2;
+  uint32 size = 3;
+  string content_type = 4;
+  // path is where the file was attached from inside the item's checkout,
+  // when it was; an unchanged copy there is removed when the checkout is
+  // released.
+  string path = 5;
+}
+
+// Note is one entry of an item's log, optionally recording an attachment.
+message Note {
+  google.protobuf.Timestamp time = 1;
+  string text = 2;
+  // head is the checkout's commit when the note was added.
+  string head = 3;
+  Attachment attachment = 4;
+}
+
+message AddNoteRequest {
+  string item_id = 1;
+  string text = 2;
+}
+
+message AddNoteResponse {
+  Note note = 1;
+}
+
+message AttachRequest {
+  string item_id = 1;
+  string name = 2;
+  bytes content = 3;
+  string text = 4;
+  // checkout_path is the file's path inside the item's checkout, when the
+  // client read it from there. The daemon validates it.
+  string checkout_path = 5;
+}
+
+message AttachResponse {
+  Note note = 1;
+}
+
+message ListNotesRequest {
+  string item_id = 1;
+}
+
+// CurrentAttachment is an attachment name's latest content.
+message CurrentAttachment {
+  Attachment attachment = 1;
+  google.protobuf.Timestamp time = 2;
+}
+
+message ListNotesResponse {
+  repeated Note notes = 1;
+  repeated CurrentAttachment attachments = 2;
+}
+
+message ReadAttachmentRequest {
+  string item_id = 1;
+  string sha256 = 2;
+}
+
+message ReadAttachmentResponse {
+  // attachment is set on the first message only.
+  Attachment attachment = 1;
+  bytes chunk = 2;
+}

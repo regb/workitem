@@ -228,12 +228,21 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		}
 		// Bootstrap publishes capabilities concurrently with driver status facts.
 		// A host snapshot must not roll back newer owner-fenced readiness.
+		runtime.Generation = 1
 		if bucket := tx.Bucket(bucketProjections).Bucket([]byte(RuntimeOwnershipProjection)); bucket != nil {
 			var current model.AgentRuntime
 			if data := bucket.Get([]byte(command.ItemID)); data != nil {
 				if err := json.Unmarshal(data, &current); err != nil {
 					return "", nil, err
 				}
+			}
+			if current.ID == runtime.ID && current.Generation != 0 {
+				runtime.Generation = current.Generation
+			} else if current.ID != runtime.ID {
+				if current.Generation == ^uint32(0) {
+					return "", nil, errors.New("agent generation exhausted")
+				}
+				runtime.Generation = current.Generation + 1
 			}
 			// Only the driver reports setting values.
 			if current.ID == runtime.ID {

@@ -1,9 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"debug/buildinfo"
-	"encoding/json"
+	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,542 +11,255 @@ import (
 	"testing"
 	"time"
 
-	"github.com/regb/workitem/internal/model"
+	"connectrpc.com/connect"
+	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitransport"
+	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/testutil"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
-func TestCLIStateAndAttentionEndToEnd(t *testing.T) {
+type binaryFixture struct {
+	root, wi, driver, source, socket, agentSocket string
+	env                                           []string
+	clients                                       *apitransport.Clients
+	t                                             *testing.T
+}
+
+func newBinaryFixture(t *testing.T) *binaryFixture {
+	t.Helper()
 	if testing.Short() {
-		t.Skip("skipping real-binary end-to-end test in short mode")
+		t.Skip("real-binary API smoke test")
 	}
-	gitPath, err := exec.LookPath("git")
+	root, err := os.MkdirTemp("/tmp", "wi-bin-api-")
 	if err != nil {
-		t.Skip("git is required for the CLI end-to-end test")
-	}
-
-	root := repositoryRoot(t)
-	temp := t.TempDir()
-	binary := filepath.Join(temp, "wi")
-	build := exec.Command("go", "build", "-o", binary, "./cmd/wi")
-	build.Dir = root
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build real wi binary: %v\n%s", err, output)
-	}
-	releaseBinary := filepath.Join(temp, "wi-release")
-	releaseBuild := exec.Command("go", "build", "-ldflags", "-X github.com/regb/workitem/internal/version.release=v0.0.0-test", "-o", releaseBinary, "./cmd/wi")
-	releaseBuild.Dir = root
-	if output, err := releaseBuild.CombinedOutput(); err != nil {
-		t.Fatalf("build release wi binary: %v\n%s", err, output)
-	}
-
-	repository := filepath.Join(temp, "repository")
-	if err := os.MkdirAll(repository, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	runGitE2E(t, repository, "init", "-q")
-	runGitE2E(t, repository, "config", "user.name", "wi test")
-	runGitE2E(t, repository, "config", "user.email", "wi@example.invalid")
-	if err := os.WriteFile(filepath.Join(repository, "README.md"), []byte("temporary repository\n"), 0o600); err != nil {
-		t.Fatal(err)
+	f := &binaryFixture{root: root, wi: filepath.Join(root, "wi"), driver: filepath.Join(root, "fake-driver"), source: filepath.Join(root, "source"), t: t}
+	t.Cleanup(func() {
+		if f.clients != nil {
+			f.clients.Close()
+		}
+		cmd := exec.Command(f.wi, "daemon", "stop")
+		cmd.Env = f.env
+		cmd.Dir = root
+		_ = cmd.Run()
+		time.Sleep(150 * time.Millisecond)
+		_ = os.RemoveAll(root)
+	})
+	_, file, _, _ := runtime.Caller(0)
+	repository := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
+	for _, target := range []struct{ path, pkg string }{{f.wi, "./cmd/wi"}, {f.driver, "./internal/apitest/driver"}} {
+		cmd := exec.Command("go", "build", "-o", target.path, target.pkg)
+		cmd.Dir = repository
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("build %s: %v %s", target.pkg, err, out)
+		}
 	}
-	runGitE2E(t, repository, "add", "README.md")
-	runGitE2E(t, repository, "commit", "-q", "-m", "initial")
-
-	// The tested binary sees git but deliberately has no tmux executable in
-	// PATH. State and durable attention plumbing must not need it.
-	tools := filepath.Join(temp, "tools")
-	if err := os.MkdirAll(tools, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(gitPath, filepath.Join(tools, "git")); err != nil {
-		t.Fatal(err)
-	}
-	home := filepath.Join(temp, "home")
-	dataHome := filepath.Join(temp, "data")
-	configHome := filepath.Join(temp, "config")
-	cacheHome := filepath.Join(temp, "cache")
-	stateHome := filepath.Join(temp, "state")
-	runtimeDir := filepath.Join(temp, "runtime")
-	for _, dir := range []string{home, dataHome, configHome, cacheHome, stateHome, runtimeDir} {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
+	f.env = testutil.IsolatedEnvironment(os.Environ(), root)
+	for _, part := range []string{"home", "data", "config/wi", "cache", "state", "run", "pi", "tmux", "source"} {
+		if err := os.MkdirAll(filepath.Join(root, part), 0700); err != nil {
 			t.Fatal(err)
 		}
 	}
-	env := isolatedE2EEnv(map[string]string{
-		"HOME": home, "XDG_DATA_HOME": dataHome, "XDG_CONFIG_HOME": configHome, "XDG_CACHE_HOME": cacheHome, "XDG_STATE_HOME": stateHome, "XDG_RUNTIME_DIR": runtimeDir,
-		"PATH": tools, "NO_COLOR": "1", "GIT_CONFIG_NOSYSTEM": "1",
-	})
-	t.Cleanup(func() { stopE2EDaemon(t, binary, repository, env) })
-
-	versionJSON := runWiE2E(t, binary, repository, env, "version", "--json")
-	var version struct {
-		Version   string `json:"version"`
-		Revision  string `json:"revision"`
-		GoVersion string `json:"go_version"`
+	config := "[drivers.pi]\ncommand = " + fmt.Sprintf("%q", f.driver) + "\n"
+	if err := os.WriteFile(filepath.Join(root, "config", "wi", "config.toml"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
 	}
-	decodeE2EJSON(t, versionJSON, &version)
-	// Go may omit VCS metadata for source archives or linked worktrees. The
-	// CLI must report the revision actually embedded, including its absence.
-	embedded, err := buildinfo.ReadFile(binary)
+	for _, args := range [][]string{{"init", "-b", "main"}, {"config", "user.name", "API smoke"}, {"config", "user.email", "test@example.invalid"}, {"commit", "--allow-empty", "-m", "initial"}} {
+		cmd := exec.Command("git", append([]string{"-C", f.source}, args...)...)
+		cmd.Env = f.env
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git: %v %s", err, out)
+		}
+	}
+	f.run("list", "--json") // Read-only commands also exercise isolated daemon autostart.
+	f.run("daemon", "start")
+	f.socket, _ = coordinator.SocketPath(filepath.Join(root, "run"), filepath.Join(root, "data", "wi"))
+	f.agentSocket, _ = coordinator.AgentSocketPath(filepath.Join(root, "run"), filepath.Join(root, "data", "wi"))
+	f.clients, err = apitransport.NewClients(f.socket)
 	if err != nil {
 		t.Fatal(err)
 	}
-	revision := ""
-	for _, setting := range embedded.Settings {
-		if setting.Key == "vcs.revision" {
-			revision = setting.Value
-		}
-	}
-	if version.Version == "" || version.Revision != revision || version.GoVersion == "" {
-		t.Fatalf("real binary version = %+v", version)
-	}
-	var released struct {
-		Version  string `json:"version"`
-		Release  string `json:"release"`
-		Revision string `json:"revision"`
-	}
-	decodeE2EJSON(t, runWiE2E(t, releaseBinary, repository, env, "version", "--json"), &released)
-	if released.Version != "v0.0.0-test" || released.Release != "v0.0.0-test" || released.Revision != revision {
-		t.Fatalf("release binary version = %+v", released)
-	}
-
-	configDir := filepath.Join(configHome, "wi")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
-		t.Fatal(err)
-	}
-	defaultProfile := ""
-	// Without Pi installed nothing is discovered: add the profile by hand.
-	runWiE2E(t, binary, repository, env, "agent", "profile", "add", "pi", "--driver", "pi")
-	runWiE2E(t, binary, repository, env, "repo", "add", "test", "--from", repository)
-	if output := runWiE2E(t, binary, repository, env, "repo", "settings", "show", "test", "--json"); !strings.Contains(string(output), "\"trust\": \"prompt\"") {
-		t.Fatalf("repository configuration lookup=%s", output)
-	}
-	exerciseRepositorySettingsE2E(t, binary, repository, env)
-	exercisePluginCatalogE2E(t, binary, repository, env, configDir, defaultProfile)
-	// Validate through the real bundled driver process, with neither Pi nor
-	// tmux on PATH: a profile with invalid settings is refused when saved.
-	invalid := exec.Command(binary, "agent", "profile", "add", "invalid", "--driver", "pi", "reasoning=extreme")
-	invalid.Dir, invalid.Env = repository, env
-	if output, err := invalid.CombinedOutput(); err == nil || !strings.Contains(string(output), "invalid Pi reasoning level") {
-		t.Fatalf("invalid profile err=%v output=%s", err, output)
-	}
-	createdJSON := runWiE2E(t, binary, repository, env, "new", "--repo", "test", "--json", "--title", "State and attention E2E")
-	var created struct {
-		WorkItemID string `json:"work_item_id"`
-		State      string `json:"state"`
-	}
-	decodeE2EJSON(t, createdJSON, &created)
-	if created.WorkItemID == "" || created.State != "backlog" {
-		t.Fatalf("new result = %+v", created)
-	}
-
-	daemonStatusJSON := runWiE2E(t, binary, repository, env, "daemon", "status", "--json")
-	var daemonStatus struct {
-		SocketPath      string `json:"socket_path"`
-		AgentSocketPath string `json:"agent_socket_path"`
-	}
-	decodeE2EJSON(t, daemonStatusJSON, &daemonStatus)
-	if daemonStatus.AgentSocketPath == "" {
-		t.Fatal("daemon did not publish its agent socket")
-	}
-	operatorAsAgentEnv := append(append([]string{}, env...), "WI_AGENT_DAEMON_SOCKET="+daemonStatus.SocketPath)
-	assertWiE2EFails(t, binary, repository, operatorAsAgentEnv, "list")
-	agentEnv := append(append([]string{}, env...), "WI_AGENT_DAEMON_SOCKET="+daemonStatus.AgentSocketPath)
-	agentCreatedJSON := runWiE2E(t, binary, repository, agentEnv, "new", "--repo", "test", "--json", "--untitled")
-	var agentCreated struct {
-		WorkItemID string         `json:"work_item_id"`
-		State      string         `json:"state"`
-		Manifest   model.Manifest `json:"manifest"`
-	}
-	decodeE2EJSON(t, agentCreatedJSON, &agentCreated)
-	if agentCreated.WorkItemID == "" || agentCreated.State != "backlog" || agentCreated.Manifest.Title != model.UntitledTitle || agentCreated.Manifest.Slug != model.IDDerivedSlug(agentCreated.WorkItemID) || agentCreated.Manifest.Checkout.Specification.Branch != model.ItemBranchName(agentCreated.Manifest.Slug, agentCreated.WorkItemID) || agentCreated.Manifest.Checkout.Claim != nil || agentCreated.Manifest.PrimaryConversation != nil {
-		t.Fatalf("agent new result = %+v", agentCreated)
-	}
-	assertWiE2EFails(t, binary, repository, agentEnv, "edit", "--item", agentCreated.WorkItemID, "--title", "Forbidden edit")
-	titledJSON := runWiE2E(t, binary, repository, env, "edit", "--item", agentCreated.WorkItemID, "--title", "Clarified backlog objective", "--json")
-	var titled struct {
-		Title    string         `json:"title"`
-		Changed  bool           `json:"changed"`
-		Manifest model.Manifest `json:"manifest"`
-	}
-	decodeE2EJSON(t, titledJSON, &titled)
-	if !titled.Changed || titled.Title != "Clarified backlog objective" || titled.Manifest.Slug != agentCreated.Manifest.Slug || titled.Manifest.Checkout.Specification.Branch != agentCreated.Manifest.Checkout.Specification.Branch || titled.Manifest.PrimaryConversation != nil || titled.Manifest.Checkout.Claim != nil {
-		t.Fatalf("title edit changed identity or allocated resources: %+v", titled)
-	}
-	assertWiE2EFails(t, binary, repository, agentEnv, "state", "set", "active", "--item", agentCreated.WorkItemID)
-	assertWiE2EFails(t, binary, repository, agentEnv, "new", "--start", "--untitled")
-	assertE2EState(t, binary, repository, env, agentCreated.WorkItemID, "backlog")
-
-	assertE2EState(t, binary, repository, env, created.WorkItemID, "backlog")
-	setState := func(target string) {
-		t.Helper()
-		output := runWiE2E(t, binary, repository, env, "state", "set", target, "--item", created.WorkItemID, "--json")
-		var result struct {
-			PreviousState string `json:"previous_state"`
-			State         string `json:"state"`
-			Changed       bool   `json:"changed"`
-			Manifest      struct {
-				Checkout struct {
-					Claim *struct {
-						Path string `json:"path"`
-					} `json:"claim"`
-				} `json:"checkout"`
-			} `json:"manifest"`
-		}
-		decodeE2EJSON(t, output, &result)
-		if result.State != target || !result.Changed || result.Manifest.Checkout.Claim != nil {
-			t.Fatalf("state set %s = %+v", target, result)
-		}
-	}
-
-	setState("active")
-	activityJSON := runWiE2E(t, binary, repository, env, "attention", "activity", "--item", created.WorkItemID, "--json")
-	var activity struct {
-		WorkItemID string `json:"work_item_id"`
-		Activity   struct {
-			LastDeferredAt *time.Time `json:"last_deferred_at"`
-		} `json:"activity"`
-		Warnings []string `json:"warnings"`
-	}
-	decodeE2EJSON(t, activityJSON, &activity)
-	if activity.WorkItemID != created.WorkItemID || activity.Activity.LastDeferredAt != nil {
-		t.Fatalf("initial activity = %+v", activity)
-	}
-	for _, warning := range activity.Warnings {
-		if strings.Contains(strings.ToLower(warning), "tmux") {
-			t.Fatalf("durable activity attempted tmux inspection: %q", warning)
-		}
-	}
-
-	deferJSON := runWiE2E(t, binary, repository, env, "attention", "defer", "--item", created.WorkItemID, "--json")
-	var deferred struct {
-		WorkItemID string    `json:"work_item_id"`
-		DeferredAt time.Time `json:"deferred_at"`
-		Warnings   []string  `json:"warnings"`
-	}
-	decodeE2EJSON(t, deferJSON, &deferred)
-	if deferred.WorkItemID != created.WorkItemID || deferred.DeferredAt.IsZero() {
-		t.Fatalf("defer result = %+v", deferred)
-	}
-	for _, warning := range deferred.Warnings {
-		if strings.Contains(strings.ToLower(warning), "tmux") {
-			t.Fatalf("durable defer attempted tmux inspection: %q", warning)
-		}
-	}
-
-	activityJSON = runWiE2E(t, binary, repository, env, "attention", "activity", created.WorkItemID, "--json")
-	decodeE2EJSON(t, activityJSON, &activity)
-	if activity.Activity.LastDeferredAt == nil || !activity.Activity.LastDeferredAt.Equal(deferred.DeferredAt) {
-		t.Fatalf("activity after defer = %+v; defer=%+v", activity, deferred)
-	}
-
-	eventsJSON := runWiE2E(t, binary, repository, env, "events", created.WorkItemID, "--json")
-	var events struct {
-		Events []struct {
-			Type string `json:"type"`
-		} `json:"events"`
-	}
-	decodeE2EJSON(t, eventsJSON, &events)
-	if !hasE2EEvent(events.Events, "work_item.state_set") || !hasE2EEvent(events.Events, "attention.deferred") {
-		t.Fatalf("events = %+v", events.Events)
-	}
-
-	setState("backlog")
-	setState("active")
-	setState("closed")
-	setState("backlog")
-	assertE2EState(t, binary, repository, env, created.WorkItemID, "backlog")
-
-	// Opting out of defaults must not parse broken declarative project labels,
-	// including during the daemon\'s independent created-from pin verification.
-	if err := os.MkdirAll(filepath.Join(repository, ".config"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(repository, ".config", "wi.toml"), []byte("[item.defaults]\nlabels = [invalid]\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	runGitE2E(t, repository, "add", ".config/wi.toml")
-	runGitE2E(t, repository, "commit", "-q", "-m", "broken project defaults")
-	runWiE2E(t, binary, repository, env, "repo", "add", "invalid-project", "--from", repository)
-	assertWiE2EFails(t, binary, repository, env, "new", "--repo", "invalid-project", "--title", "Cannot inherit invalid defaults")
-	withoutDefaults := runWiE2E(t, binary, repository, env, "new", "--repo", "invalid-project", "--title", "Skip invalid defaults", "--no-default-labels", "--label", "explicit", "--json")
-	var optedOut struct {
-		Manifest struct {
-			Labels []string `json:"labels"`
-		} `json:"manifest"`
-	}
-	decodeE2EJSON(t, withoutDefaults, &optedOut)
-	if len(optedOut.Manifest.Labels) != 1 || optedOut.Manifest.Labels[0] != "explicit" {
-		t.Fatalf("opted-out labels = %v", optedOut.Manifest.Labels)
-	}
-
-	entries, err := os.ReadDir(filepath.Join(dataHome, "wi", "worktrees"))
-	if err != nil && !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("state/attention flow created worktrees: %+v", entries)
-	}
-	daemonLogs, err := filepath.Glob(filepath.Join(stateHome, "wi", "*", "daemon.log"))
-	if err != nil || len(daemonLogs) != 1 {
-		t.Fatalf("daemon state logs = %+v err=%v", daemonLogs, err)
-	}
-	if _, err := os.Stat(filepath.Join(cacheHome, "wi", "daemon.log")); !os.IsNotExist(err) {
-		t.Fatalf("daemon log leaked into cache: %v", err)
-	}
-	exerciseRepositoryArchiveE2E(t, binary, repository, env, created.WorkItemID)
-}
-
-func exerciseRepositorySettingsE2E(t *testing.T, binary, repository string, env []string) {
-	t.Helper()
-	var changed struct {
-		Changed  bool   `json:"changed"`
-		Revision uint64 `json:"revision"`
-	}
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "set", "test", "plugins.direnv.trust", "always", "--json"), &changed)
-	if !changed.Changed || changed.Revision != 1 {
-		t.Fatal(changed)
-	}
-	var shown struct {
-		Revision  uint64                                `json:"revision"`
-		Overrides map[string]map[string]json.RawMessage `json:"overrides"`
-		Effective map[string]map[string]any             `json:"effective"`
-		Origins   map[string]string                     `json:"origins"`
-	}
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "show", "test", "--json"), &shown)
-	if shown.Revision != 1 || shown.Effective["plugins.direnv"]["trust"] != "always" || string(shown.Overrides["plugins.direnv"]["trust"]) != `"always"` {
-		t.Fatalf("settings=%+v", shown)
-	}
-	assertWiE2EFails(t, binary, repository, env, "repo", "settings", "set", "test", "plugins.direnv.trust", "typo", "--json")
-	assertWiE2EFails(t, binary, repository, env, "repo", "settings", "set", "test", "plugins.missing.trust", "always", "--json")
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "unset", "test", "plugins.direnv.trust", "--json"), &changed)
-	if !changed.Changed || changed.Revision != 2 {
-		t.Fatal(changed)
-	}
-	shown.Overrides = nil
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "settings", "show", "test", "--json"), &shown)
-	if shown.Revision != 2 || shown.Effective["plugins.direnv"]["trust"] != "prompt" || len(shown.Overrides) != 0 {
-		t.Fatalf("unset did not restore defaults: %+v", shown)
-	}
-}
-
-func exerciseRepositoryArchiveE2E(t *testing.T, binary, repository string, env []string, itemID string) {
-	t.Helper()
-	runWiE2E(t, binary, repository, env, "workspace", "ensure", "--item", itemID, "--json")
-	var shown struct {
-		Manifest model.Manifest `json:"manifest"`
-	}
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "show", itemID, "--json"), &shown)
-	worktree := shown.Manifest.Checkout.Claim.Path
-	tracked := filepath.Join(worktree, "archive-safety.txt")
-	if err := os.WriteFile(tracked, []byte("unique local commit\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	runGitE2E(t, worktree, "add", "archive-safety.txt")
-	runGitE2E(t, worktree, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "unique unpushed work")
-	if err := os.WriteFile(tracked, []byte("dirty tracked content\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	untracked := filepath.Join(worktree, "untracked.txt")
-	if err := os.WriteFile(untracked, []byte("retain this\n"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	gitOutput := func(dir string, args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-		return string(out)
-	}
-	head := gitOutput(worktree, "rev-parse", "HEAD")
-	refs := gitOutput(worktree, "for-each-ref", "--format=%(refname) %(objectname)")
-	status := gitOutput(worktree, "status", "--porcelain")
-	beforeItems := string(runWiE2E(t, binary, repository, env, "list", "--all", "--ids"))
-	var result struct {
-		Repository model.OwnedRepository `json:"repository"`
-		Changed    bool                  `json:"changed"`
-	}
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "archive", "test", "--json"), &result)
-	if !result.Changed || !result.Repository.Archived {
-		t.Fatalf("archive=%+v", result)
-	}
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "archive", "test", "--json"), &result)
-	if result.Changed {
-		t.Fatal("repeated archive changed state")
-	}
-	assertLists := func() {
-		t.Helper()
-		var repos []model.OwnedRepository
-		decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "list", "--json"), &repos)
-		for _, repo := range repos {
-			if repo.Name == "test" {
-				t.Fatal("archived repository visible by default")
-			}
-		}
-		decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "list", "--all", "--json"), &repos)
-		found := false
-		for _, repo := range repos {
-			if repo.Name == "test" && repo.Archived {
-				found = true
-			}
-		}
-		if !found {
-			t.Fatal("archived repository missing from --all")
-		}
-		if text := string(runWiE2E(t, binary, repository, env, "repo", "list", "--all")); !strings.Contains(text, "archived") {
-			t.Fatalf("unmarked archive: %s", text)
-		}
-	}
-	assertLists()
-	runWiE2E(t, binary, repository, env, "repo", "show", "test")
-	for _, mode := range []string{"tui", "headless"} {
-		assertWiE2EFails(t, binary, repository, env, "new", "--repo", "test", "--untitled", "--start", "--agent-mode", mode)
-	}
-	assertWiE2EFails(t, binary, repository, env, "new", "--repo", "test", "--untitled")
-	inherited := append(append([]string{}, env...), "WI_ID="+itemID)
-	assertWiE2EFails(t, binary, worktree, inherited, "new", "--untitled")
-	assertWiE2EFails(t, binary, repository, env, "repo", "add", "test", "--from", repository)
-	assertWiE2EFails(t, binary, repository, env, "repo", "remove", "test")
-	assertWiE2EFails(t, binary, repository, env, "repo", "delete", "test")
-	if items := string(runWiE2E(t, binary, repository, env, "list", "--all", "--ids")); items != beforeItems {
-		t.Fatalf("archive/rejected creation changed items: %s", items)
-	}
-	// Existing items can still be edited and their claims ensured while archived.
-	runWiE2E(t, binary, repository, env, "edit", "--item", itemID, "--label", "still-usable")
-	runWiE2E(t, binary, repository, env, "workspace", "ensure", "--item", itemID)
-	if got := gitOutput(worktree, "rev-parse", "HEAD"); got != head {
-		t.Fatal("archive moved unpushed tip")
-	}
-	if got := gitOutput(worktree, "for-each-ref", "--format=%(refname) %(objectname)"); got != refs {
-		t.Fatal("archive changed refs")
-	}
-	if got := gitOutput(worktree, "status", "--porcelain"); got != status {
-		t.Fatal("archive changed dirty worktree")
-	}
-	for path, want := range map[string]string{tracked: "dirty tracked content\n", untracked: "retain this\n"} {
-		data, err := os.ReadFile(path)
-		if err != nil || string(data) != want {
-			t.Fatalf("lost %s: %v", path, err)
-		}
-	}
-	stopE2EDaemon(t, binary, repository, env)
-	assertLists()
-	result.Repository = model.OwnedRepository{}
-	decodeE2EJSON(t, runWiE2E(t, binary, repository, env, "repo", "restore", "test", "--json"), &result)
-	if !result.Changed || result.Repository.Archived {
-		t.Fatalf("restore=%+v", result)
-	}
-	runWiE2E(t, binary, repository, env, "new", "--repo", "test", "--untitled")
-}
-
-func repositoryRoot(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("could not locate e2e test source")
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-}
-
-func runGitE2E(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
-	}
-}
-
-func stopE2EDaemon(t *testing.T, binary, dir string, env []string) {
-	t.Helper()
-	stop := exec.Command(binary, "daemon", "stop", "--json")
-	stop.Dir = dir
-	stop.Env = env
-	_ = stop.Run()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		status := exec.Command(binary, "daemon", "status", "--json")
-		status.Dir = dir
-		status.Env = env
-		if err := status.Run(); err != nil {
+	// Stop only runtimes created by this fixture. TMUX_TMPDIR is isolated too.
+	t.Cleanup(func() {
+		if f.clients == nil {
 			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		items, err := f.clients.Items.ListItems(ctx, connect.NewRequest(&v1.ListItemsRequest{States: []v1.ItemState{1, 2, 3}}))
+		if err == nil {
+			for _, item := range items.Msg.Items {
+				_, _ = f.clients.Agents.StopAgent(ctx, connect.NewRequest(&v1.StopAgentRequest{ItemId: item.Id, Force: true, ConfirmAttachedTerminal: true}))
+			}
+		}
+	})
+	return f
+}
+func (f *binaryFixture) command(args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, f.wi, args...)
+	cmd.Env = f.env
+	cmd.Dir = f.root
+	return cmd.CombinedOutput()
+}
+func (f *binaryFixture) run(args ...string) []byte {
+	f.t.Helper()
+	out, err := f.command(args...)
+	if err != nil {
+		logs, _ := filepath.Glob(filepath.Join(f.root, "state", "wi", "*", "daemon.log"))
+		for _, path := range logs {
+			data, _ := os.ReadFile(path)
+			f.t.Logf("daemon log: %s", data)
+		}
+		f.t.Fatalf("wi %v: %v\n%s", args, err, out)
+	}
+	return out
+}
+func (f *binaryFixture) json(msg proto.Message, args ...string) {
+	f.t.Helper()
+	out := f.run(append(args, "--json")...)
+	if err := protojson.Unmarshal(out, msg); err != nil {
+		f.t.Fatalf("wi %v API JSON: %v\n%s", args, err, out)
+	}
+}
+func (f *binaryFixture) idle(item string) *v1.Agent {
+	f.t.Helper()
+	deadline := time.Now().Add(8 * time.Second)
+	for {
+		value, err := f.clients.Agents.GetAgent(context.Background(), connect.NewRequest(&v1.GetAgentRequest{ItemId: item}))
+		if err == nil && value.Msg.Agent.Online && value.Msg.Agent.Status == v1.AgentStatus_AGENT_STATUS_IDLE {
+			return value.Msg.Agent
+		}
+		if time.Now().After(deadline) {
+			f.t.Fatalf("agent did not become idle: %v %v", value, err)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	t.Error("end-to-end daemon remained online after cleanup")
 }
-
-func runWiE2E(t *testing.T, binary, dir string, env []string, args ...string) []byte {
-	t.Helper()
-	cmd := exec.Command(binary, args...)
-	cmd.Dir = dir
-	cmd.Env = env
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("wi %s: %v\nstdout:\n%s\nstderr:\n%s", strings.Join(args, " "), err, stdout.String(), stderr.String())
-	}
-	return stdout.Bytes()
-}
-
-func assertWiE2EFails(t *testing.T, binary, dir string, env []string, args ...string) {
-	t.Helper()
-	cmd := exec.Command(binary, args...)
-	cmd.Dir = dir
-	cmd.Env = env
-	if output, err := cmd.CombinedOutput(); err == nil {
-		t.Fatalf("wi %s unexpectedly succeeded:\n%s", strings.Join(args, " "), output)
+func (f *binaryFixture) historyReady(item string, count int) {
+	f.t.Helper()
+	deadline := time.Now().Add(8 * time.Second)
+	for {
+		value, err := f.clients.Agents.GetHistory(context.Background(), connect.NewRequest(&v1.GetHistoryRequest{ItemId: item}))
+		if err == nil && len(value.Msg.Messages) >= count {
+			return
+		}
+		if time.Now().After(deadline) {
+			f.t.Fatalf("history did not settle: %v %v", value, err)
+		}
+		time.Sleep(25 * time.Millisecond)
 	}
 }
 
-func isolatedE2EEnv(overrides map[string]string) []string {
-	replaced := map[string]bool{}
-	for key := range overrides {
-		replaced[key] = true
+func TestCLIAPIEndToEnd(t *testing.T) {
+	f := newBinaryFixture(t)
+	var added v1.AddRepositoryResponse
+	f.json(&added, "repo", "add", "test", "--from", f.source, "--local")
+	repo := added.Repository.Id
+	var created v1.CreateItemResponse
+	f.json(&created, "new", "--repo", repo, "--title", "API backlog")
+	item := created.Item.Id
+	var listed v1.ListItemsResponse
+	f.json(&listed, "list")
+	if len(listed.Items) != 1 || listed.Items[0].Id != item {
+		t.Fatal(listed.String())
 	}
-	env := []string{}
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		if !replaced[key] && !strings.HasPrefix(key, "WI_") && !strings.HasPrefix(key, "PI_") && !strings.HasPrefix(key, "DIRENV_") && key != "TMUX" && key != "TMUX_PANE" {
-			env = append(env, entry)
+	for _, args := range [][]string{{"info", "agent-socket"}, {"info", "config-file"}, {"config", "get", "plugins.setup.trust", "--origins"}, {"list", "--ids", "--no-agent"}, {"repo", "show", repo}} {
+		if len(f.run(args...)) == 0 {
+			t.Fatalf("missing human output: %v", args)
 		}
 	}
-	for key, value := range overrides {
-		env = append(env, key+"="+value)
+	f.run("attention", "unread", item)
+	f.run("attention", "read", item)
+	f.run("note", "--item", item, "Durable RPC note")
+	var notes v1.ListNotesResponse
+	f.json(&notes, "notes", item)
+	if len(notes.Notes) != 1 {
+		t.Fatal(notes.String())
 	}
-	return env
-}
-
-func decodeE2EJSON(t *testing.T, data []byte, target any) {
-	t.Helper()
-	if err := json.Unmarshal(data, target); err != nil {
-		t.Fatalf("decode JSON: %v\n%s", err, data)
+	f.run("state", "set", "active", item)
+	var ensured v1.EnsureWorkspaceResponse
+	f.json(&ensured, "workspace", "ensure", item)
+	if ensured.Checkout.Claim == nil || ensured.Job.State != v1.JobState_JOB_STATE_SUCCEEDED {
+		t.Fatal(ensured.String())
 	}
-}
-
-func assertE2EState(t *testing.T, binary, dir string, env []string, itemID, expected string) {
-	t.Helper()
-	output := runWiE2E(t, binary, dir, env, "state", "show", "--item", itemID, "--json")
-	var state struct {
-		WorkItemID string `json:"work_item_id"`
-		State      string `json:"state"`
+	f.run("workspace", "setup", item)
+	f.run("workspace", "status", item)
+	f.run("workspace", "release", item)
+	var started v1.CreateAndStartItemResponse
+	f.json(&started, "new", "--repo", repo, "--title", "API fake agent", "--start", "--agent-mode", "headless", "--prompt", "first prompt")
+	agentItem := started.Item.Id
+	f.historyReady(agentItem, 2)
+	first := f.idle(agentItem)
+	if first.Generation == 0 || first.Mode != v1.AgentMode_AGENT_MODE_HEADLESS {
+		t.Fatal(first.String())
 	}
-	decodeE2EJSON(t, output, &state)
-	if state.WorkItemID != itemID || state.State != expected {
-		t.Fatalf("state show = %+v; want %s", state, expected)
+	f.run("agent", "control", "prompt", "--item", agentItem, "second prompt")
+	f.historyReady(agentItem, 4)
+	f.idle(agentItem)
+	history, err := f.clients.Agents.GetHistory(context.Background(), connect.NewRequest(&v1.GetHistoryRequest{ItemId: agentItem}))
+	if err != nil || len(history.Msg.Messages) < 4 {
+		t.Fatalf("history: %v %v", history, err)
 	}
-}
-
-func hasE2EEvent(events []struct {
-	Type string `json:"type"`
-}, eventType string) bool {
-	for _, event := range events {
-		if event.Type == eventType {
-			return true
-		}
+	f.cliControlCompatibility(agentItem)
+	f.run("agent", "settings", "set", "--item", agentItem, "--model", "test/model", "--reasoning", "low")
+	f.idle(agentItem)
+	settings, err := f.clients.Agents.GetAgentSettings(context.Background(), connect.NewRequest(&v1.GetAgentSettingsRequest{ItemId: agentItem}))
+	if err != nil || settings.Msg.Overrides["reasoning"] != "low" {
+		t.Fatalf("settings: %v %v", settings, err)
 	}
-	return false
+	// A subscription gets a current snapshot without affecting runtime lifetime.
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	stream, err := f.clients.Agents.WatchLiveContent(ctx, connect.NewRequest(&v1.WatchLiveContentRequest{ItemId: agentItem}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !stream.Receive() || stream.Msg().GetSnapshot() == nil {
+		t.Fatalf("live snapshot: %v", stream.Err())
+	}
+	cancel()
+	stream.Close()
+	f.idle(agentItem)
+	var stopped v1.StopAgentResponse
+	f.json(&stopped, "agent", "runtime", "stop", "--item", agentItem, "--force")
+	f.run("resume", agentItem, "--agent-mode", "headless")
+	second := f.idle(agentItem)
+	if second.Generation <= first.Generation {
+		t.Fatalf("generation did not advance: %d -> %d", first.Generation, second.Generation)
+	}
+	_, err = f.clients.Agents.RestartAgent(context.Background(), connect.NewRequest(&v1.RestartAgentRequest{ItemId: agentItem, ExpectedGeneration: first.Generation}))
+	if connect.CodeOf(err) != connect.CodeAborted {
+		t.Fatalf("stale generation: %v", err)
+	}
+	f.run("agent", "runtime", "stop", "--item", agentItem, "--force")
+	f.run("close", agentItem, "--resolution", "completed")
+	f.run("repo", "settings", "set", "--repo", repo, "plugins.setup.trust", "never")
+	f.run("repo", "env", "set", "--repo", repo, "PORT=8080")
+	// Direct curl proves the public socket speaks the declared Connect API.
+	cmd := exec.Command("curl", "--fail", "--silent", "--show-error", "--unix-socket", f.socket, "-H", "Content-Type: application/json", "-H", "Connect-Protocol-Version: 1", "--data", "{}", "http://localhost/wi.core.v1.SystemService/GetInfo")
+	cmd.Env = f.env
+	out, err := cmd.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), `"api_version":"1.0"`) {
+		t.Fatalf("curl Connect: %v %s", err, out)
+	}
+	agent, err := apitransport.NewClients(f.agentSocket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer agent.Close()
+	info, err := agent.System.GetInfo(context.Background(), connect.NewRequest(&v1.GetInfoRequest{}))
+	if err != nil || info.Msg.Caller.GetAccess() != v1.CallerAccess_CALLER_ACCESS_AGENT {
+		t.Fatalf("agent endpoint: %v %v", info, err)
+	}
+	_, err = agent.Items.SetItemState(context.Background(), connect.NewRequest(&v1.SetItemStateRequest{ItemId: item, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_COMPLETED}))
+	if connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("agent mutated lifecycle: %v", err)
+	}
+	f.tui(repo)
+	f.cliTUICompatibility(repo)
+	f.restartJobs(repo, added.Job.Id)
 }

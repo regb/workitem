@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "wi/core/v1/jobs.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// SystemService describes and controls the daemon itself.
+service SystemService {
+  // GetInfo reads the daemon's version, API version, data location and
+  // defaults. Clients call it first to check compatibility.
+  rpc GetInfo(GetInfoRequest) returns (GetInfoResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetHealth reports whether the daemon and its observations are healthy.
+  rpc GetHealth(GetHealthRequest) returns (GetHealthResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // RunDiagnostics checks storage, projections, agents and adapters, as
+  // wi daemon doctor does.
+  rpc RunDiagnostics(RunDiagnosticsRequest) returns (RunDiagnosticsResponse);
+  // GetConfig reads the daemon's effective global configuration, with
+  // sensitive values redacted unless show_sensitive is set.
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListPlugins lists registered plugins and their option schemas.
+  rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // Shutdown stops agents and terminals, then the daemon. The reply is
+  // sent before the daemon stops; the job reports the result to watchers
+  // until then.
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}
+
+message GetInfoRequest {}
+
+message GetInfoResponse {
+  string version = 1;
+  // api_version is this API's version; clients refuse a newer major.
+  string api_version = 2;
+  string data_root = 3;
+  string default_agent_profile = 4;
+  google.protobuf.Timestamp started_at = 5;
+  // managed means a service manager runs the daemon.
+  bool managed = 6;
+  // caller describes this authenticated endpoint. It grants no permissions.
+  Caller caller = 7;
+}
+
+// Caller is assigned by the daemon's Unix listener, never request metadata.
+// Wi-Client-Id identifies a lease client (default "cli"). Wi-Client-Kind
+// selects lease holder presentation ("terminal" or "web"); neither header
+// changes access or identity kind.
+message Caller {
+  CallerAccess access = 1;
+  CallerKind kind = 2;
+}
+
+enum CallerAccess {
+  CALLER_ACCESS_UNSPECIFIED = 0;
+  CALLER_ACCESS_OPERATOR = 1;
+  CALLER_ACCESS_AGENT = 2;
+}
+
+enum CallerKind {
+  CALLER_KIND_UNSPECIFIED = 0;
+  CALLER_KIND_LOCAL_OPERATOR = 1;
+  CALLER_KIND_WEB_ADAPTER = 2;
+  CALLER_KIND_AGENT = 3;
+}
+
+message GetHealthRequest {}
+
+message GetHealthResponse {
+  bool healthy = 1;
+  repeated string problems = 2;
+  google.protobuf.Timestamp last_observation_at = 3;
+}
+
+message RunDiagnosticsRequest {}
+
+// Diagnostic is one check's result.
+message Diagnostic {
+  string check = 1;
+  bool ok = 2;
+  string detail = 3;
+}
+
+message RunDiagnosticsResponse {
+  repeated Diagnostic diagnostics = 1;
+}
+
+message GetConfigRequest {
+  bool show_sensitive = 1;
+}
+
+message GetConfigResponse {
+  // config_json is the effective configuration as JSON, with origins.
+  string config_json = 1;
+}
+
+// PluginOption describes one option a plugin declares.
+message PluginOption {
+  string name = 1;
+  // type is "string", "bool", "int" or "string_list".
+  string type = 2;
+  string description = 3;
+  bool sensitive = 4;
+  bool repository_scope = 5;
+  string default_json = 6;
+}
+
+// Plugin is a registered plugin. Plugins run outside the daemon: hooks are
+// executables the daemon calls during core operations (checkout setup,
+// agent environment); automation and commands are clients of this API. The
+// daemon keeps the registry and the options plugins declare.
+message Plugin {
+  string name = 1;
+  bool enabled = 2;
+  bool bundled = 3;
+  // hooks are the core operations the plugin takes part in, such as
+  // "setup_checkout" or "agent_environment".
+  repeated string hooks = 4;
+  // commands are the CLI commands the plugin adds, run client-side.
+  repeated string commands = 5;
+  repeated PluginOption options = 6;
+}
+
+message ListPluginsRequest {}
+
+message ListPluginsResponse {
+  repeated Plugin plugins = 1;
+}
+
+message ShutdownRequest {
+  // force stops busy agents too.
+  bool force = 1;
+}
+
+message ShutdownResponse {
+  Job job = 1;
+}

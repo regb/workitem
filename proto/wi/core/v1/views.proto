@@ -1,0 +1,51 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "wi/core/v1/agents.proto";
+import "wi/core/v1/items.proto";
+import "wi/core/v1/jobs.proto";
+import "wi/core/v1/workspaces.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// ViewService serves composite reads: what a client shows for one subject,
+// assembled in one call. The item revision is checked before and after the
+// composite read; a changed revision causes retry, then ABORTED if unstable.
+// This is not an atomic snapshot of Git, processes, jobs or native driver files:
+// their observations may advance independently. Each part is also available
+// from its own service.
+service ViewService {
+  // GetItemView reads everything a conversation page shows for an item:
+  // the item and its description, its agent and who controls it, the latest
+  // page of the conversation, its checkout's setup, and its running jobs.
+  rpc GetItemView(GetItemViewRequest) returns (GetItemViewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+message GetItemViewRequest {
+  string item_id = 1;
+  // history_leaf_id selects the conversation branch; empty reads the latest.
+  string history_leaf_id = 2;
+}
+
+message GetItemViewResponse {
+  Item item = 1;
+  string description = 2;
+  ItemObservation observation = 3;
+  Agent agent = 4;
+  ControlStatus control = 5;
+  // history is the latest page of the conversation.
+  GetHistoryResponse history = 6;
+  // setup is the current checkout's latest setup, while it runs or after it
+  // failed.
+  SetupRun setup = 7;
+  // jobs are the item's running jobs, such as a start in progress.
+  repeated Job jobs = 8;
+  // read_at is when the daemon read this view. Views from one item are
+  // ordered by it, so a client keeps the newest when several arrive.
+  google.protobuf.Timestamp read_at = 9;
+  repeated string warnings = 10;
+}

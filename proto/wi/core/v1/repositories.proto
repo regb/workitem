@@ -1,0 +1,413 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "wi/core/v1/jobs.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// RepositoryService manages registered repositories: wi's own bare stores,
+// their upstream, settings, the files copied into checkouts and the
+// variables set for agents and setup commands.
+service RepositoryService {
+  rpc ListRepositories(ListRepositoriesRequest) returns (ListRepositoriesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc GetRepository(GetRepositoryRequest) returns (GetRepositoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AddRepository imports a repository from a Git URL or a path on the
+  // daemon's machine, as wi repo add does.
+  rpc AddRepository(AddRepositoryRequest) returns (AddRepositoryResponse);
+  rpc RenameRepository(RenameRepositoryRequest) returns (RenameRepositoryResponse);
+  rpc ArchiveRepository(ArchiveRepositoryRequest) returns (ArchiveRepositoryResponse);
+  rpc RestoreRepository(RestoreRepositoryRequest) returns (RestoreRepositoryResponse);
+  // SetUpstream configures where the integration branch follows.
+  rpc SetUpstream(SetUpstreamRequest) returns (SetUpstreamResponse);
+  // GetRepositoryStatus compares the integration branch with its upstream,
+  // optionally fetching first.
+  rpc GetRepositoryStatus(GetRepositoryStatusRequest) returns (GetRepositoryStatusResponse);
+  // SyncRepository brings the integration branch in line with its upstream.
+  rpc SyncRepository(SyncRepositoryRequest) returns (SyncRepositoryResponse);
+  // IntegrateItem merges an item's branch into the target branch, first
+  // synchronizing the integration branch with its upstream unless local.
+  rpc IntegrateItem(IntegrateItemRequest) returns (IntegrateItemResponse);
+  // GetRepositorySettings reads stored plugin options and effective values.
+  rpc GetRepositorySettings(GetRepositorySettingsRequest) returns (GetRepositorySettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetRepositorySetting stores one plugin option for the repository.
+  rpc SetRepositorySetting(SetRepositorySettingRequest) returns (SetRepositorySettingResponse);
+  // UnsetRepositorySetting removes an override, restoring inheritance.
+  rpc UnsetRepositorySetting(UnsetRepositorySettingRequest) returns (UnsetRepositorySettingResponse);
+  // GetCheckoutSetup reads how new checkouts are set up, including the
+  // command the repository declares on its integration branch.
+  rpc GetCheckoutSetup(GetCheckoutSetupRequest) returns (GetCheckoutSetupResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc UpdateCheckoutSetup(UpdateCheckoutSetupRequest) returns (UpdateCheckoutSetupResponse);
+  // ListRepositoryFiles lists the files wi copies into every checkout.
+  rpc ListRepositoryFiles(ListRepositoryFilesRequest) returns (ListRepositoryFilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  rpc ReadRepositoryFile(ReadRepositoryFileRequest) returns (ReadRepositoryFileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // PutRepositoryFile adds or replaces a file, then updates checkouts.
+  rpc PutRepositoryFile(PutRepositoryFileRequest) returns (PutRepositoryFileResponse);
+  // DeleteRepositoryFile removes a file, then updates checkouts.
+  rpc DeleteRepositoryFile(DeleteRepositoryFileRequest) returns (DeleteRepositoryFileResponse);
+  // GetEnvironment reads the repository's variables and the agents running
+  // in its checkouts with older ones.
+  rpc GetEnvironment(GetEnvironmentRequest) returns (GetEnvironmentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // UpdateEnvironment sets and unsets variables, or replaces them all.
+  rpc UpdateEnvironment(UpdateEnvironmentRequest) returns (UpdateEnvironmentResponse);
+  // SearchRepositoryFiles fuzzy-finds paths on the integration branch, for
+  // mentions in new work.
+  rpc SearchRepositoryFiles(SearchRepositoryFilesRequest) returns (SearchRepositoryFilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// Upstream is where a repository's integration branch follows. url never
+// contains credentials.
+message Upstream {
+  string url = 1;
+  string branch = 2;
+  // web_url links to the hosting page, when known.
+  string web_url = 3;
+  // host is the hosting service, such as "github", "gitlab" or "bitbucket".
+  string host = 4;
+}
+
+// Repository is a registered repository.
+message Repository {
+  string id = 1;
+  string name = 2;
+  string integration_branch = 3;
+  Upstream upstream = 4;
+  bool archived = 5;
+  google.protobuf.Timestamp created_at = 6;
+  // integration_commit is the integration branch's current commit.
+  string integration_commit = 7;
+}
+
+message ListRepositoriesRequest {
+  bool include_archived = 1;
+}
+
+message ListRepositoriesResponse {
+  repeated Repository repositories = 1;
+}
+
+message GetRepositoryRequest {
+  string repository_id = 1;
+}
+
+message GetRepositoryResponse {
+  Repository repository = 1;
+}
+
+message AddRepositoryRequest {
+  string name = 1;
+  // source is a Git URL or an absolute path on the daemon's machine.
+  string source = 2;
+  // branch is the integration branch; empty uses the source's default.
+  string branch = 3;
+  // local registers without an upstream.
+  bool local = 4;
+  string upstream_url = 5;
+  string upstream_branch = 6;
+}
+
+message AddRepositoryResponse {
+  // repository is set once registered; job reports an import in progress.
+  Repository repository = 1;
+  Job job = 2;
+}
+
+message RenameRepositoryRequest {
+  string repository_id = 1;
+  string name = 2;
+}
+
+message RenameRepositoryResponse {
+  Repository repository = 1;
+}
+
+message ArchiveRepositoryRequest {
+  string repository_id = 1;
+}
+
+message ArchiveRepositoryResponse {
+  Repository repository = 1;
+}
+
+message RestoreRepositoryRequest {
+  string repository_id = 1;
+}
+
+message RestoreRepositoryResponse {
+  Repository repository = 1;
+}
+
+message SetUpstreamRequest {
+  string repository_id = 1;
+  string url = 2;
+  string branch = 3;
+}
+
+message SetUpstreamResponse {
+  Repository repository = 1;
+}
+
+message GetRepositoryStatusRequest {
+  string repository_id = 1;
+  bool fetch = 2;
+}
+
+message GetRepositoryStatusResponse {
+  string integration_commit = 1;
+  string upstream_commit = 2;
+  uint32 ahead = 3;
+  uint32 behind = 4;
+  bool diverged = 5;
+  // reconciling means a merge reconciliation awaits continue or abort.
+  bool reconciling = 6;
+  google.protobuf.Timestamp fetched_at = 7;
+}
+
+// SyncMode is how SyncRepository reconciles with the upstream.
+enum SyncMode {
+  SYNC_MODE_UNSPECIFIED = 0;
+  // FAST_FORWARD refuses divergence.
+  SYNC_MODE_FAST_FORWARD = 1;
+  // MERGE reconciles divergent histories in a dedicated checkout.
+  SYNC_MODE_MERGE = 2;
+  SYNC_MODE_CONTINUE = 3;
+  SYNC_MODE_ABORT = 4;
+  // RESET_TO_UPSTREAM replaces the integration tip, keeping a recovery ref.
+  SYNC_MODE_RESET_TO_UPSTREAM = 5;
+}
+
+message SyncRepositoryRequest {
+  string repository_id = 1;
+  SyncMode mode = 2;
+  // confirm is required for RESET_TO_UPSTREAM.
+  bool confirm = 3;
+}
+
+message SyncRepositoryResponse {
+  Job job = 1;
+}
+
+message IntegrateItemRequest {
+  string item_id = 1;
+  // target_branch defaults to the repository's integration branch.
+  string target_branch = 2;
+  // local skips upstream network access and base synchronization.
+  bool local = 3;
+}
+
+message IntegrateItemResponse {
+  Job job = 1;
+}
+
+// StringList is a list option value.
+message StringList {
+  repeated string values = 1;
+}
+
+// SettingValue is a plugin option's value, typed by the option's schema.
+message SettingValue {
+  oneof value {
+    string string_value = 1;
+    bool bool_value = 2;
+    int32 int_value = 3;
+    StringList list_value = 4;
+  }
+}
+
+// RepositorySetting is one plugin option as it applies to a repository.
+message RepositorySetting {
+  // key is "plugins.PLUGIN.OPTION".
+  string key = 1;
+  SettingValue effective = 2;
+  // origin is where the effective value comes from: "default", "global" or
+  // "repository".
+  string origin = 3;
+  // sensitive values are omitted unless show_sensitive was requested.
+  bool sensitive = 4;
+}
+
+message GetRepositorySettingsRequest {
+  string repository_id = 1;
+  bool show_sensitive = 2;
+}
+
+message GetRepositorySettingsResponse {
+  repeated RepositorySetting settings = 1;
+  uint32 revision = 2;
+  repeated string warnings = 3;
+}
+
+message SetRepositorySettingRequest {
+  string repository_id = 1;
+  string key = 2;
+  SettingValue value = 3;
+  uint32 expected_revision = 4;
+}
+
+message SetRepositorySettingResponse {
+  uint32 revision = 1;
+}
+
+message UnsetRepositorySettingRequest {
+  string repository_id = 1;
+  string key = 2;
+  uint32 expected_revision = 3;
+}
+
+message UnsetRepositorySettingResponse {
+  uint32 revision = 1;
+}
+
+// SetupTrust says whether the setup command a repository declares runs.
+enum SetupTrust {
+  SETUP_TRUST_UNSPECIFIED = 0;
+  SETUP_TRUST_NEVER = 1;
+  SETUP_TRUST_ALWAYS = 2;
+}
+
+// CheckoutSetup is how new checkouts are set up.
+message CheckoutSetup {
+  // run is the setup command; it overrides the declared one.
+  string run = 1;
+  SetupTrust trust = 2;
+  uint32 timeout_seconds = 3;
+  // skip lists repository files not copied.
+  repeated string skip = 4;
+  // declared is the command in .config/wi.toml on the integration branch.
+  string declared = 5;
+}
+
+message GetCheckoutSetupRequest {
+  string repository_id = 1;
+}
+
+message GetCheckoutSetupResponse {
+  CheckoutSetup setup = 1;
+  uint32 revision = 2;
+}
+
+message UpdateCheckoutSetupRequest {
+  string repository_id = 1;
+  CheckoutSetup setup = 2;
+  uint32 expected_revision = 3;
+}
+
+message UpdateCheckoutSetupResponse {
+  CheckoutSetup setup = 1;
+  uint32 revision = 2;
+}
+
+// RepositoryFile is a file wi copies into checkouts, at its path there.
+message RepositoryFile {
+  string path = 1;
+  uint32 size = 2;
+  string sha256 = 3;
+  google.protobuf.Timestamp modified_at = 4;
+}
+
+message ListRepositoryFilesRequest {
+  string repository_id = 1;
+}
+
+message ListRepositoryFilesResponse {
+  repeated RepositoryFile files = 1;
+}
+
+message ReadRepositoryFileRequest {
+  string repository_id = 1;
+  string path = 2;
+}
+
+message ReadRepositoryFileResponse {
+  RepositoryFile file = 1;
+  bytes content = 2;
+}
+
+message PutRepositoryFileRequest {
+  string repository_id = 1;
+  string path = 2;
+  bytes content = 3;
+}
+
+message PutRepositoryFileResponse {
+  RepositoryFile file = 1;
+  repeated string warnings = 2;
+}
+
+message DeleteRepositoryFileRequest {
+  string repository_id = 1;
+  string path = 2;
+}
+
+message DeleteRepositoryFileResponse {
+  repeated string warnings = 1;
+}
+
+// EnvironmentVariable is one variable. Values may be secrets.
+message EnvironmentVariable {
+  string key = 1;
+  string value = 2;
+}
+
+// StaleAgent is an agent running in the repository's checkouts that started
+// before the variables last changed.
+message StaleAgent {
+  string item_id = 1;
+  string title = 2;
+  google.protobuf.Timestamp started_at = 3;
+  bool busy = 4;
+}
+
+message GetEnvironmentRequest {
+  string repository_id = 1;
+}
+
+message GetEnvironmentResponse {
+  repeated EnvironmentVariable variables = 1;
+  uint32 revision = 2;
+  google.protobuf.Timestamp changed_at = 3;
+  repeated StaleAgent stale_agents = 4;
+}
+
+message UpdateEnvironmentRequest {
+  string repository_id = 1;
+  uint32 expected_revision = 2;
+  // replace makes set the whole list; otherwise set adds or updates and
+  // unset removes.
+  bool replace = 3;
+  repeated EnvironmentVariable set = 4;
+  repeated string unset = 5;
+}
+
+message UpdateEnvironmentResponse {
+  repeated EnvironmentVariable variables = 1;
+  uint32 revision = 2;
+  repeated StaleAgent stale_agents = 3;
+}
+
+message SearchRepositoryFilesRequest {
+  string repository_id = 1;
+  string query = 2;
+  uint32 limit = 3;
+}
+
+message SearchRepositoryFilesResponse {
+  repeated string paths = 1;
+}

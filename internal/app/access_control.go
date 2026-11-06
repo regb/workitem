@@ -65,6 +65,7 @@ type ControlStatus struct {
 // ControlPlan is what taking control would do. Anything that interrupts
 // another client or an agent turn requires confirmation.
 type ControlPlan struct {
+	PlanToken         string              `json:"plan_token,omitempty"`
 	Holder            string              `json:"holder"`
 	Displaces         *model.ControlLease `json:"displaces,omitempty"`
 	DisplacesTerminal bool                `json:"displaces_terminal,omitempty"`
@@ -79,6 +80,8 @@ type ControlPlan struct {
 }
 
 type ControlRequest struct {
+	// ValidatePlan fences an API confirmation under the controller lock.
+	ValidatePlan func(context.Context, ControlStatus, ControlPlan) error
 	ResolveOptions
 	Holder   string
 	ClientID string
@@ -207,7 +210,8 @@ func (a *App) planControl(status ControlStatus, request ControlRequest, modes dr
 		lease := *status.Lease
 		plan.Displaces = &lease
 		plan.Reasons = append(plan.Reasons, "another "+lease.Holder+" client controls this agent")
-	case status.Lease == nil && status.Implicit && request.Holder != model.LeaseHolderTerminal:
+	// The command line types into a watched terminal, as a person there would.
+	case status.Lease == nil && status.Implicit && request.Holder != model.LeaseHolderTerminal && request.Holder != model.LeaseHolderCLI:
 		plan.DisplacesTerminal = true
 		plan.Reasons = append(plan.Reasons, "a terminal is attached to this agent and will become read-only")
 	}
@@ -216,7 +220,11 @@ func (a *App) planControl(status ControlStatus, request ControlRequest, modes dr
 	// profile that offers it, as the driver reports.
 	hasChannel := status.Channels.Control == model.ControlStructured
 	missing := "no runtime mode of this agent accepts structured input; control it from a terminal"
-	if request.Holder == model.LeaseHolderTerminal {
+	switch request.Holder {
+	case model.LeaseHolderCLI:
+		hasChannel = status.Channels.Control != ""
+		missing = "no runtime mode of this agent accepts input from wi"
+	case model.LeaseHolderTerminal:
 		hasChannel = status.Channels.Terminal
 		missing = "no runtime mode of this agent offers a terminal; control it from the browser"
 	}
@@ -291,6 +299,11 @@ func (a *App) AcquireControl(ctx context.Context, request ControlRequest) (Contr
 	}
 	plan := a.planControl(status, request, a.AgentRuntimeModes(ctx, m.Agent))
 	result := ControlResult{WorkItemID: m.ID, Plan: plan, Warnings: []string{}}
+	if request.ValidatePlan != nil {
+		if err := request.ValidatePlan(ctx, status, plan); err != nil {
+			return result, err
+		}
+	}
 	if plan.Unavailable != "" {
 		return result, errors.New(plan.Unavailable)
 	}
@@ -302,7 +315,7 @@ func (a *App) AcquireControl(ctx context.Context, request ControlRequest) (Contr
 			return result, err
 		}
 	}
-	if request.Holder == model.LeaseHolderWeb && request.TTL == 0 {
+	if (request.Holder == model.LeaseHolderWeb || request.Holder == model.LeaseHolderCLI) && request.TTL == 0 {
 		request.TTL = WebLeaseTTL
 	}
 	ttl := 0

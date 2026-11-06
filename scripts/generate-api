@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+# Buf is supplied by the development shell. The Go plugins are pinned in go.mod.
+buf lint
+buf generate

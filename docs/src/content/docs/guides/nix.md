@@ -3,7 +3,7 @@ title: Nix installation
 description: Build, run, and pin Wi with an upstream flake.
 ---
 
-Wi's flake provides `packages.default`, `packages.wi`, `apps.default`,
+Wi's flake provides `packages.default`, `packages.wi`, `packages.web-client`, `apps.default`,
 `apps.wi`, `devShells.default`, and `checks.go-tests` for `x86_64-linux` and
 `aarch64-darwin`. Enable Nix's `nix-command` and `flakes` experimental features.
 The locked nixpkgs input supplies Go 1.26, satisfying Wi's Go 1.24 minimum.
@@ -27,14 +27,17 @@ repeatable installation.
 
 The package contains the Wi executable and its embedded resources. It does
 not wrap PATH or install an agent. Supply Git on PATH for repository operations,
-tmux for interactive TUI runtimes, and fzf 0.71 or newer for `wi switch`.
+tmux for interactive TUI agents, and fzf 0.71 or newer for `wi switch` and file
+search. The daemon runs Git, tmux, the agents and the file search, so they must
+be on the daemon's PATH; the `wi switch` picker runs fzf in the command itself.
 Headless operation needs neither tmux nor fzf. Install your chosen agent
 separately and select its executable through Wi configuration or PATH. Optional
 direnv integration also requires direnv. Plugins and editors may need their own
 tools. No credentials, Fleet configuration, or Wi runtime state are packaged.
 
 The development shell supplies Go, Git, tmux, fzf, direnv, and Node.js.
-Node.js exercises the Pi bridge tests; it does not install Pi or credentials.
+Node.js exercises the Pi bridge tests and builds the web client; it does not
+install Pi or credentials.
 
 ## Pin a consumer
 

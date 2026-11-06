@@ -347,12 +347,33 @@ func (a *App) saveAgentSettings(ctx context.Context, id string, overrides map[st
 // default changes. A later report is a change, made through wi or in the
 // agent's own interface, and is kept wherever it differs, so the next runtime
 // continues with it.
-func (a *App) adoptReportedSettings(ctx context.Context, id string, definition model.AgentProfile, reported map[string]string, change bool) error {
+// AdoptRuntimeSettings runs in the parent daemon after a fenced settings fact.
+func (a *App) AdoptRuntimeSettings(ctx context.Context, itemID, runtimeID string, reported map[string]string, change bool) error {
+	m, err := a.Store.LoadManifest(itemID)
+	if err != nil {
+		return err
+	}
+	name, err := a.itemAgentName(m)
+	if err != nil {
+		return err
+	}
+	return a.adoptReportedSettings(ctx, itemID, a.Agents()[name], reported, change, runtimeID)
+}
+func (a *App) adoptReportedSettings(ctx context.Context, id string, definition model.AgentProfile, reported map[string]string, change bool, expectedRuntime ...string) error {
 	m, operation, err := a.lockItemOperation(ctx, ResolveOptions{Selector: id})
 	if err != nil {
 		return err
 	}
 	defer operation.Release()
+	if len(expectedRuntime) > 0 {
+		runtime, err := a.Store.LoadAgentRuntime(id)
+		if err != nil {
+			return err
+		}
+		if runtime == nil || runtime.ID != expectedRuntime[0] {
+			return fmt.Errorf("runtime owner changed before adopting settings")
+		}
+	}
 	values := a.driverConfig(definition, m.AgentSettings)
 	adopted := copySettings(m.AgentSettings)
 	names := []string{}

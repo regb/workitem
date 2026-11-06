@@ -1,0 +1,606 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "wi/core/v1/common.proto";
+import "wi/core/v1/jobs.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// AgentService manages an item's agent: the messages it is sent, its
+// conversation and live content, and its settings.
+//
+// An agent is a durable conversation, owned by its driver, that is running
+// or not. How it runs (which process, how it is hosted) is the daemon's
+// business: clients see whether it is online, in which mode, what it can
+// do, and its generation, which changes each time it starts. Sending a
+// message starts the agent when needed; StartAgent, StopAgent and
+// RestartAgent are the explicit controls.
+//
+// Sending input or changing a running agent needs the item's control lease
+// (ControlService). Wi-Control-Actor request metadata records a control source
+// for SendMessage and AbortTurn; it is descriptive and grants no permissions.
+service AgentService {
+  // GetAgent reads the agent's state, capabilities, terminal and control.
+  rpc GetAgent(GetAgentRequest) returns (GetAgentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // StartAgent starts the agent in the requested mode, resuming its
+  // conversation, unless it already runs in that mode. Running in another
+  // mode, it is restarted when idle.
+  rpc StartAgent(StartAgentRequest) returns (StartAgentResponse);
+  // StopAgent stops the agent; force aborts a busy turn first. The
+  // conversation is kept.
+  rpc StopAgent(StopAgentRequest) returns (StopAgentResponse);
+  // RestartAgent stops an idle agent and starts it again in the same mode
+  // and checkout, with current settings and repository variables.
+  rpc RestartAgent(RestartAgentRequest) returns (RestartAgentResponse);
+  // SendMessage prompts an idle agent, steers a busy one, or queues a
+  // follow-up for the end of its turn. When the agent is not running, it is
+  // started first.
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
+  // AbortTurn stops the agent's current turn.
+  rpc AbortTurn(AbortTurnRequest) returns (AbortTurnResponse);
+  // GetAgentSettings reads the item's model and reasoning: effective values,
+  // overrides, what the running agent uses and the driver's model catalog.
+  rpc GetAgentSettings(GetAgentSettingsRequest) returns (GetAgentSettingsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // UpdateAgentSettings saves settings for every later start, applies them
+  // live where the agent can, and restarts it when restart is set.
+  rpc UpdateAgentSettings(UpdateAgentSettingsRequest) returns (UpdateAgentSettingsResponse);
+  // SuggestTitle asks the item's agent driver for a short title for a
+  // description, without starting the agent. The caller sets it with
+  // ItemService.UpdateItem.
+  rpc SuggestTitle(SuggestTitleRequest) returns (SuggestTitleResponse);
+  // GetHistory reads the conversation a page at a time, newest first.
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetSubagentHistory reads a subagent's conversation.
+  rpc GetSubagentHistory(GetSubagentHistoryRequest) returns (GetSubagentHistoryResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // WatchLiveContent streams what the agent is doing now: the reply being
+  // written, reasoning, tool calls and activity. The first message is a
+  // snapshot. Ending the stream never affects the agent.
+  rpc WatchLiveContent(WatchLiveContentRequest) returns (stream WatchLiveContentResponse);
+}
+
+// ControlChannel is how a running agent accepts input.
+enum ControlChannel {
+  CONTROL_CHANNEL_UNSPECIFIED = 0;
+  // STRUCTURED takes commands through the driver's control socket.
+  CONTROL_CHANNEL_STRUCTURED = 1;
+  // EMULATED types into a native TUI.
+  CONTROL_CHANNEL_EMULATED = 2;
+  CONTROL_CHANNEL_NONE = 3;
+}
+
+// AgentCapabilities are what the running agent can do, as its driver
+// reports.
+message AgentCapabilities {
+  ControlChannel control = 1;
+  bool prompt = 2;
+  bool steering = 3;
+  bool follow_up = 4;
+  bool cancel = 5;
+  // atomic_idle means sending only while idle is guaranteed by the driver.
+  bool atomic_idle = 6;
+  bool live_content = 7;
+  bool image_input = 8;
+  // live_settings are the settings it can change while running.
+  repeated string live_settings = 9;
+}
+
+// Terminal is where an agent in TUI mode runs its native interface. People
+// attach to it for what the structured channel does not cover, such as
+// answering the agent's own questions or permission prompts. Clients attach
+// with tmux themselves; attaching is not mediated by the daemon. A gated
+// relay, for browsers or remote machines, would be a later addition.
+message Terminal {
+  string tmux_socket = 1;
+  string session = 2;
+  string window = 3;
+  // attached_clients counts the clients attached now, which stopping the
+  // agent would disconnect.
+  uint32 attached_clients = 4;
+}
+
+// Agent is an item's agent as clients see it.
+message Agent {
+  string agent_profile = 1;
+  string driver = 2;
+  // online means the agent is running now.
+  bool online = 3;
+  AgentMode mode = 4;
+  AgentStatus status = 5;
+  // reason explains a problem, or the question the agent is asking.
+  string reason = 6;
+  // asking means the agent paused its turn on a question answered in its
+  // terminal.
+  bool asking = 7;
+  AgentCapabilities capabilities = 8;
+  // terminal is set while the agent runs in TUI mode.
+  Terminal terminal = 9;
+  // running_settings are the settings the running agent reports.
+  map<string, string> running_settings = 10;
+  // generation changes each time the agent starts. Requests may expect one,
+  // so input never reaches an agent started since the caller looked.
+  uint32 generation = 11;
+  google.protobuf.Timestamp started_at = 12;
+}
+
+message GetAgentRequest {
+  string item_id = 1;
+}
+
+message GetAgentResponse {
+  Agent agent = 1;
+  ControlStatus control = 2;
+  repeated string warnings = 3;
+}
+
+message StartAgentRequest {
+  string item_id = 1;
+  AgentMode mode = 2;
+}
+
+message StartAgentResponse {
+  Agent agent = 1;
+  // job is set while the agent is still starting.
+  Job job = 2;
+}
+
+message StopAgentRequest {
+  string item_id = 1;
+  bool force = 2;
+  // confirm_attached_terminal acknowledges disconnecting attached clients.
+  bool confirm_attached_terminal = 3;
+}
+
+message StopAgentResponse {
+  repeated string warnings = 1;
+}
+
+message RestartAgentRequest {
+  string item_id = 1;
+  uint32 expected_generation = 2;
+}
+
+message RestartAgentResponse {
+  Agent agent = 1;
+  // job is set while restart continues; read final state through GetAgent.
+  Job job = 2;
+}
+
+// Delivery is how a message reaches the agent.
+enum Delivery {
+  // UNSPECIFIED chooses a prompt while idle or steering while busy.
+  DELIVERY_UNSPECIFIED = 0;
+  // PROMPT sends to an idle agent only.
+  DELIVERY_PROMPT = 1;
+  // STEER adds to the turn in progress.
+  DELIVERY_STEER = 2;
+  // FOLLOW_UP waits for the end of the turn in progress, or delivers while idle.
+  DELIVERY_FOLLOW_UP = 3;
+}
+
+message SendMessageRequest {
+  string item_id = 1;
+  string text = 2;
+  repeated Image images = 3;
+  Delivery delivery = 4;
+  // expected_generation refuses if the agent restarted since the caller
+  // looked; zero accepts any.
+  uint32 expected_generation = 5;
+  // client_message_id identifies the message. It is echoed on the live
+  // content stream once the agent records the message, so the client can
+  // match it, and it makes sending idempotent: a message with an ID already
+  // delivered to this item is not delivered again.
+  string client_message_id = 6;
+  // lease_id is the caller's control lease; see ControlService.
+  string lease_id = 7;
+  // start_mode is the mode to start the agent in when it is not running.
+  AgentMode start_mode = 8;
+  // require_online refuses instead of starting an offline agent. Low-level
+  // CLI control uses it; ordinary conversation sending may still start one.
+  bool require_online = 9;
+}
+
+message SendMessageResponse {
+  uint32 generation = 1;
+  // job is set when the agent had to start first; the message is delivered
+  // when it is ready.
+  Job job = 2;
+}
+
+message AbortTurnRequest {
+  string item_id = 1;
+  string lease_id = 2;
+}
+
+message AbortTurnResponse {}
+
+// ModelOption is a model the driver offers and the reasoning levels it
+// accepts.
+message ModelOption {
+  string value = 1;
+  string resolved = 2;
+  string label = 3;
+  string description = 4;
+  bool reasoning = 5;
+  repeated string levels = 6;
+  bool image_input = 7;
+}
+
+// ModelCatalog is a driver's models and reasoning levels.
+message ModelCatalog {
+  repeated ModelOption models = 1;
+  repeated string reasoning_levels = 2;
+  string default_model = 3;
+  string default_reasoning = 4;
+}
+
+message GetAgentSettingsRequest {
+  string item_id = 1;
+}
+
+message GetAgentSettingsResponse {
+  string agent_profile = 1;
+  string driver = 2;
+  // values are the effective settings: profile defaults plus overrides.
+  map<string, string> values = 3;
+  map<string, string> overrides = 4;
+  // running are the settings the running agent reports.
+  map<string, string> running = 5;
+  ModelCatalog catalog = 6;
+  string catalog_error = 7;
+}
+
+message UpdateAgentSettingsRequest {
+  string item_id = 1;
+  // settings to change; an empty value resets one to the profile.
+  map<string, string> settings = 2;
+  // restart allows restarting an agent that cannot apply them live.
+  bool restart = 3;
+  string lease_id = 4;
+}
+
+message UpdateAgentSettingsResponse {
+  map<string, string> overrides = 1;
+  repeated string changed = 2;
+  // applied changed in the running agent; pending apply when it next
+  // starts.
+  repeated string applied = 3;
+  repeated string pending = 4;
+  bool restarted = 5;
+  repeated string warnings = 6;
+}
+
+message SuggestTitleRequest {
+  string item_id = 1;
+  // description defaults to the item's description.
+  string description = 2;
+}
+
+message SuggestTitleResponse {
+  string title = 1;
+}
+
+// ToolCallStatus is where a tool call is.
+enum ToolCallStatus {
+  TOOL_CALL_STATUS_UNSPECIFIED = 0;
+  TOOL_CALL_STATUS_RUNNING = 1;
+  TOOL_CALL_STATUS_COMPLETED = 2;
+  TOOL_CALL_STATUS_FAILED = 3;
+}
+
+// SubagentRef names a subagent a tool call started.
+message SubagentRef {
+  string id = 1;
+  string type = 2;
+  string description = 3;
+  string status = 4;
+}
+
+// ToolCall is one tool the agent ran, with its input and output as text.
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  string input = 3;
+  string output = 4;
+  ToolCallStatus status = 5;
+  repeated Image images = 6;
+  SubagentRef subagent = 7;
+}
+
+// Reasoning is what the model thought, when the driver saved it, and how
+// long it thought, when known.
+message Reasoning {
+  string text = 1;
+  uint32 duration_ms = 2;
+}
+
+// MessageRole is who a conversation entry comes from.
+enum MessageRole {
+  MESSAGE_ROLE_UNSPECIFIED = 0;
+  MESSAGE_ROLE_USER = 1;
+  MESSAGE_ROLE_ASSISTANT = 2;
+  // SUBAGENT is a background subagent's report.
+  MESSAGE_ROLE_SUBAGENT = 3;
+  // SUMMARY is a compaction or branch summary.
+  MESSAGE_ROLE_SUMMARY = 4;
+}
+
+// Summary describes a summary entry.
+message Summary {
+  // kind is "compaction" or "branch".
+  string kind = 1;
+  uint32 tokens_before = 2;
+}
+
+// ConversationMessage is one entry of an agent conversation, normalized by
+// its driver.
+message ConversationMessage {
+  string id = 1;
+  // native_ids are the driver's entries folded into this one.
+  repeated string native_ids = 2;
+  MessageRole role = 3;
+  string text = 4;
+  google.protobuf.Timestamp time = 5;
+  repeated ToolCall tools = 6;
+  repeated Image images = 7;
+  Reasoning reasoning = 8;
+  Summary summary = 9;
+  SubagentRef subagent = 10;
+  // error means the harness answered instead of the model.
+  bool error = 11;
+  // aborted marks where the operator stopped a reply.
+  bool aborted = 12;
+}
+
+message GetHistoryRequest {
+  string item_id = 1;
+  // leaf_id selects the branch; empty reads the latest.
+  string leaf_id = 2;
+  // before continues from an earlier page's next_before.
+  string before = 3;
+}
+
+message GetHistoryResponse {
+  // messages are oldest first within the page.
+  repeated ConversationMessage messages = 1;
+  string leaf_id = 2;
+  // next_before reads the previous page; empty at the start.
+  string next_before = 3;
+  bool truncated = 4;
+  repeated string warnings = 5;
+}
+
+message GetSubagentHistoryRequest {
+  string item_id = 1;
+  string subagent_id = 2;
+  string before = 3;
+}
+
+message GetSubagentHistoryResponse {
+  repeated ConversationMessage messages = 1;
+  string next_before = 2;
+  bool truncated = 3;
+}
+
+// LiveContent is the agent's current output, not yet in history.
+message LiveContent {
+  // generation is the agent generation producing the content.
+  uint32 generation = 1;
+  // message_id is the message being written.
+  string message_id = 2;
+  string text = 3;
+  string thought = 4;
+  string activity = 5;
+  repeated ToolCall tools = 6;
+  // saved_as names the history entries the text became, once saved.
+  repeated string saved_as = 7;
+  // prompts link client message IDs to history entries.
+  repeated PromptLink prompts = 8;
+  string error = 9;
+  bool truncated = 10;
+}
+
+// PromptLink matches a client's message to the history entries it became.
+message PromptLink {
+  string client_message_id = 1;
+  repeated string native_ids = 2;
+}
+
+message WatchLiveContentRequest {
+  string item_id = 1;
+  // after resumes after a cursor the client already has; empty starts with
+  // a snapshot.
+  string after = 2;
+}
+
+// MessageStarted says the agent began writing a message.
+message MessageStarted {
+  string message_id = 1;
+}
+
+// MessageDelta appends text to the message being written.
+message MessageDelta {
+  string message_id = 1;
+  string text = 2;
+  bool truncated = 3;
+}
+
+// MessageReplaced replaces the whole text of the message being written.
+message MessageReplaced {
+  string message_id = 1;
+  string text = 2;
+  bool truncated = 3;
+}
+
+// MessageCompleted says the message is fully written.
+message MessageCompleted {
+  string message_id = 1;
+}
+
+// MessageSaved says the message is in history, as these entries.
+message MessageSaved {
+  string message_id = 1;
+  repeated string native_ids = 2;
+}
+
+// ThoughtDelta appends to the model's shared reasoning.
+message ThoughtDelta {
+  string message_id = 1;
+  string text = 2;
+}
+
+// ToolCallPhase is what happened to a tool call.
+enum ToolCallPhase {
+  TOOL_CALL_PHASE_UNSPECIFIED = 0;
+  TOOL_CALL_PHASE_STARTED = 1;
+  TOOL_CALL_PHASE_UPDATED = 2;
+  TOOL_CALL_PHASE_COMPLETED = 3;
+  // CLEARED removes the tool call from live content; history has it.
+  TOOL_CALL_PHASE_CLEARED = 4;
+}
+
+// ToolCallUpdate is a change to one tool call.
+message ToolCallUpdate {
+  ToolCallPhase phase = 1;
+  ToolCall tool = 2;
+}
+
+// PromptSaved says a message the client sent is in history.
+message PromptSaved {
+  PromptLink link = 1;
+}
+
+// ActivityChanged says what the agent is doing, such as "Thinking" or
+// "Tool running".
+message ActivityChanged {
+  string activity = 1;
+}
+
+// TurnSettled says the turn ended and live content will be found in history.
+message TurnSettled {}
+
+message WatchLiveContentResponse {
+  // cursor resumes the stream after this event; it is opaque.
+  string cursor = 1;
+  oneof event {
+    // snapshot replaces what the client holds. It comes first, and again
+    // whenever a change cannot be expressed as an event.
+    LiveContent snapshot = 2;
+    MessageStarted message_started = 3;
+    MessageDelta message_delta = 4;
+    MessageReplaced message_replaced = 5;
+    MessageCompleted message_completed = 6;
+    MessageSaved message_saved = 7;
+    ThoughtDelta thought_delta = 8;
+    ToolCallUpdate tool = 9;
+    PromptSaved prompt_saved = 10;
+    ActivityChanged activity = 11;
+    TurnSettled turn_settled = 12;
+  }
+}
+
+// ControlService arbitrates who may send input to an item's agent. One
+// lease per item, held by a client; any number of clients observe.
+service ControlService {
+  // GetControl reads who controls the agent and what taking control would
+  // do: abort a turn, restart the agent in another mode, displace a terminal.
+  rpc GetControl(GetControlRequest) returns (GetControlResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // AcquireControl takes the lease when vacant, or from another holder
+  // with confirm. Taking control may abort a turn or restart the agent.
+  rpc AcquireControl(AcquireControlRequest) returns (AcquireControlResponse);
+  // RenewControl keeps a lease alive; leases expire when not renewed.
+  rpc RenewControl(RenewControlRequest) returns (RenewControlResponse);
+  // ReleaseControl gives the lease up.
+  rpc ReleaseControl(ReleaseControlRequest) returns (ReleaseControlResponse);
+}
+
+// ControlLease is the right to send input to one item's agent.
+message ControlLease {
+  string id = 1;
+  string item_id = 2;
+  // holder is the kind of client, such as "web", "terminal" or "cli".
+  string holder = 3;
+  string client_id = 4;
+  string label = 5;
+  google.protobuf.Timestamp acquired_at = 6;
+  google.protobuf.Timestamp expires_at = 7;
+}
+
+// ControlPlan says what taking control would do for the caller.
+message ControlPlan {
+  bool needs_confirmation = 1;
+  repeated string reasons = 2;
+  ControlLease displaces = 3;
+  bool displaces_terminal = 4;
+  bool aborts_turn = 5;
+  // restarts_in is the mode the agent would be restarted in.
+  AgentMode restarts_in = 6;
+  // starts_in is the mode the agent would be started in.
+  AgentMode starts_in = 7;
+  // unavailable explains why control cannot be taken.
+  string unavailable = 8;
+  // plan_token binds confirmation to this caller, item, runtime generation,
+  // controller and takeover effects. It is opaque and invalid after restart.
+  string plan_token = 9;
+}
+
+// ControlStatus is who controls an item's agent now.
+message ControlStatus {
+  ControlLease lease = 1;
+  // implicit means a terminal controls the agent without a lease.
+  bool implicit = 2;
+  // yours is true when the caller holds the lease.
+  bool yours = 3;
+  ControlPlan plan = 4;
+}
+
+message GetControlRequest {
+  string item_id = 1;
+  string client_id = 2;
+}
+
+message GetControlResponse {
+  ControlStatus control = 1;
+}
+
+message AcquireControlRequest {
+  string item_id = 1;
+  string client_id = 2;
+  string label = 3;
+  bool confirm = 4;
+  // start_agent starts the agent if it is not running.
+  bool start_agent = 5;
+  // plan_token must echo the current plan whenever confirm is true.
+  // Missing or stale tokens fail with ABORTED; re-read before confirming.
+  string plan_token = 6;
+}
+
+message AcquireControlResponse {
+  ControlStatus control = 1;
+  Job job = 2;
+}
+
+message RenewControlRequest {
+  string lease_id = 1;
+}
+
+message RenewControlResponse {
+  ControlLease lease = 1;
+}
+
+message ReleaseControlRequest {
+  string lease_id = 1;
+}
+
+message ReleaseControlResponse {}

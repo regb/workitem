@@ -48,6 +48,9 @@ type Manifest struct {
 	AgentSettings map[string]string `json:"agent_settings,omitempty"`
 	Labels        []string          `json:"labels"`
 	DeepWork      bool              `json:"deep_work"`
+	Priority      int32             `json:"priority,omitempty"`
+	Pinned        bool              `json:"pinned,omitempty"`
+	SnoozedUntil  *time.Time        `json:"snoozed_until,omitempty"`
 	Resolution    string            `json:"resolution,omitempty"`
 	Blockers      []Blocker         `json:"blockers,omitempty"`
 }

@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/regb/workitem/internal/app"
+	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/plugin"
 )
@@ -19,9 +19,7 @@ func runPlugin(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 		return usageErr{fmt.Errorf("usage: wi plugin <list|run|skill>")}
 	}
 	host := cfg.Plugins
-	if host == nil && cfg.App != nil {
-		host = cfg.App.Plugins
-	}
+
 	if host == nil {
 		return fmt.Errorf("plugin catalog is unavailable")
 	}
@@ -154,9 +152,7 @@ func runPlugin(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 
 func runPluginCommand(ctx context.Context, name string, args []string, cfg Config, jsonOut bool) (int, bool) {
 	host := cfg.Plugins
-	if host == nil && cfg.App != nil {
-		host = cfg.App.Plugins
-	}
+
 	if host == nil {
 		return 0, false
 	}
@@ -194,10 +190,16 @@ func runPluginCommand(ctx context.Context, name string, args []string, cfg Confi
 				selector = strings.TrimPrefix(arg, "--item=")
 			}
 		}
-		if cfg.App != nil {
-			if m, err := cfg.App.ResolveItem(ctx, app.ResolveOptions{Selector: selector, CWD: cfg.CWD, Env: cfg.Env}); err == nil {
-				spec.RepositoryID = m.Repository.ID
-				spec.Settings, err = host.Settings(ctx, m.Repository.ID, name)
+		if cfg.API != nil {
+			if id, err := rpcSelect(ctx, cfg, selector); err == nil {
+				shown, err := cfg.API.Items.GetItem(ctx, rpcRequest(cfg, &v1.GetItemRequest{ItemId: id}))
+				if err != nil {
+					fmt.Fprintln(cfg.Stderr, err)
+					return ExitError, true
+				}
+				repositoryID := shown.Msg.Item.GetRepository().GetId()
+				spec.RepositoryID = repositoryID
+				spec.Settings, err = host.Settings(ctx, repositoryID, name)
 				if err != nil {
 					fmt.Fprintln(cfg.Stderr, err)
 					return ExitError, true

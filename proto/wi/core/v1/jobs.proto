@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "wi/core/v1/common.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// JobService reports operations that can outlive the request that started
+// them, such as setting up a checkout, starting an agent, synchronizing a
+// repository, integrating an item, or starting an item. A job keeps running when its client
+// disconnects. Its final state is read through the domain services, such as
+// ItemService.GetItem; the job reports progress, approvals and outcome.
+// Summaries are committed to the daemon database before being published.
+// Summaries survive restart; execution and approval challenges do not resume.
+// A job unfinished when the daemon stops is recovered as FAILED with error
+// "interrupted by a daemon restart", preserving its last recorded progress and
+// partial outcome and clearing approvals. History retains the latest 500
+// finished summaries plus all unfinished jobs. Older IDs return NOT_FOUND.
+service JobService {
+  rpc GetJob(GetJobRequest) returns (GetJobResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListJobs reads recent and running jobs, optionally for one item.
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // WatchJob streams the job's state and progress until it finishes. The
+  // first message is the current state, so a late watcher misses nothing
+  // that matters.
+  rpc WatchJob(WatchJobRequest) returns (stream WatchJobResponse);
+  // AnswerApproval answers the question a waiting job asked; the job then
+  // continues or stops.
+  rpc AnswerApproval(AnswerApprovalRequest) returns (AnswerApprovalResponse);
+  // CancelJob asks a running job to stop. Steps already done are kept and
+  // reported as its partial outcome.
+  rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
+}
+
+// JobState is where a job is in its life.
+enum JobState {
+  JOB_STATE_UNSPECIFIED = 0;
+  JOB_STATE_QUEUED = 1;
+  JOB_STATE_RUNNING = 2;
+  // WAITING_FOR_APPROVAL pauses until AnswerApproval or the approval expires.
+  JOB_STATE_WAITING_FOR_APPROVAL = 3;
+  JOB_STATE_SUCCEEDED = 4;
+  JOB_STATE_FAILED = 5;
+  JOB_STATE_CANCELLED = 6;
+}
+
+// Job is one long operation.
+message Job {
+  string id = 1;
+  // kind names the operation, such as "start_item", "setup_workspace",
+  // "start_agent", "integrate_item" or "sync_repository". New kinds may be
+  // added; clients show unknown ones by name.
+  string kind = 2;
+  JobState state = 3;
+  // item_id and repository_id name what the job works on, when it does.
+  string item_id = 4;
+  string repository_id = 5;
+  // phase is the step running now, for display, such as "setting up the
+  // checkout" or "starting the agent".
+  string phase = 6;
+  // log_tail is the end of the job's log, such as setup command output.
+  string log_tail = 7;
+  Approval approval = 8;
+  // error explains a failure; partial says what was kept.
+  string error = 9;
+  PartialOutcome partial = 10;
+  repeated string warnings = 11;
+  google.protobuf.Timestamp created_at = 12;
+  google.protobuf.Timestamp started_at = 13;
+  google.protobuf.Timestamp finished_at = 14;
+}
+
+message GetJobRequest {
+  string job_id = 1;
+}
+
+message GetJobResponse {
+  Job job = 1;
+}
+
+message ListJobsRequest {
+  string item_id = 1;
+  // running_only omits finished jobs.
+  bool running_only = 2;
+}
+
+message ListJobsResponse {
+  repeated Job jobs = 1;
+}
+
+message WatchJobRequest {
+  string job_id = 1;
+}
+
+message WatchJobResponse {
+  Job job = 1;
+}
+
+message AnswerApprovalRequest {
+  string job_id = 1;
+  string challenge_id = 2;
+  ApprovalDecision decision = 3;
+}
+
+message AnswerApprovalResponse {
+  Job job = 1;
+}
+
+message CancelJobRequest {
+  string job_id = 1;
+}
+
+message CancelJobResponse {
+  Job job = 1;
+}

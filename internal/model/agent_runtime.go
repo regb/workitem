@@ -42,6 +42,7 @@ func (c RuntimeCapabilities) LiveSetting(name string) bool {
 
 type AgentRuntime struct {
 	ID                       string              `json:"id"`
+	Generation               uint32              `json:"generation,omitempty"`
 	WorkItemID               string              `json:"work_item_id"`
 	Mode                     string              `json:"mode"`
 	State                    string              `json:"state"`

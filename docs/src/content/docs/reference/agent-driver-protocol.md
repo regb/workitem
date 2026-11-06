@@ -7,7 +7,7 @@ An agent definition is the user-selected coding agent. A driver is the executabl
 
 ## Bootstrap
 
-`wi` starts a driver with `WI_AGENT_DRIVER_BOOTSTRAP_SOCKET` set to a user-only Unix socket. The driver connects and sends a hello record:
+The daemon starts drivers: for each agent it runs, and for the short-lived conversation operations below. Clients of the [API](../api/) never talk to a driver. The daemon starts a driver with `WI_AGENT_DRIVER_BOOTSTRAP_SOCKET` set to a user-only Unix socket. The driver connects and sends a hello record:
 
 ```json
 {"protocol_version":3,"driver":"pi","driver_version":"..."}
@@ -15,7 +15,7 @@ An agent definition is the user-selected coding agent. A driver is the executabl
 
 The process protocol is version 3; version 3 named the reasoning setting `reasoning` for every driver. Runtime control and event sockets keep their independent version 1, so existing runtimes do not need restarting when conversation transport changes. External drivers must use the version-3 bootstrap and opaque record format.
 
-After checking the driver name and protocol version, `wi` sends a request envelope. Its `operation` selects a runtime launch or conversation operation. The driver sends one response envelope.
+After checking the driver name and protocol version, the daemon sends a request envelope. Its `operation` selects a runtime launch or conversation operation. The driver sends one response envelope.
 
 The normative Go wire types are in `github.com/regb/workitem/agentdriver/protocol`. Other languages can implement the newline-delimited JSON exchange directly. Go driver implementations can use `github.com/regb/workitem/agentdriver/drivertest` for conversation-operation checks and live launch, capability, control, event, and shutdown checks.
 
@@ -29,7 +29,7 @@ The additive `launch.append_system_prompt` string carries host-configured text t
 
 The runtime mode is independent of the process protocol:
 
-- `tui` asks the driver to run its interactive backend. `wi` composes that runtime with tmux.
+- `tui` asks the driver to run its interactive backend. The daemon composes that runtime with tmux and reports its terminal to clients.
 - `headless` asks the same driver process to run its backend headlessly. The driver translates control commands into backend-specific requests and translates backend events into wi runtime events. Headless mode does not create or inspect tmux resources.
 
 Both modes use the same conversation identity, runtime ownership checks, control socket, and event protocol. Optional `live_content`, `idle_guard`, and `image_input` capabilities describe content snapshots, idle-only controls, and image-bearing prompts. An absent capability means unsupported; do not restart an existing owner implicitly to obtain it. A headless driver may wrap any non-interactive backend interface; the backend itself does not need to implement RPC. The driver advertises `prompt`, `steering`, `follow_up`, `cancel`, and `streaming` separately and rejects commands it cannot translate.
@@ -42,7 +42,7 @@ Wi merges driver defaults with agent-profile overrides and sends the result as o
 
 `config.validate` is a stateless process request carrying the profile name and merged `config`, without a conversation or runtime. Success must include `config_validation: {"valid": true}` in the response; rejection uses `error`. Drivers own mandatory fields and must implement this operation for new startup requests. There is no generic configuration schema.
 
-Wi checks configuration before `new --start` creates an item, before `start`/`resume` changes lifecycle when a new owner is needed, and before runtime creation allocates resources. Plain backlog capture and workspace-only operations remain driver-independent. Access to an existing owner does not revalidate future launch settings or restart it.
+The daemon checks configuration before `CreateAndStartItem` creates an item, before `StartItem` changes lifecycle when a new agent is needed, and before starting an agent allocates resources. Plain backlog capture and workspace-only operations remain driver-independent. Access to an existing owner does not revalidate future launch settings or restart it.
 
 Validation must not launch a coding backend, create native content, allocate resources, or make a model request. Clients fail closed on rejection, missing acknowledgement, or unsupported operations, with a bounded request deadline. Validation is not a guarantee of later executable, authentication, network, or model availability; drivers must also validate launch requests. Error messages should identify missing fields without revealing secret values.
 
@@ -78,7 +78,7 @@ Discovery must not launch a coding backend, authenticate, make model requests, c
 
 **Resume contract:** every listed mode must be able to resume any conversation of the driver with the same profile settings. Wi relies on this to replace a runtime with one in another mode on the same conversation, for example when a browser needs structured control and the running TUI only accepts keystrokes. When no mode offers the channel a client needs, Wi refuses control with an explanation instead of restarting the runtime.
 
-The request may check the installed backend version, but must not start an agent, authenticate, or create native content. The answer is an expectation: a runtime's `Ready` capabilities remain authoritative. Wi caches it per profile for the life of the process. Drivers that do not implement the operation are treated as offering structured control in headless mode and a terminal in TUI mode. The operation and response field are additive within protocol version 3.
+The request may check the installed backend version, but must not start an agent, authenticate, or create native content. The answer is an expectation: a runtime's `Ready` capabilities remain authoritative. The daemon caches it per profile for its lifetime. Drivers that do not implement the operation are treated as offering structured control in headless mode and a terminal in TUI mode. The operation and response field are additive within protocol version 3.
 
 ### Model catalog
 
@@ -115,7 +115,7 @@ Drivers also handle these short-lived conversation requests:
 - `conversation.observe` returns compact status without returning prompts, responses, or tool arguments.
 - `conversation.decode` converts batches of native records into compact facts for daemon indexing. `lines` is an array of base64-encoded byte strings, not inline JSON objects. Malformed native records must reach the decoder unchanged. `decoded` reports success for each input line in order.
 
-`wi` starts the configured driver command for these operations. Driver-specific parsers and filesystem rules do not run in generic application or coordinator packages.
+The daemon starts the configured driver command for these operations. Driver-specific parsers and filesystem rules do not run in generic application or coordinator packages.
 
 The Pi history reader snapshots the file size before reading, ignores an incomplete final append, and follows parent IDs on one branch. Malformed records, missing parents, cycles, and unsupported legacy records fail explicitly. It defaults to the latest page of up to 200 native entries, limits individual text/tool fields to 16 KiB, total text to 1 MiB, and image data to 12 MiB. Thinking content is omitted. There is no conversation-size limit; older entries are available through paging. Truncation preserves UTF-8. Oversized fields have a truncation flag. The reader indexes native IDs and offsets rather than retaining all transcript bodies, but each operation still scans the file. A live TUI snapshot can supply its in-memory leaf; `"-"` means an empty branch.
 
@@ -123,7 +123,7 @@ Pi title requests use a temporary working directory and non-persisted print mode
 
 ## Runtime controls and events
 
-The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. Host-side application control resolves daemon-owned state, verifies current runtime ownership and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. Prompt-like commands may carry generic base64 `images` with MIME types only when the driver advertises `image_input`; each driver translates that payload to its native API. A driver must reject unsupported controls. It may translate supported commands through backend APIs or its own verified TUI input transport. Terminal input belongs inside the driver, not application policy. For the bundled Claude driver, native acceptance is confirmed through TUI lifecycle hooks or headless replay/queue receipts after input delivery; an initial acknowledgement can instead mean a command entered its bounded queue. It does not advertise atomic idle control. Unknown delivery outcomes must not trigger automatic retyping.
+The driver owns the per-runtime control socket named by `runtime.control_socket_path`. Each connection carries one newline-terminated `ControlCommand`. The driver replies with `{"accepted":true}` or `{"accepted":false,"error":"..."}`. The daemon resolves its state, verifies current runtime ownership, the caller's control lease and capabilities, then submits prompt, steer, follow-up, abort, or shutdown commands to that owner. Prompt-like commands may carry generic base64 `images` with MIME types only when the driver advertises `image_input`; each driver translates that payload to its native API. A driver must reject unsupported controls. It may translate supported commands through backend APIs or its own verified TUI input transport. Terminal input belongs inside the driver, not application policy. For the bundled Claude driver, native acceptance is confirmed through TUI lifecycle hooks or headless replay/queue receipts after input delivery; an initial acknowledgement can instead mean a command entered its bounded queue. It does not advertise atomic idle control. Unknown delivery outcomes must not trigger automatic retyping.
 
 `set` changes one profile setting of a running agent: it carries `setting: {"name": "model", "value": "sonnet"}` and no message. Names are `model` and `reasoning`; values are one line of at most 256 bytes. A driver lists the settings a runtime can change live in `Ready.capabilities.settings` and rejects others. It confirms or rejects the change through `command.accepted` or `command.rejected` with the command ID; Wi waits briefly for that verdict. Bundled Pi changes `model` (`provider/model`) and `reasoning` in both modes, through RPC `set_model`/`set_thinking_level` headless and its extension in the TUI. Bundled Claude changes `model` and `reasoning` in headless mode through its `set_model` and `apply_flag_settings` control requests; its TUI does not change them live.
 
@@ -137,7 +137,7 @@ Claude headless uses a persistent native streaming-JSON process. Its initialized
 
 Pi headless mode reserves submitted work immediately and uses native idle-only prompt rejection instead of steering. Guarded shutdown is checked in Pi's own event loop by a bundled extension and acknowledged only after that check succeeds. The extension returns a separate private RPC result because Pi reports slash commands as handled even if their handler throws; that result is not native conversation content. The headless extension does not create sockets or duplicate the host's event relay. TUI control checks Pi's idle/pending state and reserves bridge-submitted work until settlement. Drivers may conservatively refuse when settlement cannot be established. Explicit abort and shutdown remain available to verified archived or stale-claim owners; archived items cannot receive new messages. Existing owners without the new capability retain their previous stop behavior.
 
-The `wi agent exec` host owns `runtime.event_socket_path`. A driver opens one connection per compact `RuntimeEvent` and receives the same accepted/error response shape. The host checks protocol, runtime, and work-item identity before relaying the event through the private coordinator API. Drivers never receive the coordinator socket or its protocol metadata. Prompts, responses, deltas, tool arguments, paths, and unrestricted errors do not belong in retained daemon events.
+The `wi agent exec` host, a process the daemon starts for each agent, owns `runtime.event_socket_path`. A driver opens one connection per compact `RuntimeEvent` and receives the same accepted/error response shape. The host checks protocol, runtime, and work-item identity before relaying the event to the daemon through its private host endpoint, which is not part of the public API. Drivers never receive the coordinator socket or its protocol metadata. Prompts, responses, deltas, tool arguments, paths, and unrestricted errors do not belong in retained daemon events.
 
 Event replies may add `retryable: true` when the host cannot reach the coordinator or persist the event. Producers must retry the same event ID in order, without dropping later settlement events. Socket failures also require retry. A rejected reply with `retryable` absent or false is definitive, including invalid events and lost runtime or workspace ownership. These event-delivery rules do not authorize resending control commands.
 
@@ -167,4 +167,4 @@ Snapshots and streams do not provide lossless replay or a history watermark. Con
 
 ## Ownership boundaries
 
-`wi` owns lifecycle policy, checkout materialization, runtime ownership, tmux composition, event relay, and endpoint authorization. The driver owns backend command construction, backend configuration validation, native conversation handling, capability negotiation, and translation between backend and wi events.
+The daemon owns lifecycle policy, checkout materialization, runtime ownership, tmux composition, event relay, and endpoint authorization. The driver owns backend command construction, backend configuration validation, native conversation handling, capability negotiation, and translation between backend and wi events.

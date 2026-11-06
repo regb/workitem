@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -22,12 +23,16 @@ const MaxDescriptionBytes = 4 << 20
 // MetadataEdit is a patch, never a replacement for lifecycle or resource intent.
 // Native description content is staged on disk; only hashes enter the database.
 type MetadataEdit struct {
-	Title                     *string  `json:"title,omitempty"`
-	AddLabels                 []string `json:"add_labels,omitempty"`
-	RemoveLabels              []string `json:"remove_labels,omitempty"`
-	DeepWork                  *bool    `json:"deep_work,omitempty"`
-	DescriptionDigest         string   `json:"description_digest,omitempty"`
-	PreviousDescriptionDigest string   `json:"previous_description_digest,omitempty"`
+	Priority                  *int32     `json:"priority,omitempty"`
+	Pinned                    *bool      `json:"pinned,omitempty"`
+	SnoozedUntil              *time.Time `json:"snoozed_until,omitempty"`
+	ClearSnooze               bool       `json:"clear_snooze,omitempty"`
+	Title                     *string    `json:"title,omitempty"`
+	AddLabels                 []string   `json:"add_labels,omitempty"`
+	RemoveLabels              []string   `json:"remove_labels,omitempty"`
+	DeepWork                  *bool      `json:"deep_work,omitempty"`
+	DescriptionDigest         string     `json:"description_digest,omitempty"`
+	PreviousDescriptionDigest string     `json:"previous_description_digest,omitempty"`
 }
 type EditItemRequest struct {
 	Command     ManifestCommand `json:"command"`
@@ -93,6 +98,22 @@ func applyMetadataEdit(edit *MetadataEdit, m *model.Manifest) ([]string, error) 
 	if edit.DeepWork != nil && m.DeepWork != *edit.DeepWork {
 		m.DeepWork = *edit.DeepWork
 		fields = append(fields, "deep_work")
+	}
+	if edit.Priority != nil && m.Priority != *edit.Priority {
+		m.Priority = *edit.Priority
+		fields = append(fields, "priority")
+	}
+	if edit.Pinned != nil && m.Pinned != *edit.Pinned {
+		m.Pinned = *edit.Pinned
+		fields = append(fields, "pinned")
+	}
+	if edit.ClearSnooze && m.SnoozedUntil != nil {
+		m.SnoozedUntil = nil
+		fields = append(fields, "snoozed_until")
+	}
+	if edit.SnoozedUntil != nil && (m.SnoozedUntil == nil || !m.SnoozedUntil.Equal(*edit.SnoozedUntil)) {
+		m.SnoozedUntil = edit.SnoozedUntil
+		fields = append(fields, "snoozed_until")
 	}
 	if edit.DescriptionDigest != "" {
 		if !validDescriptionDigest(edit.DescriptionDigest) || !validDescriptionDigest(edit.PreviousDescriptionDigest) {

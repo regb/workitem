@@ -19,7 +19,7 @@ Durability protects interruptions and preserves completed work; it does not mean
 wi new --desc-file task.md --title "Investigate cache invalidation"
 ```
 
-Supply `--title` or explicitly use `--untitled`. The latter creates an editable `Untitled task` title and derives a slug such as `item-933sga1r` from the last eight characters of the item ID. The flags are mutually exclusive. `--slug` overrides either default; generated slug collisions receive numeric suffixes. Wi never infers a title or slug from a description or prompt.
+Supply `--title` or explicitly use `--untitled`. The latter creates an editable `Untitled task` title and derives a slug such as `item-933sga1r` from the last eight characters of the item ID. The flags are mutually exclusive. `--slug` overrides either default; generated slug collisions receive numeric suffixes. The CLI never infers a title or slug from a description or prompt; a client may ask the daemon to suggest one with `AgentService.SuggestTitle`.
 
 `--untitled` is only a creation option, not a durable classification. Later title edits leave the active slug and branch unchanged. Restore follows the normal current-title allocation policy. Creation selects a [registered repository](../repositories/) from the current item or an explicit `--repo NAME`.
 
@@ -43,11 +43,11 @@ Files that belong with the task but not in the repository, such as a report, a s
 
 ## IDs and slugs
 
-The ID is permanent; the active slug is a human-readable selector. Selectors can also use a unique ID prefix or an unambiguous active-item keyword. `wi start` specifically requires an active slug or slug substring.
+The ID is permanent; the active slug is a human-readable selector. Selectors can also use a unique ID prefix or an unambiguous active-item keyword. The command resolves what you type, or the item whose checkout contains the current directory, to an exact ID with the daemon (`ItemService.ResolveItem`) before acting; an ambiguous selector fails listing the candidates.
 
 The slug is fixed at creation while the item remains active, including before its first checkout. Archiving clears it. Restoring to backlog allocates a fresh slug while retaining the ID and history.
 
-The implementation branch specification is fixed at creation and survives close/reopen; a new active slug does not rename the branch. Title and description remain editable in every lifecycle state. Use `wi edit --title "New title"` for the current item or `wi edit --item SELECTOR --title "New title"` for another. `wi edit` with no edit flags opens title and description in an editor. Select closed items by ID. Updating them does not change the slug or branch, alter native conversation history, or automatically send a prompt. Auxiliary title suggestions update presentation only.
+The implementation branch specification is fixed at creation and survives close/reopen; a new active slug does not rename the branch. Title and description remain editable in every lifecycle state. Use `wi edit --title "New title"` for the current item or `wi edit --item SELECTOR --title "New title"` for another. `wi edit` with no edit flags opens title and description in an editor; the editor runs on the client, which then sends the result. Select closed items by ID. Updating them does not change the slug or branch, alter native conversation history, or automatically send a prompt. Auxiliary title suggestions update presentation only.
 
 ## Labels and deep work
 

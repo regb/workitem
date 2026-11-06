@@ -1,0 +1,95 @@
+package daemonapp
+
+import (
+	"context"
+	"fmt"
+	agentcore "github.com/regb/workitem/internal/app/core/primaryagent"
+	viewapp "github.com/regb/workitem/internal/app/view"
+	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/model"
+	"time"
+)
+
+func coordinatorWorkListObserver(client *coordinator.Client) viewapp.Observe {
+	return func(ctx context.Context, itemID string) (viewapp.Observation, error) {
+		queryCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+		defer cancel()
+		projection, err := client.AgentObservation(queryCtx, itemID)
+		if err != nil {
+			return viewapp.Observation{}, err
+		}
+		if !projection.Found {
+			return viewapp.Observation{}, fmt.Errorf("daemon has not built agent observation for %s", itemID)
+		}
+		observation := coordinatorViewObservation(projection.Observation)
+		if !projection.Projection.Fresh {
+			observation.Warnings = append(observation.Warnings, "daemon agent observation is stale")
+		}
+		return observation, nil
+	}
+}
+
+func coordinatorViewObservation(value coordinator.AgentObservation) viewapp.Observation {
+	age := int64(0)
+	if value.LastActivityAt != nil {
+		age = int64(time.Since(*value.LastActivityAt).Seconds())
+	}
+	var worktree *viewapp.WorktreeStatus
+	if value.Worktree != nil {
+		worktree = &viewapp.WorktreeStatus{Status: value.Worktree.Status, Reason: value.Worktree.Reason, CheckoutPath: value.Worktree.CheckoutPath, Head: value.Worktree.Head, ExpectedBranch: value.Worktree.ExpectedBranch, CurrentBranch: value.Worktree.CurrentBranch, BranchMatches: value.Worktree.BranchMatches, BranchMismatch: value.Worktree.BranchMismatch, Dirty: value.Worktree.Dirty, HasChanges: value.Worktree.HasChanges}
+	}
+	return viewapp.Observation{Status: value.Status, Reason: value.Reason, ProcessOnline: value.ProcessOnline, TurnState: value.TurnState, LastActivityAgeSeconds: age, Worktree: worktree, Activity: viewapp.Activity{LastRequestedAt: value.Activity.LastRequestedAt, LastCompletedAt: value.Activity.LastCompletedAt, LastDeferredAt: value.Activity.LastDeferredAt, LastReadAt: value.Activity.LastReadAt, LastUnreadAt: value.Activity.LastUnreadAt}, Warnings: append([]string(nil), value.Warnings...)}
+}
+
+func coordinatorConversationObserver(client *coordinator.Client) agentcore.ConversationObserver {
+	return func(ctx context.Context, manifest model.Manifest, now time.Time) (agentcore.ConversationStatus, []string) {
+		if manifest.PrimaryConversation == nil {
+			return agentcore.ConversationStatus{UnavailableReason: "no primary conversation is recorded for this work item"}, nil
+		}
+		queryCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+		defer cancel()
+		projection, err := client.Conversation(queryCtx, manifest.ID)
+		if err != nil {
+			return agentcore.ConversationStatus{ID: manifest.PrimaryConversation.ID, PathRel: manifest.PrimaryConversation.NativeLocator(), Source: "daemon.conversation", UnavailableReason: "could not read daemon conversation projection: " + err.Error()}, nil
+		}
+		if !projection.Found {
+			return agentcore.ConversationStatus{ID: manifest.PrimaryConversation.ID, PathRel: manifest.PrimaryConversation.NativeLocator(), Source: "daemon.conversation", UnavailableReason: "daemon has not indexed the conversation yet"}, projection.Projection.Warnings
+		}
+		index := projection.Conversation
+		status := agentcore.ConversationStatus{
+			ID:                    index.ConversationID,
+			PathRel:               manifest.PrimaryConversation.NativeLocator(),
+			Source:                "daemon.conversation",
+			Exists:                true,
+			SizeBytes:             index.Size,
+			EntriesScanned:        boundedInt(index.EntriesScanned),
+			MalformedLines:        boundedInt(index.MalformedLines),
+			InferredTurnState:     index.InferredTurnState,
+			LastEvent:             coordinatorPiFact(index.LastEvent),
+			LastTurnActivity:      coordinatorPiFact(index.LastTurnActivity),
+			LastUserPrompt:        coordinatorPiFact(index.LastUserPrompt),
+			LastAssistantMessage:  coordinatorPiFact(index.LastAssistantMessage),
+			LastTerminalAssistant: coordinatorPiFact(index.LastTerminalAssistant),
+			LastToolActivity:      coordinatorPiFact(index.LastToolActivity),
+		}
+		if status.LastTurnActivity != nil && !status.LastTurnActivity.Timestamp.IsZero() {
+			status.LastActivityAgeSeconds = int64(now.Sub(status.LastTurnActivity.Timestamp).Seconds())
+		}
+		return status, projection.Projection.Warnings
+	}
+}
+
+func coordinatorPiFact(fact *coordinator.ConversationEventFact) *agentcore.ConversationEventSummary {
+	if fact == nil {
+		return nil
+	}
+	return &agentcore.ConversationEventSummary{Line: boundedInt(fact.Line), Type: fact.Type, Timestamp: fact.Timestamp, Role: fact.Role, StopReason: fact.StopReason, ContentTypes: append([]string(nil), fact.ContentTypes...), Terminal: fact.Terminal, Failed: fact.Failed}
+}
+
+func boundedInt(value uint64) int {
+	maximum := uint64(^uint(0) >> 1)
+	if value > maximum {
+		return int(maximum)
+	}
+	return int(value)
+}

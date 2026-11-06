@@ -1,10 +1,9 @@
 package coordinator
 
-import "fmt"
+import (
+	"net"
 
-func validatePeerUID(peerUID, currentUID uint32) error {
-	if peerUID != currentUID {
-		return fmt.Errorf("reject daemon peer owned by uid %d", peerUID)
-	}
-	return nil
-}
+	"github.com/regb/workitem/internal/socketpeer"
+)
+
+func validatePeerOwnership(conn *net.UnixConn) error { return socketpeer.Validate(conn) }

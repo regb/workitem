@@ -64,23 +64,31 @@ wi blocker clear --id b1a2b3c4 auth
 wi blocker clear --all auth
 ```
 
-## Primitive state changes
+## Plumbing and porcelain
+
+Like Git, Wi has two levels of operations. Plumbing does one thing: change the lifecycle record, claim or release a checkout, start or stop an agent. Porcelain moves an item and its resources together, by performing that plumbing in order. The daemon enforces the lifecycle's requirements in the plumbing itself, so no sequence of calls, from any client, leaves an unsafe state:
+
+| State | Checkout claim | Agent |
+| --- | --- | --- |
+| `backlog` | none | not running |
+| `active` | optional | optional |
+| `closed` | none | not running |
 
 ```bash
 wi state show auth
 wi state set backlog auth
 ```
 
-`wi state set` changes lifecycle only. It does not start or stop an agent, create or release a worktree, or close tmux. Use it when you want that exact narrow operation.
+`wi state set` is the lifecycle plumbing. It changes lifecycle only: it does not start or stop an agent, or claim or release a worktree. A transition whose target state's requirements are not met is refused, naming what is still held, so stop the agent and release the checkout first, or use the porcelain. A closed item returns to work through the backlog. See [Plumbing and porcelain](../../reference/api/#plumbing-and-porcelain) for how each workflow command maps to plumbing.
 
 ## Composed workflow commands
 
-Most day-to-day transitions should use the safer composed commands:
+Most day-to-day transitions should use the composed commands, the porcelain:
 
-- `wi start` activates backlog work and ensures its workspace and agent.
-- `wi resume` ensures an active item's runtime without changing lifecycle or waiting.
+- `wi start` activates backlog work, claims and sets up its checkout, and starts its agent.
+- `wi resume` starts an active item's agent without changing lifecycle or waiting.
 - `wi shelve` stops using the active resources when safe and returns work to backlog. The item keeps waiting.
-- `wi close` shuts down and releases clean resources before closing with a resolution. It refuses a checkout with uncommitted changes; `--commit-changes` commits them to the item's branch after the agent stops, so reopening the item finds them.
+- `wi close` shuts down and releases clean resources before closing with a resolution. It refuses a checkout with uncommitted changes; `--commit-changes` (the web client's **Commit and close**) commits them to the item's branch after the agent stops, so reopening the item finds them.
 - `wi delete` permanently removes an already closed, fully cleaned item.
 
 If the original objective is still unfinished, reopen the closed item by ID. Use a new item for a different objective:
@@ -90,9 +98,9 @@ wi list --closed --ids
 wi reopen <item-id>
 ```
 
-Reopening retains the item's ID, branch, conversation and history, clears its resolution, and assigns a fresh active slug. Reopening is for going back to the work, so `wi reopen` then starts the item as `wi start` does, recreating its workspace and agent and resuming the conversation; it takes the same `--agent-mode`, `--model`, `--reasoning` and `--force` options. `wi reopen --backlog` only returns the item to the backlog, as the lifecycle primitive `wi state set backlog --item <item-id>` does; start it later with `wi start <active-slug>`. If starting fails, the item stays reopened in the backlog.
+Reopening retains the item's ID, branch, conversation and history, clears its resolution, and assigns a fresh active slug. Reopening is for going back to the work, so `wi reopen` then starts the item as `wi start` does, recreating its workspace and agent and resuming the conversation; it takes the same `--agent-mode`, `--model`, `--reasoning` and `--force` options (`--force` exceeds the [deep-work capacity](../../reference/configuration/#deep-work-capacity)). `wi reopen --backlog` only returns the item to the backlog, as the lifecycle primitive `wi state set backlog --item <item-id>` does; start it later with `wi start <active-slug>`. If starting fails, the item stays reopened in the backlog.
 
-These commands can report partial outcomes. If a durable transition succeeds and a later resource operation fails, `wi` retains the durable result and tells you what remains.
+The daemon runs these operations as jobs, which keep going if the command is interrupted. They can report partial outcomes: if a durable transition succeeds and a later resource operation fails, Wi retains the durable result and tells you what remains.
 
 ## Upgrading from the waiting state
 

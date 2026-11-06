@@ -1,0 +1,125 @@
+syntax = "proto3";
+
+// Package wi.core.v1 is the wi daemon API: work items, their workspaces and
+// agents, repositories, agent profiles, jobs and the change feed. Every
+// client (the CLI, the web adapter, a desktop app, other tools) uses this API
+// and only this API; none reads wi's storage or runs its adapters directly.
+//
+// Like Git, it offers two levels. Plumbing is the domain services' small
+// operations: change an item's state, claim or release a checkout, start or
+// stop an agent. Porcelain is LifecycleService: starting, shelving, closing
+// and reopening an item, each documented as the plumbing it performs, so a
+// client can recompose it differently. The daemon enforces lifecycle
+// invariants in the plumbing itself, so no order of calls leaves an unsafe
+// state.
+//
+// Conventions:
+//   - Requests name items and repositories by exact ID. Selectors such as
+//     slugs, prefixes, `HEAD` or the current directory are resolved by the
+//     client, with ItemService.ResolveItem where it needs the daemon.
+//     Client-side policy, such as default labels, label filters or a custom
+//     ranking, is applied by the client and sent explicitly.
+//   - The caller's identity travels in request metadata, not in messages:
+//     an operator (local socket peer or authenticated remote client), a web
+//     adapter acting for a browser tab, or an agent scoped to its item. The
+//     daemon checks permissions per method.
+//   - Mutations that depend on what the caller read carry expected_revision
+//     or expected_generation; a stale one fails with ABORTED, meaning re-read
+//     and retry. FAILED_PRECONDITION means the current state does not allow
+//     the operation, such as releasing a checkout while the agent runs.
+//   - Operations that can outlive a request start a Job and return it;
+//     JobService reports progress and asks approvals.
+//   - A failure after a durable step succeeded returns an error whose details
+//     carry a PartialOutcome, so the retained result stays visible.
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// ItemState is a work item's lifecycle. It describes resources only: an
+// active item may hold a checkout and an agent; a closed one holds neither.
+enum ItemState {
+  ITEM_STATE_UNSPECIFIED = 0;
+  ITEM_STATE_BACKLOG = 1;
+  ITEM_STATE_ACTIVE = 2;
+  ITEM_STATE_CLOSED = 3;
+}
+
+// Resolution is how a closed item ended.
+enum Resolution {
+  RESOLUTION_UNSPECIFIED = 0;
+  RESOLUTION_COMPLETED = 1;
+  RESOLUTION_ABANDONED = 2;
+  RESOLUTION_SUPERSEDED = 3;
+}
+
+// AgentStatus is the observed state of an item's agent. Unspecified means it
+// was not observed, for example because no agent runs.
+enum AgentStatus {
+  AGENT_STATUS_UNSPECIFIED = 0;
+  AGENT_STATUS_IDLE = 1;
+  AGENT_STATUS_BUSY = 2;
+  AGENT_STATUS_PROBLEM = 3;
+}
+
+// WorktreeStatus is the observed state of an item's checkout.
+enum WorktreeStatus {
+  WORKTREE_STATUS_UNSPECIFIED = 0;
+  WORKTREE_STATUS_ABSENT = 1;
+  WORKTREE_STATUS_CLEAN = 2;
+  WORKTREE_STATUS_CHANGED = 3;
+  WORKTREE_STATUS_PROBLEM = 4;
+}
+
+// AgentMode is how an agent runs: its native TUI in a terminal, or headless
+// with structured control.
+enum AgentMode {
+  AGENT_MODE_UNSPECIFIED = 0;
+  AGENT_MODE_TUI = 1;
+  AGENT_MODE_HEADLESS = 2;
+}
+
+// RepositoryRef names a registered repository.
+message RepositoryRef {
+  string id = 1;
+  string name = 2;
+}
+
+// PartialOutcome is attached to an error when a durable step succeeded
+// before a later one failed, such as an item created whose agent failed to
+// start. Clients show it rather than assume nothing happened.
+message PartialOutcome {
+  // item_id is the item the retained step concerns, if any.
+  string item_id = 1;
+  // completed describes the steps that succeeded, for display.
+  repeated string completed = 2;
+  repeated string warnings = 3;
+}
+
+// Approval is a question an operation needs a person to answer before it
+// continues, such as trusting a checkout's .envrc. It is bound to what it
+// asks about: an answer applies to this challenge only.
+message Approval {
+  string challenge_id = 1;
+  string question = 2;
+  // path is the file the question concerns, when there is one.
+  string path = 3;
+  // digest identifies the content approved, so a changed file asks again.
+  string digest = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+// ApprovalDecision answers an Approval.
+enum ApprovalDecision {
+  APPROVAL_DECISION_UNSPECIFIED = 0;
+  APPROVAL_DECISION_ALLOW = 1;
+  APPROVAL_DECISION_DENY = 2;
+}
+
+// Image is image content sent to or shown from an agent.
+message Image {
+  string mime_type = 1;
+  bytes data = 2;
+  string alt = 3;
+}

@@ -40,7 +40,7 @@ wi start add-api-retries
 This moves the item to `active`, materializes a managed worktree, starts the primary Pi TUI, and enters its tmux session.
 
 :::caution[Starting does not submit the description]
-`wi start` opens the agent runtime, but it does not turn `DESCRIPTION.md` into a prompt. At the Pi prompt, ask the agent to read the durable context and do the work:
+`wi start` starts the agent, but it does not turn `DESCRIPTION.md` into a prompt. At the Pi prompt, ask the agent to read the durable context and do the work:
 
 ```text
 Read this work item's context with `wi show`. Implement the task, run the relevant tests, and report what changed.
@@ -58,19 +58,19 @@ wi new --title "Add API retries" --repo project \
   --desc-file /tmp/task.md --start --agent-mode headless
 ```
 
-This creates the item, moves it to `active`, starts a headless runtime, and asks the agent to read the task with `wi show`. Pass `--prompt TEXT` to start with your own message; it implies `--start` and it does not change the description. Omit `--agent-mode headless` to start an unattached TUI runtime that you can enter later.
+This creates the item, moves it to `active`, starts a headless agent, and asks the agent to read the task with `wi show`. Pass `--prompt TEXT` to start with your own message; it implies `--start` and it does not change the description. Omit `--agent-mode headless` to start an unattached TUI agent that you can enter later.
 
 Watch the delegated item:
 
 ```bash
 wi list
 wi agent status add-api-retries
-wi agent monitor --item add-api-retries --limit 50
+wi agent monitor --content --item add-api-retries
 ```
 
-These two paths are alternatives; do not create both examples with the same slug in one walkthrough. `wi resume` never sends a startup message.
+`wi agent monitor --content` follows the agent's reply, reasoning and tool calls as they happen; interrupt it to stop watching. These two paths are alternatives; do not create both examples with the same slug in one walkthrough. `wi resume` never sends a startup message.
 
-Control delivery means the runtime accepted the prompt. It does not mean the task is complete.
+The daemon sets up the checkout and starts the agent as a job, which keeps going if you interrupt the command. Control delivery means the agent accepted the prompt. It does not mean the task is complete.
 
 ## Inspect and follow up
 
@@ -109,7 +109,7 @@ wi close add-api-retries
 
 File unrelated discoveries as separate items; do not keep adding objectives to the completed retries task.
 
-Read [Lifecycle](../../concepts/lifecycle/) before using primitive state changes for cleanup. `wi state set` changes durable state only. `shelve` and `close` coordinate cleanup.
+Read [Lifecycle](../../concepts/lifecycle/) before using primitive state changes for cleanup. `wi state set` changes durable state only, and refuses while the item still holds a checkout or a running agent. `shelve` and `close` coordinate cleanup.
 
 ## Where to go next
 

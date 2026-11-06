@@ -3,12 +3,26 @@ package github
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// Generate the same protojson contract as wi list --json, not a hand-written
+// presentation projection that can drift away from the CLI.
+func listOutput(t *testing.T, items ...*v1.ItemSummary) []byte {
+	t.Helper()
+	output, err := (protojson.MarshalOptions{UseProtoNames: true}).Marshal(&v1.ListItemsResponse{Items: items})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return output
+}
 
 func TestPullRequestsOnlyFromMetadata(t *testing.T) {
 	for _, tc := range []struct {
@@ -90,14 +104,12 @@ func TestDecideCountsPostsByOthersAndMergeOrClose(t *testing.T) {
 
 func TestSyncClearsSatisfiedBlockersAndChecksEachPullRequestOnce(t *testing.T) {
 	created := time.Date(2026, 10, 16, 10, 0, 0, 0, time.UTC)
-	listing, _ := json.Marshal(map[string]any{"sections": map[string]any{
-		"waiting": []map[string]any{
-			{"id": "item-a", "slug": "a", "blockers": []Blocker{{ID: "b1", Kind: "external", Event: "review of acme/api#42", Meta: map[string]string{MetaPR: "acme/api#42"}, CreatedAt: created}}},
-			{"id": "item-d", "slug": "d", "blockers": []Blocker{{ID: "b3", Kind: "external", Event: "https://github.com/acme/api/pull/42", CreatedAt: created}}},
-			{"id": "item-b", "slug": "b", "blockers": []Blocker{{ID: "b2", Kind: "external", Event: "PR", Meta: map[string]string{MetaPR: "acme/api#42"}, CreatedAt: created.Add(2 * time.Hour)}}},
-		},
-		"active": []map[string]any{{"id": "item-c", "slug": "c"}},
-	}})
+	listing := listOutput(t,
+		&v1.ItemSummary{Id: "item-a", Slug: "a", AttentionGroup: v1.AttentionGroup_ATTENTION_GROUP_NEEDS_ATTENTION, Blockers: []*v1.Blocker{{Id: "b1", Kind: v1.BlockerKind_BLOCKER_KIND_EXTERNAL, Event: "review of acme/api#42", Meta: map[string]string{MetaPR: "acme/api#42"}, CreatedAt: timestamppb.New(created)}}},
+		&v1.ItemSummary{Id: "item-d", Slug: "d", Blockers: []*v1.Blocker{{Id: "b3", Kind: v1.BlockerKind_BLOCKER_KIND_EXTERNAL, Event: "https://github.com/acme/api/pull/42", CreatedAt: timestamppb.New(created)}}},
+		&v1.ItemSummary{Id: "item-b", Slug: "b", Blockers: []*v1.Blocker{{Id: "b2", Kind: v1.BlockerKind_BLOCKER_KIND_EXTERNAL, Meta: map[string]string{MetaPR: "acme/api#42"}, CreatedAt: timestamppb.New(created.Add(2 * time.Hour))}}},
+		&v1.ItemSummary{Id: "item-c", Slug: "c"},
+	)
 	views, cleared := 0, []string{}
 	run := func(_ context.Context, name string, args ...string) ([]byte, error) {
 		switch {
@@ -130,7 +142,7 @@ func TestSyncDoesNotClearBlockersWithoutKnownSelfIdentity(t *testing.T) {
 		cleared := false
 		p := Plugin{Wi: "wi", Gh: "gh", Out: &out, Run: func(_ context.Context, name string, args ...string) ([]byte, error) {
 			if name == "wi" && args[1] == "list" {
-				return []byte(`{"sections":{"waiting":[{"id":"item","blockers":[{"id":"b1","kind":"external","meta":{"github.pr":"acme/api#42"}}]}]}}`), nil
+				return []byte(`{"items":[{"id":"item","blockers":[{"id":"b1","kind":"BLOCKER_KIND_EXTERNAL","meta":{"github.pr":"acme/api#42"}}]}]}`), nil
 			}
 			if name == "gh" && args[0] == "api" {
 				if failed {
@@ -158,12 +170,10 @@ func TestSkillTeachesWaitingOnAPullRequest(t *testing.T) {
 }
 
 func TestSyncSkipsGitHubWhenNothingInScopeWaitsOnAPullRequest(t *testing.T) {
-	listing, _ := json.Marshal(map[string]any{"sections": map[string]any{
-		"waiting": []map[string]any{
-			{"id": "item-a", "slug": "a", "repository_id": "repo-1", "blockers": []Blocker{{ID: "b1", Kind: "external", Event: "security review"}}},
-			{"id": "item-b", "slug": "b", "repository_id": "repo-2", "blockers": []Blocker{{ID: "b2", Kind: "external", Event: "PR", Meta: map[string]string{MetaPR: "acme/api#42"}}}},
-		},
-	}})
+	listing := listOutput(t,
+		&v1.ItemSummary{Id: "item-a", Slug: "a", RepositoryId: "repo-1", Blockers: []*v1.Blocker{{Id: "b1", Kind: v1.BlockerKind_BLOCKER_KIND_EXTERNAL, Event: "security review"}}},
+		&v1.ItemSummary{Id: "item-b", Slug: "b", RepositoryId: "repo-2", Blockers: []*v1.Blocker{{Id: "b2", Kind: v1.BlockerKind_BLOCKER_KIND_EXTERNAL, Meta: map[string]string{MetaPR: "acme/api#42"}}}},
+	)
 	run := func(_ context.Context, name string, args ...string) ([]byte, error) {
 		if name == "wi" && args[1] == "list" {
 			return listing, nil

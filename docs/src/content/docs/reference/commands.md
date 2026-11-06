@@ -5,20 +5,15 @@ description: Find the wi command that owns each operation.
 
 Run `wi help <command>` or `wi <command> --help` for complete options, safety notes, environment variables, and examples.
 
+Every command except `wi daemon start|stop`, `wi help` and plugin commands is a client of the daemon's [API](../api/): it resolves the item you name, makes one or a few calls, and renders the answer. Operations run in the daemon, and those that take a while run as daemon jobs the command follows; interrupting the command does not stop them.
+
 ## Common recipes
 
 Each item is one bounded task. `wi new` requires `--title TEXT` or `--untitled`. The latter uses an editable `Untitled task` title and an ID-derived slug. `--slug` overrides the default in either case. Outside a current item, select a registered `--repo NAME`.
 
-`new --start` creates and delegates; existing-item `start` opens a runtime without submitting a message. `resume` never sends a prompt. See the [Quick start](../../getting-started/quick-start/), [Delegation](../../guides/delegation/), and [Review workflow](../../guides/review-and-follow-up/) for examples.
+`new --start` creates and delegates; existing-item `start` starts the agent without submitting a message. `resume` never sends a prompt. See the [Quick start](../../getting-started/quick-start/), [Delegation](../../guides/delegation/), and [Review workflow](../../guides/review-and-follow-up/) for examples.
 
 Finish and close items rather than continually expanding them. Merge, close, and push are separate decisions.
-
-## Initial setup
-
-| Command | Purpose |
-| --- | --- |
-
-Setup refuses to overwrite an existing config and does not start agents or the coordinator. A missing default profile is a configuration error; run setup before repository or item commands.
 
 ## Configuration queries
 
@@ -30,7 +25,7 @@ Setup refuses to overwrite an existing config and does not start agents or the c
 | `wi config plugins` | Inspect registered plugin options, defaults, types, and scopes |
 | `wi config get KEY [--origins]` | Inspect a global value and optional extension-default provenance |
 
-These commands are read-only and do not start a daemon, agent, or extension, load checked-in project overrides, or discover installations. Config queries are local. Repository policy is managed separately through `wi repo settings`. Opaque driver settings, custom commands, and sensitive extension values are redacted unless `--show-sensitive` is supplied. See [Configuration](../configuration/) for examples.
+These commands are read-only. They show the daemon's effective configuration, as it read `config.toml` when it started (`SystemService.GetConfig`), and do not start an agent or extension, load checked-in project overrides, or discover installations. After editing `config.toml`, restart the daemon for its settings to apply. Repository policy is managed separately through `wi repo settings`. Opaque driver settings, custom commands, and sensitive extension values are redacted unless `--show-sensitive` is supplied. See [Configuration](../configuration/) for examples.
 
 ## Provider usage
 
@@ -38,7 +33,7 @@ These commands are read-only and do not start a daemon, agent, or extension, loa
 | --- | --- |
 | `wi usage [show] [--provider anthropic\|openai\|opencode-go] [--account ID] [--refresh] [--json]` | Show remaining subscription quota and reset times without model prompts or credential extraction |
 
-`wi usage` is the bundled usage plugin; enable it with `[plugins.usage] enabled = true`. Default text shows each subscription's quota periods with remaining-capacity bars and reset countdowns; `--json` gives the machine-readable export. Discovery uses installed Claude Code, Codex, and OpenCode clients, not Pi credentials. The aliases `claude`, `codex`, and `opencode` are also accepted. See [Provider usage](../provider-usage/).
+`wi usage` is the bundled usage plugin; enable it with `[plugins.usage] enabled = true`. It runs on the client, not in the daemon, and is not part of the API. Default text shows each subscription's quota periods with remaining-capacity bars and reset countdowns; `--json` gives the machine-readable export. Discovery uses installed Claude Code, Codex, and OpenCode clients, not Pi credentials. The aliases `claude`, `codex`, and `opencode` are also accepted. See [Provider usage](../provider-usage/).
 
 ## Repositories
 
@@ -65,19 +60,17 @@ Single-repository commands default to the current item's registered repository w
 
 ## List JSON
 
-`wi list --json` returns an object with `deep_work`, `sections`, `warnings`, and `display_sections`. It is not a top-level array. Existing `sections` remain keyed by lifecycle: `working`, `waiting`, `backlog`, and optionally `archived`. Full IDs, slugs, and titles are available there regardless of text truncation.
-
-`display_sections` adds the text display grouping and ordering without duplicating items. Each entry contains `key`, `title`, and an ordered `item_ids` array referencing items in `sections`. With agent observations, keys include `needs_attention`, `needs_fixing`, `in_progress`, `waiting`, and `backlog`. Without observations, including `--no-agent`, grouping follows lifecycle. Archived visibility follows `--archived` and `--all`. Empty display groups have empty ID arrays; text omits their headings.
+`wi list --json` prints the `ItemService.ListItems` response: an object whose `items` array holds the listed items in the daemon's attention order, and `warnings`. It is not a top-level array. Each item has its full `id`, `slug`, `title`, `state` (such as `ITEM_STATE_ACTIVE`), `labels`, `repository_id`, `blockers`, ranking knobs, `observation` (agent and worktree status, `unread`, `needs_attention`, `activity`) and `attention_group`, regardless of text truncation. Fields at their default value are omitted.
 
 ```bash
-# All visible items, using stable IDs instead of truncated text selectors.
-wi list --json | jq -r '.sections[][]? | [.id, .slug, .title] | @tsv'
+# All listed items, using stable IDs instead of truncated text selectors.
+wi list --json | jq -r '.items[] | [.id, .slug, .title] | @tsv'
 
-# Items in the same NEEDS ATTENTION group and order as the text listing.
-wi list --json | jq -r '.display_sections[] | select(.key == "needs_attention") | .item_ids[]'
+# Items in the NEEDS ATTENTION group, in ranking order.
+wi list --json | jq -r '.items[] | select(.attention_group == "ATTENTION_GROUP_NEEDS_ATTENTION") | .id'
 ```
 
-Use a JSON parser rather than matching serialized whitespace. A working lifecycle item can appear in NEEDS ATTENTION, NEEDS FIXING, or IN PROGRESS without changing its lifecycle state.
+Use a JSON parser rather than matching serialized whitespace. An active item can be in any of the needs-attention, working or waiting groups without changing its lifecycle state.
 
 ## Durable items
 
@@ -110,7 +103,7 @@ Titles are non-empty single-line UTF-8, at most 512 bytes. Descriptions are UTF-
 
 All requested metadata changes are validated and committed together. Wi refuses stale item revisions or description digests instead of overwriting concurrent edits. Description bytes stay on disk, staged for durable recovery; the database contains only hashes. If native materialization fails after commit, Wi explicitly reports the retained edit and pending description rather than claiming rollback. Do not discard the staged file: reconcile the canonical description with either its expected old content or the committed staged content, then the daemon can finish recovery. Unrelated items remain usable.
 
-Editing does not change lifecycle, slug, branch, checkout, conversation, or runtime, and sends no prompt. Use `wi show` to read metadata and description. JSON returns `work_item_id`, `changed`, `title`, `labels`, `deep_work`, `description_changed`, and `manifest`. No-op edits report `changed: false` without adding an event.
+Editing does not change lifecycle, slug, branch, checkout, conversation, or agent, and sends no prompt. Use `wi show` to read metadata and description. JSON prints the `UpdateItemResponse`: the updated `item`, with its new `revision`. The command sends the revision it read as `expected_revision`, so an edit made in between fails instead of being overwritten. No-op edits leave the item unchanged without adding an event.
 
 ### Notes and attachments
 
@@ -150,9 +143,9 @@ The former title, label, and deep metadata commands have been removed; there are
 
 | Command | Purpose |
 | --- | --- |
-| `wi agent runtime status\|ensure\|stop` | Manage the exclusive runtime owner |
-| `wi agent status` | Inspect derived agent and worktree observations |
-| `wi agent monitor` | Read normalized runtime events; `--content` follows live message text, tool calls and activity |
+| `wi agent runtime status\|ensure\|stop\|restart` | Inspect, start (in a mode), stop, or restart the item's agent |
+| `wi agent status` | Inspect the agent: online, mode, status, capabilities, generation, terminal and control |
+| `wi agent monitor --content` | Follow live message text, reasoning, tool calls and activity |
 | `wi agent settings [show]` | Show an item's model and reasoning level and the available models |
 | `wi agent settings set [--restart] NAME=VALUE...` | Change them for the item, live where the running agent supports it |
 | `wi agent profile list` | List agent profiles and the default |
@@ -185,7 +178,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | Command | Purpose |
 | --- | --- |
 | `wi start` | Activate an existing backlog item by active slug; `--skip-setup` starts the agent without setting up a new checkout |
-| `wi resume` | Ensure an active item's agent runtime |
+| `wi resume` | Start an active item's agent |
 | `wi wait` | Wait for a time, another item, or something external; `--clear` stops waiting |
 | `wi blocker` | Add, list, or clear individual typed blockers with metadata |
 | `wi plugin` | List configured plugins or run one once |
@@ -193,7 +186,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi close` | Clean up safely and retain history with a resolution |
 | `wi reopen` | Return a closed item to work and start it; `--backlog` only returns it to the backlog |
 | `wi delete` | Permanently remove cleaned closed task records |
-| `wi shutdown` | Stop runtimes, terminals, and the daemon |
+| `wi shutdown` | Stop agents, terminals, and the daemon |
 | `wi merge [--local]` | Synchronize a configured upstream base, then integrate the item; `--local` skips remote preflight |
 
 `wi close` retains the record and its resolution. For unfinished work closed by mistake, run `wi reopen <item-id>`; see [restoration](../../concepts/lifecycle/#composed-workflow-commands). File a new objective as a new item.
@@ -203,7 +196,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | Command | Purpose |
 | --- | --- |
 | `wi daemon start\|status\|doctor\|stop` | Diagnose or control the local daemon |
-| `wi info` | Print resolved paths |
+| `wi info [data-root\|operator-socket]` | Print the daemon's information, or one path |
 | `wi version` | Print build identity |
 
 ## Global JSON output
@@ -215,4 +208,16 @@ wi --json list
 wi list --json
 ```
 
-Terminal-entering commands do not attach in JSON mode.
+JSON output is the API's: the response message of the call the command makes, printed as protobuf JSON with proto field names (`next_page_token`, not `nextPageToken`), enum values by name, and RFC 3339 timestamps. Its shape is defined by the [protos](../api/) rather than by each command. A command that waits for a job prints the response with the finished job, after re-reading the state it changed. Terminal-entering commands do not attach in JSON mode.
+
+## Exit codes
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Success |
+| 1 | Error, including a refused operation (`FAILED_PRECONDITION`) or a stale read (`ABORTED`) |
+| 2 | Usage error or invalid request (`INVALID_ARGUMENT`) |
+| 3 | Not found (`NOT_FOUND`), or an unknown configuration key |
+| 4 | Ambiguous selector |
+
+When an operation fails after a durable step, the command reports the retained item and steps on standard error before exiting.

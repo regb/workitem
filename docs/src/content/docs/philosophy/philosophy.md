@@ -19,4 +19,4 @@ Lifecycle records human intent. Agent status records activity. Worktree status r
 
 ## Local control
 
-Wi has no required hosted control service. Data stays local unless the chosen agent or Git workflow sends it elsewhere. Agents can act on tasks and file constrained follow-ups; cleanup and destructive operations remain under explicit user control.
+Wi has no required hosted control service. One local daemon owns the work and runs every operation; the command line, the browser client and other tools all go through the same API, so none of them holds state of its own. Data stays local unless the chosen agent or Git workflow sends it elsewhere. Agents can act on tasks and file constrained follow-ups; cleanup and destructive operations remain under explicit user control.

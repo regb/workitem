@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,19 +10,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"time"
 
-	"github.com/regb/workitem/internal/agent"
-	"github.com/regb/workitem/internal/app"
+	"connectrpc.com/connect"
+	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/git"
+	"github.com/regb/workitem/internal/daemonapp"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/plugin"
 	"github.com/regb/workitem/internal/plugins/bundled"
 	"github.com/regb/workitem/internal/store"
-	"github.com/regb/workitem/internal/tmux"
 	"github.com/regb/workitem/internal/xdg"
 )
 
@@ -36,31 +34,35 @@ const (
 )
 
 type Config struct {
-	RequireOwnedRepository bool
-	Stdout                 io.Writer
-	Stderr                 io.Writer
-	Stdin                  io.Reader
-	CWD                    string
-	Env                    map[string]string
-	StateRoot              string
-	App                    *app.App
-	Coordinator            *coordinator.Client
-	GlobalConfig           *config.Config
-	ControlAccess          string
-	Plugins                *plugin.Host
+	Stdout    io.Writer
+	Stderr    io.Writer
+	Stdin     io.Reader
+	CWD       string
+	Env       map[string]string
+	StateRoot string
+	Paths     xdg.Paths
+	// Testable client-side terminal detection and attachment, never daemon use cases.
+	Interactive   func() bool
+	RunTerminal   func(context.Context, []string) error
+	API           *apitransport.Clients
+	SocketPath    string
+	GlobalConfig  *config.Config
+	ControlAccess string
+	Plugins       *plugin.Host
 }
 
 func Main(ctx context.Context, args []string) int {
 	env := environMap(os.Environ())
+	// The picker's formatting callback reads only its frozen snapshot; it
+	// must not contact or start the daemon.
 	if len(args) > 0 && args[0] == "internal-picker-render" {
 		return runPickerRender(args[1:], env, os.Stdout, os.Stderr)
 	}
 	filtered, jsonOut := extractGlobals(args)
-	_, helpRequested := requestedHelpTopic(filtered)
-	if len(filtered) == 0 || filtered[0] == "help" || helpRequested {
+	if len(filtered) == 0 || filtered[0] == "help" {
 		return Run(ctx, args, Config{Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, Env: env})
 	}
-	if versionCommandRequested(args) {
+	if _, help := requestedHelpTopic(filtered); help {
 		return Run(ctx, args, Config{Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, Env: env})
 	}
 	paths, err := xdg.FromEnv()
@@ -68,369 +70,143 @@ func Main(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return ExitError
 	}
-	if filtered[0] == "config" {
-		return runConfigMain(filtered[1:], paths.ConfigFile, os.Stdout, os.Stderr, jsonOut)
-	}
-	if filtered[0] == "init" {
-		fmt.Fprintln(os.Stderr, "wi init is gone: wi needs no configuration file, and the first command adds a profile for each coding agent it finds installed (see wi agent profile list)")
-		return ExitUsage
-	}
-	if infoCommandRequested(args) {
-		filtered, jsonOut := extractGlobals(args)
-		return runInfoMain(filtered[1:], paths, os.Stdout, os.Stderr, jsonOut)
-	}
-	if daemonCommandRequested(args) {
-		filtered, jsonOut := extractGlobals(args)
+	if filtered[0] == "daemon" {
 		return runDaemonMain(ctx, filtered[1:], paths, os.Stdout, os.Stderr, jsonOut)
 	}
 	self, _ := os.Executable()
-	cfgFile, pluginHost, warnings, err := bundled.Load(paths.ConfigFile, self)
+	cfgFile, host, warnings, err := bundled.Load(paths.ConfigFile, self)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "%s: %v\n", paths.ConfigFile, err)
-		return ExitError
-	}
-	for _, warning := range warnings {
-		fmt.Fprintf(os.Stderr, "warning: config: %s\n", warning)
-	}
-	st := store.New(paths.DataRoot)
-	if err := st.Ensure(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return ExitError
 	}
-	application := app.New(st, git.New("git"))
-	application.DeepWorkConfig = cfgFile.DeepWork
-	application.ItemConfig = cfgFile.Item
-	application.ListConfig = cfgFile.List
-	application.RepoConfig = cfgFile.Repo
-	application.AgentConfig = cfgFile.Agent
-	application.AgentStatusConfig = cfgFile.AgentStatus
-	application.AttentionConfig = cfgFile.Attention
-	application.DriversConfig = cfgFile.Drivers
-	application.Plugins = pluginHost
-	terminalApprovals.Store(!jsonOut && inputIsTerminal(os.Stdin))
-	approve := func(ctx context.Context, request plugin.Approval) (bool, error) {
-		if approve := plugin.ContextApprover(ctx); approve != nil {
-			return approve(ctx, request)
-		}
-		if !terminalApprovals.Load() {
-			return false, nil
-		}
-		return promptExtensionApproval(os.Stdin, os.Stderr, request)
-	}
-	mux := tmux.New("tmux")
-	application.Tmux = mux
-	if self, err := os.Executable(); err == nil {
-		application.SelfPath = self
-		for _, driver := range []string{"pi", "claude"} {
-			application.BundledDriverCommands[driver] = app.BundledDriverCommand{Path: self, Args: []string{"internal-driver", driver}}
-		}
-	}
-	for driverName, client := range configuredDriverClients(cfgFile, application.SelfPath, env) {
-		application.ConversationBackends[driverName] = client
+	for _, warning := range warnings {
+		fmt.Fprintln(os.Stderr, "warning:", warning)
 	}
 	cwd, _ := os.Getwd()
-	application.AgentRuntimeStateRoot = paths.DataStateRoot
-	application.AgentRuntimeSocketRoot = paths.DataRuntimeRoot
-	runConfig := Config{RequireOwnedRepository: true, Stdout: os.Stdout, Stderr: os.Stderr, Stdin: os.Stdin, CWD: cwd, Env: env, StateRoot: paths.DataStateRoot, App: application, GlobalConfig: &cfgFile, Plugins: pluginHost}
-	defaultSocketPath, err := coordinator.SocketPath(paths.RuntimeDir, paths.DataRoot)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "daemon is required for this command: %s\n", err)
-		return ExitError
-	}
-	agentSocketPath := strings.TrimSpace(env["WI_AGENT_DAEMON_SOCKET"])
-	if agentSocketPath != "" && !filepath.IsAbs(agentSocketPath) {
-		fmt.Fprintln(os.Stderr, "WI_AGENT_DAEMON_SOCKET must be an absolute path")
-		return ExitError
-	}
-	socketPath := defaultSocketPath
-	if agentSocketPath != "" {
-		socketPath = agentSocketPath
-	}
-	client := &coordinator.Client{SocketPath: socketPath}
-	probeCtx, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
-	status, probeErr := client.Status(probeCtx)
-	cancel()
-	if probeErr == nil {
-		if agentSocketPath != "" && status.Access != coordinator.AccessAgent {
-			fmt.Fprintln(os.Stderr, "WI_AGENT_DAEMON_SOCKET does not identify a restricted agent endpoint")
-			return ExitError
+	if len(filtered) > 1 && filtered[0] == "agent" && filtered[1] == "exec" {
+		socket := coordinator.InternalSocketPath(mustOperatorSocket(paths))
+		if value := env["WI_DAEMON_SOCKET"]; value != "" {
+			socket = value
 		}
-		runConfig.Coordinator = client
-		runConfig.ControlAccess = status.Access
-	} else if agentSocketPath == "" {
-		status, _, startErr := ensureDaemonRunning(ctx, paths, socketPath, cfgFile.Daemon.Managed)
-		if startErr != nil {
-			fmt.Fprintf(os.Stderr, "daemon is required for this command: %s\n", startErr)
-			return ExitError
-		}
-		runConfig.Coordinator = client
-		runConfig.ControlAccess = status.Access
-	} else {
-		fmt.Fprintf(os.Stderr, "configured agent endpoint is unavailable: %s\n", probeErr)
-		return ExitError
-	}
-	BindCoordinatorApp(application, st, runConfig.Coordinator)
-	application.LoadAgentProfiles = client.AgentProfiles
-	if runConfig.ControlAccess != coordinator.AccessAgent {
-		discoverers := map[string]configDiscoverer{}
-		for name, driver := range configuredDriverClients(cfgFile, application.SelfPath, env) {
-			discoverers[name] = driver
-		}
-		if err := seedAgentProfiles(ctx, client, discoverers, os.Stderr); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: agent profiles: %v\n", err)
-		}
-	}
-	application.RepositoryEnvironment = func(ctx context.Context, id string) ([]model.EnvVar, error) {
-		result, err := client.RepositoryEnvironment(ctx, id)
-		return result.Environment.Vars, err
-	}
-	pluginHost.ReadRepository = func(ctx context.Context, id string) (model.RepositorySettings, error) {
-		result, err := client.RepositorySettings(ctx, id)
-		return result.Settings, err
-	}
-	pluginHost.ListRepositories = func(ctx context.Context) ([]string, error) {
-		repos, err := client.ListRepositories(ctx)
-		ids := []string{}
-		for _, repo := range repos {
-			ids = append(ids, repo.ID)
-		}
-		return ids, err
-	}
-	application.Preparation = pluginHost.Preparation(approve)
-	if commandUsesCLIProjectEnvironment(args) {
-		repositoryID, boundary := "", ""
-		if current, findErr := application.Store.FindByWorktree(cwd); findErr == nil {
-			repositoryID = current.Repository.ID
-			if current.Checkout.Claim != nil {
-				boundary = current.Checkout.Claim.Path
-			}
-		}
-		var projectWarnings []string
-		env, projectWarnings, err = loadCLIProjectEnvironment(ctx, application.Preparation, cwd, boundary, repositoryID, env)
-		for _, warning := range projectWarnings {
-			fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
-		}
+		err := daemonapp.ExecHost(ctx, filtered[2:], &coordinator.Client{SocketPath: socket}, paths, cfgFile, host, self, env)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return ExitError
 		}
-		runConfig.Env = env
-	}
-	if runConfig.ControlAccess == coordinator.AccessAgent {
-		// The restricted agent endpoint cannot read or take control leases.
-		application.Leases = nil
-	}
-	return Run(ctx, args, runConfig)
-}
-
-func Run(ctx context.Context, args []string, cfg Config) int {
-	if cfg.Coordinator == nil && cfg.App != nil && strings.TrimSpace(cfg.App.DaemonSocketPath) != "" {
-		cfg.Coordinator = &coordinator.Client{SocketPath: cfg.App.DaemonSocketPath}
-		if native, ok := cfg.App.Store.(*store.Store); ok {
-			BindCoordinatorApp(cfg.App, native, cfg.Coordinator)
-		}
-	}
-	if cfg.Stdout == nil {
-		cfg.Stdout = io.Discard
-	}
-	if cfg.Stderr == nil {
-		cfg.Stderr = io.Discard
-	}
-	if cfg.Stdin == nil {
-		cfg.Stdin = strings.NewReader("")
-	}
-	if cfg.Env == nil {
-		cfg.Env = map[string]string{}
-	}
-	args, jsonOut := extractGlobals(args)
-	if len(args) == 0 {
-		printUsage(cfg.Stdout)
 		return ExitOK
 	}
-	if args[0] == "help" {
-		topic := strings.Join(args[1:], " ")
-		if !printHelp(cfg.Stdout, topic) {
-			fmt.Fprintf(cfg.Stderr, "unknown help topic %q\n", topic)
-			return ExitUsage
-		}
-		return ExitOK
-	}
-	if topic, requested := requestedHelpTopic(args); requested {
-		if !printHelp(cfg.Stdout, topic) {
-			fmt.Fprintf(cfg.Stderr, "unknown help topic %q\n", topic)
-			return ExitUsage
-		}
-		return ExitOK
-	}
-	if args[0] == "version" {
-		if err := runVersion(args[1:], cfg, jsonOut); err != nil {
-			fmt.Fprintln(cfg.Stderr, err)
-			return exitCode(err)
-		}
-		return ExitOK
-	}
-	if cfg.App == nil {
-		fmt.Fprintln(cfg.Stderr, "internal error: app is not configured")
+	socket, err := coordinator.SocketPath(paths.RuntimeDir, paths.DataRoot)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return ExitError
 	}
-
-	cmd := args[0]
-	var err error
-	switch cmd {
-	case "repo":
-		err = runRepository(ctx, args[1:], cfg, jsonOut)
-	case "new":
-		err = runNew(ctx, args[1:], cfg, jsonOut)
-	case "list":
-		err = runList(ctx, args[1:], cfg, jsonOut)
-	case "show":
-		err = runShow(ctx, args[1:], cfg, jsonOut)
-	case "events":
-		err = runEvents(ctx, args[1:], cfg, jsonOut)
-	case "merge":
-		err = runMerge(ctx, args[1:], cfg, jsonOut)
-	case "state":
-		err = runState(ctx, args[1:], cfg, jsonOut)
-	case "attention":
-		err = runAttention(ctx, args[1:], cfg, jsonOut)
-	case "workspace":
-		err = runWorkspace(ctx, args[1:], cfg, jsonOut)
-	case "terminal":
-		err = runTerminal(ctx, args[1:], cfg, jsonOut)
-	case "start":
-		err = runStart(ctx, args[1:], cfg, jsonOut)
-	case "switch":
-		err = runSwitch(ctx, args[1:], cfg, jsonOut)
-	case "next":
-		err = runNext(ctx, args[1:], cfg, jsonOut)
-	case "resume":
-		err = runResume(ctx, args[1:], cfg, jsonOut)
-	case "shelve":
-		err = runShelve(ctx, args[1:], cfg, jsonOut)
-	case "close":
-		err = runClose(ctx, args[1:], cfg, jsonOut)
-	case "reopen":
-		err = runReopen(ctx, args[1:], cfg, jsonOut)
-	case "wait":
-		err = runWait(ctx, args[1:], cfg, jsonOut)
-	case "pick":
-		err = runPick(ctx, args[1:], cfg, jsonOut)
-	case "blocker":
-		err = runBlocker(ctx, args[1:], cfg, jsonOut)
-	case "plugin":
-		err = runPlugin(ctx, args[1:], cfg, jsonOut)
-	case "delete":
-		err = runDelete(ctx, args[1:], cfg, jsonOut)
-	case "shutdown":
-		err = runShutdown(ctx, args[1:], cfg, jsonOut)
-	case "edit":
-		err = runEdit(ctx, args[1:], cfg, jsonOut)
-	case "note":
-		err = runNote(ctx, args[1:], cfg, jsonOut)
-	case "notes":
-		err = runNotes(ctx, args[1:], cfg, jsonOut)
-	case "search":
-		err = runSearch(ctx, args[1:], cfg, jsonOut)
-	case "attach":
-		err = runAttach(ctx, args[1:], cfg, jsonOut)
-	case "attachments":
-		err = runAttachments(ctx, args[1:], cfg, jsonOut)
-	case "attachment":
-		err = runAttachment(ctx, args[1:], cfg, jsonOut)
-	case "agent":
-		err = runAgent(ctx, args[1:], cfg, jsonOut)
-	default:
-		// Enabled plugins provide their own subcommands, like git's git-<name>
-		// extensions; they can never shadow a built-in command.
-		if code, ok := runPluginCommand(ctx, cmd, args[1:], cfg, jsonOut); ok {
-			return code
+	agentSocket := strings.TrimSpace(env["WI_AGENT_DAEMON_SOCKET"])
+	if agentSocket != "" {
+		if !filepath.IsAbs(agentSocket) {
+			fmt.Fprintln(os.Stderr, "WI_AGENT_DAEMON_SOCKET must be absolute")
+			return ExitError
 		}
-		fmt.Fprintf(cfg.Stderr, "unknown command %q\n", cmd)
-		return ExitUsage
+		socket = agentSocket
 	}
+	clients, err := apitransport.NewClients(socket)
 	if err != nil {
-		fmt.Fprintln(cfg.Stderr, err)
-		return exitCode(err)
+		fmt.Fprintln(os.Stderr, err)
+		return ExitError
 	}
-	return ExitOK
-}
-
-func effectiveListLabelRules(configRules []string, env map[string]string, cliRules []string) (map[string]bool, error) {
-	rules := map[string]bool{}
-	if err := applyListLabelRules(rules, configRules, "config"); err != nil {
-		return nil, err
+	defer clients.Close()
+	probe, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
+	info, probeErr := clients.System.GetInfo(probe, connect.NewRequest(&v1.GetInfoRequest{}))
+	cancel()
+	if probeErr != nil && agentSocket == "" {
+		if _, _, err := ensureDaemonRunning(ctx, paths, socket, cfgFile.Daemon.Managed); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return ExitError
+		}
+		info, probeErr = clients.System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{}))
 	}
-	if raw, ok := env["WI_LIST_LABELS"]; ok {
-		if err := applyListLabelRules(rules, []string{raw}, "WI_LIST_LABELS"); err != nil {
+	if probeErr != nil {
+		fmt.Fprintln(os.Stderr, "daemon API is unavailable:", probeErr)
+		return ExitError
+	}
+	access := callerAccess(info.Msg.Caller)
+	if agentSocket != "" && access != "agent" {
+		fmt.Fprintln(os.Stderr, "configured agent socket is not a restricted endpoint")
+		return ExitError
+	}
+	if !strings.HasPrefix(info.Msg.ApiVersion, "1.") {
+		fmt.Fprintln(os.Stderr, "unsupported daemon API version:", info.Msg.ApiVersion)
+		return ExitError
+	}
+	host.ReadRepository = func(ctx context.Context, id string) (model.RepositorySettings, error) {
+		value, err := clients.Repositories.GetRepositorySettings(ctx, connect.NewRequest(&v1.GetRepositorySettingsRequest{RepositoryId: id, ShowSensitive: true}))
+		if err != nil {
+			return model.RepositorySettings{}, err
+		}
+		out := model.RepositorySettings{RepositoryID: id, Revision: uint64(value.Msg.Revision), Namespaces: map[string]map[string]json.RawMessage{}}
+		for _, setting := range value.Msg.Settings {
+			parts := strings.Split(setting.Key, ".")
+			if len(parts) != 3 {
+				continue
+			}
+			namespace := parts[0] + "." + parts[1]
+			if out.Namespaces[namespace] == nil {
+				out.Namespaces[namespace] = map[string]json.RawMessage{}
+			}
+			raw, _ := json.Marshal(cliSettingAny(setting.Effective))
+			out.Namespaces[namespace][parts[2]] = raw
+		}
+		return out, nil
+	}
+	host.ListRepositories = func(ctx context.Context) ([]string, error) {
+		value, err := clients.Repositories.ListRepositories(ctx, connect.NewRequest(&v1.ListRepositoriesRequest{}))
+		if err != nil {
 			return nil, err
 		}
-	}
-	if err := applyListLabelRules(rules, cliRules, "--label"); err != nil {
-		return nil, err
-	}
-	return rules, nil
-}
-
-func applyListLabelRules(effective map[string]bool, values []string, source string) error {
-	for _, value := range values {
-		for _, token := range strings.Split(value, ",") {
-			token = strings.TrimSpace(token)
-			if token == "" {
-				continue
-			}
-			if token == "!" {
-				clear(effective)
-				continue
-			}
-			include := true
-			if token[0] == '+' || token[0] == '-' {
-				include = token[0] != '-'
-				token = strings.TrimSpace(token[1:])
-			}
-			label, err := model.NormalizeLabel(token)
-			if err != nil {
-				return fmt.Errorf("invalid %s label rule %q: %w", source, token, err)
-			}
-			effective[label] = include
+		ids := []string{}
+		for _, repo := range value.Msg.Repositories {
+			ids = append(ids, repo.Id)
 		}
+		return ids, nil
+	}
+	return Run(ctx, args, Config{Paths: paths, API: clients, SocketPath: socket, CWD: cwd, Env: env, StateRoot: paths.DataStateRoot, GlobalConfig: &cfgFile, Plugins: host, ControlAccess: access, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
+}
+func callerAccess(caller *v1.Caller) string {
+	if caller == nil {
+		return ""
+	}
+	switch caller.Access {
+	case v1.CallerAccess_CALLER_ACCESS_OPERATOR:
+		return coordinator.AccessOperator
+	case v1.CallerAccess_CALLER_ACCESS_AGENT:
+		return coordinator.AccessAgent
+	}
+	return ""
+}
+func mustOperatorSocket(paths xdg.Paths) string {
+	value, _ := coordinator.SocketPath(paths.RuntimeDir, paths.DataRoot)
+	return value
+}
+func cliSettingAny(value *v1.SettingValue) any {
+	if value == nil {
+		return nil
+	}
+	switch v := value.Value.(type) {
+	case *v1.SettingValue_StringValue:
+		return v.StringValue
+	case *v1.SettingValue_BoolValue:
+		return v.BoolValue
+	case *v1.SettingValue_IntValue:
+		return v.IntValue
+	case *v1.SettingValue_ListValue:
+		// Protobuf decodes an empty repeated field as a nil slice. Preserve
+		// the list's type so JSON round trips emit [] rather than null.
+		values := []string{}
+		if v.ListValue != nil {
+			values = append(values, v.ListValue.Values...)
+		}
+		return values
 	}
 	return nil
-}
-
-func printTransition(w io.Writer, res app.StateTransitionResult) {
-	if res.Changed {
-		fmt.Fprintf(w, "%s: %s -> %s\n", res.WorkItemID, res.PreviousState, res.State)
-	} else {
-		fmt.Fprintf(w, "%s: already %s\n", res.WorkItemID, res.State)
-	}
-	for _, warning := range res.Warnings {
-		fmt.Fprintf(w, "warning: %s\n", warning)
-	}
-}
-
-func runAgentExec(ctx context.Context, args []string, cfg Config) error {
-	fs := newFlagSet("agent exec", cfg.Stderr)
-	var itemID, conversationID, runtimeID, modeValue string
-	fs.StringVar(&itemID, "item", "", "work-item ID")
-	fs.StringVar(&conversationID, "conversation", "", "primary conversation ID")
-	fs.StringVar(&runtimeID, "runtime", "", "agent runtime ID")
-	fs.StringVar(&modeValue, "mode", "", "agent runtime mode")
-	if err := fs.Parse(args); err != nil {
-		return usageErr{err}
-	}
-	if itemID == "" || conversationID == "" || runtimeID == "" || modeValue == "" {
-		return usageErr{errors.New("usage: wi agent exec --item <id> --conversation <conversation-id> --runtime <runtime-id> --mode <tui|headless>")}
-	}
-	mode, err := agent.ParseMode(modeValue)
-	if err != nil {
-		return usageErr{err}
-	}
-	return cfg.App.AgentExec(ctx, itemID, conversationID, runtimeID, mode)
-}
-
-func versionCommandRequested(args []string) bool {
-	filtered, _ := extractGlobals(args)
-	return len(filtered) > 0 && filtered[0] == "version"
 }
 
 func extractGlobals(args []string) ([]string, bool) {
@@ -484,16 +260,6 @@ func (r *repeatFlag) Set(s string) error {
 	return nil
 }
 
-type newWorkItemCLIResult struct {
-	WorkItemID      string          `json:"work_item_id"`
-	ChangedArtifact string          `json:"changed_artifact"`
-	State           string          `json:"state"`
-	ItemDir         string          `json:"item_dir,omitempty"`
-	Warnings        []string        `json:"warnings"`
-	Manifest        *model.Manifest `json:"manifest,omitempty"`
-	Checkout        *model.Checkout `json:"checkout,omitempty"`
-}
-
 func writeJSON(w io.Writer, v any) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -523,32 +289,6 @@ func exitCode(err error) int {
 		return ExitUsage
 	}
 	return ExitError
-}
-
-// terminalApprovals allows approval prompts on this process's terminal. A
-// server such as wi web turns it off: nobody answers its terminal.
-var terminalApprovals atomic.Bool
-
-func inputIsTerminal(input *os.File) bool {
-	if input == nil {
-		return false
-	}
-	info, err := input.Stat()
-	return err == nil && info.Mode()&os.ModeCharDevice != 0
-}
-
-func promptExtensionApproval(input io.Reader, output io.Writer, request plugin.Approval) (bool, error) {
-	fmt.Fprintf(output, "%s\nPath: %s\nItem: %s [y/N] ", request.Question, request.Path, request.ItemID)
-	line, err := bufio.NewReader(input).ReadString('\n')
-	if err != nil && !errors.Is(err, io.EOF) {
-		return false, err
-	}
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-		return true, nil
-	default:
-		return false, nil
-	}
 }
 
 func environMap(environ []string) map[string]string {

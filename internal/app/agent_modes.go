@@ -69,9 +69,12 @@ func (a *App) AgentRuntimeModes(ctx context.Context, name string) driverprotocol
 func controlMode(modes driverprotocol.RuntimeModes, holder string) (agent.Mode, bool) {
 	want := func(c driverprotocol.ModeCapabilities) bool { return c.Control == driverprotocol.ControlStructured }
 	preferred := driverprotocol.ModeHeadless
-	if holder == model.LeaseHolderTerminal {
+	switch holder {
+	case model.LeaseHolderTerminal:
 		want = func(c driverprotocol.ModeCapabilities) bool { return c.Terminal }
 		preferred = driverprotocol.ModeTUI
+	case model.LeaseHolderCLI:
+		want = func(c driverprotocol.ModeCapabilities) bool { return c.Control != "" }
 	}
 	candidates := modes.ModesWith(want, preferred)
 	if len(candidates) == 0 {

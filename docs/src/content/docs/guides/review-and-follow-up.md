@@ -9,11 +9,11 @@ An idle agent is waiting for input, not necessarily finished or correct. Review 
 
 ```bash
 wi agent status add-api-retries
-wi agent monitor --item add-api-retries --limit 50
+wi agent monitor --content --item add-api-retries
 wi switch add-api-retries
 ```
 
-Runtime events are compact activity facts. The TUI provides the full conversation.
+The monitor follows the reply being written, shared reasoning, tool calls and activity while the agent works; it keeps nothing. The TUI provides the full conversation.
 
 ## Inspect the checkout
 

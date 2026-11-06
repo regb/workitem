@@ -40,7 +40,7 @@ func (a *App) admitControllerCommand(ctx context.Context, itemID string, opts Ag
 		return noop, fmt.Errorf("controller lease expired or was released; reacquire control before sending")
 	}
 	ttl := 0
-	if holder == model.LeaseHolderWeb {
+	if holder == model.LeaseHolderWeb || holder == model.LeaseHolderCLI {
 		ttl = int(WebLeaseTTL / time.Second)
 	}
 	granted, err := a.Leases.AcquireLease(ctx, model.LeaseRequest{ItemID: itemID, Holder: holder, ClientID: clientID, TTLSeconds: ttl, ExpectedLeaseID: &expected})

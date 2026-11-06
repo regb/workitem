@@ -18,7 +18,7 @@
             pname = "wi";
             version = "unstable-${if revision == "" then "unknown" else builtins.substring 0 12 revision}${if modified == "true" then "-dirty" else ""}";
             src = self;
-            vendorHash = "sha256-IAkxa6kvGN0NbcwQrYLAVAylnt1v3cvXu6Y028+oZEA=";
+            vendorHash = "sha256-GpjNp0eHXF9c+AGWeS4lPrs1QdTE0KZkHopOsCxJFFo=";
             subPackages = [ "cmd/wi" ];
             ldflags = [
               "-s" "-w"
@@ -80,7 +80,7 @@
       checks = forAllSystems (system: { go-tests = (perSystem system).tests; });
       devShells = forAllSystems (system: let p = perSystem system; in {
         default = p.pkgs.mkShell {
-          packages = [ p.pkgs.go_1_26 ] ++ p.testTools;
+          packages = [ p.pkgs.go_1_26 p.pkgs.buf ] ++ p.testTools;
         };
       });
     };

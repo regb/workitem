@@ -16,7 +16,7 @@ func IsolatedEnvironment(base []string, root string) []string {
 	env := make([]string, 0, len(base)+8)
 	for _, entry := range base {
 		key, _, _ := strings.Cut(entry, "=")
-		if key == "HOME" || strings.HasPrefix(key, "XDG_") || strings.HasPrefix(key, "WI_") || strings.HasPrefix(key, "PI_") || strings.HasPrefix(key, "DIRENV_") || strings.HasPrefix(key, "GIT_") || key == "GOBIN" || key == "GOPATH" || key == "TMUX" || key == "TMUX_PANE" {
+		if key == "HOME" || strings.HasPrefix(key, "XDG_") || strings.HasPrefix(key, "WI_") || strings.HasPrefix(key, "PI_") || strings.HasPrefix(key, "DIRENV_") || strings.HasPrefix(key, "GIT_") || key == "GOBIN" || key == "GOPATH" || key == "TMUX" || key == "TMUX_PANE" || key == "TMUX_TMPDIR" {
 			continue
 		}
 		env = append(env, entry)
@@ -24,7 +24,7 @@ func IsolatedEnvironment(base []string, root string) []string {
 	for _, pair := range [][2]string{
 		{"HOME", "home"}, {"XDG_DATA_HOME", "data"}, {"XDG_CONFIG_HOME", "config"},
 		{"XDG_CACHE_HOME", "cache"}, {"XDG_STATE_HOME", "state"}, {"XDG_RUNTIME_DIR", "run"},
-		{"PI_CODING_AGENT_DIR", "pi"}, {"GOBIN", "bin"}, {"GOPATH", "go"},
+		{"PI_CODING_AGENT_DIR", "pi"}, {"GOBIN", "bin"}, {"GOPATH", "go"}, {"TMUX_TMPDIR", "tmux"},
 	} {
 		env = append(env, pair[0]+"="+filepath.Join(root, pair[1]))
 	}
@@ -46,7 +46,7 @@ func RunIsolatedTests(run func() int) int {
 		return 1
 	}
 	defer os.RemoveAll(root)
-	for _, part := range []string{"home", "data", "config", "cache", "state", "run", "pi"} {
+	for _, part := range []string{"home", "data", "config", "cache", "state", "run", "pi", "tmux"} {
 		if err := os.Mkdir(filepath.Join(root, part), 0700); err != nil {
 			fmt.Fprintln(os.Stderr, "isolate tests:", err)
 			return 1

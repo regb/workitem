@@ -20,6 +20,7 @@ import (
 	workspacecore "github.com/regb/workitem/internal/app/core/workspace"
 	viewapp "github.com/regb/workitem/internal/app/view"
 	"github.com/regb/workitem/internal/config"
+	"github.com/regb/workitem/internal/coordinator"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/plugin"
@@ -117,6 +118,7 @@ type App struct {
 	Clock                      Clock
 	NewID                      func() (string, error)
 	SelfPath                   string
+	Coordinator                *coordinator.Client
 	DaemonSocketPath           string
 	AgentRuntimeStateRoot      string
 	AgentRuntimeSocketRoot     string

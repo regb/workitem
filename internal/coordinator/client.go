@@ -18,10 +18,11 @@ type Client struct {
 	SocketPath    string
 	BuildIdentity string
 	counter       atomic.Uint64
+	local         *Server
 }
 
 func (c *Client) Call(ctx context.Context, method string, payload any, result any) error {
-	if c == nil || c.SocketPath == "" {
+	if c == nil || (c.SocketPath == "" && c.local == nil) {
 		return errors.New("coordinator socket path is required")
 	}
 	var encoded json.RawMessage
@@ -41,6 +42,25 @@ func (c *Client) Call(ctx context.Context, method string, payload any, result an
 		buildIdentity = version.BuildIdentity()
 	}
 	request := Request{ProtocolVersion: ProtocolVersion, SchemaVersion: SchemaVersion, BuildIdentity: buildIdentity, ID: requestID, Method: method, Payload: encoded}
+	if c.local != nil {
+		value, err := c.local.dispatch(ctx, request, AccessOperator)
+		if err != nil {
+			return err
+		}
+		if result != nil {
+			data, err := json.Marshal(value)
+			if err != nil {
+				return err
+			}
+			if err := json.Unmarshal(data, result); err != nil {
+				return err
+			}
+			if method != MethodRepositorySource {
+				return c.resolveResponseRepositories(ctx, result)
+			}
+		}
+		return nil
+	}
 	dialer := net.Dialer{}
 	conn, err := dialer.DialContext(ctx, "unix", c.SocketPath)
 	if err != nil {

@@ -110,7 +110,7 @@ var helpDocs = map[string]helpDoc{
 	"daemon": {
 		Summary:     "Run and inspect the authoritative local coordinator",
 		Usage:       []string{"wi daemon <start|serve|status|stop|doctor>"},
-		Description: []string{"The daemon is the authoritative per-data-root event store and the only writer of canonical state.", "Commands start it when needed and replace one of another build. With [daemon] managed = true in config.toml, a service manager owns it: wi never starts, stops or replaces it, and the daemon refuses shutdown requests."},
+		Description: []string{"The daemon is the authoritative per-data-root event store and the only writer of canonical state.", "Clients contact the generated API and start an unmanaged daemon when needed. Compatibility is checked through the reported API major version. With [daemon] managed = true in config.toml, a service manager owns it: wi never starts, stops or replaces it, and the daemon refuses shutdown requests."},
 		SeeAlso:     []string{"daemon start", "daemon serve", "daemon status", "daemon doctor", "daemon stop"},
 	},
 	"daemon start": {
@@ -150,21 +150,21 @@ var helpDocs = map[string]helpDoc{
 		SeeAlso: []string{"agent runtime stop", "terminal close", "daemon stop"},
 	},
 	"config": {
-		Summary:     "Inspect global configuration without starting services",
+		Summary:     "Inspect the daemon's effective global configuration",
 		Usage:       []string{"wi config [show] [--origins] [--show-sensitive]", "wi config get KEY [--origins] [--show-sensitive]", "wi config drivers [--show-sensitive]", "wi config plugins"},
-		Description: []string{"Read-only queries of global user configuration with built-in defaults. Never starts or contacts a daemon, driver, plugin, or direnv; does not evaluate project files or environment rules. Repository policy is managed by wi repo settings and agent profiles by wi agent profile, not configuration files. A missing file means the built-in defaults; a file that exists must be valid.", "Driver-specific settings and custom driver commands are redacted by default because they can contain secrets. --show-sensitive reveals them, including in JSON. get returns the selected JSON value with --json, or a plain scalar/dotted settings in text; unknown keys exit 3."},
+		Description: []string{"Read-only queries through the daemon API, with built-in defaults. May start an unmanaged daemon if it is absent. The daemon loads configuration and plugin schemas; value queries do not run checkout hooks or inspect worktrees. Repository policy is managed by wi repo settings and agent profiles by wi agent profile, not configuration files. A missing file means the built-in defaults; a file that exists must be valid.", "Driver-specific settings and custom driver commands are redacted by default because they can contain secrets. --show-sensitive reveals them, including in JSON. get prints a plain scalar or dotted settings in text; --origins adds source information. --json emits the API GetConfigResponse with the selected value encoded in config_json. Unknown keys exit 3."},
 		Options:     []helpOption{{"--origins", "Wrap output with effective value and plugin option origins."}, {"--show-sensitive", "Reveal sensitive plugin settings, opaque driver settings, and custom commands."}},
 		Examples:    []string{"wi config get deep_work.max_active", "wi config show --json"},
 		SeeAlso:     []string{"info", "config show", "config get", "config drivers", "config plugins", "agent profile"},
 	},
-	"config show":    {Summary: "Show global settings with built-in defaults", Usage: []string{"wi config show [--show-sensitive]"}, Description: []string{"Outputs sorted dotted settings in text or a configuration object with --json. Driver-specific values and commands are redacted unless --show-sensitive is supplied. Repository entity settings are separate; project files and environment rules are not evaluated."}, SeeAlso: []string{"config"}},
-	"config get":     {Summary: "Query one configuration key or section", Usage: []string{"wi config get KEY [--show-sensitive]"}, Description: []string{"Use dot-separated JSON keys, such as deep_work.max_active, item.defaults.labels, agent.startup_message, or drivers.pi.defaults. Unknown keys exit 3. Scalars print directly in text; --json always emits the selected value as JSON."}, SeeAlso: []string{"config"}},
-	"config plugins": {Summary: "Inspect registered plugin option schemas", Usage: []string{"wi config plugins [--json]"}, Description: []string{"Returns option schemas from the common native/executable plugin catalog, including declarative third-party manifests. Includes defaults, types, bounds, sensitivity and repository scope. Never executes plugin code."}, SeeAlso: []string{"config"}},
-	"config drivers": {Summary: "Inspect configured drivers and their defaults", Usage: []string{"wi config drivers [--show-sensitive]"}, Description: []string{"Queries the drivers section, including built-in drivers. Custom commands and opaque defaults are redacted unless --show-sensitive is supplied. No driver executable is resolved or launched."}, SeeAlso: []string{"config"}},
+	"config show":    {Summary: "Show global settings with built-in defaults", Usage: []string{"wi config show [--show-sensitive]"}, Description: []string{"Outputs sorted dotted settings in text. --json emits the API GetConfigResponse with effective settings encoded in config_json. Driver-specific values and commands are redacted unless --show-sensitive is supplied. Repository entity settings are separate; project files and environment rules are not evaluated."}, SeeAlso: []string{"config"}},
+	"config get":     {Summary: "Query one configuration key or section", Usage: []string{"wi config get KEY [--origins] [--show-sensitive]"}, Description: []string{"Use dot-separated JSON keys, such as deep_work.max_active, item.defaults.labels, agent.startup_message, or drivers.pi.defaults. Unknown keys exit 3. Scalars print directly in text. --origins adds value sources; --json emits the selected value inside the API config_json field."}, SeeAlso: []string{"config"}},
+	"config plugins": {Summary: "Inspect registered plugin option schemas", Usage: []string{"wi config plugins [--json]"}, Description: []string{"Returns option schemas from the common native/executable plugin catalog, including declarative third-party manifests. Includes defaults, types, sensitivity and repository scope. Queries the daemon registry without running plugin hooks or automation."}, SeeAlso: []string{"config"}},
+	"config drivers": {Summary: "Inspect configured drivers and their defaults", Usage: []string{"wi config drivers [--show-sensitive]"}, Description: []string{"Queries the drivers section, including built-in drivers. Custom commands and opaque defaults are redacted unless --show-sensitive is supplied. The query does not invoke a driver; daemon startup may discover installed profiles."}, SeeAlso: []string{"config"}},
 	"info": {
 		Summary:     "Show resolved paths for the current wi data root",
 		Usage:       []string{"wi info [key]"},
-		Description: []string{"Without a key, prints all resolved data, configuration, state, runtime, and socket paths. With a key, prints only its value for use in scripts. Path resolution is local and does not start or contact the daemon."},
+		Description: []string{"Without a key, prints all resolved data, configuration, state, runtime, and socket paths. With a key, prints only its value for use in scripts. Contacts the daemon API to check compatibility and may start an unmanaged daemon if absent. Path keys are resolved for the caller's XDG environment; --json without a key returns the API daemon information."},
 		Examples:    []string{"wi info", "wi info agent-socket", "wi info --json"},
 	},
 	"version": {
@@ -176,9 +176,9 @@ var helpDocs = map[string]helpDoc{
 		Summary: "Create a durable work item",
 		Usage:   []string{"wi new --title <text> [options]", "wi new --untitled [options]"},
 		Description: []string{
-			"Normally creates a work item in backlog. Durable metadata and DESCRIPTION.md are written immediately; no terminal session, conversation, runtime, or composed use case is started. Items begin with an absent managed-slot checkout. Select a registered repository with --repo NAME, or inherit the current item’s repository. Without --base, the immutable starting commit comes from the registered integration branch, with no fallback to HEAD. When the repository has an upstream and repo.follow_upstream is fast-forward (the default), the branch is first fetched and fast-forwarded like wi repo sync; if that fails or the histories diverged, the item starts from the local branch with a warning. An explicit --base never fetches.",
-			"With --start, the item moves to working and an unattached agent receives the global agent.startup_message through runtime control. --prompt supplies that message and implies --start; it never changes DESCRIPTION.md. --desc-file remains the durable task description. TUI mode is the default: it creates the normal tmux runtime for later entry but does not switch or attach the caller. Use --agent-mode headless for an explicitly headless runtime. If startup or delivery fails, the command reports the durable partial outcome instead of deleting the item.",
-			"Use --desc-file for a backlog item's self-contained multiline description. Labels are repeatable and augment defaults from user config, <repository>/.config/wi.toml, and WI_ITEM_DEFAULT_LABELS; use --no-default-labels to opt out. Deep work is a built-in attribute, not a label.",
+			"Normally creates a work item in backlog. Durable metadata and DESCRIPTION.md are written immediately; no terminal session, conversation or agent process is started. Creation runs in the daemon through the API. Items begin with an absent managed-slot checkout. Select a registered repository with --repo NAME, or inherit the current item’s repository. Without --base, the immutable starting commit comes from the registered integration branch, with no fallback to HEAD. When the repository has an upstream and repo.follow_upstream is fast-forward (the default), the branch is first fetched and fast-forwarded like wi repo sync; if that fails or the histories diverged, the item starts from the local branch with a warning. An explicit --base never fetches.",
+			"With --start, the item moves to active and an unattached agent receives the global agent.startup_message through runtime control. --prompt supplies that message and implies --start; it never changes DESCRIPTION.md. --desc-file remains the durable task description. TUI mode is the default: it creates the normal tmux runtime for later entry but does not switch or attach the caller. Use --agent-mode headless for an explicitly headless runtime. If startup or delivery fails, the command reports the durable partial outcome instead of deleting the item.",
+			"Use --desc-file for a backlog item's self-contained multiline description. Labels are repeatable and augment defaults from user config and WI_ITEM_DEFAULT_LABELS; use --no-default-labels to opt out. Deep work is a built-in attribute, not a label.",
 			"A sandbox may set WI_AGENT_DAEMON_SOCKET to the daemon's separately mounted agent endpoint. That endpoint permits only absent managed-slot backlog creation; --start is rejected. Worktree-relative bases require item and repository context available through the endpoint.",
 		},
 		Options: []helpOption{
@@ -214,13 +214,13 @@ var helpDocs = map[string]helpDoc{
 		Summary: "List and filter work items",
 		Usage:   []string{"wi list [options]"},
 		Description: []string{
-			"JSON preserves lifecycle-keyed sections and adds display_sections with key, title, and ordered item_ids matching text grouping. Full IDs and slugs remain available in sections. Empty display groups have empty arrays. JSON is an object, not an item array.",
+			"Text is a readable table with lifecycle/actionability groups. --json emits the API ListItemsResponse: items with full IDs, slugs, observations and attention_group, plus pagination metadata.",
 			"Shows open work grouped by actionability. Closed items are hidden by default. --closed selects closed-only, --all includes open and closed, and --state closed implies closed visibility. Live agent/worktree inspection adds AGENT and WORKTREE columns unless --no-agent is used.",
 			"Active items with an open blocker appear under WAITING, outside the attention ranking, unless the agent responded since the item was last read: that unread response puts the item back in NEEDS ATTENTION until it is read. Unread titles are bold (or marked unread without color). What an item waits for follows its name in yellow (a blocker's label such as #1234, or a compact form like until Fri 09:00 or on api-schema), and closed items show their RESOLUTION.",
 			"Label rules are additive. A bare label or +label requires that label; -label excludes it. All positive labels must match and no negative label may match.",
 			"Global defaults use labels = [\"+team\", \"-personal\"] in the [list] section of config.toml. WI_LIST_LABELS accepts comma-separated rules. CLI rules use repeatable --label flags.",
 			"Rules merge by source precedence: config list.labels < WI_LIST_LABELS < CLI --label. A higher-precedence rule replaces only the same normalized label while unrelated inherited rules remain. Within one source, rules are processed left-to-right and the later rule wins for the same label. The token ! clears all inherited rules before subsequent tokens are applied.",
-			"Within NEEDS ATTENTION, [attention] priority selects the ranking strategy. The current recent-request strategy orders non-deferred items by newest observed user prompt, then deferred items by oldest attention.deferred event. JSON exposes the selected strategy and requested, completed, and deferred timestamps.",
+			"Within NEEDS ATTENTION, [attention] priority selects the ranking strategy. The current recent-request strategy orders non-deferred items by newest observed user prompt, then deferred items by oldest attention.deferred event. API observations expose requested, completed, read and deferred timestamps.",
 		},
 		Options: []helpOption{
 			{"--label <rule>", "Apply a label rule; repeatable. Forms: label, +label, -label, !."},
@@ -262,7 +262,7 @@ var helpDocs = map[string]helpDoc{
 	"show": {
 		Summary:     "Show durable task context and metadata",
 		Usage:       []string{"wi show [--item <selector>] [item]"},
-		Description: []string{"Prints durable metadata and the hydrated DESCRIPTION.md contents. Text and JSON use the same stable result containing manifest and description. If no item is supplied, resolves the current item from WI_ID, tmux, or the current claimed checkout."},
+		Description: []string{"Prints durable metadata and the hydrated DESCRIPTION.md contents. Text labels the item metadata and description. --json emits the API GetItemResponse containing item, description and observation. If no item is supplied, resolves the current item from WI_ID, tmux, or the current claimed checkout."},
 		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}},
 		Examples:    []string{`wi show`, `wi show --item auth`, `wi --json show 01KZ39T`},
 	},
@@ -479,7 +479,7 @@ var helpDocs = map[string]helpDoc{
 		Summary: "Start an existing backlog item",
 		Usage:   []string{"wi start [--agent-mode <tui|headless>] [--model <model>] [--reasoning <level>] [--force] [--skip-setup] <slug>"},
 		Description: []string{
-			"Resolves an exact active slug or one unambiguous active-slug substring. Exact matches take precedence; ambiguous substrings fail with candidate IDs and slugs. IDs, title keywords, implicit current-item selection, and --item are not accepted.",
+			"Resolves the selector through ItemService.ResolveItem. IDs, slugs, --item and current-item context are supported; ambiguous selectors fail rather than choosing a match.",
 			"Transitions backlog -> active, enforces deep-work capacity, materializes the worktree, and ensures the selected primary runtime. TUI mode attaches terminal access; headless mode remains tmux-independent. JSON never attaches. Starting an existing item does not send a message.",
 			"To create and start an item, use wi new --title TEXT --start.",
 		},
@@ -529,7 +529,7 @@ var helpDocs = map[string]helpDoc{
 		Usage:   []string{"wi workspace setup [--item <selector>] [item]"},
 		Description: []string{
 			"Every new checkout claim is set up before an agent starts in it: the repository files are copied in, then the setup command runs in the checkout. The command is plugins.setup.run, or the [workspace.setup] run command declared in the repository's .config/wi.toml on its default branch once plugins.setup.trust is always. It runs with /bin/sh, without the direnv environment, with WI_ID, WI_WORKTREE, WI_REPOSITORY_ID, WI_SLOT, WI_SLOT_REUSED and WI_FILES, a private copy of the repository files that lives for the run. Its output goes to a log under XDG state.",
-			"If setup fails, the item stays active with its checkout claimed and no agent starts. This command reruns setup, claiming a checkout first if there is none; it refuses while an agent runs in the checkout. wi start, resume and reopen accept --skip-setup to start the agent without setting up a new claim.",
+			"If setup fails, the item stays active with its checkout claimed and no agent starts. This plumbing command requires an active item with an existing checkout claim; use workspace ensure to claim one first. It reruns setup and it refuses while an agent runs in the checkout. wi start, resume and reopen accept --skip-setup to start the agent without setting up a new claim.",
 		},
 		Options:  []helpOption{{"--item <selector>", "Select an item explicitly."}},
 		Examples: []string{"wi workspace setup", "wi repo settings set biskoui plugins.setup.run 'cp \"$WI_FILES/.env\" .env && npm install'"},
@@ -556,33 +556,24 @@ var helpDocs = map[string]helpDoc{
 	"terminal": {
 		Summary:     "Manage optional terminal access",
 		Usage:       []string{"wi terminal <status|ensure|enter|close> [options] [item]"},
-		Description: []string{"Low-level tmux adapter plumbing operates over an existing worktree. It never creates a conversation or changes lifecycle state."},
+		Description: []string{"Uses the agent API for status, TUI startup and stop. Ensure or enter can activate and materialize an item through StartItem; close stops its agent. The CLI only attaches or switches using the terminal target returned by GetAgent."},
 		SeeAlso:     []string{"terminal status", "terminal ensure", "terminal enter", "terminal close", "workspace"},
 	},
 	"terminal status": {Summary: "Inspect optional terminal access", Usage: []string{"wi terminal status [--item <selector>] [item]"}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
-	"terminal ensure": {Summary: "Ensure optional terminal access", Usage: []string{"wi terminal ensure [--item <selector>] [item]"}, Description: []string{"Requires an existing worktree and creates no agent resources."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
-	"terminal enter":  {Summary: "Enter optional terminal access", Usage: []string{"wi terminal enter [--item <selector>] [item]"}, Description: []string{"Ensures tmux over an existing worktree and attaches unless JSON output is selected."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
-	"terminal close":  {Summary: "Close optional terminal access", Usage: []string{"wi terminal close [--item <selector>] [item]"}, Description: []string{"Closes tmux only. A TUI agent runtime must be stopped explicitly first."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
+	"terminal ensure": {Summary: "Ensure optional terminal access", Usage: []string{"wi terminal ensure [--item <selector>] [item]"}, Description: []string{"Ensures a TUI agent through the lifecycle API without attaching; may activate the item and set up its checkout."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
+	"terminal enter":  {Summary: "Enter optional terminal access", Usage: []string{"wi terminal enter [--item <selector>] [item]"}, Description: []string{"Ensures a TUI agent through the API and enters the target from GetAgent when interactive. JSON never attaches."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
+	"terminal close":  {Summary: "Close optional terminal access", Usage: []string{"wi terminal close [--item <selector>] [item]"}, Description: []string{"Stops the agent through AgentService.StopAgent; busy agents require --force."}, Options: []helpOption{{"--item <selector>", "Select an item explicitly."}}},
 	"next": {
 		Summary: "Switch to the next item in the NEEDS ATTENTION ring",
-		Usage:   []string{"wi next [--defer | --wait (--until WHEN | --on ITEM | --for TEXT)... | --close [--resolution R]] [--label <rule>]..."},
+		Usage:   []string{"wi next [--label <rule>]..."},
 		Description: []string{
-			"Builds the ranked NEEDS ATTENTION queue using the same config, WI_LIST_LABELS, and optional --label rules as wi list. If the current item is in that queue, selects its successor and wraps from the last item to the first. If the current item is busy, waiting, needs fixing, backlog, closed, or otherwise outside the queue, starts at the first NEEDS ATTENTION item.",
-			"Plain navigation takes one synchronized daemon actionability snapshot, remains state-neutral, and performs the same TUI composition as wi switch. By default it records no defer, selection event, cursor, or ranking timestamp. With --defer, it first records attention.deferred only when the current item belongs to NEEDS ATTENTION; from busy, waiting, fixing, or other outside items it simply navigates.",
-			"With --wait, wi atomically adds the same blockers as wi wait to the current item (at least one of --until, --on, or --for is required) and ranks the resulting daemon actionability snapshot, then navigates from the top. With --close, wi validates clean-worktree safety and stops the previous runtime before switching, then durably releases its workspace claim and closes it with --resolution (completed by default) before scheduling the previous tmux session for closure. --wait, --defer, and --close are mutually exclusive. If switching succeeds but closing fails, the new item remains selected and the error reports the partial outcome.",
-			"JSON mode selects and ensures the target workspace without attaching to tmux. Therefore --json next --close invoked inside the previous item's tmux session refuses terminal cleanup rather than pretending the client switched.",
+			"Reads the daemon's attention-ordered list with config list.labels, WI_LIST_LABELS and command-line label rules. Selects the current item's successor, wrapping at the end; if the current item is outside the ring, selects the first candidate.",
+			"Ensures the selected item's TUI through the API, obtains its terminal target from GetAgent, and enters it when interactive. Marks the entered conversation read and the item left read unless it was explicitly marked unread. --json returns API data without attaching.",
 		},
-		Options: []helpOption{
-			{"--defer", "Defer the current item if it is in NEEDS ATTENTION before navigating."},
-			{"--wait", "Make the current item wait before navigating; requires --until, --on, or --for like wi wait."},
-			{"--close", "Enter a distinct successor, then stop, clean up, and close the previous item."},
-			{"--resolution <name>", "With --close: completed (default), abandoned, or superseded."},
-			{"--label <rule>", "Apply the same repeatable additive label rules as wi list."},
-		},
-		Environment: []helpOption{{"WI_LIST_LABELS", "Comma-separated label rules overlaid on config."}},
-		Examples:    []string{`wi next`, `wi next --defer`, `wi next --wait --until tomorrow`, `wi next --wait --on -`, `wi next --close --resolution abandoned`, `wi next --label +backend --label -blocked`, `wi --json next --wait --until 4h`},
+		Options:     []helpOption{{"--label <rule>", "Apply the same additive label rules as wi list."}},
+		Environment: []helpOption{{"WI_LIST_LABELS", "Comma-separated rules overlaid on config."}, {"WI_TMUX_CLIENT", "Originating tmux client to switch explicitly."}},
+		Examples:    []string{"wi next", "wi next --label +backend --label -blocked"},
 	},
-
 	"resume": {
 		Summary:     "Ensure an active item's agent runtime",
 		Usage:       []string{"wi resume [--item <selector>] [--agent-mode <tui|headless>] [--skip-setup] [item]"},
@@ -764,19 +755,11 @@ var helpDocs = map[string]helpDoc{
 		},
 	},
 	"agent monitor": {
-		Summary: "Read compact runtime events, or follow live content",
-		Usage:   []string{"wi agent monitor [--item <selector>] [--limit <n>] [--follow] [item]", "wi agent monitor --content [--item <selector>] [item]"},
-		Description: []string{
-			"Shows the compact lifecycle, message, command, and tool events retained by the daemon.",
-			"--content instead follows the running agent's live content as it happens: message text as it streams, reasoning the agent shares, tool calls, activity, and which history entries a finished message was saved as. Nothing of it is retained. It waits while no agent runs and follows the next one; interrupt it to stop. With --json it prints one compact event per line.",
-		},
-		Options: []helpOption{
-			{"--item <selector>", "Select an item explicitly."},
-			{"--limit <n>", "Show the latest N events; zero means all."},
-			{"--follow", "Continue streaming new normalized events."},
-			{"--content", "Follow live content instead of compact events."},
-		},
-		Examples: []string{`wi agent monitor --follow`, `wi agent monitor --content --item auth`},
+		Summary:     "Follow live agent content",
+		Usage:       []string{"wi agent monitor [--item <selector>] [--limit N] [item]"},
+		Description: []string{"Streams live message text, reasoning, tool calls and activity. The first message is a snapshot. Interrupting the stream does not stop the agent. With --json it prints one event per line. The positional selector and --item are alternatives. --limit bounds received live events, including the initial snapshot; it defaults to 50, and zero follows indefinitely. Durable invalidation is available through the API change feed."},
+		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}, {"--limit N", "Maximum live events; default 50, zero follows indefinitely."}},
+		Examples:    []string{"wi agent monitor auth --limit 1"},
 	},
 }
 
@@ -807,7 +790,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  Selectors may be IDs, active slugs, or unique active-item keywords.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Global options:")
-	printOptions(w, []helpOption{{"--json", "Emit structured JSON; interactive commands do not attach."}, {"-h, --help", "Show global or command-specific help."}})
+	printOptions(w, []helpOption{{"--json", "Emit API protojson; interactive commands do not attach."}, {"-h, --help", "Show global or command-specific help."}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Run 'wi help <command>' for command details.")
 }

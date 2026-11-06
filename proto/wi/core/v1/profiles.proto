@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// AgentProfileService manages agent profiles: a driver and the settings it
+// launches with. Items name the profile they use. Authentication stays with
+// each agent.
+service AgentProfileService {
+  rpc ListAgentProfiles(ListAgentProfilesRequest) returns (ListAgentProfilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // PutAgentProfile adds or replaces a profile. The first one added becomes
+  // the default.
+  rpc PutAgentProfile(PutAgentProfileRequest) returns (PutAgentProfileResponse);
+  // DeleteAgentProfile removes a profile that is not the default. Items
+  // using it keep its name and ask to move when they next start.
+  rpc DeleteAgentProfile(DeleteAgentProfileRequest) returns (DeleteAgentProfileResponse);
+  rpc SetDefaultAgentProfile(SetDefaultAgentProfileRequest) returns (SetDefaultAgentProfileResponse);
+  // ListDrivers lists the drivers profiles can use and their defaults.
+  rpc ListDrivers(ListDriversRequest) returns (ListDriversResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// AgentProfile is a named agent setup.
+message AgentProfile {
+  string name = 1;
+  string driver = 2;
+  string label = 3;
+  // config is the driver's settings, such as executable, model and
+  // reasoning. Its shape belongs to the driver.
+  google.protobuf.Struct config = 4;
+  // users counts the open items using the profile.
+  uint32 users = 5;
+}
+
+// Driver is an agent driver wi can run.
+message Driver {
+  string name = 1;
+  string label = 2;
+  google.protobuf.Struct defaults = 3;
+}
+
+message ListAgentProfilesRequest {}
+
+message ListAgentProfilesResponse {
+  repeated AgentProfile profiles = 1;
+  string default_profile = 2;
+  uint32 revision = 3;
+}
+
+message PutAgentProfileRequest {
+  AgentProfile profile = 1;
+  uint32 expected_revision = 2;
+}
+
+message PutAgentProfileResponse {
+  AgentProfile profile = 1;
+  uint32 revision = 2;
+}
+
+message DeleteAgentProfileRequest {
+  string name = 1;
+  uint32 expected_revision = 2;
+}
+
+message DeleteAgentProfileResponse {
+  uint32 revision = 1;
+}
+
+message SetDefaultAgentProfileRequest {
+  string name = 1;
+  uint32 expected_revision = 2;
+}
+
+message SetDefaultAgentProfileResponse {
+  uint32 revision = 1;
+}
+
+message ListDriversRequest {}
+
+message ListDriversResponse {
+  repeated Driver drivers = 1;
+}

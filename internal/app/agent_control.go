@@ -16,6 +16,7 @@ type AgentControlOptions struct {
 	Images             []agent.ImageContent
 	Actor              string
 	RequestID          string
+	CommandID          string
 	ExpectedRuntimeID  string
 	RequireIdle        bool
 	ControllerHolder   string
@@ -55,7 +56,7 @@ func (a *App) agentControlWithLease(ctx context.Context, opts AgentControlOption
 		return AgentControlResult{}, err
 	}
 	defer release()
-	return a.primaryAgentService().Control(ctx, agentcore.ControlOptions{ResolveOptions: contract.ResolveOptions(opts.ResolveOptions), CommandType: opts.CommandType, Message: opts.Message, Images: opts.Images, Actor: opts.Actor, RequestID: opts.RequestID, ExpectedRuntimeID: opts.ExpectedRuntimeID, RequireIdle: opts.RequireIdle, Setting: opts.Setting})
+	return a.primaryAgentService().Control(ctx, agentcore.ControlOptions{ResolveOptions: contract.ResolveOptions(opts.ResolveOptions), CommandType: opts.CommandType, Message: opts.Message, Images: opts.Images, Actor: opts.Actor, RequestID: opts.RequestID, CommandID: opts.CommandID, ExpectedRuntimeID: opts.ExpectedRuntimeID, RequireIdle: opts.RequireIdle, Setting: opts.Setting})
 }
 
 func (a *App) runtimeControlSocketPath(itemID string, runtime *model.AgentRuntime) string {

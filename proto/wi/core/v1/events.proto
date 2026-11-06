@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// EventService reports that state changed, so clients re-read what they
+// show instead of polling.
+service EventService {
+  // WatchChanges streams which items changed after a cursor. The first
+  // message answers at once: with changes since the cursor, or with all set
+  // when the cursor is from another daemon instance or too old to resume.
+  rpc WatchChanges(WatchChangesRequest) returns (stream WatchChangesResponse);
+}
+
+message WatchChangesRequest {
+  // after is the last cursor the client saw; empty starts from now. A
+  // cursor is opaque: clients only send it back.
+  string after = 1;
+}
+
+message WatchChangesResponse {
+  // cursor resumes the feed after this message.
+  string cursor = 1;
+  repeated string item_ids = 2;
+  repeated string repository_ids = 3;
+  // all means anything may have changed; re-read everything shown.
+  bool all = 4;
+  // profiles_changed means agent profiles changed.
+  bool profiles_changed = 5;
+}

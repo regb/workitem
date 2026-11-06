@@ -12,7 +12,7 @@ wi new --desc-file audit.md --start --agent-mode headless \
   --title "Check dependency license changes"
 ```
 
-Wi stores the description, activates the item, materializes a workspace, starts an unattached runtime, and sends the configured startup message asking the agent to read `wi show`.
+Wi stores the description, activates the item, materializes a workspace, starts an unattached agent, and sends the configured startup message asking the agent to read `wi show`. The daemon does the starting as a job, so it finishes even if the command is interrupted.
 
 Omit `--agent-mode headless` for an unattached TUI you can enter with `wi switch`. `--prompt TEXT` overrides only the startup message, not the description. Resume never sends it again.
 
@@ -23,7 +23,7 @@ wi new --desc-file handoff.md --title "Fix stale runtime ownership"
 wi start fix-stale-runtime-ownership
 ```
 
-Existing-item `start` opens the runtime without sending a prompt. Ask the agent to read `wi show` in the TUI, or send that instruction through runtime control.
+Existing-item `start` starts the agent without sending a prompt. Ask the agent to read `wi show` in the TUI, or send that instruction with `wi agent control send`.
 
 ## Prompt-only questions
 
@@ -41,7 +41,7 @@ The prompt goes to the conversation; no description or title is inferred from it
 ```bash
 wi agent control send --follow-up --item fix-stale-runtime-ownership \
   "Also test PID reuse and report the focused test command."
-wi agent monitor --item fix-stale-runtime-ownership --limit 50
+wi agent monitor --content --item fix-stale-runtime-ownership
 ```
 
 `--follow-up` waits for the current run to settle; `--file` accepts multiline feedback. Delivery confirms handoff, not completion.
@@ -50,4 +50,4 @@ Keep corrections within the original objective in this item. File independent di
 
 ## Agent authority
 
-A sandbox can use `WI_AGENT_DAEMON_SOCKET` to file safe managed-slot backlog work. That restricted endpoint rejects lifecycle, workspace, runtime, terminal, deletion, shutdown, and `--start` operations.
+A sandbox can point `WI_AGENT_DAEMON_SOCKET` at the daemon's restricted agent endpoint to file safe managed-slot backlog work. The CLI checks that the socket really is that endpoint and never starts a daemon for it. The endpoint allows reading items, repositories and agent profiles, creating backlog items, and adding notes and attachments; it rejects lifecycle, workspace, agent, terminal, deletion, shutdown, and `--start` operations. See [Endpoints](../../reference/api/#endpoints).

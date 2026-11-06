@@ -45,6 +45,9 @@ func (c RuntimeCapabilities) Channels() Channels {
 const (
 	LeaseHolderWeb      = "web"
 	LeaseHolderTerminal = "terminal"
+	// LeaseHolderCLI drives an agent through whatever control channel it
+	// has, structured or emulated, so it never forces a replacement.
+	LeaseHolderCLI = "cli"
 )
 
 // ControlLease names the single client allowed to send input to an item's

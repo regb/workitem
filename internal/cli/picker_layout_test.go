@@ -114,7 +114,7 @@ func TestPickerPreviewAdaptsAndCanBeHidden(t *testing.T) {
 	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$ARGS_PATH\"\nhead -n 1\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	cfg := Config{App: &app.App{}, Stderr: &bytes.Buffer{}, Env: map[string]string{"WI_FZF": script, "ARGS_PATH": argsPath}}
+	cfg := Config{Stderr: &bytes.Buffer{}, Env: map[string]string{"WI_FZF": script, "ARGS_PATH": argsPath}}
 	candidates := []pickerCandidate{{Item: app.WorkListItem{ID: "selected-id", Title: "Title", Slug: "slug"}}}
 	for _, noPreview := range []bool{false, true} {
 		if _, ok, err := selectWithFZF(context.Background(), cfg, candidates, noPreview); err != nil || !ok {

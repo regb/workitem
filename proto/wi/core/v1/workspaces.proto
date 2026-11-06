@@ -1,0 +1,144 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "wi/core/v1/common.proto";
+import "wi/core/v1/items.proto";
+import "wi/core/v1/jobs.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// WorkspaceService manages an item's checkout claim: claiming, setting up,
+// committing and releasing a worktree, and reading its Git state. It never
+// starts agents.
+service WorkspaceService {
+  // GetWorkspace reads the claim, the checkout's Git state and its setup.
+  rpc GetWorkspace(GetWorkspaceRequest) returns (GetWorkspaceResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // EnsureWorkspace claims or reclaims a checkout and sets it up.
+  rpc EnsureWorkspace(EnsureWorkspaceRequest) returns (EnsureWorkspaceResponse);
+  // SetupWorkspace sets the checkout up again: copies the repository files
+  // and runs the setup command.
+  rpc SetupWorkspace(SetupWorkspaceRequest) returns (SetupWorkspaceResponse);
+  // CommitWorkspace commits the checkout's uncommitted changes to the
+  // item's branch, so releasing it keeps them. Unchanged copies of
+  // attachments are removed instead of committed.
+  rpc CommitWorkspace(CommitWorkspaceRequest) returns (CommitWorkspaceResponse);
+  // ReleaseWorkspace releases the claim when the checkout is clean, after
+  // removing unchanged copies of attachments. The agent must be stopped.
+  rpc ReleaseWorkspace(ReleaseWorkspaceRequest) returns (ReleaseWorkspaceResponse);
+  // GetUncommittedChanges reads, without changing anything, which files
+  // releasing the checkout would find uncommitted and which are unchanged
+  // copies of attachments it would remove.
+  rpc GetUncommittedChanges(GetUncommittedChangesRequest) returns (GetUncommittedChangesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SearchWorkspaceFiles fuzzy-finds paths in the checkout, for mentions.
+  rpc SearchWorkspaceFiles(SearchWorkspaceFilesRequest) returns (SearchWorkspaceFilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// SetupState is where a checkout's setup is.
+enum SetupState {
+  SETUP_STATE_UNSPECIFIED = 0;
+  SETUP_STATE_RUNNING = 1;
+  SETUP_STATE_SUCCEEDED = 2;
+  SETUP_STATE_FAILED = 3;
+}
+
+// SetupRun is the latest setup of the current claim.
+message SetupRun {
+  string claim_id = 1;
+  SetupState state = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  string error = 5;
+  repeated string warnings = 6;
+  string log_tail = 7;
+}
+
+// GitState is the checkout's Git state as last observed.
+message GitState {
+  string head = 1;
+  string current_branch = 2;
+  string expected_branch = 3;
+  bool branch_mismatch = 4;
+  bool dirty = 5;
+  // ahead and behind count commits relative to the integration branch's
+  // upstream, as of the last fetch.
+  uint32 ahead = 6;
+  uint32 behind = 7;
+}
+
+message GetWorkspaceRequest {
+  string item_id = 1;
+}
+
+message GetWorkspaceResponse {
+  Checkout checkout = 1;
+  WorktreeStatus status = 2;
+  string reason = 3;
+  GitState git = 4;
+  SetupRun setup = 5;
+}
+
+message EnsureWorkspaceRequest {
+  string item_id = 1;
+  bool skip_setup = 2;
+}
+
+message EnsureWorkspaceResponse {
+  Checkout checkout = 1;
+  Job job = 2;
+}
+
+message SetupWorkspaceRequest {
+  string item_id = 1;
+}
+
+message SetupWorkspaceResponse {
+  Job job = 1;
+}
+
+message CommitWorkspaceRequest {
+  string item_id = 1;
+  // message defaults to a message saying wi committed the checkout.
+  string message = 2;
+}
+
+message CommitWorkspaceResponse {
+  // commit is empty when there was nothing to commit.
+  string commit = 1;
+  repeated string removed_copies = 2;
+}
+
+message ReleaseWorkspaceRequest {
+  string item_id = 1;
+}
+
+message ReleaseWorkspaceResponse {
+  Item item = 1;
+  repeated string warnings = 2;
+}
+
+message GetUncommittedChangesRequest {
+  string item_id = 1;
+}
+
+message GetUncommittedChangesResponse {
+  repeated string files = 1;
+  repeated string attached_copies = 2;
+}
+
+message SearchWorkspaceFilesRequest {
+  string item_id = 1;
+  string query = 2;
+  uint32 limit = 3;
+}
+
+message SearchWorkspaceFilesResponse {
+  repeated string paths = 1;
+}

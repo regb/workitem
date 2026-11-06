@@ -74,7 +74,14 @@ func (a *App) WaitForAgentRuntimeReady(ctx context.Context, itemID string, runti
 	return a.waitForAgentRuntimeReady(ctx, itemID, runtime)
 }
 
+// WaitForAgentStarted also accepts native TUI drivers without prompt control.
+func (a *App) WaitForAgentStarted(ctx context.Context, itemID string, runtime *model.AgentRuntime) error {
+	return a.waitForAgentAvailable(ctx, itemID, runtime, false)
+}
 func (a *App) waitForAgentRuntimeReady(ctx context.Context, itemID string, runtime *model.AgentRuntime) error {
+	return a.waitForAgentAvailable(ctx, itemID, runtime, true)
+}
+func (a *App) waitForAgentAvailable(ctx context.Context, itemID string, runtime *model.AgentRuntime, requirePrompt bool) error {
 	if runtime == nil {
 		return fmt.Errorf("agent runtime metadata is unavailable")
 	}
@@ -103,6 +110,9 @@ func (a *App) waitForAgentRuntimeReady(ctx context.Context, itemID string, runti
 		}
 		if current.State == model.AgentRuntimeProblem || current.State == model.AgentRuntimeStopped {
 			return false, fmt.Errorf("agent runtime %s is %s before accepting the initial prompt", runtime.ID, current.State)
+		}
+		if !requirePrompt && current.State == model.AgentRuntimeRunning && (current.Capabilities.NativeTUI || current.Capabilities.Headless) {
+			return true, nil
 		}
 		if _, err := os.Stat(socketPath); err == nil {
 			if current.Capabilities.Prompt {

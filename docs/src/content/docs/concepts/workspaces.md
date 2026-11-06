@@ -5,7 +5,7 @@ description: Learn how Wi assigns managed Git worktrees and preserves task branc
 
 A workspace is a Git checkout claim, not a tmux session or an agent process. All new items use managed slots from a [registered repository](../repositories/).
 
-The checkout specification records the implementation branch and materialization policy. A nullable claim records the current assignment, including its path and identity. Release clears the claim but preserves the specification and last claim generation. Every later assignment receives a new identity and higher generation, even when reusing a directory. Runtime and terminal records bind to that assignment to fence stale owners.
+The checkout specification records the implementation branch and materialization policy. A nullable claim records the current assignment, including its path and identity. Release clears the claim but preserves the specification and last claim generation. Every later assignment receives a new identity and higher generation, even when reusing a directory. The agent and its terminal bind to that assignment, so an agent left over from an earlier claim cannot act on the new one.
 
 ## Additional Git worktrees
 
@@ -34,7 +34,7 @@ wi workspace ensure add-pagination
 wi workspace release add-pagination
 ```
 
-Release refuses while an active runtime or terminal depends on the checkout. It also requires the recorded implementation branch and a clean worktree. The slot directory is retained for reuse, and the task branch survives release.
+Release refuses while the item's agent runs in the checkout. It also requires the recorded implementation branch and a clean worktree. The slot directory is retained for reuse, and the task branch survives release.
 
 A reused slot keeps its untracked and ignored files, such as `node_modules` or build caches, so it starts warm. A setup command that wants a fresh slot can run `git clean` itself.
 
@@ -48,7 +48,7 @@ wi repo files add biskoui certs/dev.pem --from ~/certs/biskoui.pem
 wi repo files list
 ```
 
-Adding or removing a file updates the repository's checkouts at once where it can: `wi repo files remove` deletes unedited copies from checkouts that no item claims, while a claimed checkout keeps its copy until its next claim, still ignored by Git. A copy edited since it was placed is never deleted; Wi reports it instead.
+`wi repo files add` reads the file on the client and sends its content to the daemon. Adding or removing a file updates the repository's checkouts at once where it can: `wi repo files remove` deletes unedited copies from checkouts that no item claims, while a claimed checkout keeps its copy until its next claim, still ignored by Git. A copy edited since it was placed is never deleted; Wi reports it instead.
 
 Every new checkout claim is set up before an agent starts in it:
 
@@ -69,7 +69,7 @@ wi repo settings set biskoui plugins.setup.trust always
 
 The command runs without the direnv environment, since it may create files an `.envrc` needs. It gets `WI_ID`, `WI_WORKTREE`, `WI_REPOSITORY_ID`, `WI_SLOT`, `WI_SLOT_REUSED` (`1` when another claim used the slot before), and `WI_FILES`, a private copy of every repository file that lives only for the run. List files that should not be copied automatically in `plugins.files.skip`; setup can still copy or transform them from `$WI_FILES`. It must finish within `plugins.setup.timeout_seconds` (600 by default). Its output goes to a log under XDG state, and `wi workspace status` shows the outcome.
 
-Setup runs once per claim; resuming an agent on the same claim does not repeat it. Setup runs without holding the item's lock, so the item stays usable while it runs. If it fails, the item stays active with its checkout claimed and no agent starts; its worktree shows as a problem, so the item rises in attention until setup is retried. Fix the cause and run `wi workspace setup`, which repeats setup and refuses while an agent runs in the checkout. `wi start`, `wi resume` and `wi reopen` accept `--skip-setup` to start the agent without setting up a new claim.
+Setup runs once per claim; resuming an agent on the same claim does not repeat it. The daemon runs it as a job (`setup_workspace`), which keeps going if the command that started it is interrupted, and reports its phase and the end of its log. Setup runs without holding the item's lock, so the item stays usable while it runs. If it fails, the item stays active with its checkout claimed and no agent starts; its worktree shows as a problem, so the item rises in attention until setup is retried. Fix the cause and run `wi workspace setup`, which repeats setup and refuses while an agent runs in the checkout. `wi start`, `wi resume` and `wi reopen` accept `--skip-setup` to start the agent without setting up a new claim.
 
 ## Environment variables
 
@@ -81,7 +81,11 @@ wi repo env list            # values hidden; --show-values prints them
 wi repo env unset PORT
 ```
 
-Wi sets them for every agent runtime (TUI and headless, including the item's tmux session) and setup command it starts in the repository's checkouts. A repository's `.envrc`, when direnv loads it, applies after them. They are passed to the process as it starts, never written to a file, so they work the same wherever the checkout runs; a project that needs a `.env` on disk can write one in its setup command. Common `.env` loaders leave variables that are already set alone, so these take precedence over a committed `.env`. Changes apply to agents and setup started afterwards. Values may be secrets: history records which keys changed, never values. `WI_*` names, `TMUX` and `TMUX_PANE` are reserved.
+Wi sets them for every agent (TUI and headless) and setup command it starts in the repository's checkouts. A repository's `.envrc`, when direnv loads it, applies after them. They are passed to the process as it starts, never written to a file, so they work the same wherever the checkout runs; a project that needs a `.env` on disk can write one in its setup command. Common `.env` loaders leave variables that are already set alone, so these take precedence over a committed `.env`. Changes apply to agents and setup started afterwards; `wi agent runtime restart` restarts an idle agent with them. Values may be secrets: history records which keys changed, never values. `WI_*` names, `TMUX` and `TMUX_PANE` are reserved.
+
+### Where the rest of the environment comes from
+
+The daemon starts agents and setup commands, so they never inherit the shell that ran a `wi` command. A headless agent's environment starts from the daemon's own; a TUI agent's starts from the tmux server's global environment when a server is running, and otherwise from the daemon's. Wi removes inherited direnv state, `WI_*` context, `TMUX` and `TMUX_PANE`, adds the repository's variables, then the checkout's `.envrc` when direnv loads it, and puts the directory of the daemon's `wi` executable first on `PATH`. What the daemon itself starts with is described in [Daemon startup environment](../../reference/configuration/#daemon-startup-environment): set a variable there, or as a repository variable, rather than in the shell you run `wi` from.
 
 ## Branch divergence
 

@@ -20,6 +20,7 @@ type ControlOptions struct {
 	Images            []agent.ImageContent
 	Actor             string
 	RequestID         string
+	CommandID         string
 	ExpectedRuntimeID string
 	RequireIdle       bool
 	// Setting is the change carried by CommandSet.
@@ -90,9 +91,12 @@ func (s *Service) Control(ctx context.Context, opts ControlOptions) (ControlResu
 	if !supportsControl(runtime.Capabilities, commandType) {
 		return ControlResult{}, fmt.Errorf("agent driver does not support %s control", commandType)
 	}
-	commandID, err := s.newID()
-	if err != nil {
-		return ControlResult{}, err
+	commandID := opts.CommandID
+	if commandID == "" {
+		commandID, err = s.newID()
+		if err != nil {
+			return ControlResult{}, err
+		}
 	}
 	actor := strings.TrimSpace(opts.Actor)
 	if actor == "" {

@@ -6,7 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
+
+	"github.com/regb/workitem/internal/apitransport"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,6 +32,13 @@ type Server struct {
 	native                     *store.Store
 	listener                   *net.UnixListener
 	agentListener              *net.UnixListener
+	webListener                *net.UnixListener
+	hostListener               *net.UnixListener
+	apiHandler                 http.Handler
+	apiServers                 []*apitransport.Server
+	serversMu                  sync.Mutex
+	beforeClose                func()
+	runtimeSettingsObserver    func(string, string, map[string]string, bool)
 	agentSocketPath            string
 	startedAt                  time.Time
 	buildIdentity              string
@@ -187,10 +198,43 @@ func (s *Server) Serve(ctx context.Context) error {
 	if s.agentListener != nil {
 		listenerCount++
 	}
-	failures := make(chan error, listenerCount)
-	go s.acceptConnections(s.listener, AccessOperator, failures)
-	if s.agentListener != nil {
-		go s.acceptConnections(s.agentListener, AccessAgent, failures)
+	failures := make(chan error, listenerCount+1)
+	if s.apiHandler == nil {
+		go s.acceptConnections(s.listener, AccessOperator, failures)
+		if s.agentListener != nil {
+			go s.acceptConnections(s.agentListener, AccessAgent, failures)
+		}
+	} else {
+		serve := func(listener *net.UnixListener, access apitransport.Access) {
+			if listener == nil {
+				return
+			}
+			s.serversMu.Lock()
+			select {
+			case <-s.closed:
+				s.serversMu.Unlock()
+				return
+			default:
+			}
+			server, _ := apitransport.NewServer(s.apiHandler, access)
+			s.apiServers = append(s.apiServers, server)
+			s.serversMu.Unlock()
+			go func() {
+				if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+					select {
+					case <-s.closed:
+					default:
+						failures <- err
+					}
+				}
+			}()
+		}
+		serve(s.listener, apitransport.Operator)
+		serve(s.agentListener, apitransport.Agent)
+		serve(s.webListener, apitransport.WebAdapter)
+		if s.hostListener != nil {
+			go s.acceptConnections(s.hostListener, AccessRuntimeHost, failures)
+		}
 	}
 	select {
 	case <-s.closed:
@@ -400,6 +444,22 @@ func (s *Server) Close() error {
 	var result error
 	s.closeOnce.Do(func() {
 		close(s.closed)
+		s.serversMu.Lock()
+		servers := append([]*apitransport.Server(nil), s.apiServers...)
+		s.serversMu.Unlock()
+		for _, server := range servers {
+			_ = server.Close()
+		}
+		if s.webListener != nil {
+			_ = s.webListener.Close()
+		}
+		if s.hostListener != nil {
+			_ = s.hostListener.Close()
+			_ = os.Remove(InternalSocketPath(s.socketPath))
+		}
+		if s.beforeClose != nil {
+			s.beforeClose()
+		}
 		if s.listener != nil {
 			result = s.listener.Close()
 		}
@@ -439,29 +499,54 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		s.writeError(conn, request.ID, "invalid_request", "decode request: "+err.Error())
 		return
 	}
-	if request.ProtocolVersion != ProtocolVersion {
-		s.writeError(conn, request.ID, "protocol_mismatch", fmt.Sprintf("unsupported protocol %d; expected %d", request.ProtocolVersion, ProtocolVersion))
+	s.dispatchWire(context.Background(), conn, request, access)
+}
+
+func (s *Server) dispatchWire(ctx context.Context, conn io.Writer, request Request, access string) {
+	result, err := s.dispatch(ctx, request, access)
+	if err != nil {
+		var protocolError *ProtocolError
+		if !errors.As(err, &protocolError) {
+			protocolError = &ProtocolError{Code: "internal_error", Message: err.Error()}
+		}
+		s.writeError(conn, request.ID, protocolError.Code, protocolError.Message)
 		return
+	}
+	encoded, err := json.Marshal(result)
+	if err != nil {
+		s.writeError(conn, request.ID, "internal_error", err.Error())
+		return
+	}
+	_ = json.NewEncoder(conn).Encode(Response{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, ID: request.ID, OK: true, Result: encoded})
+}
+
+func (s *Server) dispatch(ctx context.Context, request Request, access string) (any, error) {
+	if request.ProtocolVersion != ProtocolVersion {
+		return nil, &ProtocolError{Code: "protocol_mismatch", Message: fmt.Sprintf("unsupported protocol %d; expected %d", request.ProtocolVersion, ProtocolVersion)}
+
 	}
 	// A build mismatch alone is not permission to replace this writer. Old
 	// clients must not shut down a daemon whose database they cannot open.
 	// Health reads and fenced runtime facts do not interpret durable schema;
 	// keeping these independent also preserves existing runtime event hosts.
 	if request.Method != MethodPing && request.Method != MethodStatus && request.Method != MethodRuntimeEvent && request.SchemaVersion != SchemaVersion {
-		s.writeError(conn, request.ID, "schema_mismatch", fmt.Sprintf("client database schema %d cannot control daemon schema %d; use a matching wi build", request.SchemaVersion, SchemaVersion))
-		return
+		return nil, &ProtocolError{Code: "schema_mismatch", Message: fmt.Sprintf("client database schema %d cannot control daemon schema %d; use a matching wi build", request.SchemaVersion, SchemaVersion)}
+
 	}
 	if request.BuildIdentity != "" && request.BuildIdentity != s.buildIdentity && request.Method != MethodStatus && request.Method != MethodShutdown && request.Method != MethodRuntimeEvent {
-		s.writeError(conn, request.ID, "build_mismatch", "client and daemon builds differ; restart the older process")
-		return
+		return nil, &ProtocolError{Code: "build_mismatch", Message: "client and daemon builds differ; restart the older process"}
+
 	}
 	if strings.TrimSpace(request.ID) == "" || strings.TrimSpace(request.Method) == "" {
-		s.writeError(conn, request.ID, "invalid_request", "request id and method are required")
-		return
+		return nil, &ProtocolError{Code: "invalid_request", Message: "request id and method are required"}
+
+	}
+	if access == AccessRuntimeHost && !hostMethodAllowed(request.Method) {
+		return nil, &ProtocolError{Code: "permission_denied", Message: "private runtime host endpoint does not allow " + request.Method}
 	}
 	if access == AccessAgent && !agentMethodAllowed(request.Method) {
-		s.writeError(conn, request.ID, "permission_denied", "agent endpoint does not allow "+request.Method)
-		return
+		return nil, &ProtocolError{Code: "permission_denied", Message: "agent endpoint does not allow " + request.Method}
+
 	}
 	var result any
 	switch request.Method {
@@ -470,8 +555,8 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	case MethodStatus:
 		status, err := s.status()
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		status.Access = access
 		if access == AccessAgent {
@@ -483,22 +568,22 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		result = status
 	case MethodShutdown:
 		if s.managed {
-			s.writeError(conn, request.ID, "managed_daemon", ManagedDaemonMessage)
-			return
+			return nil, &ProtocolError{Code: "managed_daemon", Message: ManagedDaemonMessage}
+
 		}
 		result = map[string]any{"stopping": true}
 		defer func() { go s.Close() }()
 	case MethodConversation:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
-			s.writeError(conn, request.ID, "invalid_request", "valid item_id is required")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "valid item_id is required"}
+
 		}
 		var session ConversationIndex
 		found, err := s.database.ReadProjection(ConversationProjection, itemRequest.ItemID, &session)
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		s.importMu.RLock()
 		conversationWarnings := append([]string(nil), s.lastConversationImport.Warnings...)
@@ -507,15 +592,15 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	case MethodLeaseGet:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
-			s.writeError(conn, request.ID, "invalid_request", "valid item_id is required")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "valid item_id is required"}
+
 		}
 		result = model.LeaseResult{Lease: s.leases.get(itemRequest.ItemID, time.Now().UTC())}
 	case MethodLeaseAcquire, MethodLeaseRelease:
 		var leaseRequest model.LeaseRequest
 		if err := json.Unmarshal(request.Payload, &leaseRequest); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", "decode lease request: "+err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "decode lease request: " + err.Error()}
+
 		}
 		var leaseResult model.LeaseResult
 		var err error
@@ -526,8 +611,8 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			leaseResult, err = s.leases.release(leaseRequest)
 		}
 		if err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		// A handover changes who may write; a renewal changes nothing readers show.
 		if leaseResult.Granted && (request.Method == MethodLeaseRelease || before == nil || leaseResult.Lease == nil || before.ID != leaseResult.Lease.ID) {
@@ -537,21 +622,21 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	case MethodItemResources:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
-			s.writeError(conn, request.ID, "invalid_request", "valid item_id is required")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "valid item_id is required"}
+
 		}
 		resources := ItemResourcesResult{}
 		var runtime model.AgentRuntime
 		if found, err := s.database.ReadProjection(RuntimeOwnershipProjection, itemRequest.ItemID, &runtime); err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		} else if found {
 			resources.Runtime = &runtime
 		}
 		var terminal model.TerminalRuntime
 		if found, err := s.database.ReadProjection(TerminalOwnershipProjection, itemRequest.ItemID, &terminal); err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		} else if found {
 			resources.Terminal = &terminal
 		}
@@ -559,77 +644,77 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	case MethodAgentObservation:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
-			s.writeError(conn, request.ID, "invalid_request", "valid item_id is required")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "valid item_id is required"}
+
 		}
 		var observation AgentObservation
 		found, err := s.database.ReadProjection(AgentObservationProjection, itemRequest.ItemID, &observation)
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		result = AgentObservationResult{Projection: ProjectionMetadata{Revision: uint64(observation.ObservedAt.UnixNano()), Source: "daemon.external_observer", ObservedAt: observation.ObservedAt, Fresh: found && time.Since(observation.ObservedAt) < 5*time.Second, Warnings: append([]string(nil), observation.Warnings...)}, Found: found, Observation: observation}
 	case MethodCanonicalManifest:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
-			s.writeError(conn, request.ID, "invalid_request", "valid item_id is required")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "valid item_id is required"}
+
 		}
 		canonical, err := s.database.CanonicalManifest(itemRequest.ItemID)
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		result = canonical
 	case MethodActivityBarrier:
-		barrierCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		barrierCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		barrier, err := s.activityBarrier(barrierCtx)
 		cancel()
 		if err != nil {
-			s.writeError(conn, request.ID, "barrier_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "barrier_error", Message: err.Error()}
+
 		}
 		result = barrier
 	case MethodActionability:
 		var snapshotRequest ActionabilitySnapshotRequest
 		if err := json.Unmarshal(request.Payload, &snapshotRequest); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", "decode actionability snapshot: "+err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "decode actionability snapshot: " + err.Error()}
+
 		}
 		if snapshotRequest.CurrentItemID != "" && !model.ValidID(snapshotRequest.CurrentItemID) {
-			s.writeError(conn, request.ID, "invalid_request", "current_item_id must be empty or valid")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "current_item_id must be empty or valid"}
+
 		}
-		snapshotCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		snapshotCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		snapshot, err := s.actionabilitySnapshot(snapshotCtx, snapshotRequest.CurrentItemID, snapshotRequest.Queue)
 		cancel()
 		if err != nil {
-			s.writeError(conn, request.ID, "snapshot_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "snapshot_error", Message: err.Error()}
+
 		}
 		result = snapshot
 	case MethodAttentionActivity:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
-			s.writeError(conn, request.ID, "invalid_request", "valid item_id is required")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "valid item_id is required"}
+
 		}
 		activity, err := s.database.AttentionActivity(itemRequest.ItemID)
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		result = activity
 	case MethodItemEvents:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
-			s.writeError(conn, request.ID, "invalid_request", "valid item_id is required")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "valid item_id is required"}
+
 		}
 		domainEvents, err := s.database.ListItemEvents(itemRequest.ItemID)
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		events := make([]model.Event, 0, len(domainEvents))
 		for _, event := range domainEvents {
@@ -639,8 +724,8 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	case MethodChangesWait:
 		var changesRequest ChangesRequest
 		if err := json.Unmarshal(request.Payload, &changesRequest); err != nil || changesRequest.WaitMillis < 0 || changesRequest.WaitMillis > 30000 {
-			s.writeError(conn, request.ID, "invalid_request", "valid after and wait_millis are required")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "valid after and wait_millis are required"}
+
 		}
 		changes, waiter := s.database.changes.since(changesRequest.Epoch, changesRequest.After)
 		if !changes.All && len(changes.ItemIDs) == 0 && changesRequest.WaitMillis > 0 {
@@ -657,13 +742,13 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	case MethodRuntimeEvents:
 		var eventsRequest RuntimeEventsRequest
 		if err := json.Unmarshal(request.Payload, &eventsRequest); err != nil || !model.ValidID(eventsRequest.ItemID) || eventsRequest.Limit < 0 || eventsRequest.Limit > 10000 || eventsRequest.WaitMillis < 0 || eventsRequest.WaitMillis > 30000 {
-			s.writeError(conn, request.ID, "invalid_request", "valid item_id, limit, and wait_millis are required")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "valid item_id, limit, and wait_millis are required"}
+
 		}
 		eventsResult, err := s.database.RuntimeEvents(eventsRequest.ItemID, eventsRequest.AfterSequence, eventsRequest.Limit)
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		if len(eventsResult.Events) == 0 && eventsRequest.WaitMillis > 0 {
 			waiter := s.runtimeEventWaiter()
@@ -681,32 +766,38 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			}
 			eventsResult, err = s.database.RuntimeEvents(eventsRequest.ItemID, eventsRequest.AfterSequence, eventsRequest.Limit)
 			if err != nil {
-				s.writeError(conn, request.ID, "database_error", err.Error())
-				return
+				return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 			}
 		}
 		result = eventsResult
 	case MethodRuntimeEvent:
 		var runtimeEvent RuntimeSemanticEvent
 		if err := json.Unmarshal(request.Payload, &runtimeEvent); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", "decode runtime event: "+err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "decode runtime event: " + err.Error()}
+
 		}
 		s.domainMu.Lock()
-		runtimeResult, err := IngestRuntimeEvent(context.Background(), s.database, runtimeEvent)
+		var previous model.AgentRuntime
+		if len(runtimeEvent.Settings) > 0 {
+			_, _ = s.database.ReadProjection(RuntimeOwnershipProjection, runtimeEvent.WorkItemID, &previous)
+		}
+		runtimeResult, err := IngestRuntimeEvent(ctx, s.database, runtimeEvent)
 		s.domainMu.Unlock()
+		if err == nil && !runtimeResult.Duplicate && len(runtimeEvent.Settings) > 0 && s.runtimeSettingsObserver != nil {
+			s.runtimeSettingsObserver(runtimeEvent.WorkItemID, runtimeEvent.RuntimeID, runtimeEvent.Settings, len(previous.Settings) > 0)
+		}
 		if err != nil {
 			var ownerMismatch *RuntimeOwnerMismatchError
 			var rejected *RuntimeEventRejection
+			code := "database_error"
 			switch {
 			case errors.As(err, &ownerMismatch):
-				s.writeError(conn, request.ID, "runtime_owner_mismatch", err.Error())
+				code = "runtime_owner_mismatch"
 			case errors.As(err, &rejected) || errors.Is(err, store.ErrNotFound):
-				s.writeError(conn, request.ID, "runtime_event_error", err.Error())
-			default:
-				s.writeError(conn, request.ID, "database_error", err.Error())
+				code = "runtime_event_error"
 			}
-			return
+			return nil, &ProtocolError{Code: code, Message: err.Error()}
 		}
 		if !runtimeResult.Duplicate {
 			s.publishRuntimeEvent()
@@ -715,10 +806,16 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	case MethodStoreCommand:
 		var storeRequest StoreCommandRequest
 		if err := json.Unmarshal(request.Payload, &storeRequest); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", "decode store command: "+err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "decode store command: " + err.Error()}
+
 		}
 		s.domainMu.Lock()
+		if access == AccessRuntimeHost {
+			if err := s.validateHostStoreMutation(storeRequest); err != nil {
+				s.domainMu.Unlock()
+				return nil, &ProtocolError{Code: "runtime_owner_mismatch", Message: err.Error()}
+			}
+		}
 		err := StageStoreMutation(s.database, storeRequest.Command, storeRequest.Payload)
 		var storeResult StoreCommandResult
 		committed := false
@@ -727,48 +824,48 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			committed = err == nil
 		}
 		if committed {
-			err = MaterializeNativeWrites(context.Background(), s.database, s.native)
+			err = MaterializeNativeWrites(ctx, s.database, s.native)
 		}
 		if err == nil || !committed {
 			RemoveStagedStoreMutation(s.database, storeRequest.Command.ID)
 		}
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "command_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+
 		}
 		result = storeResult
 	case MethodCreateItem:
 		var createRequest CreateItemRequest
 		if err := json.Unmarshal(request.Payload, &createRequest); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", "decode create command: "+err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "decode create command: " + err.Error()}
+
 		}
 		if ref := createRequest.Command.Manifest.Repository; ref.ID != "" {
-			source, err := s.database.RepositorySource(context.Background(), RepositorySourceRequest{Selector: ref.ID, Revision: ref.CreatedFromCommit, SkipLabels: true})
+			source, err := s.database.RepositorySource(ctx, RepositorySourceRequest{Selector: ref.ID, Revision: ref.CreatedFromCommit, SkipLabels: true})
 			if err != nil || source.Commit != ref.CreatedFromCommit {
-				s.writeError(conn, request.ID, "invalid_request", "created-from commit is not present in the registered repository")
-				return
+				return nil, &ProtocolError{Code: "invalid_request", Message: "created-from commit is not present in the registered repository"}
+
 			}
 			git := gitpkg.New("git")
 			pin := "refs/wi/pins/" + ref.CreatedFromCommit
-			if _, err := git.RevParse(context.Background(), source.GitDir, pin); err != nil {
-				if err := git.UpdateRef(context.Background(), source.GitDir, pin, source.Commit, "", "wi: retain item base"); err != nil {
-					s.writeError(conn, request.ID, "repository_error", err.Error())
-					return
+			if _, err := git.RevParse(ctx, source.GitDir, pin); err != nil {
+				if err := git.UpdateRef(ctx, source.GitDir, pin, source.Commit, "", "wi: retain item base"); err != nil {
+					return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 				}
 			}
 		}
 		if access == AccessAgent {
 			createRequest.Command.Actor = "agent"
 			if err := validateAgentCreateItem(createRequest.Command.Manifest); err != nil {
-				s.writeError(conn, request.ID, "permission_denied", err.Error())
-				return
+				return nil, &ProtocolError{Code: "permission_denied", Message: err.Error()}
+
 			}
 		}
 		if err := validateCreateDescription(createRequest.Command, createRequest.Description); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		s.domainMu.Lock()
 		err := StageDescription(s.database, createRequest.Command.ID, createRequest.Description)
@@ -783,268 +880,268 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 			committed = err == nil
 		}
 		if committed {
-			err = MaterializeNativeWrites(context.Background(), s.database, s.native)
+			err = MaterializeNativeWrites(ctx, s.database, s.native)
 		}
 		if err == nil || !committed {
 			RemoveStagedDescription(s.database, createRequest.Command.ID)
 		}
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "command_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+
 		}
 		result = createResult
 	case MethodManifestQueue:
 		var queueRequest ManifestCommandQueueRequest
 		if err := json.Unmarshal(request.Payload, &queueRequest); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", "decode manifest queue command: "+err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "decode manifest queue command: " + err.Error()}
+
 		}
 		if queueRequest.Command.Type != CommandBlockerAdd {
-			s.writeError(conn, request.ID, "invalid_request", "manifest queue command requires adding a blocker")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "manifest queue command requires adding a blocker"}
+
 		}
 		s.domainMu.Lock()
 		queueResult, err := s.database.ExecuteManifestCommandWithQueue(queueRequest.Command, queueRequest.Queue)
 		if err == nil {
-			err = MaterializeNativeWrites(context.Background(), s.database, s.native)
+			err = MaterializeNativeWrites(ctx, s.database, s.native)
 		}
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "command_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+
 		}
 		result = queueResult
 	case MethodAddNote:
 		var noteRequest AddNoteRequest
 		if err := json.Unmarshal(request.Payload, &noteRequest); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
-		note, err := s.addNote(context.Background(), noteRequest)
+		note, err := s.addNote(ctx, noteRequest)
 		if err != nil {
-			s.writeError(conn, request.ID, "command_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+
 		}
 		result = note
 	case MethodAttach:
 		var attachRequest AttachRequest
 		if err := json.Unmarshal(request.Payload, &attachRequest); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
-		note, err := s.attach(context.Background(), attachRequest)
+		note, err := s.attach(ctx, attachRequest)
 		if err != nil {
-			s.writeError(conn, request.ID, "command_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+
 		}
 		result = note
 	case MethodAgentProfiles:
 		value, err := s.database.AgentProfiles()
 		if err != nil {
-			s.writeError(conn, request.ID, "command_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+
 		}
 		result = value
 	case MethodChangeAgentProfile:
 		var command ChangeAgentProfileCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		s.domainMu.Lock()
 		value, err := s.database.ChangeAgentProfile(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "command_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+
 		}
 		result = value
 	case MethodRepositoryEnvironment:
 		var query RepositoryEnvironmentRequest
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		value, err := s.database.RepositoryEnvironment(query.Selector)
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		result = value
 	case MethodSetRepositoryEnvironment:
 		var command SetRepositoryEnvironmentCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		s.domainMu.Lock()
 		value, err := s.database.SetRepositoryEnvironment(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		result = value
 	case MethodRepositoryFiles, MethodRepositoryFileRead, MethodRepositoryFilePut, MethodRepositoryFileRemove:
 		value, err := s.repositoryFile(request.Method, request.Payload)
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		result = value
 	case MethodEditItem:
 		var editRequest EditItemRequest
 		if err := json.Unmarshal(request.Payload, &editRequest); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		s.domainMu.Lock()
 		editResult, err := s.editItem(editRequest)
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "command_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+
 		}
 		result = editResult
 	case MethodManifestCommand:
 		var command ManifestCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", "decode manifest command: "+err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "decode manifest command: " + err.Error()}
+
 		}
 		if command.Type == CommandEdit && command.Edit != nil && command.Edit.DescriptionDigest != "" {
-			s.writeError(conn, request.ID, "invalid_request", "description edits require edit_item")
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: "description edits require edit_item"}
+
 		}
 		s.domainMu.Lock()
 		commandResult, err := s.database.ExecuteManifestCommand(command)
 		if err == nil {
-			err = MaterializeNativeWrites(context.Background(), s.database, s.native)
+			err = MaterializeNativeWrites(ctx, s.database, s.native)
 		}
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "command_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+
 		}
 		result = commandResult
 	case MethodRepositoryStatus, MethodRepositorySync:
-		operationCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		operationCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 		defer cancel()
 		var value any
 		var operationErr error
 		if request.Method == MethodRepositoryStatus {
 			var query RepositoryStatusRequest
 			if err := json.Unmarshal(request.Payload, &query); err != nil {
-				s.writeError(conn, request.ID, "invalid_request", err.Error())
-				return
+				return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 			}
 			value, operationErr = s.repositoryStatus(operationCtx, query)
 		} else {
 			var command RepositorySyncRequest
 			if err := json.Unmarshal(request.Payload, &command); err != nil {
-				s.writeError(conn, request.ID, "invalid_request", err.Error())
-				return
+				return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 			}
 			value, operationErr = s.repositorySync(operationCtx, command)
 		}
 		if operationErr != nil {
-			s.writeError(conn, request.ID, "repository_error", operationErr.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: operationErr.Error()}
+
 		}
 		result = value
 	case MethodSetRepositoryUpstream:
 		var command SetRepositoryUpstreamCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
-		operationCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		operationCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		value, err := s.setRepositoryUpstream(operationCtx, command)
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		result = value
 	case MethodRepositorySettings:
 		var query RepositorySettingsRequest
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		value, err := s.database.RepositorySettings(query.Selector)
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		result = value
 	case MethodSetRepositorySetting:
 		var command SetRepositorySettingCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		s.domainMu.Lock()
 		value, err := s.database.SetRepositorySetting(command, s.repositorySettingsRegistry)
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		result = value
 	case MethodRenameRepository:
 		var command RenameRepositoryCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		s.domainMu.Lock()
 		renamed, err := s.database.RenameRepository(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		result = renamed
 	case MethodSetRepositoryArchived:
 		var command SetRepositoryArchivedCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		s.domainMu.Lock()
 		value, err := s.database.SetRepositoryArchived(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		result = value
 	case MethodListRepositories:
 		repositories, err := s.database.ListRepositories()
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		var query struct {
 			ObserveUpstream bool `json:"observe_upstream"`
 		}
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		if query.ObserveUpstream {
 			if access == AccessAgent {
-				s.writeError(conn, request.ID, "permission_denied", "agent endpoint does not allow Git tracking inspection")
-				return
+				return nil, &ProtocolError{Code: "permission_denied", Message: "agent endpoint does not allow Git tracking inspection"}
+
 			}
 			views := make([]RepositoryView, 0, len(repositories))
 			for _, repo := range repositories {
-				view, err := s.database.repositoryView(context.Background(), repo)
+				view, err := s.database.repositoryView(ctx, repo)
 				if err != nil {
-					s.writeError(conn, request.ID, "repository_error", err.Error())
-					return
+					return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 				}
 				views = append(views, view)
 			}
@@ -1055,17 +1152,17 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	case MethodRepositorySource:
 		var query RepositorySourceRequest
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		if access == AccessAgent && query.ObserveUpstream {
-			s.writeError(conn, request.ID, "permission_denied", "agent endpoint does not allow Git tracking inspection")
-			return
+			return nil, &ProtocolError{Code: "permission_denied", Message: "agent endpoint does not allow Git tracking inspection"}
+
 		}
-		value, err := s.database.RepositorySource(context.Background(), query)
+		value, err := s.database.RepositorySource(ctx, query)
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		if access == AccessAgent {
 			value.GitDir = ""
@@ -1075,32 +1172,32 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 	case MethodRegisterRepository:
 		var command RegisterRepositoryCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			s.writeError(conn, request.ID, "invalid_request", err.Error())
-			return
+			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+
 		}
 		path, err := model.OwnedRepositoryGitDir(s.dataRoot, command.Repository.ID)
 		if err == nil {
-			inspectionCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			inspectionCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			err = gitpkg.New("git").ValidateOwnedBare(inspectionCtx, path, command.Repository.IntegrationBranch)
 			cancel()
 		}
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		s.domainMu.Lock()
 		registered, err := s.database.RegisterRepository(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			s.writeError(conn, request.ID, "repository_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+
 		}
 		result = registered
 	case MethodListManifests:
 		manifests, err := s.database.ListManifests()
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		if access == AccessAgent {
 			for index := range manifests {
@@ -1109,21 +1206,16 @@ func (s *Server) handle(conn *net.UnixConn, access string) {
 		}
 		database, err := s.database.Status()
 		if err != nil {
-			s.writeError(conn, request.ID, "database_error", err.Error())
-			return
+			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+
 		}
 		projection := ProjectionMetadata{Revision: database.GlobalSequence, Source: "daemon-canonical", ObservedAt: time.Now().UTC(), Fresh: true, Warnings: []string{}}
 		result = ManifestProjectionResult{Projection: projection, Manifests: manifests}
 	default:
-		s.writeError(conn, request.ID, "unknown_method", "unknown coordinator method "+request.Method)
-		return
+		return nil, &ProtocolError{Code: "unknown_method", Message: "unknown coordinator method " + request.Method}
+
 	}
-	encoded, err := json.Marshal(result)
-	if err != nil {
-		s.writeError(conn, request.ID, "internal_error", err.Error())
-		return
-	}
-	_ = json.NewEncoder(conn).Encode(Response{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, ID: request.ID, OK: true, Result: encoded})
+	return result, nil
 }
 
 func agentMethodAllowed(method string) bool {
@@ -1180,6 +1272,6 @@ func (s *Server) status() (Status, error) {
 	return Status{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, PID: os.Getpid(), StartedAt: s.startedAt.Format(time.RFC3339Nano), DataRoot: s.dataRoot, SocketPath: s.socketPath, AgentSocketPath: s.agentSocketPath, Access: AccessOperator, Managed: s.managed, Database: database, ConversationImport: lastConversationImport}, nil
 }
 
-func (s *Server) writeError(conn net.Conn, id, code, message string) {
+func (s *Server) writeError(conn io.Writer, id, code, message string) {
 	_ = json.NewEncoder(conn).Encode(Response{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, ID: id, Error: &ProtocolError{Code: code, Message: message}})
 }

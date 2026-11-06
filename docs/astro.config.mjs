@@ -51,6 +51,7 @@ export default defineConfig({
           items: [
             { label: 'Command map', slug: 'reference/commands' },
             { label: 'Configuration', slug: 'reference/configuration' },
+            { label: 'Daemon API', slug: 'reference/api' },
             { label: 'Data and diagnostics', slug: 'reference/data-and-diagnostics' },
             { label: 'Provider usage', slug: 'reference/provider-usage' },
             { label: 'Troubleshooting', slug: 'reference/troubleshooting' },

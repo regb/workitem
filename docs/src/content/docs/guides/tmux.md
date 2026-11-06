@@ -3,7 +3,9 @@ title: Use tmux
 description: Enter TUI agents and navigate active work through tmux.
 ---
 
-Tmux is optional. `wi` uses it as the human-access layer for native Pi TUI sessions. Headless mode remains tmux-independent.
+Tmux is optional. `wi` uses it as the human-access layer for native agent TUIs, such as Pi's or Claude's. Headless mode remains tmux-independent.
+
+The daemon starts TUI agents in tmux and reports where each one runs: the tmux socket, session and window, and how many clients are attached. Commands that enter an item read that report and attach with tmux themselves, from your terminal; the daemon never attaches anyone.
 
 ## Enter an item
 
@@ -11,7 +13,7 @@ Tmux is optional. `wi` uses it as the human-access layer for native Pi TUI sessi
 wi switch auth
 ```
 
-With an explicit item, `switch` validates active work, ensures its worktree and TUI runtime, then enters its wi-owned tmux session. Switching marks the conversation read and takes [control](../../concepts/agents/#controllers-and-observers) when nobody else holds it. If another client, such as a browser, controls the agent, the TUI opens read-only: pane input stays disabled and a status message explains how to take over. `wi switch --take` aborts a turn in flight, replaces a headless runtime with a TUI on the same conversation, and re-enables input.
+With an explicit item, `switch` validates active work, has the daemon ensure its worktree and TUI agent, then attaches to the session the agent reports, or switches the current tmux client to it. Switching marks the conversation read and takes [control](../../concepts/agents/#controllers-and-observers) when nobody else holds it. If another client, such as a browser, controls the agent, the TUI opens read-only: pane input stays disabled and a status message explains how to take over. `wi switch --take` aborts a turn in flight, replaces a headless agent with a TUI on the same conversation, and re-enables input.
 
 Without an item, `switch` opens an `fzf` picker:
 
@@ -35,7 +37,7 @@ wi next --close --resolution abandoned
 
 ## Low-level terminal commands
 
-Use these when you need direct control over access without starting an agent or changing lifecycle:
+Use these when you need direct control over the TUI agent's terminal without changing lifecycle:
 
 ```bash
 wi terminal status --item auth
@@ -44,7 +46,7 @@ wi terminal enter --item auth
 wi terminal close --item auth
 ```
 
-`terminal ensure` requires an existing workspace. It does not create a conversation or runtime.
+The terminal is the TUI agent's: `terminal status` shows the agent with its reported terminal, `terminal ensure` starts the agent in TUI mode (it needs an active item with a checkout), `terminal enter` attaches to it, and `terminal close` stops the agent, disconnecting attached clients. None of them changes lifecycle.
 
 ## Add tmux bindings
 
@@ -105,9 +107,9 @@ These are ordinary tmux bindings, not a plugin. Change the keys, popup dimension
 
 For `run-shell`, `-E` redirects stderr to stdout so tmux displays failures in view mode. Redirecting ordinary stdout keeps successful navigation silent. Pickers use `display-popup -EE`; two `-E` flags close the popup on success but leave it open when selection or startup fails.
 
-`wi` reads `WI_LIST_LABELS` and `WI_ITEM_DEFAULT_LABELS` from an allowed `.envrc` in the command's working directory. Tmux bindings do not need to invoke `direnv`. Explicit caller values still take precedence, and `wi` does not import paths, socket locations, or identity variables from `.envrc` into CLI configuration.
+`wi` reads `WI_LIST_LABELS` and `WI_ITEM_DEFAULT_LABELS` from its own environment only; it does not load an `.envrc`. A binding that should use a directory's values can run the command through direnv, for example `direnv exec #{pane_current_path} wi next`.
 
-New Wi runtimes include the directory of the running Wi executable in PATH, even if the tmux server predates its installation. This preserves the clean server environment without copying another work item’s PATH or secrets.
+Agents the daemon starts include the directory of the daemon's `wi` executable in PATH, even if the tmux server predates its installation. This preserves the clean server environment without copying another work item’s PATH or secrets.
 
 ## Create from a prompt popup
 
@@ -139,4 +141,4 @@ wi --json switch auth
 wi --json next
 ```
 
-JSON mode may select and ensure a target, but it never moves the invoking tmux client. This keeps structured commands safe for scripts.
+JSON mode may select and ensure a target and prints its agent, including the reported terminal, but it never moves the invoking tmux client. This keeps structured commands safe for scripts.

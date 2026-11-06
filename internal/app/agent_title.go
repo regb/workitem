@@ -8,11 +8,26 @@ import (
 )
 
 // GenerateConversationTitle asks the configured default driver for a title.
-// The driver owns the auxiliary request; no primary conversation is acquired.
 func (a *App) GenerateConversationTitle(ctx context.Context, prompt string) (string, error) {
-	definition, configured := a.Agents()[a.DefaultProfile()]
+	return a.generateTitle(ctx, a.DefaultProfile(), prompt)
+}
+
+// GenerateItemTitle uses the item's profile without acquiring a conversation.
+func (a *App) GenerateItemTitle(ctx context.Context, opts ResolveOptions, prompt string) (string, error) {
+	m, err := a.ResolveItem(ctx, opts)
+	if err != nil {
+		return "", err
+	}
+	name, err := a.itemAgentName(m)
+	if err != nil {
+		return "", err
+	}
+	return a.generateTitle(ctx, name, prompt)
+}
+func (a *App) generateTitle(ctx context.Context, name, prompt string) (string, error) {
+	definition, configured := a.Agents()[name]
 	if !configured || strings.TrimSpace(definition.Driver) == "" {
-		return "", fmt.Errorf("default agent has no configured conversation driver")
+		return "", fmt.Errorf("agent profile %q has no configured conversation driver", name)
 	}
 	backend, ok := a.ConversationBackends[definition.Driver].(interface {
 		GenerateTitle(context.Context, string, string, json.RawMessage) (string, error)
@@ -24,5 +39,5 @@ func (a *App) GenerateConversationTitle(ctx context.Context, prompt string) (str
 	if err != nil {
 		return "", err
 	}
-	return backend.GenerateTitle(ctx, prompt, a.DefaultProfile(), raw)
+	return backend.GenerateTitle(ctx, prompt, name, raw)
 }

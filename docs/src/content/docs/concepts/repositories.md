@@ -13,7 +13,7 @@ wi repo list
 wi repo show project
 ```
 
-Local onboarding imports committed Git state into an independent store under `$DATA_ROOT/repositories/<id>.git`. It does not copy dirty files, change your external checkout, or depend on it afterward. The import does not use hardlinks or object alternates.
+The daemon performs the import, so a local source must be a path it can read on the same machine; `wi repo add` sends the absolute path. Local onboarding imports committed Git state into an independent store under `$DATA_ROOT/repositories/<id>.git`. It does not copy dirty files, change your external checkout, or depend on it afterward. The import does not use hardlinks or object alternates.
 
 `--branch` selects the integration branch. When omitted for a local source, Wi discovers it once from the local branch corresponding to `origin/HEAD`, then `main`, `master`, `develop`, or `trunk`. If discovery fails, choose explicitly. For a URL, Wi asks the remote for its default branch (the branch its `HEAD` names); pass `--branch` to choose another:
 
@@ -25,7 +25,7 @@ Register only repositories whose project-local agent resources you trust. Regist
 
 The integration branch selection is stored in the registry; it is not rediscovered when creating or merging items. There is currently no command to change that selection. Its remote URL and upstream branch tracking are Git configuration, read when needed. The bare store has no permanent integration checkout.
 
-Normal `wi repo list` output shows active repositories by name, integration branch, state, and upstream URL/branch or `untracked`. Untracked means the integration branch has no upstream tracking; an origin remote may still exist. `wi repo list --all` includes archived repositories, marked `archived`. `--json` retains the stable ID and other registry metadata; `repo show` also prints the ID and Git store path.
+Normal `wi repo list` output shows active repositories by name, integration branch, state, and upstream URL/branch or `untracked`. Untracked means the integration branch has no upstream tracking; an origin remote may still exist. `wi repo list --all` includes archived repositories, marked `archived`. `--json` prints the repositories with their stable `id`, `integration_branch`, `upstream` and `archived` fields; `repo show` also prints the ID and Git store path.
 
 ## Select the repository for new work
 
@@ -77,11 +77,11 @@ wi repo list --all
 wi repo restore project
 ```
 
-Archiving hides a repository from the default list and rejects new items, whether selected with `--repo` or inherited from the current item. The name remains reserved. Use `repo show` to inspect it or `repo list --all --json` to see its `archived: true` metadata.
+Archiving hides a repository from the default list and rejects new items, whether selected with `--repo` or inherited from the current item. The name remains reserved. Use `repo show` to inspect it or `repo list --all --json` to see its `"archived": true`.
 
 Existing items remain usable, including their normal workspace, agent, and merge operations. Archiving does not stop running agents or change item lifecycle, claims, conversations, or descriptions. It preserves the Git store, implementation branches, unpushed commits, dirty and untracked files, and the original external checkout. No push or cleanliness check is needed because nothing is deleted.
 
-Restore makes the same repository available for new items again. It does not materialize a workspace or runtime. Repeated archive or restore requests are no-ops when already in the requested state. Both commands also accept a stable repository ID. Wi records `repository.archived` and `repository.restored` events.
+Restore makes the same repository available for new items again. It does not materialize a workspace or start an agent. Repeated archive or restore requests are no-ops when already in the requested state. Both commands also accept a stable repository ID. Wi records `repository.archived` and `repository.restored` events.
 
 There is no repository deletion command.
 
@@ -118,11 +118,12 @@ Direct Git edits are authoritative: changing origin changes the next synchroniza
 ```json
 "upstream": {
   "url": "git@example.com:owner/project.git",
-  "branch": "main"
+  "branch": "main",
+  "web_url": "https://example.com/owner/project"
 }
 ```
 
-The `upstream` object in list/show/status JSON is a live Git-derived view, marked `upstream_source: "git"`, not stored registry metadata. Missing tracking means local-only integration.
+The `upstream` object of a repository in the API and in `--json` output is read from Git each time, not stored registry metadata; `web_url` and `host` name the hosting page when Wi recognizes the service. Missing tracking means local-only integration.
 
 Past events and acknowledged command results remain historical snapshots. They do not override current Git tracking.
 
@@ -153,6 +154,6 @@ Publishing stays explicit. Use Git against the store reported by `wi repo show` 
 
 ### Follow the upstream
 
-Creating an item from the integration branch first synchronizes it like `wi repo sync` without options, so new work starts from current upstream changes. This applies to `wi new`, backlog items included. A behind branch fast-forwards, an ahead one is left alone, and diverged histories are not reconciled. Creation never fails because of it: when the upstream is unreachable, the fetch takes more than 20 seconds, a reconciliation is pending or the histories diverged, the item starts from the local integration branch and creation reports a warning. Repositories without an upstream are not affected.
+Creating an item from the integration branch first synchronizes it like `wi repo sync` without options, so new work starts from current upstream changes. The daemon does this inside `ItemService.CreateItem`, which stays synchronous, so it applies to every client, backlog items included. A behind branch fast-forwards, an ahead one is left alone, and diverged histories are not reconciled. Creation never fails because of it: when the upstream is unreachable, a reconciliation is pending or the histories diverged, the item starts from the local integration branch and creation returns a warning. Repositories without an upstream are not affected.
 
-Set `follow_upstream = "off"` under `[repo]` in `config.toml` to create items from the local integration branch without fetching. Merges still synchronize first; use `wi merge --local` to skip that.
+Set `follow_upstream = "off"` under `[repo]` in `config.toml`, then restart the daemon, to create items from the local integration branch without fetching. Merges still synchronize first; use `wi merge --local` to skip that.

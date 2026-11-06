@@ -123,7 +123,7 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (result Merg
 	res.TargetBranch = target
 	if m.Repository.ID != "" {
 		var source coordinator.RepositorySourceResult
-		client := &coordinator.Client{SocketPath: a.DaemonSocketPath}
+		client := a.coordinatorClient()
 		if a.DaemonSocketPath != "" {
 			err = client.Call(ctx, coordinator.MethodRepositorySource, coordinator.RepositorySourceRequest{Selector: m.Repository.ID, MetadataOnly: true, ObserveUpstream: true}, &source)
 			if err != nil {
