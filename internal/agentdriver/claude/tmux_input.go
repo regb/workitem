@@ -24,6 +24,7 @@ type tuiInput interface {
 type tmuxInput struct {
 	socket, pane string
 	owner        int
+	inputOff     bool
 	bindingPath  string
 	bindings     inputBindings
 	fingerprint  [32]byte
@@ -119,9 +120,12 @@ func (t *tmuxInput) verify(ctx context.Context, editor bool) error {
 		return inputFailure("pane_unavailable", err)
 	}
 	fields := strings.Split(strings.TrimSpace(out), "|")
-	if len(fields) != 5 || fields[0] != t.pane || fields[1] != strconv.Itoa(t.owner) || fields[2] != "0" || fields[3] != "0" || fields[4] != "0" {
+	if len(fields) != 5 || fields[0] != t.pane || fields[1] != strconv.Itoa(t.owner) || fields[2] != "0" || fields[3] != "0" || (fields[4] != "0" && fields[4] != "1") {
 		return inputFailure("pane_changed", fmt.Errorf("Claude pane ownership or input state changed"))
 	}
+	t.inputOff = fields[4] == "1"
+	// pane_input_off fences native keyboard input for a non-terminal controller.
+	// Delivery must respect that fence, not enable keyboard input here.
 	group, err := syscall.Getpgid(t.owner)
 	if err != nil || group != t.owner {
 		return inputFailure("pane_changed", fmt.Errorf("Claude pane process group changed"))
@@ -152,7 +156,7 @@ func (t *tmuxInput) Interrupt(ctx context.Context) error {
 	if err := t.verify(ctx, true); err != nil {
 		return err
 	}
-	if _, err := t.run(ctx, nil, append([]string{"send-keys", "-t", t.pane}, keys...)...); err != nil {
+	if err := t.sendKeys(ctx, keys); err != nil {
 		return inputFailure("abort_uncertain", fmt.Errorf("Claude abort delivery uncertain; do not resend: %w", err))
 	}
 	return nil
@@ -202,7 +206,7 @@ func (t *tmuxInput) sendDraft(ctx context.Context, message string, steer bool, p
 				return preFailure(err)
 			}
 		}
-		if _, err := t.run(ctx, nil, "paste-buffer", "-p", "-b", buffer, "-t", t.pane); err != nil {
+		if err := t.paste(ctx, buffer, message); err != nil {
 			return fmt.Errorf("Claude delivery uncertain after paste; do not resend: %w", err)
 		}
 	}
@@ -212,7 +216,7 @@ func (t *tmuxInput) sendDraft(ctx context.Context, message string, steer bool, p
 	if err := t.verify(ctx, false); err != nil {
 		return fmt.Errorf("Claude delivery uncertain after paste; do not resend: %w", err)
 	}
-	if _, err := t.run(ctx, nil, append([]string{"send-keys", "-t", t.pane}, keys...)...); err != nil {
+	if err := t.sendKeys(ctx, keys); err != nil {
 		return inputFailure("submission_uncertain", fmt.Errorf("Claude delivery uncertain after submission shortcut; do not resend: %w", err))
 	}
 	return nil

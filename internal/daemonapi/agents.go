@@ -2,8 +2,6 @@ package daemonapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"os"
 	"path/filepath"
 
@@ -251,8 +249,11 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 		if err != nil {
 			return err
 		}
-		if pending && receipt.Delivered {
-			return nil
+		if pending {
+			done, err := s.messageReceiptResult(receipt)
+			if done || err != nil {
+				return err
+			}
 		}
 	}
 	current, err := s.generation(ctx, r.ItemId, r.ExpectedGeneration)
@@ -303,8 +304,7 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 	}
 	commandID := ""
 	if r.ClientMessageId != "" {
-		sum := sha256.Sum256([]byte(r.ItemId + "\x00" + r.ClientMessageId))
-		commandID = "api-message:" + hex.EncodeToString(sum[:])
+		commandID = messageCommandID(r.ItemId, r.ClientMessageId)
 		if !pending {
 			receipt = coordinator.APIMessageReceipt{ItemID: r.ItemId, MessageID: r.ClientMessageId, RuntimeID: runtime.Runtime.ID, Generation: current.Generation, CreatedAt: time.Now().UTC()}
 		}
@@ -315,11 +315,20 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 			return connect.NewError(connect.CodeInternal, err)
 		}
 	}
-	_, err = s.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: resolve(r.ItemId), CommandType: delivery, Message: r.Text, Images: images, Actor: controlActor(ctx), RequestID: r.ClientMessageId, CommandID: commandID, ExpectedRuntimeID: runtime.Runtime.ID, RequireIdle: delivery == "prompt" && runtime.Runtime.Capabilities.IdleGuard, ControllerHolder: lease.Holder, ControllerClientID: lease.ClientID, ControllerLeaseID: lease.ID})
+	// Claude acknowledges queue acceptance before native submission.
+	m, err := s.App.Store.LoadManifest(r.ItemId)
+	if err != nil {
+		return err
+	}
+	nativeConfirmation := m.PrimaryConversation != nil && m.PrimaryConversation.Driver == "claude"
+	result, err := s.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: resolve(r.ItemId), CommandType: delivery, Message: r.Text, Images: images, Actor: controlActor(ctx), RequestID: r.ClientMessageId, CommandID: commandID, ExpectedRuntimeID: runtime.Runtime.ID, RequireIdle: delivery == "prompt" && runtime.Runtime.Capabilities.IdleGuard, ControllerHolder: lease.Holder, ControllerClientID: lease.ClientID, ControllerLeaseID: lease.ID})
+	if err == nil && nativeConfirmation {
+		err = s.waitMessageConfirmation(ctx, r.ItemId, runtime.Runtime.ID, result.Command.ID)
+	}
 	if r.ClientMessageId != "" {
 		if err != nil {
 			var refused *driver.ControlRejectedError
-			if errors.Is(err, driver.ErrNotIdle) || errors.As(err, &refused) {
+			if !nativeConfirmation && (errors.Is(err, driver.ErrNotIdle) || errors.As(err, &refused)) {
 				_ = s.Core.Database().ForgetAPIMessage(r.ItemId, r.ClientMessageId)
 			}
 			return err
@@ -341,8 +350,11 @@ func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMe
 		if err != nil {
 			return nil, rpcError(err)
 		}
-		if found && receipt.Delivered {
-			return response(&v1.SendMessageResponse{Generation: receipt.Generation}, nil)
+		if found {
+			done, err := s.messageReceiptResult(receipt)
+			if done || err != nil {
+				return response(&v1.SendMessageResponse{Generation: receipt.Generation}, err)
+			}
 		}
 	}
 	m, err := s.requireActive(ctx, r.ItemId)

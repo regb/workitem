@@ -80,6 +80,35 @@ func TestControlsReadinessConfirmationAndDeduplication(t *testing.T) {
 		t.Fatal("accepted reused identity")
 	}
 }
+func TestStartupQueueRejectionPreservesTaskAndDeduplicates(t *testing.T) {
+	ctx := context.Background()
+	s, input, events := testControls()
+	c := control("startup-rejected", protocol.CommandPrompt, "original private task")
+	if err := s.accept(ctx, c); err != nil {
+		t.Fatal(err)
+	}
+	if state, _ := s.deliveryFacts(c); state != "queued" {
+		t.Fatal(state)
+	}
+	input.err = beforeInputError{inputFailure("pane_changed", fmt.Errorf("pane replaced"))}
+	s.hook("SessionStart", "")
+	s.tick(ctx, time.Now().Add(time.Second))
+	if state, reason := s.deliveryFacts(c); state != "not_sent" || reason != "pane_changed" {
+		t.Fatal(state, reason)
+	}
+	if s.seen[c.ID].command.Message != c.Message {
+		t.Fatal("known-unsent task text lost")
+	}
+	for i := 0; i < 2; i++ {
+		if err := s.accept(ctx, c); err == nil {
+			t.Fatal("retry concealed asynchronous rejection")
+		}
+	}
+	if len(input.messages) != 1 || (*events)[len(*events)-1].Type != protocol.EventCommandRejected {
+		t.Fatal("replayed rejected input", input.messages, *events)
+	}
+}
+
 func TestControlsFollowUpWaitsForSettledAndSteeringIsImmediate(t *testing.T) {
 	ctx := context.Background()
 	s, input, _ := testControls()
@@ -272,7 +301,7 @@ func TestTmuxInputBracketedPasteOwnershipAndSteerKeys(t *testing.T) {
 	if !strings.Contains(joined, "paste-buffer -p") || !strings.Contains(joined, "send-keys -t %3 C-x C-s") || !strings.Contains(joined, "delete-buffer") || strings.Contains(joined, "private") {
 		t.Fatal(joined)
 	}
-	for _, wrong := range []string{"%4|1|0|0|0", "%3|1|0|0|0", "%3|" + fmt.Sprint(syscall.Getpgrp()) + "|0|1|0"} {
+	for _, wrong := range []string{"%4|1|0|0|0", "%3|1|0|0|0", "%3|" + fmt.Sprint(syscall.Getpgrp()) + "|0|1|0", "%3|" + fmt.Sprint(syscall.Getpgrp()) + "|1|0|0"} {
 		meta = wrong
 		if err := transport.Send(context.Background(), "work", false); err == nil {
 			t.Fatal("typed into wrong/mode pane")

@@ -124,7 +124,10 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, AgentState: event.AgentState, LeafID: event.LeafID, ReasonCode: compactIdentifier(event.ReasonCode, 64)}
 	// A setting change or an accepted abort is recorded for its requester but
 	// is not agent activity.
-	updates := []ProjectionUpdate{}
+	updates, err := commandDeliveryUpdate(database, event)
+	if err != nil {
+		return RuntimeIngestResult{}, err
+	}
 	if event.Type == agent.EventSettingsChanged {
 		// Setting values are not agent activity; the runtime record keeps
 		// the latest, and the event history every change.

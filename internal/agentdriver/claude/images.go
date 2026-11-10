@@ -131,7 +131,7 @@ func (t *tmuxInput) SendImages(ctx context.Context, message string, images []pro
 		}
 		if err == nil {
 			touched = true
-			_, err = t.run(ctx, nil, "paste-buffer", "-p", "-b", buffer, "-t", t.pane)
+			err = t.paste(ctx, buffer, path)
 		}
 		_, _ = t.run(context.Background(), nil, "delete-buffer", "-b", buffer)
 		if err != nil {

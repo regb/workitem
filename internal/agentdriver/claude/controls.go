@@ -234,7 +234,12 @@ func (s *tuiControls) submit(ctx context.Context, d *commandDelivery, steer bool
 	if s.waitForScreen(d, err) {
 		return nil
 	}
-	d.command.Message = ""
+	// Retain known-unsent task text for diagnosis/recovery. Once anything
+	// may have reached the editor, keep only its digest and never replay it.
+	var untouched beforeInputError
+	if !errors.As(err, &untouched) {
+		d.command.Message = ""
+	}
 	d.command.Images = nil
 	if err != nil {
 		d.err = err
