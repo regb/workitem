@@ -322,7 +322,11 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 	}
 	nativeConfirmation := m.PrimaryConversation != nil && m.PrimaryConversation.Driver == "claude"
 	result, err := s.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: resolve(r.ItemId), CommandType: delivery, Message: r.Text, Images: images, Actor: controlActor(ctx), RequestID: r.ClientMessageId, CommandID: commandID, ExpectedRuntimeID: runtime.Runtime.ID, RequireIdle: delivery == "prompt" && runtime.Runtime.Capabilities.IdleGuard, ControllerHolder: lease.Holder, ControllerClientID: lease.ClientID, ControllerLeaseID: lease.ID})
-	if err == nil && nativeConfirmation {
+	// A follow-up is deliberately scheduled after the current turn. The
+	// driver's acknowledgement accepts that queue entry; waiting for native
+	// submission here would turn a healthy, long-running turn into an error.
+	// Startup prompts and steering still require native confirmation.
+	if err == nil && nativeConfirmation && delivery != "follow_up" {
 		err = s.waitMessageConfirmation(ctx, r.ItemId, runtime.Runtime.ID, result.Command.ID)
 	}
 	if r.ClientMessageId != "" {
@@ -333,9 +337,10 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 			}
 			return err
 		}
-		receipt.Delivered = true
+		receipt.Accepted = true
+		receipt.Delivered = !nativeConfirmation || delivery != "follow_up"
 		if err := s.Core.Database().RecordAPIMessage(receipt); err != nil {
-			return partial(err, r.ItemId, "submitted message")
+			return partial(err, r.ItemId, "accepted message")
 		}
 	}
 	return err

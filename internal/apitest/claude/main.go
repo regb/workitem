@@ -12,6 +12,19 @@ import (
 	"time"
 )
 
+// holdTurn lets a regression keep a native turn active without model calls.
+func holdTurn(root string) {
+	if _, err := os.Stat(filepath.Join(root, "hold-turn")); err != nil {
+		return
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(root, "finish-turn")); err == nil {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
 func headless(root string) {
 	enc := json.NewEncoder(os.Stdout)
 	scan := bufio.NewScanner(os.Stdin)
@@ -43,6 +56,7 @@ func headless(root string) {
 			_ = enc.Encode(map[string]any{"type": "system", "subtype": "init", "capabilities": []string{"msg_lifecycle_v1", "request_marker_lists_v1", "interrupt_receipt_v1", "interrupt_cancel_queued_v1"}})
 			_ = enc.Encode(map[string]any{"type": "command_lifecycle", "state": "queued", "command_uuid": frame.UUID})
 			_ = enc.Encode(map[string]any{"type": "user", "uuid": frame.UUID, "isReplay": true})
+			holdTurn(root)
 			_ = enc.Encode(map[string]any{"type": "result", "subtype": "success", "num_turns": 1, "user_message_uuids": []string{frame.UUID}})
 		}
 	}
@@ -144,6 +158,7 @@ func main() {
 			_ = json.NewEncoder(file).Encode(draft)
 			_ = file.Close()
 			hook("UserPromptSubmit", draft)
+			holdTurn(root)
 			hook("Stop", "")
 			draft = ""
 			render("")

@@ -11,7 +11,7 @@ func TestAPIMessageReceiptSurvivesRestartAndCannotChangeGeneration(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	value := APIMessageReceipt{ItemID: "item", MessageID: "opaque-message", RuntimeID: "runtime", Generation: 3, CreatedAt: time.Now().UTC()}
+	value := APIMessageReceipt{ItemID: "item", MessageID: "opaque-message", RuntimeID: "runtime", Generation: 3, CreatedAt: time.Now().UTC(), Accepted: true}
 	if err := db.RecordAPIMessage(value); err != nil {
 		t.Fatal(err)
 	}
@@ -24,7 +24,7 @@ func TestAPIMessageReceiptSurvivesRestartAndCannotChangeGeneration(t *testing.T)
 	}
 	defer db.Close()
 	got, found, err := db.APIMessage(value.ItemID, value.MessageID)
-	if err != nil || !found || got.Delivered || got.RuntimeID != value.RuntimeID {
+	if err != nil || !found || got.Delivered || !got.Accepted || got.RuntimeID != value.RuntimeID {
 		t.Fatalf("pending receipt: %+v %v %v", got, found, err)
 	}
 	replacement := value
@@ -32,6 +32,14 @@ func TestAPIMessageReceiptSurvivesRestartAndCannotChangeGeneration(t *testing.T)
 	replacement.Generation++
 	if err := db.RecordAPIMessage(replacement); err == nil {
 		t.Fatal("pending message moved onto replacement generation")
+	}
+	value.Accepted = false
+	if err := db.RecordAPIMessage(value); err != nil {
+		t.Fatal(err)
+	}
+	got, _, err = db.APIMessage(value.ItemID, value.MessageID)
+	if err != nil || !got.Accepted || got.Delivered {
+		t.Fatalf("queued acknowledgement regressed or became delivery: %+v %v", got, err)
 	}
 	value.Delivered = true
 	if err := db.RecordAPIMessage(value); err != nil {

@@ -24,9 +24,9 @@ func TestQueuedMessageReceiptWaitsForNativeOutcome(t *testing.T) {
 	if err := f.api.App.Store.SaveAgentRuntime(ctx, item, model.AgentRuntime{ID: "runtime", WorkItemID: item, Generation: 1}); err != nil {
 		t.Fatal(err)
 	}
-	for _, state := range []string{"not_sent", "uncertain", "confirmed"} {
+	for _, state := range []string{"not_sent", "cancelled", "uncertain", "confirmed"} {
 		t.Run(state, func(t *testing.T) {
-			receipt := coordinator.APIMessageReceipt{ItemID: item, MessageID: state, RuntimeID: "runtime", Generation: 1, CreatedAt: time.Now().UTC()}
+			receipt := coordinator.APIMessageReceipt{ItemID: item, MessageID: state, RuntimeID: "runtime", Generation: 1, CreatedAt: time.Now().UTC(), Accepted: true}
 			if err := f.core.Database().RecordAPIMessage(receipt); err != nil {
 				t.Fatal(err)
 			}
@@ -64,22 +64,24 @@ func TestQueuedMessageReceiptWaitsForNativeOutcome(t *testing.T) {
 				t.Fatalf("outcome: %s %v", state, err)
 			}
 			got, found, err := f.core.Database().APIMessage(item, state)
-			if err != nil || !found || got.Delivered {
+			if err != nil || !found || got.Delivered || !got.Accepted {
 				t.Fatalf("queue persisted a false delivered receipt: %+v %v", got, err)
 			}
-			// Even an old transport-only delivered=true receipt must not conceal
-			// an explicit later native rejection or uncertainty.
-			receipt.Delivered = true
-			if err := f.core.Database().RecordAPIMessage(receipt); err != nil {
-				t.Fatal(err)
-			}
 			for i := 0; i < 2; i++ {
+				if i == 1 {
+					// Neither queue acceptance nor a legacy transport-only
+					// delivered receipt may conceal the native outcome.
+					receipt.Delivered = true
+					if err := f.core.Database().RecordAPIMessage(receipt); err != nil {
+						t.Fatal(err)
+					}
+				}
 				response, err := f.clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: "original task", ClientMessageId: state}))
 				if state == "confirmed" {
 					if err != nil || response.Msg.Generation != 1 {
 						t.Fatalf("confirmed retry: %v %v", response, err)
 					}
-				} else if err == nil || !strings.Contains(err.Error(), map[string]string{"not_sent": "not sent", "uncertain": "uncertain"}[state]) {
+				} else if err == nil || !strings.Contains(err.Error(), map[string]string{"not_sent": "not sent", "cancelled": "not sent", "uncertain": "uncertain"}[state]) {
 					t.Fatalf("retry concealed failure: %v", err)
 				}
 			}

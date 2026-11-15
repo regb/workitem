@@ -15,12 +15,15 @@ const apiMessagesProjection = "api_message_receipts"
 // A pending handoff is retried only with the same deterministic command ID on
 // the same runtime; it must never be replayed onto a replacement runtime.
 type APIMessageReceipt struct {
-	ItemID     string    `json:"item_id"`
-	MessageID  string    `json:"message_id"`
-	RuntimeID  string    `json:"runtime_id"`
-	Generation uint32    `json:"generation"`
-	Delivered  bool      `json:"delivered"`
-	CreatedAt  time.Time `json:"created_at"`
+	ItemID     string `json:"item_id"`
+	MessageID  string `json:"message_id"`
+	RuntimeID  string `json:"runtime_id"`
+	Generation uint32 `json:"generation"`
+	// Accepted is the driver's handoff acknowledgement, including queued work.
+	// It must not be mistaken for native submission of a Claude follow-up.
+	Accepted  bool      `json:"accepted,omitempty"`
+	Delivered bool      `json:"delivered"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 func apiMessageKey(itemID, messageID string) string {
@@ -50,6 +53,7 @@ func (d *Database) RecordAPIMessage(value APIMessageReceipt) error {
 			if old.Delivered {
 				return nil
 			}
+			value.Accepted = value.Accepted || old.Accepted
 		}
 		data, err := json.Marshal(value)
 		if err != nil {

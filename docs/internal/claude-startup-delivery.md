@@ -20,7 +20,9 @@ The test also enters copy mode after queue acceptance to force an asynchronous k
 
 Queue acceptance is not native confirmation. Runtime events retain `queued`, `submitted`, `confirmed`, `not_sent`, and `uncertain` delivery facts. A runtime-and-command-fenced coordinator projection keeps the latest outcome across daemon restarts. Native confirmation cannot regress to a delayed timeout or queue event.
 
-Claude API sends wait up to 30 seconds for native confirmation. Only confirmation completes a delivery receipt or startup job successfully. A timeout says the handoff was accepted but not confirmed; the driver may still have queued work. It does not cancel or resend that work. Long-waiting follow-ups can reach this timeout too.
+Claude startup prompts and steering wait up to 30 seconds for native confirmation. Only confirmation completes their delivery receipt or startup job successfully. A timeout says the handoff was accepted but not confirmed; the driver may still have queued work. It does not cancel or resend that work.
+
+Explicit follow-ups acknowledge the driver's queue acceptance immediately, even while the current turn continues beyond 30 seconds. Their receipt records `accepted=true`, not `delivered=true`; compact delivery facts remain queued/submitted until native confirmation arrives. The web client keeps them under Queued follow-ups rather than reporting an error or offering an unsent-message retry. Same-identity retries deduplicate against the original runtime, and rejections or cancellations still take precedence over queue acceptance.
 
 Use a stable `client_message_id` when sending through the API. Retrying that identity on the same runtime queries/deduplicates the same command rather than typing another prompt. Reservations cannot move to a replacement runtime. Semantic rejection also overrides old transport-only receipts that incorrectly claimed delivery. When such a receipt predates the delivery projection, the daemon reads the retained compact events for that runtime and command. Normal delivery uses the indexed projection without scanning history.
 
