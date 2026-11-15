@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/model"
 )
@@ -129,5 +130,29 @@ func TestNativeObservationRetainsWorkspaceClaimFence(t *testing.T) {
 	event := RuntimeSemanticEvent{ID: "tree-stale-claim", RuntimeID: "owner", WorkItemID: importTestID, Type: agent.EventRuntimeStatus, Readiness: "ready", AgentState: "idle", LeafID: "leaf", Timestamp: time.Now().UTC()}
 	if _, err := IngestRuntimeEvent(context.Background(), db, event); err == nil {
 		t.Fatal("native snapshot bypassed the workspace generation fence")
+	}
+}
+
+func TestAFailedBranchKeepsAKnownFailureReason(t *testing.T) {
+	db, root := attentionTestDatabase(t)
+	seedRuntimeOwner(t, db, importTestID, "owner")
+	ctx := context.Background()
+	now := time.Now().UTC()
+	settled := RuntimeSemanticEvent{ID: "limit", RuntimeID: "owner", WorkItemID: importTestID, Type: agent.EventAgentSettled, Outcome: "failed", Failed: true, ReasonCode: "usage_limit", Timestamp: now}
+	status := RuntimeSemanticEvent{ID: "tree-limit", RuntimeID: "owner", WorkItemID: importTestID, Type: agent.EventRuntimeStatus, Readiness: "ready", AgentState: "failed", LeafID: "limit", Timestamp: now.Add(time.Second)}
+	for _, event := range []RuntimeSemanticEvent{settled, status} {
+		if _, err := IngestRuntimeEvent(ctx, db, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var observation AgentObservation
+	if _, err := db.ReadProjection(AgentObservationProjection, importTestID, &observation); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewExternalObserver(db, root).applyActionability(importTestID, &observation); err != nil {
+		t.Fatal(err)
+	}
+	if observation.Status != "problem" || observation.Reason != driverprotocol.RuntimeReasonText("usage_limit") {
+		t.Fatal("selected failed branch hid the usage limit", observation)
 	}
 }

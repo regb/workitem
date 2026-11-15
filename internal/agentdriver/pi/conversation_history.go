@@ -153,8 +153,15 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 			if reasoned {
 				message.Reasoning = &driverprotocol.HistoryReasoning{Text: boundedHistoryText(reasoning, &result.Truncated)}
 			}
-			if stop, _ := entry.Message["stopReason"].(string); message.Role == "assistant" && abortedStop(stop) {
+			stop, _ := entry.Message["stopReason"].(string)
+			if message.Role == "assistant" && abortedStop(stop) {
 				message.Aborted = true
+			}
+			// Pi records a provider failure, such as a usage limit, as an
+			// empty reply carrying the error: show it as the harness's notice.
+			if failure, _ := entry.Message["errorMessage"].(string); message.Role == "assistant" && stop == "error" && strings.TrimSpace(failure) != "" && strings.TrimSpace(message.Text) == "" {
+				message.Error = true
+				message.Text = strings.TrimSpace(failure)
 			}
 			if message.Role == "toolResult" {
 				id, _ := entry.Message["toolCallId"].(string)

@@ -50,6 +50,9 @@ type nativeRPCTransport struct {
 	pending             map[string]agent.ControlCommand
 	handled             map[string]bool
 	lastAssistantFailed bool
+	// lastFailureReason is the reason code of the last failed reply, such as
+	// usage_limit, reported when the agent settles.
+	lastFailureReason string
 	// unsaved are messages whose session entries are not yet known; Pi appends
 	// an entry after dispatching its message_end.
 	unsaved []unsavedMessage
@@ -375,6 +378,7 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 		t.busy = true
 		if output.Type == "agent_start" {
 			t.lastAssistantFailed = false
+			t.lastFailureReason = ""
 		}
 	case "agent_settled":
 		t.busy = false
@@ -404,6 +408,10 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 		message, _ := event.Data["message"].(map[string]any)
 		reason, _ := message["stopReason"].(string)
 		t.lastAssistantFailed = reason == "error"
+		t.lastFailureReason = ""
+		if failure, _ := message["errorMessage"].(string); t.lastAssistantFailed && usageLimitError(failure) {
+			t.lastFailureReason = "usage_limit"
+		}
 		if timestamp, ok := message["timestamp"].(float64); ok && output.Type == "message_end" && event.Text != "" {
 			t.unsaved = append(t.unsaved, unsavedMessage{role: "assistant", text: event.Text, timestamp: int64(timestamp), since: time.Now()})
 		}
@@ -416,6 +424,7 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 		event.Outcome = "completed"
 		if event.Failed {
 			event.Outcome = "failed"
+			event.ReasonCode = t.lastFailureReason
 		}
 	}
 	if output.Type == "agent_settled" {

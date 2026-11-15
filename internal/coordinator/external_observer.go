@@ -371,8 +371,7 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 		observation.Reason = "live agent loop settled with a failure"
 		if reason := driverprotocol.RuntimeReasonText(live.FailureReason); reason != "" {
 			observation.Reason = reason
-		}
-		if live.LeafID != "" {
+		} else if live.LeafID != "" {
 			observation.Reason = "native agent reports failure on its selected branch"
 		}
 		observation.TurnState = "failed"

@@ -14,9 +14,10 @@ type conversationLine struct {
 	Timestamp  string `json:"timestamp"`
 	StopReason string `json:"stopReason"`
 	Message    struct {
-		Role       string          `json:"role"`
-		Content    json.RawMessage `json:"content"`
-		StopReason string          `json:"stopReason"`
+		Role         string          `json:"role"`
+		Content      json.RawMessage `json:"content"`
+		StopReason   string          `json:"stopReason"`
+		ErrorMessage string          `json:"errorMessage"`
 	} `json:"message"`
 }
 
@@ -63,8 +64,24 @@ func SummarizeConversationFact(line uint64, raw []byte) (driverprotocol.Conversa
 		// An aborted reply ends the turn the operator stopped; it is not a
 		// failure, and the next message continues as usual.
 		fact.Terminal = fact.Failed || abortedStop(stop) || !hasTool && hasText && (stop == "" || stop == "stop" || stop == "end_turn" || stop == "complete" || stop == "completed")
+		if fact.Failed && usageLimitError(value.Message.ErrorMessage) {
+			fact.StopReason = "usage_limit"
+		}
 	}
 	return fact, true
+}
+
+// usageLimitError reports whether Pi's error text for a failed reply says the
+// provider refused it for usage or rate limits, such as "Codex error: The
+// usage limit has been reached".
+func usageLimitError(message string) bool {
+	message = strings.ToLower(message)
+	for _, marker := range []string{"usage limit", "usage_limit", "rate limit", "rate_limit", "quota"} {
+		if strings.Contains(message, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func compactStopReason(value string) string {
