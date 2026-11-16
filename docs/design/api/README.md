@@ -42,7 +42,7 @@ under `proto/wi/core/v1/`.
 | `common.proto` | Shared enums and messages: states, statuses, agent mode, approvals, partial outcomes |
 | `items.proto` | `ItemService`: items, lists in the requested order, search, edits, attention state, blockers, notes, attachments, history |
 | `lifecycle.proto` | `LifecycleService`: create and start, start, shelve, close, reopen |
-| `workspaces.proto` | `WorkspaceService`: claim and setup, commit, release, uncommitted files, file search |
+| `workspaces.proto` | `WorkspaceService`: claim and setup, commit, release, uncommitted files, file search, reading and saving checkout files |
 | `agents.proto` | `AgentService`, `ControlService`: agent state, start, stop, restart, messages, conversation, live content, settings, title suggestions, control leases |
 | `repositories.proto` | `RepositoryService`: registration, upstream and sync, integrating an item, settings, checkout setup, files, variables |
 | `profiles.proto` | `AgentProfileService`: agent profiles and drivers |
@@ -102,6 +102,7 @@ Transitions through `SetItemState`: backlog → active, active → backlog, acti
 | `WorkspaceService.SetupWorkspace` | item active with a claim; agent not running | claim generation (implicit: results of a setup started for an older claim are discarded) | yes: a running setup is returned |
 | `WorkspaceService.CommitWorkspace` | claim held; agent not running | none | yes: nothing to commit returns no commit |
 | `WorkspaceService.ReleaseWorkspace` | agent not running; checkout clean after removing unchanged attached copies | none | yes: no claim succeeds |
+| `WorkspaceService.SaveWorkspaceFile` | item active; claim held; checkout on the item's branch; file exists as UTF-8 text | claim ID and generation, SHA-256 of the content read | no: a retry with the same digest finds the saved content and fails with `ABORTED` |
 | `AgentService.StartAgent` | item active with a claim whose setup succeeded (or was skipped); the profile's driver is configured | none | yes: running in the requested mode returns it; running in another mode restarts it when idle, else `FAILED_PRECONDITION` |
 | `AgentService.StopAgent` | not busy, unless `force`; attached terminal clients need `confirm_attached_terminal` | none | yes: not running succeeds |
 | `AgentService.RestartAgent` | running and idle | `expected_generation` (optional) | no: each call restarts |

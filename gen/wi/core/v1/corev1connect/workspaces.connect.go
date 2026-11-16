@@ -54,6 +54,18 @@ const (
 	// WorkspaceServiceSearchWorkspaceFilesProcedure is the fully-qualified name of the
 	// WorkspaceService's SearchWorkspaceFiles RPC.
 	WorkspaceServiceSearchWorkspaceFilesProcedure = "/wi.core.v1.WorkspaceService/SearchWorkspaceFiles"
+	// WorkspaceServiceListWorkspaceFilesProcedure is the fully-qualified name of the WorkspaceService's
+	// ListWorkspaceFiles RPC.
+	WorkspaceServiceListWorkspaceFilesProcedure = "/wi.core.v1.WorkspaceService/ListWorkspaceFiles"
+	// WorkspaceServiceGetWorkspaceFileProcedure is the fully-qualified name of the WorkspaceService's
+	// GetWorkspaceFile RPC.
+	WorkspaceServiceGetWorkspaceFileProcedure = "/wi.core.v1.WorkspaceService/GetWorkspaceFile"
+	// WorkspaceServiceGetWorkspaceDocumentProcedure is the fully-qualified name of the
+	// WorkspaceService's GetWorkspaceDocument RPC.
+	WorkspaceServiceGetWorkspaceDocumentProcedure = "/wi.core.v1.WorkspaceService/GetWorkspaceDocument"
+	// WorkspaceServiceSaveWorkspaceFileProcedure is the fully-qualified name of the WorkspaceService's
+	// SaveWorkspaceFile RPC.
+	WorkspaceServiceSaveWorkspaceFileProcedure = "/wi.core.v1.WorkspaceService/SaveWorkspaceFile"
 )
 
 // WorkspaceServiceClient is a client for the wi.core.v1.WorkspaceService service.
@@ -78,6 +90,25 @@ type WorkspaceServiceClient interface {
 	GetUncommittedChanges(context.Context, *connect.Request[v1.GetUncommittedChangesRequest]) (*connect.Response[v1.GetUncommittedChangesResponse], error)
 	// SearchWorkspaceFiles fuzzy-finds paths in the checkout, for mentions.
 	SearchWorkspaceFiles(context.Context, *connect.Request[v1.SearchWorkspaceFilesRequest]) (*connect.Response[v1.SearchWorkspaceFilesResponse], error)
+	// ListWorkspaceFiles lists the checkout's tracked and non-ignored
+	// untracked paths, sorted and bounded, with the claim that the file
+	// methods below take as their fence.
+	ListWorkspaceFiles(context.Context, *connect.Request[v1.ListWorkspaceFilesRequest]) (*connect.Response[v1.ListWorkspaceFilesResponse], error)
+	// GetWorkspaceFile reads one file of the current claim, up to 1 MiB. A
+	// missing file reads as not existing; binary and larger files are marked
+	// without content. Paths are relative; symlinks and Git metadata are
+	// refused. A stale claim fails with ABORTED.
+	GetWorkspaceFile(context.Context, *connect.Request[v1.GetWorkspaceFileRequest]) (*connect.Response[v1.GetWorkspaceFileResponse], error)
+	// GetWorkspaceDocument reads a PDF of the current claim, up to 16 MiB,
+	// under the same path rules. Other files fail with INVALID_ARGUMENT.
+	GetWorkspaceDocument(context.Context, *connect.Request[v1.GetWorkspaceDocumentRequest]) (*connect.Response[v1.GetWorkspaceDocumentResponse], error)
+	// SaveWorkspaceFile replaces an existing UTF-8 text file of an active
+	// item's current claim, on its own branch, keeping its permissions. The
+	// SHA-256 of the content read is the fence: a changed file or a stale
+	// claim fails with ABORTED. Agents, shells and editors do not take Wi's
+	// locks, so this detects concurrent edits but cannot exclude them;
+	// callers keep their unsaved text on failure.
+	SaveWorkspaceFile(context.Context, *connect.Request[v1.SaveWorkspaceFileRequest]) (*connect.Response[v1.SaveWorkspaceFileResponse], error)
 }
 
 // NewWorkspaceServiceClient constructs a client for the wi.core.v1.WorkspaceService service. By
@@ -136,6 +167,33 @@ func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		listWorkspaceFiles: connect.NewClient[v1.ListWorkspaceFilesRequest, v1.ListWorkspaceFilesResponse](
+			httpClient,
+			baseURL+WorkspaceServiceListWorkspaceFilesProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("ListWorkspaceFiles")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getWorkspaceFile: connect.NewClient[v1.GetWorkspaceFileRequest, v1.GetWorkspaceFileResponse](
+			httpClient,
+			baseURL+WorkspaceServiceGetWorkspaceFileProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("GetWorkspaceFile")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		getWorkspaceDocument: connect.NewClient[v1.GetWorkspaceDocumentRequest, v1.GetWorkspaceDocumentResponse](
+			httpClient,
+			baseURL+WorkspaceServiceGetWorkspaceDocumentProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("GetWorkspaceDocument")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		saveWorkspaceFile: connect.NewClient[v1.SaveWorkspaceFileRequest, v1.SaveWorkspaceFileResponse](
+			httpClient,
+			baseURL+WorkspaceServiceSaveWorkspaceFileProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("SaveWorkspaceFile")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -148,6 +206,10 @@ type workspaceServiceClient struct {
 	releaseWorkspace      *connect.Client[v1.ReleaseWorkspaceRequest, v1.ReleaseWorkspaceResponse]
 	getUncommittedChanges *connect.Client[v1.GetUncommittedChangesRequest, v1.GetUncommittedChangesResponse]
 	searchWorkspaceFiles  *connect.Client[v1.SearchWorkspaceFilesRequest, v1.SearchWorkspaceFilesResponse]
+	listWorkspaceFiles    *connect.Client[v1.ListWorkspaceFilesRequest, v1.ListWorkspaceFilesResponse]
+	getWorkspaceFile      *connect.Client[v1.GetWorkspaceFileRequest, v1.GetWorkspaceFileResponse]
+	getWorkspaceDocument  *connect.Client[v1.GetWorkspaceDocumentRequest, v1.GetWorkspaceDocumentResponse]
+	saveWorkspaceFile     *connect.Client[v1.SaveWorkspaceFileRequest, v1.SaveWorkspaceFileResponse]
 }
 
 // GetWorkspace calls wi.core.v1.WorkspaceService.GetWorkspace.
@@ -185,6 +247,26 @@ func (c *workspaceServiceClient) SearchWorkspaceFiles(ctx context.Context, req *
 	return c.searchWorkspaceFiles.CallUnary(ctx, req)
 }
 
+// ListWorkspaceFiles calls wi.core.v1.WorkspaceService.ListWorkspaceFiles.
+func (c *workspaceServiceClient) ListWorkspaceFiles(ctx context.Context, req *connect.Request[v1.ListWorkspaceFilesRequest]) (*connect.Response[v1.ListWorkspaceFilesResponse], error) {
+	return c.listWorkspaceFiles.CallUnary(ctx, req)
+}
+
+// GetWorkspaceFile calls wi.core.v1.WorkspaceService.GetWorkspaceFile.
+func (c *workspaceServiceClient) GetWorkspaceFile(ctx context.Context, req *connect.Request[v1.GetWorkspaceFileRequest]) (*connect.Response[v1.GetWorkspaceFileResponse], error) {
+	return c.getWorkspaceFile.CallUnary(ctx, req)
+}
+
+// GetWorkspaceDocument calls wi.core.v1.WorkspaceService.GetWorkspaceDocument.
+func (c *workspaceServiceClient) GetWorkspaceDocument(ctx context.Context, req *connect.Request[v1.GetWorkspaceDocumentRequest]) (*connect.Response[v1.GetWorkspaceDocumentResponse], error) {
+	return c.getWorkspaceDocument.CallUnary(ctx, req)
+}
+
+// SaveWorkspaceFile calls wi.core.v1.WorkspaceService.SaveWorkspaceFile.
+func (c *workspaceServiceClient) SaveWorkspaceFile(ctx context.Context, req *connect.Request[v1.SaveWorkspaceFileRequest]) (*connect.Response[v1.SaveWorkspaceFileResponse], error) {
+	return c.saveWorkspaceFile.CallUnary(ctx, req)
+}
+
 // WorkspaceServiceHandler is an implementation of the wi.core.v1.WorkspaceService service.
 type WorkspaceServiceHandler interface {
 	// GetWorkspace reads the claim, the checkout's Git state and its setup.
@@ -207,6 +289,25 @@ type WorkspaceServiceHandler interface {
 	GetUncommittedChanges(context.Context, *connect.Request[v1.GetUncommittedChangesRequest]) (*connect.Response[v1.GetUncommittedChangesResponse], error)
 	// SearchWorkspaceFiles fuzzy-finds paths in the checkout, for mentions.
 	SearchWorkspaceFiles(context.Context, *connect.Request[v1.SearchWorkspaceFilesRequest]) (*connect.Response[v1.SearchWorkspaceFilesResponse], error)
+	// ListWorkspaceFiles lists the checkout's tracked and non-ignored
+	// untracked paths, sorted and bounded, with the claim that the file
+	// methods below take as their fence.
+	ListWorkspaceFiles(context.Context, *connect.Request[v1.ListWorkspaceFilesRequest]) (*connect.Response[v1.ListWorkspaceFilesResponse], error)
+	// GetWorkspaceFile reads one file of the current claim, up to 1 MiB. A
+	// missing file reads as not existing; binary and larger files are marked
+	// without content. Paths are relative; symlinks and Git metadata are
+	// refused. A stale claim fails with ABORTED.
+	GetWorkspaceFile(context.Context, *connect.Request[v1.GetWorkspaceFileRequest]) (*connect.Response[v1.GetWorkspaceFileResponse], error)
+	// GetWorkspaceDocument reads a PDF of the current claim, up to 16 MiB,
+	// under the same path rules. Other files fail with INVALID_ARGUMENT.
+	GetWorkspaceDocument(context.Context, *connect.Request[v1.GetWorkspaceDocumentRequest]) (*connect.Response[v1.GetWorkspaceDocumentResponse], error)
+	// SaveWorkspaceFile replaces an existing UTF-8 text file of an active
+	// item's current claim, on its own branch, keeping its permissions. The
+	// SHA-256 of the content read is the fence: a changed file or a stale
+	// claim fails with ABORTED. Agents, shells and editors do not take Wi's
+	// locks, so this detects concurrent edits but cannot exclude them;
+	// callers keep their unsaved text on failure.
+	SaveWorkspaceFile(context.Context, *connect.Request[v1.SaveWorkspaceFileRequest]) (*connect.Response[v1.SaveWorkspaceFileResponse], error)
 }
 
 // NewWorkspaceServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -261,6 +362,33 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	workspaceServiceListWorkspaceFilesHandler := connect.NewUnaryHandler(
+		WorkspaceServiceListWorkspaceFilesProcedure,
+		svc.ListWorkspaceFiles,
+		connect.WithSchema(workspaceServiceMethods.ByName("ListWorkspaceFiles")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	workspaceServiceGetWorkspaceFileHandler := connect.NewUnaryHandler(
+		WorkspaceServiceGetWorkspaceFileProcedure,
+		svc.GetWorkspaceFile,
+		connect.WithSchema(workspaceServiceMethods.ByName("GetWorkspaceFile")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	workspaceServiceGetWorkspaceDocumentHandler := connect.NewUnaryHandler(
+		WorkspaceServiceGetWorkspaceDocumentProcedure,
+		svc.GetWorkspaceDocument,
+		connect.WithSchema(workspaceServiceMethods.ByName("GetWorkspaceDocument")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	workspaceServiceSaveWorkspaceFileHandler := connect.NewUnaryHandler(
+		WorkspaceServiceSaveWorkspaceFileProcedure,
+		svc.SaveWorkspaceFile,
+		connect.WithSchema(workspaceServiceMethods.ByName("SaveWorkspaceFile")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/wi.core.v1.WorkspaceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WorkspaceServiceGetWorkspaceProcedure:
@@ -277,6 +405,14 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 			workspaceServiceGetUncommittedChangesHandler.ServeHTTP(w, r)
 		case WorkspaceServiceSearchWorkspaceFilesProcedure:
 			workspaceServiceSearchWorkspaceFilesHandler.ServeHTTP(w, r)
+		case WorkspaceServiceListWorkspaceFilesProcedure:
+			workspaceServiceListWorkspaceFilesHandler.ServeHTTP(w, r)
+		case WorkspaceServiceGetWorkspaceFileProcedure:
+			workspaceServiceGetWorkspaceFileHandler.ServeHTTP(w, r)
+		case WorkspaceServiceGetWorkspaceDocumentProcedure:
+			workspaceServiceGetWorkspaceDocumentHandler.ServeHTTP(w, r)
+		case WorkspaceServiceSaveWorkspaceFileProcedure:
+			workspaceServiceSaveWorkspaceFileHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -312,4 +448,20 @@ func (UnimplementedWorkspaceServiceHandler) GetUncommittedChanges(context.Contex
 
 func (UnimplementedWorkspaceServiceHandler) SearchWorkspaceFiles(context.Context, *connect.Request[v1.SearchWorkspaceFilesRequest]) (*connect.Response[v1.SearchWorkspaceFilesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.WorkspaceService.SearchWorkspaceFiles is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) ListWorkspaceFiles(context.Context, *connect.Request[v1.ListWorkspaceFilesRequest]) (*connect.Response[v1.ListWorkspaceFilesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.WorkspaceService.ListWorkspaceFiles is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) GetWorkspaceFile(context.Context, *connect.Request[v1.GetWorkspaceFileRequest]) (*connect.Response[v1.GetWorkspaceFileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.WorkspaceService.GetWorkspaceFile is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) GetWorkspaceDocument(context.Context, *connect.Request[v1.GetWorkspaceDocumentRequest]) (*connect.Response[v1.GetWorkspaceDocumentResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.WorkspaceService.GetWorkspaceDocument is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) SaveWorkspaceFile(context.Context, *connect.Request[v1.SaveWorkspaceFileRequest]) (*connect.Response[v1.SaveWorkspaceFileResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.WorkspaceService.SaveWorkspaceFile is not implemented"))
 }

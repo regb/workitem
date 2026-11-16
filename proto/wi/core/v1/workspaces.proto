@@ -39,6 +39,98 @@ service WorkspaceService {
   rpc SearchWorkspaceFiles(SearchWorkspaceFilesRequest) returns (SearchWorkspaceFilesResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ListWorkspaceFiles lists the checkout's tracked and non-ignored
+  // untracked paths, sorted and bounded, with the claim that the file
+  // methods below take as their fence.
+  rpc ListWorkspaceFiles(ListWorkspaceFilesRequest) returns (ListWorkspaceFilesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetWorkspaceFile reads one file of the current claim, up to 1 MiB. A
+  // missing file reads as not existing; binary and larger files are marked
+  // without content. Paths are relative; symlinks and Git metadata are
+  // refused. A stale claim fails with ABORTED.
+  rpc GetWorkspaceFile(GetWorkspaceFileRequest) returns (GetWorkspaceFileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetWorkspaceDocument reads a PDF of the current claim, up to 16 MiB,
+  // under the same path rules. Other files fail with INVALID_ARGUMENT.
+  rpc GetWorkspaceDocument(GetWorkspaceDocumentRequest) returns (GetWorkspaceDocumentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SaveWorkspaceFile replaces an existing UTF-8 text file of an active
+  // item's current claim, on its own branch, keeping its permissions. The
+  // SHA-256 of the content read is the fence: a changed file or a stale
+  // claim fails with ABORTED. Agents, shells and editors do not take Wi's
+  // locks, so this detects concurrent edits but cannot exclude them;
+  // callers keep their unsaved text on failure.
+  rpc SaveWorkspaceFile(SaveWorkspaceFileRequest) returns (SaveWorkspaceFileResponse);
+}
+
+// SourceFile is a file's text as read, up to 1 MiB.
+message SourceFile {
+  string path = 1;
+  // Empty when the file is binary, too large or missing.
+  string content = 2;
+  // The SHA-256 of the bytes read, hex; empty when too large or missing.
+  string sha256 = 3;
+  bool exists = 4;
+  bool binary = 5;
+  bool too_large = 6;
+}
+
+message ListWorkspaceFilesRequest {
+  string item_id = 1;
+}
+
+message ListWorkspaceFilesResponse {
+  repeated string paths = 1;
+  // More paths exist than were listed.
+  bool truncated = 2;
+  string claim_id = 3;
+  uint32 claim_generation = 4;
+}
+
+message GetWorkspaceFileRequest {
+  string item_id = 1;
+  string path = 2;
+  // The claim the caller listed or read from. Required.
+  string expected_claim_id = 3;
+  uint32 expected_claim_generation = 4;
+}
+
+message GetWorkspaceFileResponse {
+  SourceFile file = 1;
+  string claim_id = 2;
+  uint32 claim_generation = 3;
+}
+
+message GetWorkspaceDocumentRequest {
+  string item_id = 1;
+  string path = 2;
+  // The claim the caller listed or read from. Required.
+  string expected_claim_id = 3;
+  uint32 expected_claim_generation = 4;
+}
+
+message GetWorkspaceDocumentResponse {
+  bytes content = 1;
+  string sha256 = 2;
+  string media_type = 3;
+}
+
+message SaveWorkspaceFileRequest {
+  string item_id = 1;
+  string path = 2;
+  string content = 3;
+  // The SHA-256 of the content the edit started from. Required.
+  string expected_sha256 = 4;
+  // The claim the file was read from. Required.
+  string expected_claim_id = 5;
+  uint32 expected_claim_generation = 6;
+}
+
+message SaveWorkspaceFileResponse {
+  SourceFile file = 1;
 }
 
 // SetupState is where a checkout's setup is.

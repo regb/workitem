@@ -58,7 +58,7 @@ A failed call answers with an HTTP error status and a JSON body such as `{"code"
 | --- | --- |
 | `ItemService` | Items: creation, selector resolution, lists in the requested order, search, edits, lifecycle record, attention state, blockers, notes, attachments, history |
 | `LifecycleService` | Porcelain: create and start, start, shelve, close, reopen |
-| `WorkspaceService` | Checkout claims: claim and set up, set up again, commit, release, uncommitted files, file search |
+| `WorkspaceService` | Checkout claims: claim and set up, set up again, commit, release, uncommitted files, file search, reading and saving checkout files |
 | `AgentService` | The agent: state, start, stop, restart, messages, abort, settings, title suggestions, history, live content |
 | `ControlService` | Control leases: who may send input, what taking control would do, acquire, renew, release |
 | `RepositoryService` | Repositories: registration, upstream and synchronization, integrating an item, settings, checkout setup, copied files, environment variables |

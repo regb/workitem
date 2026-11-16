@@ -75,6 +75,594 @@ func (SetupState) EnumDescriptor() ([]byte, []int) {
 	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{0}
 }
 
+// SourceFile is a file's text as read, up to 1 MiB.
+type SourceFile struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Path  string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	// Empty when the file is binary, too large or missing.
+	Content string `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
+	// The SHA-256 of the bytes read, hex; empty when too large or missing.
+	Sha256        string `protobuf:"bytes,3,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	Exists        bool   `protobuf:"varint,4,opt,name=exists,proto3" json:"exists,omitempty"`
+	Binary        bool   `protobuf:"varint,5,opt,name=binary,proto3" json:"binary,omitempty"`
+	TooLarge      bool   `protobuf:"varint,6,opt,name=too_large,json=tooLarge,proto3" json:"too_large,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SourceFile) Reset() {
+	*x = SourceFile{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SourceFile) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SourceFile) ProtoMessage() {}
+
+func (x *SourceFile) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SourceFile.ProtoReflect.Descriptor instead.
+func (*SourceFile) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *SourceFile) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *SourceFile) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *SourceFile) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *SourceFile) GetExists() bool {
+	if x != nil {
+		return x.Exists
+	}
+	return false
+}
+
+func (x *SourceFile) GetBinary() bool {
+	if x != nil {
+		return x.Binary
+	}
+	return false
+}
+
+func (x *SourceFile) GetTooLarge() bool {
+	if x != nil {
+		return x.TooLarge
+	}
+	return false
+}
+
+type ListWorkspaceFilesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListWorkspaceFilesRequest) Reset() {
+	*x = ListWorkspaceFilesRequest{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorkspaceFilesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkspaceFilesRequest) ProtoMessage() {}
+
+func (x *ListWorkspaceFilesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkspaceFilesRequest.ProtoReflect.Descriptor instead.
+func (*ListWorkspaceFilesRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ListWorkspaceFilesRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+type ListWorkspaceFilesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Paths []string               `protobuf:"bytes,1,rep,name=paths,proto3" json:"paths,omitempty"`
+	// More paths exist than were listed.
+	Truncated       bool   `protobuf:"varint,2,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	ClaimId         string `protobuf:"bytes,3,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	ClaimGeneration uint32 `protobuf:"varint,4,opt,name=claim_generation,json=claimGeneration,proto3" json:"claim_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ListWorkspaceFilesResponse) Reset() {
+	*x = ListWorkspaceFilesResponse{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListWorkspaceFilesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListWorkspaceFilesResponse) ProtoMessage() {}
+
+func (x *ListWorkspaceFilesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListWorkspaceFilesResponse.ProtoReflect.Descriptor instead.
+func (*ListWorkspaceFilesResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ListWorkspaceFilesResponse) GetPaths() []string {
+	if x != nil {
+		return x.Paths
+	}
+	return nil
+}
+
+func (x *ListWorkspaceFilesResponse) GetTruncated() bool {
+	if x != nil {
+		return x.Truncated
+	}
+	return false
+}
+
+func (x *ListWorkspaceFilesResponse) GetClaimId() string {
+	if x != nil {
+		return x.ClaimId
+	}
+	return ""
+}
+
+func (x *ListWorkspaceFilesResponse) GetClaimGeneration() uint32 {
+	if x != nil {
+		return x.ClaimGeneration
+	}
+	return 0
+}
+
+type GetWorkspaceFileRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ItemId string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	Path   string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// The claim the caller listed or read from. Required.
+	ExpectedClaimId         string `protobuf:"bytes,3,opt,name=expected_claim_id,json=expectedClaimId,proto3" json:"expected_claim_id,omitempty"`
+	ExpectedClaimGeneration uint32 `protobuf:"varint,4,opt,name=expected_claim_generation,json=expectedClaimGeneration,proto3" json:"expected_claim_generation,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *GetWorkspaceFileRequest) Reset() {
+	*x = GetWorkspaceFileRequest{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetWorkspaceFileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetWorkspaceFileRequest) ProtoMessage() {}
+
+func (x *GetWorkspaceFileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetWorkspaceFileRequest.ProtoReflect.Descriptor instead.
+func (*GetWorkspaceFileRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetWorkspaceFileRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+func (x *GetWorkspaceFileRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *GetWorkspaceFileRequest) GetExpectedClaimId() string {
+	if x != nil {
+		return x.ExpectedClaimId
+	}
+	return ""
+}
+
+func (x *GetWorkspaceFileRequest) GetExpectedClaimGeneration() uint32 {
+	if x != nil {
+		return x.ExpectedClaimGeneration
+	}
+	return 0
+}
+
+type GetWorkspaceFileResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	File            *SourceFile            `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	ClaimId         string                 `protobuf:"bytes,2,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	ClaimGeneration uint32                 `protobuf:"varint,3,opt,name=claim_generation,json=claimGeneration,proto3" json:"claim_generation,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *GetWorkspaceFileResponse) Reset() {
+	*x = GetWorkspaceFileResponse{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetWorkspaceFileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetWorkspaceFileResponse) ProtoMessage() {}
+
+func (x *GetWorkspaceFileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetWorkspaceFileResponse.ProtoReflect.Descriptor instead.
+func (*GetWorkspaceFileResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetWorkspaceFileResponse) GetFile() *SourceFile {
+	if x != nil {
+		return x.File
+	}
+	return nil
+}
+
+func (x *GetWorkspaceFileResponse) GetClaimId() string {
+	if x != nil {
+		return x.ClaimId
+	}
+	return ""
+}
+
+func (x *GetWorkspaceFileResponse) GetClaimGeneration() uint32 {
+	if x != nil {
+		return x.ClaimGeneration
+	}
+	return 0
+}
+
+type GetWorkspaceDocumentRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ItemId string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	Path   string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	// The claim the caller listed or read from. Required.
+	ExpectedClaimId         string `protobuf:"bytes,3,opt,name=expected_claim_id,json=expectedClaimId,proto3" json:"expected_claim_id,omitempty"`
+	ExpectedClaimGeneration uint32 `protobuf:"varint,4,opt,name=expected_claim_generation,json=expectedClaimGeneration,proto3" json:"expected_claim_generation,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *GetWorkspaceDocumentRequest) Reset() {
+	*x = GetWorkspaceDocumentRequest{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetWorkspaceDocumentRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetWorkspaceDocumentRequest) ProtoMessage() {}
+
+func (x *GetWorkspaceDocumentRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetWorkspaceDocumentRequest.ProtoReflect.Descriptor instead.
+func (*GetWorkspaceDocumentRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *GetWorkspaceDocumentRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+func (x *GetWorkspaceDocumentRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *GetWorkspaceDocumentRequest) GetExpectedClaimId() string {
+	if x != nil {
+		return x.ExpectedClaimId
+	}
+	return ""
+}
+
+func (x *GetWorkspaceDocumentRequest) GetExpectedClaimGeneration() uint32 {
+	if x != nil {
+		return x.ExpectedClaimGeneration
+	}
+	return 0
+}
+
+type GetWorkspaceDocumentResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Content       []byte                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
+	Sha256        string                 `protobuf:"bytes,2,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	MediaType     string                 `protobuf:"bytes,3,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetWorkspaceDocumentResponse) Reset() {
+	*x = GetWorkspaceDocumentResponse{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetWorkspaceDocumentResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetWorkspaceDocumentResponse) ProtoMessage() {}
+
+func (x *GetWorkspaceDocumentResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetWorkspaceDocumentResponse.ProtoReflect.Descriptor instead.
+func (*GetWorkspaceDocumentResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *GetWorkspaceDocumentResponse) GetContent() []byte {
+	if x != nil {
+		return x.Content
+	}
+	return nil
+}
+
+func (x *GetWorkspaceDocumentResponse) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *GetWorkspaceDocumentResponse) GetMediaType() string {
+	if x != nil {
+		return x.MediaType
+	}
+	return ""
+}
+
+type SaveWorkspaceFileRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	ItemId  string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	Path    string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Content string                 `protobuf:"bytes,3,opt,name=content,proto3" json:"content,omitempty"`
+	// The SHA-256 of the content the edit started from. Required.
+	ExpectedSha256 string `protobuf:"bytes,4,opt,name=expected_sha256,json=expectedSha256,proto3" json:"expected_sha256,omitempty"`
+	// The claim the file was read from. Required.
+	ExpectedClaimId         string `protobuf:"bytes,5,opt,name=expected_claim_id,json=expectedClaimId,proto3" json:"expected_claim_id,omitempty"`
+	ExpectedClaimGeneration uint32 `protobuf:"varint,6,opt,name=expected_claim_generation,json=expectedClaimGeneration,proto3" json:"expected_claim_generation,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
+}
+
+func (x *SaveWorkspaceFileRequest) Reset() {
+	*x = SaveWorkspaceFileRequest{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveWorkspaceFileRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveWorkspaceFileRequest) ProtoMessage() {}
+
+func (x *SaveWorkspaceFileRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveWorkspaceFileRequest.ProtoReflect.Descriptor instead.
+func (*SaveWorkspaceFileRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SaveWorkspaceFileRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+func (x *SaveWorkspaceFileRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *SaveWorkspaceFileRequest) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *SaveWorkspaceFileRequest) GetExpectedSha256() string {
+	if x != nil {
+		return x.ExpectedSha256
+	}
+	return ""
+}
+
+func (x *SaveWorkspaceFileRequest) GetExpectedClaimId() string {
+	if x != nil {
+		return x.ExpectedClaimId
+	}
+	return ""
+}
+
+func (x *SaveWorkspaceFileRequest) GetExpectedClaimGeneration() uint32 {
+	if x != nil {
+		return x.ExpectedClaimGeneration
+	}
+	return 0
+}
+
+type SaveWorkspaceFileResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	File          *SourceFile            `protobuf:"bytes,1,opt,name=file,proto3" json:"file,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SaveWorkspaceFileResponse) Reset() {
+	*x = SaveWorkspaceFileResponse{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SaveWorkspaceFileResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SaveWorkspaceFileResponse) ProtoMessage() {}
+
+func (x *SaveWorkspaceFileResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SaveWorkspaceFileResponse.ProtoReflect.Descriptor instead.
+func (*SaveWorkspaceFileResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SaveWorkspaceFileResponse) GetFile() *SourceFile {
+	if x != nil {
+		return x.File
+	}
+	return nil
+}
+
 // SetupRun is the latest setup of the current claim.
 type SetupRun struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -91,7 +679,7 @@ type SetupRun struct {
 
 func (x *SetupRun) Reset() {
 	*x = SetupRun{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[0]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +691,7 @@ func (x *SetupRun) String() string {
 func (*SetupRun) ProtoMessage() {}
 
 func (x *SetupRun) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[0]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +704,7 @@ func (x *SetupRun) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetupRun.ProtoReflect.Descriptor instead.
 func (*SetupRun) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{0}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SetupRun) GetClaimId() string {
@@ -186,7 +774,7 @@ type GitState struct {
 
 func (x *GitState) Reset() {
 	*x = GitState{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[1]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -198,7 +786,7 @@ func (x *GitState) String() string {
 func (*GitState) ProtoMessage() {}
 
 func (x *GitState) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[1]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -211,7 +799,7 @@ func (x *GitState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GitState.ProtoReflect.Descriptor instead.
 func (*GitState) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{1}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GitState) GetHead() string {
@@ -272,7 +860,7 @@ type GetWorkspaceRequest struct {
 
 func (x *GetWorkspaceRequest) Reset() {
 	*x = GetWorkspaceRequest{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[2]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -284,7 +872,7 @@ func (x *GetWorkspaceRequest) String() string {
 func (*GetWorkspaceRequest) ProtoMessage() {}
 
 func (x *GetWorkspaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[2]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -297,7 +885,7 @@ func (x *GetWorkspaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorkspaceRequest.ProtoReflect.Descriptor instead.
 func (*GetWorkspaceRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{2}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetWorkspaceRequest) GetItemId() string {
@@ -320,7 +908,7 @@ type GetWorkspaceResponse struct {
 
 func (x *GetWorkspaceResponse) Reset() {
 	*x = GetWorkspaceResponse{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[3]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -332,7 +920,7 @@ func (x *GetWorkspaceResponse) String() string {
 func (*GetWorkspaceResponse) ProtoMessage() {}
 
 func (x *GetWorkspaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[3]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -345,7 +933,7 @@ func (x *GetWorkspaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWorkspaceResponse.ProtoReflect.Descriptor instead.
 func (*GetWorkspaceResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{3}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetWorkspaceResponse) GetCheckout() *Checkout {
@@ -393,7 +981,7 @@ type EnsureWorkspaceRequest struct {
 
 func (x *EnsureWorkspaceRequest) Reset() {
 	*x = EnsureWorkspaceRequest{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[4]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -405,7 +993,7 @@ func (x *EnsureWorkspaceRequest) String() string {
 func (*EnsureWorkspaceRequest) ProtoMessage() {}
 
 func (x *EnsureWorkspaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[4]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -418,7 +1006,7 @@ func (x *EnsureWorkspaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsureWorkspaceRequest.ProtoReflect.Descriptor instead.
 func (*EnsureWorkspaceRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{4}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *EnsureWorkspaceRequest) GetItemId() string {
@@ -445,7 +1033,7 @@ type EnsureWorkspaceResponse struct {
 
 func (x *EnsureWorkspaceResponse) Reset() {
 	*x = EnsureWorkspaceResponse{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[5]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -457,7 +1045,7 @@ func (x *EnsureWorkspaceResponse) String() string {
 func (*EnsureWorkspaceResponse) ProtoMessage() {}
 
 func (x *EnsureWorkspaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[5]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -470,7 +1058,7 @@ func (x *EnsureWorkspaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnsureWorkspaceResponse.ProtoReflect.Descriptor instead.
 func (*EnsureWorkspaceResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{5}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *EnsureWorkspaceResponse) GetCheckout() *Checkout {
@@ -496,7 +1084,7 @@ type SetupWorkspaceRequest struct {
 
 func (x *SetupWorkspaceRequest) Reset() {
 	*x = SetupWorkspaceRequest{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[6]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -508,7 +1096,7 @@ func (x *SetupWorkspaceRequest) String() string {
 func (*SetupWorkspaceRequest) ProtoMessage() {}
 
 func (x *SetupWorkspaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[6]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -521,7 +1109,7 @@ func (x *SetupWorkspaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetupWorkspaceRequest.ProtoReflect.Descriptor instead.
 func (*SetupWorkspaceRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{6}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SetupWorkspaceRequest) GetItemId() string {
@@ -540,7 +1128,7 @@ type SetupWorkspaceResponse struct {
 
 func (x *SetupWorkspaceResponse) Reset() {
 	*x = SetupWorkspaceResponse{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[7]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -552,7 +1140,7 @@ func (x *SetupWorkspaceResponse) String() string {
 func (*SetupWorkspaceResponse) ProtoMessage() {}
 
 func (x *SetupWorkspaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[7]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -565,7 +1153,7 @@ func (x *SetupWorkspaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetupWorkspaceResponse.ProtoReflect.Descriptor instead.
 func (*SetupWorkspaceResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{7}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *SetupWorkspaceResponse) GetJob() *Job {
@@ -586,7 +1174,7 @@ type CommitWorkspaceRequest struct {
 
 func (x *CommitWorkspaceRequest) Reset() {
 	*x = CommitWorkspaceRequest{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[8]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +1186,7 @@ func (x *CommitWorkspaceRequest) String() string {
 func (*CommitWorkspaceRequest) ProtoMessage() {}
 
 func (x *CommitWorkspaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[8]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +1199,7 @@ func (x *CommitWorkspaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitWorkspaceRequest.ProtoReflect.Descriptor instead.
 func (*CommitWorkspaceRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{8}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *CommitWorkspaceRequest) GetItemId() string {
@@ -639,7 +1227,7 @@ type CommitWorkspaceResponse struct {
 
 func (x *CommitWorkspaceResponse) Reset() {
 	*x = CommitWorkspaceResponse{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[9]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -651,7 +1239,7 @@ func (x *CommitWorkspaceResponse) String() string {
 func (*CommitWorkspaceResponse) ProtoMessage() {}
 
 func (x *CommitWorkspaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[9]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -664,7 +1252,7 @@ func (x *CommitWorkspaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitWorkspaceResponse.ProtoReflect.Descriptor instead.
 func (*CommitWorkspaceResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{9}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CommitWorkspaceResponse) GetCommit() string {
@@ -690,7 +1278,7 @@ type ReleaseWorkspaceRequest struct {
 
 func (x *ReleaseWorkspaceRequest) Reset() {
 	*x = ReleaseWorkspaceRequest{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[10]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -702,7 +1290,7 @@ func (x *ReleaseWorkspaceRequest) String() string {
 func (*ReleaseWorkspaceRequest) ProtoMessage() {}
 
 func (x *ReleaseWorkspaceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[10]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -715,7 +1303,7 @@ func (x *ReleaseWorkspaceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseWorkspaceRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseWorkspaceRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{10}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ReleaseWorkspaceRequest) GetItemId() string {
@@ -735,7 +1323,7 @@ type ReleaseWorkspaceResponse struct {
 
 func (x *ReleaseWorkspaceResponse) Reset() {
 	*x = ReleaseWorkspaceResponse{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[11]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -747,7 +1335,7 @@ func (x *ReleaseWorkspaceResponse) String() string {
 func (*ReleaseWorkspaceResponse) ProtoMessage() {}
 
 func (x *ReleaseWorkspaceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[11]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -760,7 +1348,7 @@ func (x *ReleaseWorkspaceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseWorkspaceResponse.ProtoReflect.Descriptor instead.
 func (*ReleaseWorkspaceResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{11}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ReleaseWorkspaceResponse) GetItem() *Item {
@@ -786,7 +1374,7 @@ type GetUncommittedChangesRequest struct {
 
 func (x *GetUncommittedChangesRequest) Reset() {
 	*x = GetUncommittedChangesRequest{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[12]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -798,7 +1386,7 @@ func (x *GetUncommittedChangesRequest) String() string {
 func (*GetUncommittedChangesRequest) ProtoMessage() {}
 
 func (x *GetUncommittedChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[12]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -811,7 +1399,7 @@ func (x *GetUncommittedChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUncommittedChangesRequest.ProtoReflect.Descriptor instead.
 func (*GetUncommittedChangesRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{12}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *GetUncommittedChangesRequest) GetItemId() string {
@@ -831,7 +1419,7 @@ type GetUncommittedChangesResponse struct {
 
 func (x *GetUncommittedChangesResponse) Reset() {
 	*x = GetUncommittedChangesResponse{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[13]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -843,7 +1431,7 @@ func (x *GetUncommittedChangesResponse) String() string {
 func (*GetUncommittedChangesResponse) ProtoMessage() {}
 
 func (x *GetUncommittedChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[13]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -856,7 +1444,7 @@ func (x *GetUncommittedChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUncommittedChangesResponse.ProtoReflect.Descriptor instead.
 func (*GetUncommittedChangesResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{13}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *GetUncommittedChangesResponse) GetFiles() []string {
@@ -884,7 +1472,7 @@ type SearchWorkspaceFilesRequest struct {
 
 func (x *SearchWorkspaceFilesRequest) Reset() {
 	*x = SearchWorkspaceFilesRequest{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[14]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -896,7 +1484,7 @@ func (x *SearchWorkspaceFilesRequest) String() string {
 func (*SearchWorkspaceFilesRequest) ProtoMessage() {}
 
 func (x *SearchWorkspaceFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[14]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -909,7 +1497,7 @@ func (x *SearchWorkspaceFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchWorkspaceFilesRequest.ProtoReflect.Descriptor instead.
 func (*SearchWorkspaceFilesRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{14}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SearchWorkspaceFilesRequest) GetItemId() string {
@@ -942,7 +1530,7 @@ type SearchWorkspaceFilesResponse struct {
 
 func (x *SearchWorkspaceFilesResponse) Reset() {
 	*x = SearchWorkspaceFilesResponse{}
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[15]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -954,7 +1542,7 @@ func (x *SearchWorkspaceFilesResponse) String() string {
 func (*SearchWorkspaceFilesResponse) ProtoMessage() {}
 
 func (x *SearchWorkspaceFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_workspaces_proto_msgTypes[15]
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -967,7 +1555,7 @@ func (x *SearchWorkspaceFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchWorkspaceFilesResponse.ProtoReflect.Descriptor instead.
 func (*SearchWorkspaceFilesResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{15}
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SearchWorkspaceFilesResponse) GetPaths() []string {
@@ -982,7 +1570,50 @@ var File_wi_core_v1_workspaces_proto protoreflect.FileDescriptor
 const file_wi_core_v1_workspaces_proto_rawDesc = "" +
 	"\n" +
 	"\x1bwi/core/v1/workspaces.proto\x12\n" +
-	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17wi/core/v1/common.proto\x1a\x16wi/core/v1/items.proto\x1a\x15wi/core/v1/jobs.proto\"\x98\x02\n" +
+	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17wi/core/v1/common.proto\x1a\x16wi/core/v1/items.proto\x1a\x15wi/core/v1/jobs.proto\"\x9f\x01\n" +
+	"\n" +
+	"SourceFile\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
+	"\acontent\x18\x02 \x01(\tR\acontent\x12\x16\n" +
+	"\x06sha256\x18\x03 \x01(\tR\x06sha256\x12\x16\n" +
+	"\x06exists\x18\x04 \x01(\bR\x06exists\x12\x16\n" +
+	"\x06binary\x18\x05 \x01(\bR\x06binary\x12\x1b\n" +
+	"\ttoo_large\x18\x06 \x01(\bR\btooLarge\"4\n" +
+	"\x19ListWorkspaceFilesRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"\x96\x01\n" +
+	"\x1aListWorkspaceFilesResponse\x12\x14\n" +
+	"\x05paths\x18\x01 \x03(\tR\x05paths\x12\x1c\n" +
+	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12\x19\n" +
+	"\bclaim_id\x18\x03 \x01(\tR\aclaimId\x12)\n" +
+	"\x10claim_generation\x18\x04 \x01(\rR\x0fclaimGeneration\"\xae\x01\n" +
+	"\x17GetWorkspaceFileRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12*\n" +
+	"\x11expected_claim_id\x18\x03 \x01(\tR\x0fexpectedClaimId\x12:\n" +
+	"\x19expected_claim_generation\x18\x04 \x01(\rR\x17expectedClaimGeneration\"\x8c\x01\n" +
+	"\x18GetWorkspaceFileResponse\x12*\n" +
+	"\x04file\x18\x01 \x01(\v2\x16.wi.core.v1.SourceFileR\x04file\x12\x19\n" +
+	"\bclaim_id\x18\x02 \x01(\tR\aclaimId\x12)\n" +
+	"\x10claim_generation\x18\x03 \x01(\rR\x0fclaimGeneration\"\xb2\x01\n" +
+	"\x1bGetWorkspaceDocumentRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12*\n" +
+	"\x11expected_claim_id\x18\x03 \x01(\tR\x0fexpectedClaimId\x12:\n" +
+	"\x19expected_claim_generation\x18\x04 \x01(\rR\x17expectedClaimGeneration\"o\n" +
+	"\x1cGetWorkspaceDocumentResponse\x12\x18\n" +
+	"\acontent\x18\x01 \x01(\fR\acontent\x12\x16\n" +
+	"\x06sha256\x18\x02 \x01(\tR\x06sha256\x12\x1d\n" +
+	"\n" +
+	"media_type\x18\x03 \x01(\tR\tmediaType\"\xf2\x01\n" +
+	"\x18SaveWorkspaceFileRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\x12\x18\n" +
+	"\acontent\x18\x03 \x01(\tR\acontent\x12'\n" +
+	"\x0fexpected_sha256\x18\x04 \x01(\tR\x0eexpectedSha256\x12*\n" +
+	"\x11expected_claim_id\x18\x05 \x01(\tR\x0fexpectedClaimId\x12:\n" +
+	"\x19expected_claim_generation\x18\x06 \x01(\rR\x17expectedClaimGeneration\"G\n" +
+	"\x19SaveWorkspaceFileResponse\x12*\n" +
+	"\x04file\x18\x01 \x01(\v2\x16.wi.core.v1.SourceFileR\x04file\"\x98\x02\n" +
 	"\bSetupRun\x12\x19\n" +
 	"\bclaim_id\x18\x01 \x01(\tR\aclaimId\x12,\n" +
 	"\x05state\x18\x02 \x01(\x0e2\x16.wi.core.v1.SetupStateR\x05state\x129\n" +
@@ -1047,7 +1678,7 @@ const file_wi_core_v1_workspaces_proto_rawDesc = "" +
 	"\x17SETUP_STATE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13SETUP_STATE_RUNNING\x10\x01\x12\x19\n" +
 	"\x15SETUP_STATE_SUCCEEDED\x10\x02\x12\x16\n" +
-	"\x12SETUP_STATE_FAILED\x10\x032\xbd\x05\n" +
+	"\x12SETUP_STATE_FAILED\x10\x032\xdd\b\n" +
 	"\x10WorkspaceService\x12V\n" +
 	"\fGetWorkspace\x12\x1f.wi.core.v1.GetWorkspaceRequest\x1a .wi.core.v1.GetWorkspaceResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\x0fEnsureWorkspace\x12\".wi.core.v1.EnsureWorkspaceRequest\x1a#.wi.core.v1.EnsureWorkspaceResponse\x12W\n" +
@@ -1055,7 +1686,11 @@ const file_wi_core_v1_workspaces_proto_rawDesc = "" +
 	"\x0fCommitWorkspace\x12\".wi.core.v1.CommitWorkspaceRequest\x1a#.wi.core.v1.CommitWorkspaceResponse\x12]\n" +
 	"\x10ReleaseWorkspace\x12#.wi.core.v1.ReleaseWorkspaceRequest\x1a$.wi.core.v1.ReleaseWorkspaceResponse\x12q\n" +
 	"\x15GetUncommittedChanges\x12(.wi.core.v1.GetUncommittedChangesRequest\x1a).wi.core.v1.GetUncommittedChangesResponse\"\x03\x90\x02\x01\x12n\n" +
-	"\x14SearchWorkspaceFiles\x12'.wi.core.v1.SearchWorkspaceFilesRequest\x1a(.wi.core.v1.SearchWorkspaceFilesResponse\"\x03\x90\x02\x01B0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
+	"\x14SearchWorkspaceFiles\x12'.wi.core.v1.SearchWorkspaceFilesRequest\x1a(.wi.core.v1.SearchWorkspaceFilesResponse\"\x03\x90\x02\x01\x12h\n" +
+	"\x12ListWorkspaceFiles\x12%.wi.core.v1.ListWorkspaceFilesRequest\x1a&.wi.core.v1.ListWorkspaceFilesResponse\"\x03\x90\x02\x01\x12b\n" +
+	"\x10GetWorkspaceFile\x12#.wi.core.v1.GetWorkspaceFileRequest\x1a$.wi.core.v1.GetWorkspaceFileResponse\"\x03\x90\x02\x01\x12n\n" +
+	"\x14GetWorkspaceDocument\x12'.wi.core.v1.GetWorkspaceDocumentRequest\x1a(.wi.core.v1.GetWorkspaceDocumentResponse\"\x03\x90\x02\x01\x12`\n" +
+	"\x11SaveWorkspaceFile\x12$.wi.core.v1.SaveWorkspaceFileRequest\x1a%.wi.core.v1.SaveWorkspaceFileResponseB0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
 var (
 	file_wi_core_v1_workspaces_proto_rawDescOnce sync.Once
@@ -1070,62 +1705,81 @@ func file_wi_core_v1_workspaces_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_workspaces_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_wi_core_v1_workspaces_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_wi_core_v1_workspaces_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_wi_core_v1_workspaces_proto_goTypes = []any{
 	(SetupState)(0),                       // 0: wi.core.v1.SetupState
-	(*SetupRun)(nil),                      // 1: wi.core.v1.SetupRun
-	(*GitState)(nil),                      // 2: wi.core.v1.GitState
-	(*GetWorkspaceRequest)(nil),           // 3: wi.core.v1.GetWorkspaceRequest
-	(*GetWorkspaceResponse)(nil),          // 4: wi.core.v1.GetWorkspaceResponse
-	(*EnsureWorkspaceRequest)(nil),        // 5: wi.core.v1.EnsureWorkspaceRequest
-	(*EnsureWorkspaceResponse)(nil),       // 6: wi.core.v1.EnsureWorkspaceResponse
-	(*SetupWorkspaceRequest)(nil),         // 7: wi.core.v1.SetupWorkspaceRequest
-	(*SetupWorkspaceResponse)(nil),        // 8: wi.core.v1.SetupWorkspaceResponse
-	(*CommitWorkspaceRequest)(nil),        // 9: wi.core.v1.CommitWorkspaceRequest
-	(*CommitWorkspaceResponse)(nil),       // 10: wi.core.v1.CommitWorkspaceResponse
-	(*ReleaseWorkspaceRequest)(nil),       // 11: wi.core.v1.ReleaseWorkspaceRequest
-	(*ReleaseWorkspaceResponse)(nil),      // 12: wi.core.v1.ReleaseWorkspaceResponse
-	(*GetUncommittedChangesRequest)(nil),  // 13: wi.core.v1.GetUncommittedChangesRequest
-	(*GetUncommittedChangesResponse)(nil), // 14: wi.core.v1.GetUncommittedChangesResponse
-	(*SearchWorkspaceFilesRequest)(nil),   // 15: wi.core.v1.SearchWorkspaceFilesRequest
-	(*SearchWorkspaceFilesResponse)(nil),  // 16: wi.core.v1.SearchWorkspaceFilesResponse
-	(*timestamppb.Timestamp)(nil),         // 17: google.protobuf.Timestamp
-	(*Checkout)(nil),                      // 18: wi.core.v1.Checkout
-	(WorktreeStatus)(0),                   // 19: wi.core.v1.WorktreeStatus
-	(*Job)(nil),                           // 20: wi.core.v1.Job
-	(*Item)(nil),                          // 21: wi.core.v1.Item
+	(*SourceFile)(nil),                    // 1: wi.core.v1.SourceFile
+	(*ListWorkspaceFilesRequest)(nil),     // 2: wi.core.v1.ListWorkspaceFilesRequest
+	(*ListWorkspaceFilesResponse)(nil),    // 3: wi.core.v1.ListWorkspaceFilesResponse
+	(*GetWorkspaceFileRequest)(nil),       // 4: wi.core.v1.GetWorkspaceFileRequest
+	(*GetWorkspaceFileResponse)(nil),      // 5: wi.core.v1.GetWorkspaceFileResponse
+	(*GetWorkspaceDocumentRequest)(nil),   // 6: wi.core.v1.GetWorkspaceDocumentRequest
+	(*GetWorkspaceDocumentResponse)(nil),  // 7: wi.core.v1.GetWorkspaceDocumentResponse
+	(*SaveWorkspaceFileRequest)(nil),      // 8: wi.core.v1.SaveWorkspaceFileRequest
+	(*SaveWorkspaceFileResponse)(nil),     // 9: wi.core.v1.SaveWorkspaceFileResponse
+	(*SetupRun)(nil),                      // 10: wi.core.v1.SetupRun
+	(*GitState)(nil),                      // 11: wi.core.v1.GitState
+	(*GetWorkspaceRequest)(nil),           // 12: wi.core.v1.GetWorkspaceRequest
+	(*GetWorkspaceResponse)(nil),          // 13: wi.core.v1.GetWorkspaceResponse
+	(*EnsureWorkspaceRequest)(nil),        // 14: wi.core.v1.EnsureWorkspaceRequest
+	(*EnsureWorkspaceResponse)(nil),       // 15: wi.core.v1.EnsureWorkspaceResponse
+	(*SetupWorkspaceRequest)(nil),         // 16: wi.core.v1.SetupWorkspaceRequest
+	(*SetupWorkspaceResponse)(nil),        // 17: wi.core.v1.SetupWorkspaceResponse
+	(*CommitWorkspaceRequest)(nil),        // 18: wi.core.v1.CommitWorkspaceRequest
+	(*CommitWorkspaceResponse)(nil),       // 19: wi.core.v1.CommitWorkspaceResponse
+	(*ReleaseWorkspaceRequest)(nil),       // 20: wi.core.v1.ReleaseWorkspaceRequest
+	(*ReleaseWorkspaceResponse)(nil),      // 21: wi.core.v1.ReleaseWorkspaceResponse
+	(*GetUncommittedChangesRequest)(nil),  // 22: wi.core.v1.GetUncommittedChangesRequest
+	(*GetUncommittedChangesResponse)(nil), // 23: wi.core.v1.GetUncommittedChangesResponse
+	(*SearchWorkspaceFilesRequest)(nil),   // 24: wi.core.v1.SearchWorkspaceFilesRequest
+	(*SearchWorkspaceFilesResponse)(nil),  // 25: wi.core.v1.SearchWorkspaceFilesResponse
+	(*timestamppb.Timestamp)(nil),         // 26: google.protobuf.Timestamp
+	(*Checkout)(nil),                      // 27: wi.core.v1.Checkout
+	(WorktreeStatus)(0),                   // 28: wi.core.v1.WorktreeStatus
+	(*Job)(nil),                           // 29: wi.core.v1.Job
+	(*Item)(nil),                          // 30: wi.core.v1.Item
 }
 var file_wi_core_v1_workspaces_proto_depIdxs = []int32{
-	0,  // 0: wi.core.v1.SetupRun.state:type_name -> wi.core.v1.SetupState
-	17, // 1: wi.core.v1.SetupRun.started_at:type_name -> google.protobuf.Timestamp
-	17, // 2: wi.core.v1.SetupRun.finished_at:type_name -> google.protobuf.Timestamp
-	18, // 3: wi.core.v1.GetWorkspaceResponse.checkout:type_name -> wi.core.v1.Checkout
-	19, // 4: wi.core.v1.GetWorkspaceResponse.status:type_name -> wi.core.v1.WorktreeStatus
-	2,  // 5: wi.core.v1.GetWorkspaceResponse.git:type_name -> wi.core.v1.GitState
-	1,  // 6: wi.core.v1.GetWorkspaceResponse.setup:type_name -> wi.core.v1.SetupRun
-	18, // 7: wi.core.v1.EnsureWorkspaceResponse.checkout:type_name -> wi.core.v1.Checkout
-	20, // 8: wi.core.v1.EnsureWorkspaceResponse.job:type_name -> wi.core.v1.Job
-	20, // 9: wi.core.v1.SetupWorkspaceResponse.job:type_name -> wi.core.v1.Job
-	21, // 10: wi.core.v1.ReleaseWorkspaceResponse.item:type_name -> wi.core.v1.Item
-	3,  // 11: wi.core.v1.WorkspaceService.GetWorkspace:input_type -> wi.core.v1.GetWorkspaceRequest
-	5,  // 12: wi.core.v1.WorkspaceService.EnsureWorkspace:input_type -> wi.core.v1.EnsureWorkspaceRequest
-	7,  // 13: wi.core.v1.WorkspaceService.SetupWorkspace:input_type -> wi.core.v1.SetupWorkspaceRequest
-	9,  // 14: wi.core.v1.WorkspaceService.CommitWorkspace:input_type -> wi.core.v1.CommitWorkspaceRequest
-	11, // 15: wi.core.v1.WorkspaceService.ReleaseWorkspace:input_type -> wi.core.v1.ReleaseWorkspaceRequest
-	13, // 16: wi.core.v1.WorkspaceService.GetUncommittedChanges:input_type -> wi.core.v1.GetUncommittedChangesRequest
-	15, // 17: wi.core.v1.WorkspaceService.SearchWorkspaceFiles:input_type -> wi.core.v1.SearchWorkspaceFilesRequest
-	4,  // 18: wi.core.v1.WorkspaceService.GetWorkspace:output_type -> wi.core.v1.GetWorkspaceResponse
-	6,  // 19: wi.core.v1.WorkspaceService.EnsureWorkspace:output_type -> wi.core.v1.EnsureWorkspaceResponse
-	8,  // 20: wi.core.v1.WorkspaceService.SetupWorkspace:output_type -> wi.core.v1.SetupWorkspaceResponse
-	10, // 21: wi.core.v1.WorkspaceService.CommitWorkspace:output_type -> wi.core.v1.CommitWorkspaceResponse
-	12, // 22: wi.core.v1.WorkspaceService.ReleaseWorkspace:output_type -> wi.core.v1.ReleaseWorkspaceResponse
-	14, // 23: wi.core.v1.WorkspaceService.GetUncommittedChanges:output_type -> wi.core.v1.GetUncommittedChangesResponse
-	16, // 24: wi.core.v1.WorkspaceService.SearchWorkspaceFiles:output_type -> wi.core.v1.SearchWorkspaceFilesResponse
-	18, // [18:25] is the sub-list for method output_type
-	11, // [11:18] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	1,  // 0: wi.core.v1.GetWorkspaceFileResponse.file:type_name -> wi.core.v1.SourceFile
+	1,  // 1: wi.core.v1.SaveWorkspaceFileResponse.file:type_name -> wi.core.v1.SourceFile
+	0,  // 2: wi.core.v1.SetupRun.state:type_name -> wi.core.v1.SetupState
+	26, // 3: wi.core.v1.SetupRun.started_at:type_name -> google.protobuf.Timestamp
+	26, // 4: wi.core.v1.SetupRun.finished_at:type_name -> google.protobuf.Timestamp
+	27, // 5: wi.core.v1.GetWorkspaceResponse.checkout:type_name -> wi.core.v1.Checkout
+	28, // 6: wi.core.v1.GetWorkspaceResponse.status:type_name -> wi.core.v1.WorktreeStatus
+	11, // 7: wi.core.v1.GetWorkspaceResponse.git:type_name -> wi.core.v1.GitState
+	10, // 8: wi.core.v1.GetWorkspaceResponse.setup:type_name -> wi.core.v1.SetupRun
+	27, // 9: wi.core.v1.EnsureWorkspaceResponse.checkout:type_name -> wi.core.v1.Checkout
+	29, // 10: wi.core.v1.EnsureWorkspaceResponse.job:type_name -> wi.core.v1.Job
+	29, // 11: wi.core.v1.SetupWorkspaceResponse.job:type_name -> wi.core.v1.Job
+	30, // 12: wi.core.v1.ReleaseWorkspaceResponse.item:type_name -> wi.core.v1.Item
+	12, // 13: wi.core.v1.WorkspaceService.GetWorkspace:input_type -> wi.core.v1.GetWorkspaceRequest
+	14, // 14: wi.core.v1.WorkspaceService.EnsureWorkspace:input_type -> wi.core.v1.EnsureWorkspaceRequest
+	16, // 15: wi.core.v1.WorkspaceService.SetupWorkspace:input_type -> wi.core.v1.SetupWorkspaceRequest
+	18, // 16: wi.core.v1.WorkspaceService.CommitWorkspace:input_type -> wi.core.v1.CommitWorkspaceRequest
+	20, // 17: wi.core.v1.WorkspaceService.ReleaseWorkspace:input_type -> wi.core.v1.ReleaseWorkspaceRequest
+	22, // 18: wi.core.v1.WorkspaceService.GetUncommittedChanges:input_type -> wi.core.v1.GetUncommittedChangesRequest
+	24, // 19: wi.core.v1.WorkspaceService.SearchWorkspaceFiles:input_type -> wi.core.v1.SearchWorkspaceFilesRequest
+	2,  // 20: wi.core.v1.WorkspaceService.ListWorkspaceFiles:input_type -> wi.core.v1.ListWorkspaceFilesRequest
+	4,  // 21: wi.core.v1.WorkspaceService.GetWorkspaceFile:input_type -> wi.core.v1.GetWorkspaceFileRequest
+	6,  // 22: wi.core.v1.WorkspaceService.GetWorkspaceDocument:input_type -> wi.core.v1.GetWorkspaceDocumentRequest
+	8,  // 23: wi.core.v1.WorkspaceService.SaveWorkspaceFile:input_type -> wi.core.v1.SaveWorkspaceFileRequest
+	13, // 24: wi.core.v1.WorkspaceService.GetWorkspace:output_type -> wi.core.v1.GetWorkspaceResponse
+	15, // 25: wi.core.v1.WorkspaceService.EnsureWorkspace:output_type -> wi.core.v1.EnsureWorkspaceResponse
+	17, // 26: wi.core.v1.WorkspaceService.SetupWorkspace:output_type -> wi.core.v1.SetupWorkspaceResponse
+	19, // 27: wi.core.v1.WorkspaceService.CommitWorkspace:output_type -> wi.core.v1.CommitWorkspaceResponse
+	21, // 28: wi.core.v1.WorkspaceService.ReleaseWorkspace:output_type -> wi.core.v1.ReleaseWorkspaceResponse
+	23, // 29: wi.core.v1.WorkspaceService.GetUncommittedChanges:output_type -> wi.core.v1.GetUncommittedChangesResponse
+	25, // 30: wi.core.v1.WorkspaceService.SearchWorkspaceFiles:output_type -> wi.core.v1.SearchWorkspaceFilesResponse
+	3,  // 31: wi.core.v1.WorkspaceService.ListWorkspaceFiles:output_type -> wi.core.v1.ListWorkspaceFilesResponse
+	5,  // 32: wi.core.v1.WorkspaceService.GetWorkspaceFile:output_type -> wi.core.v1.GetWorkspaceFileResponse
+	7,  // 33: wi.core.v1.WorkspaceService.GetWorkspaceDocument:output_type -> wi.core.v1.GetWorkspaceDocumentResponse
+	9,  // 34: wi.core.v1.WorkspaceService.SaveWorkspaceFile:output_type -> wi.core.v1.SaveWorkspaceFileResponse
+	24, // [24:35] is the sub-list for method output_type
+	13, // [13:24] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_workspaces_proto_init() }
@@ -1142,7 +1796,7 @@ func file_wi_core_v1_workspaces_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_workspaces_proto_rawDesc), len(file_wi_core_v1_workspaces_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   16,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
