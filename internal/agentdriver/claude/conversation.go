@@ -197,6 +197,7 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 		Subtype             string          `json:"subtype"`
 		PreventContinuation bool            `json:"preventContinuation"`
 		Content             json.RawMessage `json:"content"`
+		ToolUseResult       json.RawMessage `json:"toolUseResult"`
 		Message             struct {
 			Role    string          `json:"role"`
 			Stop    string          `json:"stop_reason"`
@@ -217,6 +218,9 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 		return protocol.ConversationFact{}, true
 	}
 	fact := protocol.ConversationFact{Line: line, Type: "message", Role: record.Type, Timestamp: record.Timestamp, StopReason: record.Message.Stop, Failed: record.APIError}
+	if record.Type == "user" {
+		fact.BackgroundStarted, fact.BackgroundEnded = backgroundWork(record.ToolUseResult, record.Message.Content)
+	}
 	// Claude writes a synthetic reply when the API refuses a turn; a usage
 	// limit waits for its reset rather than for a fix.
 	if record.APIError && record.Error == "rate_limit" {
@@ -250,6 +254,78 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 	}
 	return fact, true
 }
+
+// backgroundWork reads the background work a user record starts or ends.
+// Claude Code records a background command's or async subagent's launch in
+// the tool result, and its end as a task notification, which re-activates
+// the agent; stopping a task records its ID in the stop tool's result.
+func backgroundWork(result, content json.RawMessage) (started, ended []string) {
+	var launched struct {
+		BackgroundTaskID string `json:"backgroundTaskId"`
+		Async            bool   `json:"isAsync"`
+		AgentID          string `json:"agentId"`
+		TaskID           string `json:"taskId"`
+		TimeoutMs        int64  `json:"timeoutMs"`
+		StoppedTaskID    string `json:"task_id"`
+	}
+	if len(result) > 0 && result[0] == '{' && json.Unmarshal(result, &launched) == nil {
+		switch {
+		case launched.BackgroundTaskID != "":
+			started = append(started, launched.BackgroundTaskID)
+		case launched.Async && launched.AgentID != "":
+			started = append(started, launched.AgentID)
+		case launched.TaskID != "" && launched.TimeoutMs > 0:
+			// A monitor: its events re-activate the agent until it ends.
+			started = append(started, launched.TaskID)
+		case launched.StoppedTaskID != "":
+			ended = append(ended, launched.StoppedTaskID)
+		}
+	}
+	var text string
+	if json.Unmarshal(content, &text) != nil {
+		var blocks []struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(content, &blocks) == nil {
+			for _, block := range blocks {
+				if block.Type == "text" {
+					text += block.Text
+				}
+			}
+		}
+	}
+	for _, match := range taskNotificationPattern.FindAllStringSubmatch(text, -1) {
+		if taskEnded(match[2]) {
+			ended = append(ended, match[1])
+		}
+	}
+	return started, ended
+}
+
+var taskNotificationPattern = regexp.MustCompile(`(?s)<task-notification>\s*<task-id>([^<]{1,128})</task-id>(.*?)</task-notification>`)
+
+// taskEnded reports whether a task notification's body ends the task: a final
+// status, or a monitor's expiry. A monitor's other events leave it running.
+func taskEnded(body string) bool {
+	if strings.Contains(body, "[Monitor expired") {
+		return true
+	}
+	start := strings.Index(body, "<status>")
+	if start < 0 {
+		return false
+	}
+	end := strings.Index(body[start:], "</status>")
+	if end < 0 {
+		return false
+	}
+	switch strings.TrimSpace(body[start+len("<status>") : start+end]) {
+	case "completed", "failed", "killed", "stopped", "cancelled", "canceled", "error", "timeout", "expired":
+		return true
+	}
+	return false
+}
+
 func interruptedContent(raw json.RawMessage) bool {
 	var text string
 	if json.Unmarshal(raw, &text) != nil {

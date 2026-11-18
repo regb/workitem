@@ -5,11 +5,11 @@ description: Understand how wi identifies work that needs a human decision.
 
 Attention answers a practical question: which active item should you inspect next?
 
-An item needs attention when it is `active`, its agent is idle, neither agent nor worktree observation reports a problem, and it is not [waiting](../lifecycle/#waiting). Busy work appears in progress.
+An item needs attention when it is `active`, its agent is idle, neither agent nor worktree observation reports a problem, and it is not [waiting](../lifecycle/#waiting). Busy work appears in progress. So does an idle agent waiting on background work it started, such as a background command or subagent, which re-activates the agent when it completes: the agent's reason says how many tasks it waits on. Only work started by the running agent process counts, since it ends with that process.
 
 ## State in the daemon, ranking in clients
 
-The daemon keeps the facts attention works from: each item's activity (when you last prompted it, when the agent last completed, read, unread, deferred), whether a response is unread, its blockers, the latest agent and worktree observations, and whether it **needs attention**: an unread response, an idle agent waiting for input, a question, or a problem. It also keeps ranking knobs that people or automation set on an item: `priority` (higher first), `pinned`, and `snoozed_until`.
+The daemon keeps the facts attention works from: each item's activity (when you last prompted it, when the agent last completed, read, unread, deferred), whether a response is unread, its blockers, the latest agent and worktree observations, and whether it **needs attention**: an unread response or an idle agent waiting for input, unless the agent is still working; a question; or a problem. It also keeps ranking knobs that people or automation set on an item: `priority` (higher first), `pinned`, and `snoozed_until`.
 
 The built-in ranking is the attention order of `ItemService.ListItems`: it sets each item's `attention_group` (`NEEDS_ATTENTION`, `WORKING`, `WAITING`, `BACKLOG` or `CLOSED`) and orders the items within each group. `wi list`, `wi next`, the picker and the web dashboard use it. Any client may instead read the same state and rank items its own way, to suit its medium or its user. Customization works through that state, never through code inside the daemon: automation such as automatic deferral is a client that watches the [change feed](../../reference/api/#conventions) and updates the knobs.
 
@@ -27,8 +27,8 @@ Defer and waiting are different tools. Defer means "later, among things I can ac
 
 An agent response you have not read is **unread**. Unread titles are bold in `wi list` and the picker, like unread mail. Read state is tracked per item:
 
-- On an item that is not waiting, unread only changes the display. Reading never moves the item in the queue.
-- On a waiting item, an unread response puts the item back in NEEDS ATTENTION. Reading it returns the item to WAITING. This covers follow-up prompts sent to an item that waits for a review: the answer surfaces without clearing what it waits for.
+- On an item that is not waiting, unread only changes the display. Reading never moves the item in the queue. An unread response does not keep a working agent out of IN PROGRESS: when you or another client sends it a new message before you read its answer, it shows as working until it answers again.
+- On a waiting item, an unread response puts the item back in NEEDS ATTENTION once its agent stops working. Reading it returns the item to WAITING. This covers follow-up prompts sent to an item that waits for a review: the answer surfaces without clearing what it waits for.
 
 The picker shows waiting alongside the agent's status, including busy items and waiting items with unread responses. The item name and blocker label share the available column width, borrowing space from each other when one is short. Only when both cannot fit does the picker truncate them, keeping a visible condition label. Conditions appear in yellow after `·`, without a redundant `waiting:` prefix. The complete condition remains searchable.
 

@@ -714,13 +714,18 @@ type ItemObservation struct {
 	// unread means a response arrived since the operator last read the item.
 	Unread     bool                   `protobuf:"varint,8,opt,name=unread,proto3" json:"unread,omitempty"`
 	ObservedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
-	// needs_attention means the operator is needed: an unread response, an
-	// idle agent waiting for input, a question, or a problem. A waiting item
-	// (with an open blocker) needs attention only for an unread response.
+	// needs_attention means the operator is needed: an unread response or an
+	// idle agent waiting for input, unless the agent is still working; a
+	// question; or a problem. A waiting item (with an open blocker) needs
+	// attention only for an unread response.
 	NeedsAttention bool               `protobuf:"varint,10,opt,name=needs_attention,json=needsAttention,proto3" json:"needs_attention,omitempty"`
 	Activity       *AttentionActivity `protobuf:"bytes,11,opt,name=activity,proto3" json:"activity,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// background_tasks counts background work an idle agent waits on, such as
+	// a background command or subagent; each re-activates the agent when it
+	// completes. While it is nonzero the agent counts as working.
+	BackgroundTasks uint32 `protobuf:"varint,14,opt,name=background_tasks,json=backgroundTasks,proto3" json:"background_tasks,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ItemObservation) Reset() {
@@ -828,6 +833,13 @@ func (x *ItemObservation) GetActivity() *AttentionActivity {
 		return x.Activity
 	}
 	return nil
+}
+
+func (x *ItemObservation) GetBackgroundTasks() uint32 {
+	if x != nil {
+		return x.BackgroundTasks
+	}
+	return 0
 }
 
 // AttentionActivity is when the operator and the agent last acted on an
@@ -3588,7 +3600,7 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x1a7\n" +
 	"\tMetaEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xff\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xaa\x04\n" +
 	"\x0fItemObservation\x12:\n" +
 	"\fagent_status\x18\x01 \x01(\x0e2\x17.wi.core.v1.AgentStatusR\vagentStatus\x12!\n" +
 	"\fagent_reason\x18\x02 \x01(\tR\vagentReason\x12\x16\n" +
@@ -3602,7 +3614,8 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"observedAt\x12'\n" +
 	"\x0fneeds_attention\x18\n" +
 	" \x01(\bR\x0eneedsAttention\x129\n" +
-	"\bactivity\x18\v \x01(\v2\x1d.wi.core.v1.AttentionActivityR\bactivity\"\xe9\x02\n" +
+	"\bactivity\x18\v \x01(\v2\x1d.wi.core.v1.AttentionActivityR\bactivity\x12)\n" +
+	"\x10background_tasks\x18\x0e \x01(\rR\x0fbackgroundTasks\"\xe9\x02\n" +
 	"\x11AttentionActivity\x12F\n" +
 	"\x11last_requested_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastRequestedAt\x12F\n" +
 	"\x11last_completed_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastCompletedAt\x12<\n" +

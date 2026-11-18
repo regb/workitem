@@ -130,4 +130,9 @@ type ConversationFact struct {
 	ContentTypes []string  `json:"content_types,omitempty"`
 	Terminal     bool      `json:"terminal,omitempty"`
 	Failed       bool      `json:"failed,omitempty"`
+	// BackgroundStarted and BackgroundEnded name background work the agent
+	// started or saw end on this line: work that re-activates the agent when
+	// it completes, such as a background command or subagent.
+	BackgroundStarted []string `json:"background_started,omitempty"`
+	BackgroundEnded   []string `json:"background_ended,omitempty"`
 }

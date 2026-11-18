@@ -28,7 +28,14 @@ type ConversationEventFact struct {
 	ContentTypes []string  `json:"content_types,omitempty"`
 	Terminal     bool      `json:"terminal,omitempty"`
 	Failed       bool      `json:"failed,omitempty"`
+	// BackgroundStarted and BackgroundEnded are the driver's background work
+	// facts; see driverprotocol.ConversationFact.
+	BackgroundStarted []string `json:"background_started,omitempty"`
+	BackgroundEnded   []string `json:"background_ended,omitempty"`
 }
+
+// maxPendingBackground bounds the background work a conversation index keeps.
+const maxPendingBackground = 64
 
 type ConversationIndex struct {
 	WorkItemID            string                 `json:"work_item_id"`
@@ -46,6 +53,10 @@ type ConversationIndex struct {
 	LastAssistantMessage  *ConversationEventFact `json:"last_assistant_message,omitempty"`
 	LastTerminalAssistant *ConversationEventFact `json:"last_terminal_assistant,omitempty"`
 	LastToolActivity      *ConversationEventFact `json:"last_tool_activity,omitempty"`
+	// Background is the background work started and not yet seen to end, by
+	// ID, with the time it started. Work outlives no agent process, so readers
+	// count only work started by the current one.
+	Background map[string]time.Time `json:"background,omitempty"`
 }
 
 type ConversationRecord struct {
@@ -356,6 +367,44 @@ func applyConversationFact(index *ConversationIndex, attention *AttentionActivit
 	if fact.Role == "assistant" && containsCoordinator(fact.ContentTypes, "toolCall", "bashExecution", "tool_use") {
 		index.LastToolActivity = &copyFact
 	}
+	applyBackgroundFact(index, fact)
+}
+
+// applyBackgroundFact tracks background work that will re-activate the agent.
+func applyBackgroundFact(index *ConversationIndex, fact ConversationEventFact) {
+	for _, id := range fact.BackgroundEnded {
+		delete(index.Background, id)
+	}
+	for _, id := range fact.BackgroundStarted {
+		if id == "" || len(id) > 128 {
+			continue
+		}
+		if index.Background == nil {
+			index.Background = map[string]time.Time{}
+		}
+		index.Background[id] = fact.Timestamp.UTC()
+	}
+	for len(index.Background) > maxPendingBackground {
+		oldest := ""
+		for id, at := range index.Background {
+			if oldest == "" || at.Before(index.Background[oldest]) {
+				oldest = id
+			}
+		}
+		delete(index.Background, oldest)
+	}
+}
+
+// PendingBackground counts the background work started since the given
+// time, by the agent process that started then.
+func (index ConversationIndex) PendingBackground(since time.Time) int {
+	count := 0
+	for _, at := range index.Background {
+		if !at.Before(since) {
+			count++
+		}
+	}
+	return count
 }
 
 func inferIndexedConversationTurnState(index ConversationIndex) string {

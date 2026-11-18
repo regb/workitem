@@ -128,6 +128,7 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 		out.AgentStatus = agentStatus(v.Status)
 		out.AgentReason = v.Reason
 		out.ObservedAt = stamp(v.ObservedAt)
+		out.BackgroundTasks = uint32(v.BackgroundTasks)
 		if v.Runtime != nil {
 			out.Asking = v.Runtime.Readiness == "waiting_input"
 		}
@@ -143,7 +144,7 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 		out.Activity = &v1.AttentionActivity{LastRequestedAt: optionalStamp(a.LastRequestedAt), LastCompletedAt: optionalStamp(a.LastCompletedAt), LastReadAt: optionalStamp(a.LastReadAt), LastUnreadAt: optionalStamp(a.LastUnreadAt), LastDeferredAt: optionalStamp(a.LastDeferredAt)}
 		out.Unread = (view.Activity{LastRequestedAt: a.LastRequestedAt, LastCompletedAt: a.LastCompletedAt, LastReadAt: a.LastReadAt, LastUnreadAt: a.LastUnreadAt, LastDeferredAt: a.LastDeferredAt}).Unread()
 	}
-	out.NeedsAttention = m.State == model.StateActive && (out.Unread || (!m.Waiting(time.Now()) && (out.AgentStatus == v1.AgentStatus_AGENT_STATUS_IDLE || out.AgentStatus == v1.AgentStatus_AGENT_STATUS_PROBLEM || out.WorktreeStatus == v1.WorktreeStatus_WORKTREE_STATUS_PROBLEM || out.BranchMismatch || out.Asking)))
+	out.NeedsAttention = m.State == model.StateActive && needsAttention(out, m.Waiting(time.Now()))
 	if m.SnoozedUntil != nil && m.SnoozedUntil.After(time.Now()) && !out.Unread {
 		out.NeedsAttention = false
 	}
@@ -152,6 +153,22 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 		out.NeedsAttention = false
 	}
 	return out
+}
+
+// needsAttention reports whether an active item needs the operator. An agent
+// still working (busy, or idle until its background work re-activates it)
+// needs no attention for its last response or for being idle; it does for a
+// question or a problem. A waiting item needs attention only for an unread
+// response.
+func needsAttention(o *v1.ItemObservation, waiting bool) bool {
+	working := o.AgentStatus == v1.AgentStatus_AGENT_STATUS_BUSY || o.BackgroundTasks > 0
+	if o.Unread && !working {
+		return true
+	}
+	if waiting {
+		return false
+	}
+	return o.AgentStatus == v1.AgentStatus_AGENT_STATUS_IDLE && !working || o.AgentStatus == v1.AgentStatus_AGENT_STATUS_PROBLEM || o.WorktreeStatus == v1.WorktreeStatus_WORKTREE_STATUS_PROBLEM || o.BranchMismatch || o.Asking
 }
 func (s *Server) GetItem(ctx context.Context, req *connect.Request[v1.GetItemRequest]) (*connect.Response[v1.GetItemResponse], error) {
 	c, err := s.canonical(ctx, req.Msg.ItemId, 0)

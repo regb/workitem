@@ -66,8 +66,11 @@ type AgentObservation struct {
 	Worktree           *ProjectedWorktree     `json:"worktree,omitempty"`
 	WorktreeObservedAt time.Time              `json:"worktree_observed_at,omitempty"`
 	Activity           AttentionActivity      `json:"activity"`
-	ObservedAt         time.Time              `json:"observed_at"`
-	Warnings           []string               `json:"warnings,omitempty"`
+	// BackgroundTasks counts background work the idle agent waits on: it
+	// re-activates the agent when it completes.
+	BackgroundTasks int       `json:"background_tasks,omitempty"`
+	ObservedAt      time.Time `json:"observed_at"`
+	Warnings        []string  `json:"warnings,omitempty"`
 }
 
 type AgentObservationResult struct {
@@ -419,6 +422,16 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 	default:
 		observation.Status = "problem"
 		observation.Reason = "latest conversation activity is incomplete and runtime ownership is offline"
+	}
+	observation.BackgroundTasks = 0
+	if observation.Status == "idle" && observation.ProcessOnline && ownerFound && owner.State != model.AgentRuntimeStopped && conversationFound {
+		observation.BackgroundTasks = conversation.PendingBackground(owner.StartedAt)
+		switch {
+		case observation.BackgroundTasks == 1:
+			observation.Reason = "waiting on 1 background task that will re-activate the agent"
+		case observation.BackgroundTasks > 1:
+			observation.Reason = fmt.Sprintf("waiting on %d background tasks that will re-activate the agent", observation.BackgroundTasks)
+		}
 	}
 	return nil
 }

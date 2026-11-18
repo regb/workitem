@@ -165,11 +165,16 @@ message ItemObservation {
   // unread means a response arrived since the operator last read the item.
   bool unread = 8;
   google.protobuf.Timestamp observed_at = 9;
-  // needs_attention means the operator is needed: an unread response, an
-  // idle agent waiting for input, a question, or a problem. A waiting item
-  // (with an open blocker) needs attention only for an unread response.
+  // needs_attention means the operator is needed: an unread response or an
+  // idle agent waiting for input, unless the agent is still working; a
+  // question; or a problem. A waiting item (with an open blocker) needs
+  // attention only for an unread response.
   bool needs_attention = 10;
   AttentionActivity activity = 11;
+  // background_tasks counts background work an idle agent waits on, such as
+  // a background command or subagent; each re-activates the agent when it
+  // completes. While it is nonzero the agent counts as working.
+  uint32 background_tasks = 14;
 }
 
 // AttentionActivity is when the operator and the agent last acted on an
