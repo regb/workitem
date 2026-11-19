@@ -30,6 +30,13 @@ service SystemService {
   rpc ListPlugins(ListPluginsRequest) returns (ListPluginsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // GetUsage reads how much of each subscription's quota is left, as the
+  // usage plugin reports it. It answers at once from the daemon's last
+  // result: the daemon checks every five minutes while the API is in use
+  // (any call within the last 30 minutes). refresh starts a check now in
+  // the background; wait blocks until a check started now finishes. The
+  // first call after the daemon starts always waits.
+  rpc GetUsage(GetUsageRequest) returns (GetUsageResponse);
   // Shutdown stops agents and terminals, then the daemon. The reply is
   // sent before the daemon stops; the job reports the result to watchers
   // until then.
@@ -143,4 +150,61 @@ message ShutdownRequest {
 
 message ShutdownResponse {
   Job job = 1;
+}
+
+message GetUsageRequest {
+  // refresh asks the providers again rather than reading their cached
+  // answers; the plugin allows this once a minute.
+  bool refresh = 1;
+  // wait returns only after the check this call started, if any, finishes.
+  bool wait = 2;
+}
+
+message GetUsageResponse {
+  // enabled is false when the usage plugin is not enabled.
+  bool enabled = 1;
+  repeated UsageQuota quotas = 2;
+  // checked_at is when the daemon last finished a check; unset before the
+  // first one.
+  google.protobuf.Timestamp checked_at = 3;
+  // refreshing means a check is running; read again for its result.
+  bool refreshing = 4;
+  // error is why the last check failed; quotas then hold the previous result.
+  string error = 5;
+}
+
+// UsageQuota is one subscription's remaining quota. Remaining values are as
+// of observed_at; stale and error qualify them.
+message UsageQuota {
+  // provider names the subscription's provider, such as claude or codex.
+  string provider = 1;
+  string account = 2;
+  google.protobuf.Timestamp observed_at = 3;
+  repeated UsageWindow windows = 4;
+  // included_usage_allowed is the provider's own answer to whether the
+  // subscription still allows included usage; unset when it gives none.
+  optional bool included_usage_allowed = 5;
+  UsageCredits credits = 6;
+  bool stale = 7;
+  // error_code and error_message say why the quota is unknown.
+  string error_code = 8;
+  string error_message = 9;
+}
+
+// UsageWindow is a rate-limit window, such as five hours or a week.
+message UsageWindow {
+  string id = 1;
+  string scope_model = 2;
+  string scope_surface = 3;
+  // remaining_percent is unset when unknown, never zero for unknown.
+  optional double remaining_percent = 4;
+  google.protobuf.Timestamp resets_at = 5;
+  optional int64 duration_seconds = 6;
+}
+
+// UsageCredits is a balance of paid credits beyond the subscription.
+message UsageCredits {
+  optional double remaining = 1;
+  optional bool unlimited = 2;
+  string unit = 3;
 }

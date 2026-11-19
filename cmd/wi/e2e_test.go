@@ -260,6 +260,10 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 		t.Fatalf("agent mutated lifecycle: %v", err)
 	}
 	f.schedules()
+	// The daemon answers usage from its plugin host; here the plugin is off.
+	if value, err := f.clients.System.GetUsage(context.Background(), connect.NewRequest(&v1.GetUsageRequest{Wait: true})); err != nil || value.Msg.Enabled || value.Msg.Error != "" || value.Msg.CheckedAt == nil {
+		t.Fatalf("usage: %v %v", value, err)
+	}
 	f.tui(repo)
 	f.cliTUICompatibility(repo)
 	f.restartJobs(repo, added.Job.Id)

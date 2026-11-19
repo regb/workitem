@@ -51,6 +51,7 @@ type Server struct {
 	callbackMu      sync.Mutex
 	callbacksClosed bool
 	callbacks       sync.WaitGroup
+	usage           usageState
 }
 
 func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.Config, host *plugin.Host, root string) (*Server, error) {
@@ -69,6 +70,8 @@ func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.C
 	core.SetRuntimeSettingsObserver(s.observeRuntimeSettings)
 	s.callbacks.Add(1)
 	go s.scheduleLoop()
+	s.callbacks.Add(1)
+	go s.usageLoop()
 	a.ReviewRecords = core
 	a.ReviewCaptures = app.NewReviewCaptureQueue(ctx, a.CaptureAfterSettlement)
 	a.ReviewCaptures.Changed = core.Database().NotifyAll
@@ -129,6 +132,7 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 			if access := apitransport.Caller(ctx); access != apitransport.Operator && access != apitransport.Agent && access != apitransport.WebAdapter {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("authenticated daemon endpoint is required"))
 			}
+			s.noteActivity()
 			who := identity{client: req.Header().Get(ClientHeader), holder: req.Header().Get(HolderHeader), actor: req.Header().Get(ControlActorHeader)}
 			if len(who.actor) > 128 || !utf8.ValidString(who.actor) || strings.IndexFunc(who.actor, unicode.IsControl) >= 0 {
 				return nil, invalid("invalid control actor")

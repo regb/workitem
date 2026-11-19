@@ -67,7 +67,7 @@ A failed call answers with an HTTP error status and a JSON body such as `{"code"
 | `ScheduleService` | Schedules that start a new item in a repository on a cron schedule |
 | `JobService` | Long operations: progress, approvals, cancellation |
 | `EventService` | The change feed |
-| `SystemService` | Daemon information, health, diagnostics, effective configuration, plugin registry, shutdown |
+| `SystemService` | Daemon information, health, diagnostics, effective configuration, plugin registry, shutdown, subscription usage |
 | `ViewService` | Composite reads, such as everything a conversation page shows for an item |
 
 `SystemService.GetInfo` reports `api_version`. Clients refuse a daemon whose major version differs from theirs.

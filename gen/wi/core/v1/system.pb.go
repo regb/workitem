@@ -982,6 +982,403 @@ func (x *ShutdownResponse) GetJob() *Job {
 	return nil
 }
 
+type GetUsageRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// refresh asks the providers again rather than reading their cached
+	// answers; the plugin allows this once a minute.
+	Refresh bool `protobuf:"varint,1,opt,name=refresh,proto3" json:"refresh,omitempty"`
+	// wait returns only after the check this call started, if any, finishes.
+	Wait          bool `protobuf:"varint,2,opt,name=wait,proto3" json:"wait,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetUsageRequest) Reset() {
+	*x = GetUsageRequest{}
+	mi := &file_wi_core_v1_system_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUsageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUsageRequest) ProtoMessage() {}
+
+func (x *GetUsageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_system_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUsageRequest.ProtoReflect.Descriptor instead.
+func (*GetUsageRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *GetUsageRequest) GetRefresh() bool {
+	if x != nil {
+		return x.Refresh
+	}
+	return false
+}
+
+func (x *GetUsageRequest) GetWait() bool {
+	if x != nil {
+		return x.Wait
+	}
+	return false
+}
+
+type GetUsageResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// enabled is false when the usage plugin is not enabled.
+	Enabled bool          `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Quotas  []*UsageQuota `protobuf:"bytes,2,rep,name=quotas,proto3" json:"quotas,omitempty"`
+	// checked_at is when the daemon last finished a check; unset before the
+	// first one.
+	CheckedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=checked_at,json=checkedAt,proto3" json:"checked_at,omitempty"`
+	// refreshing means a check is running; read again for its result.
+	Refreshing bool `protobuf:"varint,4,opt,name=refreshing,proto3" json:"refreshing,omitempty"`
+	// error is why the last check failed; quotas then hold the previous result.
+	Error         string `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetUsageResponse) Reset() {
+	*x = GetUsageResponse{}
+	mi := &file_wi_core_v1_system_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUsageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUsageResponse) ProtoMessage() {}
+
+func (x *GetUsageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_system_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUsageResponse.ProtoReflect.Descriptor instead.
+func (*GetUsageResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *GetUsageResponse) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+func (x *GetUsageResponse) GetQuotas() []*UsageQuota {
+	if x != nil {
+		return x.Quotas
+	}
+	return nil
+}
+
+func (x *GetUsageResponse) GetCheckedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CheckedAt
+	}
+	return nil
+}
+
+func (x *GetUsageResponse) GetRefreshing() bool {
+	if x != nil {
+		return x.Refreshing
+	}
+	return false
+}
+
+func (x *GetUsageResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+// UsageQuota is one subscription's remaining quota. Remaining values are as
+// of observed_at; stale and error qualify them.
+type UsageQuota struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// provider names the subscription's provider, such as claude or codex.
+	Provider   string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Account    string                 `protobuf:"bytes,2,opt,name=account,proto3" json:"account,omitempty"`
+	ObservedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=observed_at,json=observedAt,proto3" json:"observed_at,omitempty"`
+	Windows    []*UsageWindow         `protobuf:"bytes,4,rep,name=windows,proto3" json:"windows,omitempty"`
+	// included_usage_allowed is the provider's own answer to whether the
+	// subscription still allows included usage; unset when it gives none.
+	IncludedUsageAllowed *bool         `protobuf:"varint,5,opt,name=included_usage_allowed,json=includedUsageAllowed,proto3,oneof" json:"included_usage_allowed,omitempty"`
+	Credits              *UsageCredits `protobuf:"bytes,6,opt,name=credits,proto3" json:"credits,omitempty"`
+	Stale                bool          `protobuf:"varint,7,opt,name=stale,proto3" json:"stale,omitempty"`
+	// error_code and error_message say why the quota is unknown.
+	ErrorCode     string `protobuf:"bytes,8,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
+	ErrorMessage  string `protobuf:"bytes,9,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UsageQuota) Reset() {
+	*x = UsageQuota{}
+	mi := &file_wi_core_v1_system_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UsageQuota) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UsageQuota) ProtoMessage() {}
+
+func (x *UsageQuota) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_system_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UsageQuota.ProtoReflect.Descriptor instead.
+func (*UsageQuota) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *UsageQuota) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+func (x *UsageQuota) GetAccount() string {
+	if x != nil {
+		return x.Account
+	}
+	return ""
+}
+
+func (x *UsageQuota) GetObservedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObservedAt
+	}
+	return nil
+}
+
+func (x *UsageQuota) GetWindows() []*UsageWindow {
+	if x != nil {
+		return x.Windows
+	}
+	return nil
+}
+
+func (x *UsageQuota) GetIncludedUsageAllowed() bool {
+	if x != nil && x.IncludedUsageAllowed != nil {
+		return *x.IncludedUsageAllowed
+	}
+	return false
+}
+
+func (x *UsageQuota) GetCredits() *UsageCredits {
+	if x != nil {
+		return x.Credits
+	}
+	return nil
+}
+
+func (x *UsageQuota) GetStale() bool {
+	if x != nil {
+		return x.Stale
+	}
+	return false
+}
+
+func (x *UsageQuota) GetErrorCode() string {
+	if x != nil {
+		return x.ErrorCode
+	}
+	return ""
+}
+
+func (x *UsageQuota) GetErrorMessage() string {
+	if x != nil {
+		return x.ErrorMessage
+	}
+	return ""
+}
+
+// UsageWindow is a rate-limit window, such as five hours or a week.
+type UsageWindow struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Id           string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ScopeModel   string                 `protobuf:"bytes,2,opt,name=scope_model,json=scopeModel,proto3" json:"scope_model,omitempty"`
+	ScopeSurface string                 `protobuf:"bytes,3,opt,name=scope_surface,json=scopeSurface,proto3" json:"scope_surface,omitempty"`
+	// remaining_percent is unset when unknown, never zero for unknown.
+	RemainingPercent *float64               `protobuf:"fixed64,4,opt,name=remaining_percent,json=remainingPercent,proto3,oneof" json:"remaining_percent,omitempty"`
+	ResetsAt         *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=resets_at,json=resetsAt,proto3" json:"resets_at,omitempty"`
+	DurationSeconds  *int64                 `protobuf:"varint,6,opt,name=duration_seconds,json=durationSeconds,proto3,oneof" json:"duration_seconds,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *UsageWindow) Reset() {
+	*x = UsageWindow{}
+	mi := &file_wi_core_v1_system_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UsageWindow) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UsageWindow) ProtoMessage() {}
+
+func (x *UsageWindow) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_system_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UsageWindow.ProtoReflect.Descriptor instead.
+func (*UsageWindow) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *UsageWindow) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *UsageWindow) GetScopeModel() string {
+	if x != nil {
+		return x.ScopeModel
+	}
+	return ""
+}
+
+func (x *UsageWindow) GetScopeSurface() string {
+	if x != nil {
+		return x.ScopeSurface
+	}
+	return ""
+}
+
+func (x *UsageWindow) GetRemainingPercent() float64 {
+	if x != nil && x.RemainingPercent != nil {
+		return *x.RemainingPercent
+	}
+	return 0
+}
+
+func (x *UsageWindow) GetResetsAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ResetsAt
+	}
+	return nil
+}
+
+func (x *UsageWindow) GetDurationSeconds() int64 {
+	if x != nil && x.DurationSeconds != nil {
+		return *x.DurationSeconds
+	}
+	return 0
+}
+
+// UsageCredits is a balance of paid credits beyond the subscription.
+type UsageCredits struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Remaining     *float64               `protobuf:"fixed64,1,opt,name=remaining,proto3,oneof" json:"remaining,omitempty"`
+	Unlimited     *bool                  `protobuf:"varint,2,opt,name=unlimited,proto3,oneof" json:"unlimited,omitempty"`
+	Unit          string                 `protobuf:"bytes,3,opt,name=unit,proto3" json:"unit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UsageCredits) Reset() {
+	*x = UsageCredits{}
+	mi := &file_wi_core_v1_system_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UsageCredits) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UsageCredits) ProtoMessage() {}
+
+func (x *UsageCredits) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_system_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UsageCredits.ProtoReflect.Descriptor instead.
+func (*UsageCredits) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *UsageCredits) GetRemaining() float64 {
+	if x != nil && x.Remaining != nil {
+		return *x.Remaining
+	}
+	return 0
+}
+
+func (x *UsageCredits) GetUnlimited() bool {
+	if x != nil && x.Unlimited != nil {
+		return *x.Unlimited
+	}
+	return false
+}
+
+func (x *UsageCredits) GetUnit() string {
+	if x != nil {
+		return x.Unit
+	}
+	return ""
+}
+
 var File_wi_core_v1_system_proto protoreflect.FileDescriptor
 
 const file_wi_core_v1_system_proto_rawDesc = "" +
@@ -1040,7 +1437,51 @@ const file_wi_core_v1_system_proto_rawDesc = "" +
 	"\x0fShutdownRequest\x12\x14\n" +
 	"\x05force\x18\x01 \x01(\bR\x05force\"5\n" +
 	"\x10ShutdownResponse\x12!\n" +
-	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job*b\n" +
+	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"?\n" +
+	"\x0fGetUsageRequest\x12\x18\n" +
+	"\arefresh\x18\x01 \x01(\bR\arefresh\x12\x12\n" +
+	"\x04wait\x18\x02 \x01(\bR\x04wait\"\xcd\x01\n" +
+	"\x10GetUsageResponse\x12\x18\n" +
+	"\aenabled\x18\x01 \x01(\bR\aenabled\x12.\n" +
+	"\x06quotas\x18\x02 \x03(\v2\x16.wi.core.v1.UsageQuotaR\x06quotas\x129\n" +
+	"\n" +
+	"checked_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcheckedAt\x12\x1e\n" +
+	"\n" +
+	"refreshing\x18\x04 \x01(\bR\n" +
+	"refreshing\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\"\x96\x03\n" +
+	"\n" +
+	"UsageQuota\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x18\n" +
+	"\aaccount\x18\x02 \x01(\tR\aaccount\x12;\n" +
+	"\vobserved_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"observedAt\x121\n" +
+	"\awindows\x18\x04 \x03(\v2\x17.wi.core.v1.UsageWindowR\awindows\x129\n" +
+	"\x16included_usage_allowed\x18\x05 \x01(\bH\x00R\x14includedUsageAllowed\x88\x01\x01\x122\n" +
+	"\acredits\x18\x06 \x01(\v2\x18.wi.core.v1.UsageCreditsR\acredits\x12\x14\n" +
+	"\x05stale\x18\a \x01(\bR\x05stale\x12\x1d\n" +
+	"\n" +
+	"error_code\x18\b \x01(\tR\terrorCode\x12#\n" +
+	"\rerror_message\x18\t \x01(\tR\ferrorMessageB\x19\n" +
+	"\x17_included_usage_allowed\"\xa9\x02\n" +
+	"\vUsageWindow\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vscope_model\x18\x02 \x01(\tR\n" +
+	"scopeModel\x12#\n" +
+	"\rscope_surface\x18\x03 \x01(\tR\fscopeSurface\x120\n" +
+	"\x11remaining_percent\x18\x04 \x01(\x01H\x00R\x10remainingPercent\x88\x01\x01\x127\n" +
+	"\tresets_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\bresetsAt\x12.\n" +
+	"\x10duration_seconds\x18\x06 \x01(\x03H\x01R\x0fdurationSeconds\x88\x01\x01B\x14\n" +
+	"\x12_remaining_percentB\x13\n" +
+	"\x11_duration_seconds\"\x84\x01\n" +
+	"\fUsageCredits\x12!\n" +
+	"\tremaining\x18\x01 \x01(\x01H\x00R\tremaining\x88\x01\x01\x12!\n" +
+	"\tunlimited\x18\x02 \x01(\bH\x01R\tunlimited\x88\x01\x01\x12\x12\n" +
+	"\x04unit\x18\x03 \x01(\tR\x04unitB\f\n" +
+	"\n" +
+	"_remainingB\f\n" +
+	"\n" +
+	"_unlimited*b\n" +
 	"\fCallerAccess\x12\x1d\n" +
 	"\x19CALLER_ACCESS_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16CALLER_ACCESS_OPERATOR\x10\x01\x12\x17\n" +
@@ -1050,13 +1491,14 @@ const file_wi_core_v1_system_proto_rawDesc = "" +
 	"\x17CALLER_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCALLER_KIND_LOCAL_OPERATOR\x10\x01\x12\x1b\n" +
 	"\x17CALLER_KIND_WEB_ADAPTER\x10\x02\x12\x15\n" +
-	"\x11CALLER_KIND_AGENT\x10\x032\xeb\x03\n" +
+	"\x11CALLER_KIND_AGENT\x10\x032\xb2\x04\n" +
 	"\rSystemService\x12G\n" +
 	"\aGetInfo\x12\x1a.wi.core.v1.GetInfoRequest\x1a\x1b.wi.core.v1.GetInfoResponse\"\x03\x90\x02\x01\x12M\n" +
 	"\tGetHealth\x12\x1c.wi.core.v1.GetHealthRequest\x1a\x1d.wi.core.v1.GetHealthResponse\"\x03\x90\x02\x01\x12W\n" +
 	"\x0eRunDiagnostics\x12!.wi.core.v1.RunDiagnosticsRequest\x1a\".wi.core.v1.RunDiagnosticsResponse\x12M\n" +
 	"\tGetConfig\x12\x1c.wi.core.v1.GetConfigRequest\x1a\x1d.wi.core.v1.GetConfigResponse\"\x03\x90\x02\x01\x12S\n" +
 	"\vListPlugins\x12\x1e.wi.core.v1.ListPluginsRequest\x1a\x1f.wi.core.v1.ListPluginsResponse\"\x03\x90\x02\x01\x12E\n" +
+	"\bGetUsage\x12\x1b.wi.core.v1.GetUsageRequest\x1a\x1c.wi.core.v1.GetUsageResponse\x12E\n" +
 	"\bShutdown\x12\x1b.wi.core.v1.ShutdownRequest\x1a\x1c.wi.core.v1.ShutdownResponseB0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
 var (
@@ -1072,7 +1514,7 @@ func file_wi_core_v1_system_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_system_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_wi_core_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_wi_core_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_wi_core_v1_system_proto_goTypes = []any{
 	(CallerAccess)(0),              // 0: wi.core.v1.CallerAccess
 	(CallerKind)(0),                // 1: wi.core.v1.CallerKind
@@ -1092,36 +1534,49 @@ var file_wi_core_v1_system_proto_goTypes = []any{
 	(*ListPluginsResponse)(nil),    // 15: wi.core.v1.ListPluginsResponse
 	(*ShutdownRequest)(nil),        // 16: wi.core.v1.ShutdownRequest
 	(*ShutdownResponse)(nil),       // 17: wi.core.v1.ShutdownResponse
-	(*timestamppb.Timestamp)(nil),  // 18: google.protobuf.Timestamp
-	(*Job)(nil),                    // 19: wi.core.v1.Job
+	(*GetUsageRequest)(nil),        // 18: wi.core.v1.GetUsageRequest
+	(*GetUsageResponse)(nil),       // 19: wi.core.v1.GetUsageResponse
+	(*UsageQuota)(nil),             // 20: wi.core.v1.UsageQuota
+	(*UsageWindow)(nil),            // 21: wi.core.v1.UsageWindow
+	(*UsageCredits)(nil),           // 22: wi.core.v1.UsageCredits
+	(*timestamppb.Timestamp)(nil),  // 23: google.protobuf.Timestamp
+	(*Job)(nil),                    // 24: wi.core.v1.Job
 }
 var file_wi_core_v1_system_proto_depIdxs = []int32{
-	18, // 0: wi.core.v1.GetInfoResponse.started_at:type_name -> google.protobuf.Timestamp
+	23, // 0: wi.core.v1.GetInfoResponse.started_at:type_name -> google.protobuf.Timestamp
 	4,  // 1: wi.core.v1.GetInfoResponse.caller:type_name -> wi.core.v1.Caller
 	0,  // 2: wi.core.v1.Caller.access:type_name -> wi.core.v1.CallerAccess
 	1,  // 3: wi.core.v1.Caller.kind:type_name -> wi.core.v1.CallerKind
-	18, // 4: wi.core.v1.GetHealthResponse.last_observation_at:type_name -> google.protobuf.Timestamp
+	23, // 4: wi.core.v1.GetHealthResponse.last_observation_at:type_name -> google.protobuf.Timestamp
 	8,  // 5: wi.core.v1.RunDiagnosticsResponse.diagnostics:type_name -> wi.core.v1.Diagnostic
 	12, // 6: wi.core.v1.Plugin.options:type_name -> wi.core.v1.PluginOption
 	13, // 7: wi.core.v1.ListPluginsResponse.plugins:type_name -> wi.core.v1.Plugin
-	19, // 8: wi.core.v1.ShutdownResponse.job:type_name -> wi.core.v1.Job
-	2,  // 9: wi.core.v1.SystemService.GetInfo:input_type -> wi.core.v1.GetInfoRequest
-	5,  // 10: wi.core.v1.SystemService.GetHealth:input_type -> wi.core.v1.GetHealthRequest
-	7,  // 11: wi.core.v1.SystemService.RunDiagnostics:input_type -> wi.core.v1.RunDiagnosticsRequest
-	10, // 12: wi.core.v1.SystemService.GetConfig:input_type -> wi.core.v1.GetConfigRequest
-	14, // 13: wi.core.v1.SystemService.ListPlugins:input_type -> wi.core.v1.ListPluginsRequest
-	16, // 14: wi.core.v1.SystemService.Shutdown:input_type -> wi.core.v1.ShutdownRequest
-	3,  // 15: wi.core.v1.SystemService.GetInfo:output_type -> wi.core.v1.GetInfoResponse
-	6,  // 16: wi.core.v1.SystemService.GetHealth:output_type -> wi.core.v1.GetHealthResponse
-	9,  // 17: wi.core.v1.SystemService.RunDiagnostics:output_type -> wi.core.v1.RunDiagnosticsResponse
-	11, // 18: wi.core.v1.SystemService.GetConfig:output_type -> wi.core.v1.GetConfigResponse
-	15, // 19: wi.core.v1.SystemService.ListPlugins:output_type -> wi.core.v1.ListPluginsResponse
-	17, // 20: wi.core.v1.SystemService.Shutdown:output_type -> wi.core.v1.ShutdownResponse
-	15, // [15:21] is the sub-list for method output_type
-	9,  // [9:15] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	24, // 8: wi.core.v1.ShutdownResponse.job:type_name -> wi.core.v1.Job
+	20, // 9: wi.core.v1.GetUsageResponse.quotas:type_name -> wi.core.v1.UsageQuota
+	23, // 10: wi.core.v1.GetUsageResponse.checked_at:type_name -> google.protobuf.Timestamp
+	23, // 11: wi.core.v1.UsageQuota.observed_at:type_name -> google.protobuf.Timestamp
+	21, // 12: wi.core.v1.UsageQuota.windows:type_name -> wi.core.v1.UsageWindow
+	22, // 13: wi.core.v1.UsageQuota.credits:type_name -> wi.core.v1.UsageCredits
+	23, // 14: wi.core.v1.UsageWindow.resets_at:type_name -> google.protobuf.Timestamp
+	2,  // 15: wi.core.v1.SystemService.GetInfo:input_type -> wi.core.v1.GetInfoRequest
+	5,  // 16: wi.core.v1.SystemService.GetHealth:input_type -> wi.core.v1.GetHealthRequest
+	7,  // 17: wi.core.v1.SystemService.RunDiagnostics:input_type -> wi.core.v1.RunDiagnosticsRequest
+	10, // 18: wi.core.v1.SystemService.GetConfig:input_type -> wi.core.v1.GetConfigRequest
+	14, // 19: wi.core.v1.SystemService.ListPlugins:input_type -> wi.core.v1.ListPluginsRequest
+	18, // 20: wi.core.v1.SystemService.GetUsage:input_type -> wi.core.v1.GetUsageRequest
+	16, // 21: wi.core.v1.SystemService.Shutdown:input_type -> wi.core.v1.ShutdownRequest
+	3,  // 22: wi.core.v1.SystemService.GetInfo:output_type -> wi.core.v1.GetInfoResponse
+	6,  // 23: wi.core.v1.SystemService.GetHealth:output_type -> wi.core.v1.GetHealthResponse
+	9,  // 24: wi.core.v1.SystemService.RunDiagnostics:output_type -> wi.core.v1.RunDiagnosticsResponse
+	11, // 25: wi.core.v1.SystemService.GetConfig:output_type -> wi.core.v1.GetConfigResponse
+	15, // 26: wi.core.v1.SystemService.ListPlugins:output_type -> wi.core.v1.ListPluginsResponse
+	19, // 27: wi.core.v1.SystemService.GetUsage:output_type -> wi.core.v1.GetUsageResponse
+	17, // 28: wi.core.v1.SystemService.Shutdown:output_type -> wi.core.v1.ShutdownResponse
+	22, // [22:29] is the sub-list for method output_type
+	15, // [15:22] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_system_proto_init() }
@@ -1130,13 +1585,16 @@ func file_wi_core_v1_system_proto_init() {
 		return
 	}
 	file_wi_core_v1_jobs_proto_init()
+	file_wi_core_v1_system_proto_msgTypes[18].OneofWrappers = []any{}
+	file_wi_core_v1_system_proto_msgTypes[19].OneofWrappers = []any{}
+	file_wi_core_v1_system_proto_msgTypes[20].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_system_proto_rawDesc), len(file_wi_core_v1_system_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   16,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -45,6 +45,8 @@ const (
 	// SystemServiceListPluginsProcedure is the fully-qualified name of the SystemService's ListPlugins
 	// RPC.
 	SystemServiceListPluginsProcedure = "/wi.core.v1.SystemService/ListPlugins"
+	// SystemServiceGetUsageProcedure is the fully-qualified name of the SystemService's GetUsage RPC.
+	SystemServiceGetUsageProcedure = "/wi.core.v1.SystemService/GetUsage"
 	// SystemServiceShutdownProcedure is the fully-qualified name of the SystemService's Shutdown RPC.
 	SystemServiceShutdownProcedure = "/wi.core.v1.SystemService/Shutdown"
 )
@@ -64,6 +66,13 @@ type SystemServiceClient interface {
 	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error)
 	// ListPlugins lists registered plugins and their option schemas.
 	ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
+	// GetUsage reads how much of each subscription's quota is left, as the
+	// usage plugin reports it. It answers at once from the daemon's last
+	// result: the daemon checks every five minutes while the API is in use
+	// (any call within the last 30 minutes). refresh starts a check now in
+	// the background; wait blocks until a check started now finishes. The
+	// first call after the daemon starts always waits.
+	GetUsage(context.Context, *connect.Request[v1.GetUsageRequest]) (*connect.Response[v1.GetUsageResponse], error)
 	// Shutdown stops agents and terminals, then the daemon. The reply is
 	// sent before the daemon stops; the job reports the result to watchers
 	// until then.
@@ -115,6 +124,12 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		getUsage: connect.NewClient[v1.GetUsageRequest, v1.GetUsageResponse](
+			httpClient,
+			baseURL+SystemServiceGetUsageProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("GetUsage")),
+			connect.WithClientOptions(opts...),
+		),
 		shutdown: connect.NewClient[v1.ShutdownRequest, v1.ShutdownResponse](
 			httpClient,
 			baseURL+SystemServiceShutdownProcedure,
@@ -131,6 +146,7 @@ type systemServiceClient struct {
 	runDiagnostics *connect.Client[v1.RunDiagnosticsRequest, v1.RunDiagnosticsResponse]
 	getConfig      *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
 	listPlugins    *connect.Client[v1.ListPluginsRequest, v1.ListPluginsResponse]
+	getUsage       *connect.Client[v1.GetUsageRequest, v1.GetUsageResponse]
 	shutdown       *connect.Client[v1.ShutdownRequest, v1.ShutdownResponse]
 }
 
@@ -159,6 +175,11 @@ func (c *systemServiceClient) ListPlugins(ctx context.Context, req *connect.Requ
 	return c.listPlugins.CallUnary(ctx, req)
 }
 
+// GetUsage calls wi.core.v1.SystemService.GetUsage.
+func (c *systemServiceClient) GetUsage(ctx context.Context, req *connect.Request[v1.GetUsageRequest]) (*connect.Response[v1.GetUsageResponse], error) {
+	return c.getUsage.CallUnary(ctx, req)
+}
+
 // Shutdown calls wi.core.v1.SystemService.Shutdown.
 func (c *systemServiceClient) Shutdown(ctx context.Context, req *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
 	return c.shutdown.CallUnary(ctx, req)
@@ -179,6 +200,13 @@ type SystemServiceHandler interface {
 	GetConfig(context.Context, *connect.Request[v1.GetConfigRequest]) (*connect.Response[v1.GetConfigResponse], error)
 	// ListPlugins lists registered plugins and their option schemas.
 	ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error)
+	// GetUsage reads how much of each subscription's quota is left, as the
+	// usage plugin reports it. It answers at once from the daemon's last
+	// result: the daemon checks every five minutes while the API is in use
+	// (any call within the last 30 minutes). refresh starts a check now in
+	// the background; wait blocks until a check started now finishes. The
+	// first call after the daemon starts always waits.
+	GetUsage(context.Context, *connect.Request[v1.GetUsageRequest]) (*connect.Response[v1.GetUsageResponse], error)
 	// Shutdown stops agents and terminals, then the daemon. The reply is
 	// sent before the daemon stops; the job reports the result to watchers
 	// until then.
@@ -226,6 +254,12 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	systemServiceGetUsageHandler := connect.NewUnaryHandler(
+		SystemServiceGetUsageProcedure,
+		svc.GetUsage,
+		connect.WithSchema(systemServiceMethods.ByName("GetUsage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	systemServiceShutdownHandler := connect.NewUnaryHandler(
 		SystemServiceShutdownProcedure,
 		svc.Shutdown,
@@ -244,6 +278,8 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 			systemServiceGetConfigHandler.ServeHTTP(w, r)
 		case SystemServiceListPluginsProcedure:
 			systemServiceListPluginsHandler.ServeHTTP(w, r)
+		case SystemServiceGetUsageProcedure:
+			systemServiceGetUsageHandler.ServeHTTP(w, r)
 		case SystemServiceShutdownProcedure:
 			systemServiceShutdownHandler.ServeHTTP(w, r)
 		default:
@@ -273,6 +309,10 @@ func (UnimplementedSystemServiceHandler) GetConfig(context.Context, *connect.Req
 
 func (UnimplementedSystemServiceHandler) ListPlugins(context.Context, *connect.Request[v1.ListPluginsRequest]) (*connect.Response[v1.ListPluginsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.SystemService.ListPlugins is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) GetUsage(context.Context, *connect.Request[v1.GetUsageRequest]) (*connect.Response[v1.GetUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.SystemService.GetUsage is not implemented"))
 }
 
 func (UnimplementedSystemServiceHandler) Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {

@@ -1,0 +1,146 @@
+package daemonapi
+
+import (
+	"context"
+	"errors"
+	"sync"
+	"testing"
+	"time"
+
+	"connectrpc.com/connect"
+	v1 "github.com/regb/workitem/gen/wi/core/v1"
+)
+
+// fakeUsage stands in for the usage plugin: each check reports its number,
+// and a check can be held open until released.
+type fakeUsage struct {
+	mu       sync.Mutex
+	runs     int
+	refresh  []bool
+	hold     chan struct{}
+	failNext bool
+}
+
+func (u *fakeUsage) run(ctx context.Context, refresh bool) (*v1.GetUsageResponse, error) {
+	u.mu.Lock()
+	u.runs++
+	n := u.runs
+	u.refresh = append(u.refresh, refresh)
+	hold, fail := u.hold, u.failNext
+	u.failNext = false
+	u.mu.Unlock()
+	if hold != nil {
+		<-hold
+	}
+	if fail {
+		return nil, errors.New("the usage plugin failed: provider unreachable")
+	}
+	return &v1.GetUsageResponse{Enabled: true, Quotas: []*v1.UsageQuota{{Provider: "claude", Account: string(rune('0' + n))}}}, nil
+}
+
+func (u *fakeUsage) count() int {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.runs
+}
+
+func TestUsageAnswersFromTheLastCheckAndRefreshesInTheBackground(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	fake := &fakeUsage{}
+	f.api.usage.run = fake.run
+	get := func(refresh, wait bool) *v1.GetUsageResponse {
+		t.Helper()
+		value, err := f.clients.System.GetUsage(ctx, connect.NewRequest(&v1.GetUsageRequest{Refresh: refresh, Wait: wait}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value.Msg
+	}
+	// The first call has nothing to show, so it waits for a check.
+	first := get(false, false)
+	if !first.Enabled || len(first.Quotas) != 1 || first.Quotas[0].Account != "1" || first.CheckedAt == nil || first.Refreshing {
+		t.Fatalf("first: %v", first)
+	}
+	// Later calls answer from it without checking again.
+	if again := get(false, false); again.Quotas[0].Account != "1" || fake.count() != 1 {
+		t.Fatalf("cached: %v runs=%d", again, fake.count())
+	}
+	// A refresh answers at once and reports the check running.
+	fake.mu.Lock()
+	fake.hold = make(chan struct{})
+	fake.mu.Unlock()
+	started := get(true, false)
+	if !started.Refreshing || started.Quotas[0].Account != "1" {
+		t.Fatalf("refresh started: %v", started)
+	}
+	close(fake.hold)
+	fake.mu.Lock()
+	fake.hold = nil
+	fake.mu.Unlock()
+	waited := get(false, false)
+	for deadline := time.Now().Add(5 * time.Second); waited.Refreshing && time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		waited = get(false, false)
+	}
+	if waited.Refreshing || waited.Quotas[0].Account != "2" || !fake.refresh[1] {
+		t.Fatalf("refreshed: %v refresh=%v", waited, fake.refresh)
+	}
+	// A failed check keeps the previous quotas and says why.
+	fake.mu.Lock()
+	fake.failNext = true
+	fake.mu.Unlock()
+	failed := get(true, true)
+	if failed.Error == "" || len(failed.Quotas) != 1 || failed.Quotas[0].Account != "2" {
+		t.Fatalf("failed check: %v", failed)
+	}
+	if next := get(true, true); next.Error != "" || next.Quotas[0].Account != "4" {
+		t.Fatalf("recovered: %v", next)
+	}
+}
+
+func TestBackgroundUsageChecksRunOnlyWhileTheAPIIsInUse(t *testing.T) {
+	f := newFixture(t)
+	fake := &fakeUsage{}
+	s := f.api
+	s.usage.run = fake.run
+	wait := func() {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+			s.usage.mu.Lock()
+			idle := s.usage.running == nil
+			s.usage.mu.Unlock()
+			if idle {
+				return
+			}
+		}
+		t.Fatal("check did not finish")
+	}
+	now := time.Now()
+	// Nobody has used the API: nothing runs.
+	s.usage.lastActivity.Store(now.Add(-usageIdle - time.Minute).Unix())
+	s.maybeCheckUsage(now)
+	wait()
+	if fake.count() != 0 {
+		t.Fatalf("idle daemon checked usage %d times", fake.count())
+	}
+	// In use, with no result yet: a check runs.
+	s.usage.lastActivity.Store(now.Unix())
+	s.maybeCheckUsage(now)
+	wait()
+	if fake.count() != 1 || fake.refresh[0] {
+		t.Fatalf("active check: runs=%d refresh=%v", fake.count(), fake.refresh)
+	}
+	// A result younger than five minutes is kept.
+	s.maybeCheckUsage(time.Now().Add(usageInterval - time.Minute))
+	wait()
+	if fake.count() != 1 {
+		t.Fatalf("fresh result checked again: %d", fake.count())
+	}
+	// An older one is renewed while the API stays in use.
+	s.usage.lastActivity.Store(time.Now().Add(usageInterval).Unix())
+	s.maybeCheckUsage(time.Now().Add(usageInterval + time.Minute))
+	wait()
+	if fake.count() != 2 {
+		t.Fatalf("stale result not renewed: %d", fake.count())
+	}
+}
