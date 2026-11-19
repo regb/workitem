@@ -142,6 +142,8 @@ type App struct {
 	BundledDriverCommands          map[string]BundledDriverCommand
 	AgentRuntimeLauncher           agent.Launcher
 	RunAgentDriver                 AgentDriverRunner
+	ReviewRecords                  ReviewRecordStore
+	ReviewCaptures                 *ReviewCaptureQueue
 	ConversationProjectionObserver agentcore.ConversationObserver
 	WorkListObserver               viewapp.Observe
 	AttentionActivityReader        func(context.Context, string) (AttentionActivity, error)

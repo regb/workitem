@@ -476,19 +476,15 @@ var helpDocs = map[string]helpDoc{
 		Examples:    []string{`wi events`, `wi events --item auth`, `wi --json events auth`},
 	},
 	"merge": {
-		Summary: "Fast-forward a local target branch, rebasing when needed",
-		Usage:   []string{"wi merge [--item <selector>] [--target <branch>] [--local] [target]"},
+		Summary: "Rebase and squash item work into a local target",
+		Usage:   []string{"wi merge [--item ITEM] [--target BRANCH] [--local] [--rebase | --message TEXT] [TARGET]"},
 		Description: []string{
-			"Merges the current active item without switching checkouts: integrates committed work while preserving uncommitted source changes, rebases only when needed using a temporary checkout for dirty sources, atomically fast-forwards the local target ref, and synchronizes any worktree where the target is checked out.",
-			"The target defaults to the registered integration branch. With a configured upstream, wi fetches and fast-forward-synchronizes that base before integrating the item; divergence stops before rebasing. --local skips that remote preflight. Other explicitly selected target branches remain local-only. No push, squash, branch deletion, workspace cleanup, shelve, or close is performed.",
-			"If item rebase, target advancement, or target-worktree synchronization fails, wi aborts/rolls back the item integration. An earlier successful upstream synchronization is deliberately retained and reported. Dirty non-integration target files are allowed only when they do not overlap incoming paths.",
+			"Captures the merge input, commits uncommitted checkout work as close does, rebases onto the fenced target, and creates one squash commit with the target as its sole parent. The message defaults to the item title. --rebase preserves the rebased ordinary commit series instead. The item branch advances to the result for clean continued work.",
+			"An idle online agent may merge; a running turn or in-progress capture must finish first. The checkout must be on its item's branch. Rebase conflicts leave the target unchanged and stay in the checkout for git rebase --continue or --abort. Already-contained work succeeds without creating an empty commit.",
+			"Configured upstream synchronization runs before integration unless --local is used. Target publication uses compare-and-swap. Successful durable steps remain if a later source or target-checkout update fails; inspect partial outcomes before retrying. Approval is optional. Unresolved review threads warn but do not block merge. No push or close is performed.",
 		},
-		Options: []helpOption{
-			{"--item <selector>", "Select the source work item explicitly."},
-			{"--target <branch>", "Select an existing local target branch instead of positional target."},
-			{"--local", "Skip upstream network access and base synchronization; pending reconciliation still blocks merging."},
-		},
-		Examples: []string{`wi merge`, `wi merge main`, `wi merge --item auth --target main`, `wi merge --target develop`, `wi --json merge main`},
+		Options:  []helpOption{{"--item ITEM", "Select the source item."}, {"--target BRANCH", "Select an existing local target branch."}, {"--local", "Skip upstream synchronization."}, {"--rebase", "Preserve the rebased ordinary series instead of squashing."}, {"--message TEXT, -m TEXT", "Set the squash message; defaults to the item title."}},
+		Examples: []string{"wi merge", "wi merge --item auth --message 'Reviewed feature'", "wi merge --rebase", "wi merge --local --target develop"},
 	},
 	"start": {
 		Summary: "Start an existing backlog item",
@@ -532,6 +528,22 @@ var helpDocs = map[string]helpDoc{
 			{"WI_LIST_LABELS", "Comma-separated label rules overlaid on config."},
 		},
 		Examples: []string{`wi switch`, `wi switch agent-context`, `wi switch --current`, `wi switch --take auth`, `wi switch --label +backend --label -blocked`},
+	},
+	"review": {
+		Summary: "Inspect and capture retained code revisions",
+		Usage: []string{
+			"wi review [status|revisions] [--item ITEM] [--json]", "wi review checkpoint [--item ITEM] [--capture-id ID]",
+			"wi review diff [FROM] [TO] [--patch|--stat] [--path PATH]", "wi review threads [--unresolved] [--json]", "wi review thread tN [--json]",
+			"wi review comment --revision rN [-m TEXT] [--path PATH --line N]", "wi review drafts [--json]", "wi review publish --revision rN --drafts d1,d2",
+			"wi review reply --revision rN [--thread tN -m TEXT --addressed | --stdin]", "wi review reply --capture --stdin [--operation-id ID]",
+			"wi review resolve|reopen|withdraw tN [--revision rN]", "wi review capture-status [--json]",
+			"wi review intent rN [--json]", "wi review request-review|approve|request-changes|withdraw-approval rN", "wi review notify qN [--operation-id ID]",
+		},
+		Description: []string{
+			"Revisions, drafts, threads, rounds, approvals and merge records belong to the item and live in coordinator records. Git stores only immutable code snapshots under private create-only refs. Item-scoped rN revisions use the first captured checkout HEAD as their initial base. Capture preserves HEAD, branches, index and stash. Historical reads do not need a checkout. Exclusions are visible and never prevent approval.",
+			"Comments save durable drafts. Publish exact draft identities as one round. Publication is durable before a generic notification is attempted once, using an idle prompt or busy follow-up. No running agent or failed notification is a partial outcome; the round stays published. Use wi review notify qN to explicitly send again. There is no notification retry loop. Agent replies record evidence and never resolve reviewer concerns. reply --capture records a new snapshot and the whole reply batch together. Exact successful operation retries return the original result without capturing newer files.",
+			"Approval is optional and informational. Ordinary wi merge remains the merge command. Captures record the actual claimed checkout branch or detached HEAD; item identity and ordinary merge source semantics are unchanged.",
+		},
 	},
 	"workspace": {
 		Summary:     "Inspect and manage the repository worktree",
@@ -792,7 +804,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Agent and checkout:")
-	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
+	printCommandRows(w, [][2]string{{"review", "Inspect and capture retained code revisions"}, {"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Administration:")
 	printCommandRows(w, [][2]string{{"config", "Inspect global settings"}, {"schedule", "Start new items on a cron schedule"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete closed work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"plugin", "List and run optional plugins"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})

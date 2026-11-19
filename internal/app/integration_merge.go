@@ -2,10 +2,7 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/lock"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -13,31 +10,33 @@ import (
 	"strings"
 	"time"
 
+	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/lock"
+
+	reviewcore "github.com/regb/workitem/internal/app/core/review"
+
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 )
 
 type mergeGit interface {
-	DefaultBranch(ctx context.Context, repoRoot string) (string, error)
-	ResolveBranchSHA(ctx context.Context, repoRoot, branch string) (string, error)
-	RevParse(ctx context.Context, dir, rev string) (string, error)
-	EnsureClean(ctx context.Context, dir string) error
-	EnsureNoUnmerged(ctx context.Context, dir string) error
-	HasMergeSourceChanges(ctx context.Context, dir string) (bool, error)
-	AddMergeSnapshot(ctx context.Context, root, path, sha string) error
-	RebaseMergeSnapshot(ctx context.Context, path, targetSHA string) error
-	WorktreeRemove(ctx context.Context, root, path string, force bool) error
-	EnsureNoOperationInProgress(ctx context.Context, dir, action string) error
-	Rebase(ctx context.Context, dir, target string) error
-	RebaseAbort(ctx context.Context, dir string) error
-	ResetHard(ctx context.Context, dir, rev string) error
-	IsAncestor(ctx context.Context, repoRoot, ancestor, descendant string) (bool, error)
-	UpdateRef(ctx context.Context, repoRoot, ref, newSHA, oldSHA, message string) error
-	TargetWorktreeForBranch(ctx context.Context, repoRoot, branch string) (*gitpkg.WorktreeInfo, error)
-	DiffNameOnly(ctx context.Context, repoRoot, oldSHA, newSHA string) ([]string, error)
-	StatusPaths(ctx context.Context, dir string) ([]string, error)
-	UpdateIndexRefresh(ctx context.Context, dir string) error
-	ReadTreeMergeUpdate(ctx context.Context, dir, oldSHA, newSHA string) error
+	DefaultBranch(context.Context, string) (string, error)
+	ResolveBranchSHA(context.Context, string, string) (string, error)
+	RevParse(context.Context, string, string) (string, error)
+	EnsureClean(context.Context, string) error
+	EnsureNoUnmerged(context.Context, string) error
+	EnsureNoOperationInProgress(context.Context, string, string) error
+	RebaseOnto(context.Context, string, string) error
+	SquashCommit(context.Context, string, string, string, string) (string, error)
+	ReviewTree(context.Context, string, string) (string, error)
+	IsAncestor(context.Context, string, string, string) (bool, error)
+	UpdateRef(context.Context, string, string, string, string, string) error
+	TargetWorktreeForBranch(context.Context, string, string) (*gitpkg.WorktreeInfo, error)
+	DiffNameOnly(context.Context, string, string, string) ([]string, error)
+	StatusPaths(context.Context, string) ([]string, error)
+	IgnoredPaths(context.Context, string) ([]string, error)
+	UpdateIndexRefresh(context.Context, string) error
+	ReadTreeMergeUpdate(context.Context, string, string, string) error
 }
 
 type MergeOptions struct {
@@ -46,9 +45,18 @@ type MergeOptions struct {
 	CWD      string
 	Env      map[string]string
 	Local    bool
+	Rebase   bool
+	Message  string
 }
 
 type MergeResult struct {
+	RevisionID      string `json:"revision_id,omitempty"`
+	Commit          string `json:"commit,omitempty"`
+	Tree            string `json:"tree,omitempty"`
+	SourceCommitted bool   `json:"source_committed"`
+	SourceAdvanced  bool   `json:"source_advanced"`
+	Recorded        bool   `json:"recorded"`
+
 	UpstreamSync            *coordinator.RepositorySyncResult `json:"upstream_sync,omitempty"`
 	WorkItemID              string                            `json:"work_item_id"`
 	SourceBranch            string                            `json:"source_branch"`
@@ -59,32 +67,42 @@ type MergeResult struct {
 	TargetOldSHA            string                            `json:"target_old_sha"`
 	TargetWorktreePath      string                            `json:"target_worktree_path,omitempty"`
 	TargetManagedWorkItemID string                            `json:"target_managed_work_item_id,omitempty"`
-	SourcePreserved         bool                              `json:"source_preserved,omitempty"`
 	Rebased                 bool                              `json:"rebased"`
 	TargetAdvanced          bool                              `json:"target_advanced"`
 	TargetSynced            bool                              `json:"target_synced"`
-	RolledBack              bool                              `json:"rolled_back"`
 	Warnings                []string                          `json:"warnings"`
 }
 
-type mergeTransaction struct {
-	Result MergeResult
-}
-
 func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (result MergeResult, resultErr error) {
+	if opts.Rebase && opts.Message != "" {
+		return MergeResult{}, fmt.Errorf("--message is only used by squash merge")
+	}
+	input, err := a.captureMergeInput(ctx, opts)
+	if err != nil {
+		return MergeResult{}, err
+	}
 	m, operation, err := a.lockItemOperation(ctx, ResolveOptions{Selector: opts.Selector, CWD: opts.CWD, Env: opts.Env})
 	if err != nil {
 		return MergeResult{}, err
 	}
 	defer operation.Release()
-	res := MergeResult{WorkItemID: m.ID, SourceBranch: expectedCheckoutBranch(m), Warnings: []string{}}
+	if err := a.ensureMergeIdle(ctx, m.ID); err != nil {
+		return MergeResult{WorkItemID: m.ID, RevisionID: input.ID}, err
+	}
+	res := MergeResult{WorkItemID: m.ID, SourceBranch: expectedCheckoutBranch(m), Warnings: []string{}, RevisionID: input.ID}
 	if m.State != model.StateActive {
 		return res, fmt.Errorf("work item %s is %s; merge requires an active item", m.ID, m.State)
 	}
 	if !m.Checkout.Present() || m.Checkout.Claim == nil || strings.TrimSpace(m.Checkout.Claim.Path) == "" {
 		return res, fmt.Errorf("work item %s has no checkout; start it before merging", m.ID)
 	}
+	if !reviewClaimMatches(m, input.ClaimID, input.ClaimGeneration) {
+		return res, ErrReviewChanged
+	}
 	res.SourcePath = m.Checkout.Claim.Path
+	if input.Head == "" {
+		return res, fmt.Errorf("merge input snapshot required")
+	}
 	mg, ok := a.Git.(mergeGit)
 	if !ok {
 		return res, fmt.Errorf("configured Git adapter does not support merge operations")
@@ -212,198 +230,245 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (result Merg
 		if !info.IsDir() {
 			return res, fmt.Errorf("target branch %s is registered at non-directory worktree path %s; repair the Git worktree registration", target, targetWorktree.Path)
 		}
+		if err := mg.EnsureNoOperationInProgress(ctx, targetWorktree.Path, "update target checkout"); err != nil {
+			return res, err
+		}
 		if targetItem, err := a.Store.FindByWorktree(targetWorktree.Path); err == nil {
 			res.TargetManagedWorkItemID = targetItem.ID
 		}
 	}
 
-	canFastForward, err := mg.IsAncestor(ctx, repoRoot, res.TargetOldSHA, res.SourceOldSHA)
-	if err != nil {
-		return res, fmt.Errorf("check target ancestry: %w", err)
+	if res.SourceOldSHA != input.Head {
+		return res, fmt.Errorf("source HEAD changed after merge-input capture; target unchanged")
 	}
-
-	tx := &mergeTransaction{Result: res}
-	a.appendMergeEvent(ctx, m.ID, "merge.started", mergeEventData(tx.Result, "", ""), &tx.Result)
-	if canFastForward {
-		// Preserve existing merge/subtree history when no rebase is needed.
-		tx.Result.SourceNewSHA = res.SourceOldSHA
-	} else if dirty, inspectErr := mg.HasMergeSourceChanges(ctx, res.SourcePath); inspectErr != nil {
-		return a.failMergeWithRollback(ctx, m.ID, mg, tx, "source_dirty_check", inspectErr)
-	} else if dirty {
-		// Rebase only committed content. The original branch, index, and files
-		// remain untouched, even when they overlap the integration-base changes.
-		tx.Result.SourcePreserved = true
-		temporary, createErr := os.MkdirTemp("", "wi-merge-")
-		if createErr != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "snapshot_create", createErr)
-		}
-		snapshot := filepath.Join(temporary, "checkout")
-		defer func() {
-			warn := func(message string) {
-				result.Warnings = append(result.Warnings, message)
-				if resultErr != nil {
-					resultErr = fmt.Errorf("%w; %s", resultErr, message)
-				}
-			}
-			cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-			defer cancel()
-			if cleanupErr := mg.WorktreeRemove(cleanupCtx, repoRoot, snapshot, true); cleanupErr != nil {
-				warn("temporary merge checkout retained at " + snapshot + ": " + cleanupErr.Error())
-				return
-			}
-			if cleanupErr := os.RemoveAll(temporary); cleanupErr != nil {
-				warn("remove temporary merge directory: " + cleanupErr.Error())
-			}
-		}()
-		if createErr := mg.AddMergeSnapshot(ctx, repoRoot, snapshot, res.SourceOldSHA); createErr != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "snapshot_checkout", createErr)
-		}
-		if rebaseErr := mg.RebaseMergeSnapshot(ctx, snapshot, res.TargetOldSHA); rebaseErr != nil {
-			abortCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-			abortErr := mg.RebaseAbort(abortCtx, snapshot)
-			cancel()
-			if abortErr != nil {
-				tx.Result.Warnings = append(tx.Result.Warnings, "temporary rebase abort failed: "+abortErr.Error())
-			}
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "isolated_rebase", fmt.Errorf("isolated rebase failed; source checkout was not modified: %w", rebaseErr))
-		}
-		tx.Result.SourceNewSHA, err = mg.RevParse(ctx, snapshot, "HEAD^{commit}")
-		if err != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "resolve_rebased_head", err)
-		}
-		tx.Result.Rebased = true
-		tx.Result.Warnings = append(tx.Result.Warnings, "rebased committed work in a temporary checkout; source branch and uncommitted changes were left untouched")
-		a.appendMergeEvent(ctx, m.ID, "merge.rebased", mergeEventData(tx.Result, "", ""), &tx.Result)
-	} else {
-		if err := mg.EnsureClean(ctx, res.SourcePath); err != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "source_dirty_check", err)
-		}
-		if err := mg.Rebase(ctx, res.SourcePath, target); err != nil {
-			abortErr := mg.RebaseAbort(ctx, res.SourcePath)
-			head, headErr := mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
-			if abortErr != nil {
-				tx.Result.Warnings = append(tx.Result.Warnings, "automatic rebase abort failed: "+abortErr.Error())
-			}
-			headRestored := headErr == nil && head == res.SourceOldSHA
-			if !headRestored {
-				tx.Result.Warnings = append(tx.Result.Warnings, fmt.Sprintf("automatic abort did not verify source HEAD %s; inspect %s manually", shortSHA(res.SourceOldSHA), res.SourcePath))
-			}
-			message := fmt.Sprintf("rebase of %s onto %s failed and was aborted; no merge was performed. Run `git -C %s rebase %s` manually, resolve conflicts, then retry `wi merge`", res.SourceBranch, target, res.SourcePath, target)
-			if abortErr != nil {
-				message = fmt.Sprintf("rebase of %s onto %s failed and automatic abort also failed; inspect %s manually", res.SourceBranch, target, res.SourcePath)
-			} else if !headRestored {
-				message += fmt.Sprintf(". WARNING: source HEAD was not verified at %s; inspect it manually", shortSHA(res.SourceOldSHA))
-			}
-			a.appendMergeEvent(ctx, m.ID, "merge.failed", mergeEventData(tx.Result, "rebase", err.Error()), &tx.Result)
-			tx.Result.RolledBack = abortErr == nil && headRestored
-			rollbackData := mergeEventData(tx.Result, "rebase", err.Error())
-			if abortErr != nil {
-				rollbackData["rollback_errors"] = []string{abortErr.Error()}
-			}
-			a.appendMergeEvent(ctx, m.ID, "merge.rolled_back", rollbackData, &tx.Result)
-			return tx.Result, errors.New(message + "\nGit reported: " + err.Error())
-		}
-		tx.Result.Rebased = true
-		tx.Result.SourceNewSHA, err = mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
-		if err != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "resolve_rebased_head", err)
-		}
-		a.appendMergeEvent(ctx, m.ID, "merge.rebased", mergeEventData(tx.Result, "", ""), &tx.Result)
-	}
-	ancestor, err := mg.IsAncestor(ctx, repoRoot, res.TargetOldSHA, tx.Result.SourceNewSHA)
+	state, err := a.ReviewRecords.LoadReview(ctx, m.ID)
 	if err != nil {
-		return a.failMergeWithRollback(ctx, m.ID, mg, tx, "fast_forward_check", err)
+		return res, err
+	}
+	unresolved := 0
+	for _, thread := range state.Threads {
+		if thread.Status() != "resolved" && thread.Status() != "withdrawn" {
+			unresolved++
+		}
+	}
+	if unresolved > 0 {
+		res.Warnings = append(res.Warnings, fmt.Sprintf("%d unresolved review threads; merge is not blocked", unresolved))
+	}
+	if len(state.Drafts) > 0 {
+		res.Warnings = append(res.Warnings, fmt.Sprintf("%d unpublished review drafts", len(state.Drafts)))
+	}
+	removed, err := a.removeAttachedCopies(ctx, m)
+	if err != nil {
+		return res, err
+	}
+	status, err := a.Git.StatusPorcelain(ctx, res.SourcePath)
+	if err != nil {
+		return res, err
+	}
+	if strings.TrimSpace(status) != "" {
+		if _, err := a.Git.CommitAll(ctx, res.SourcePath, "wi: uncommitted changes at merge"); err != nil {
+			return res, fmt.Errorf("commit merge input: %w", err)
+		}
+		res.SourceCommitted = true
+	}
+	source, err := mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
+	if err != nil {
+		return res, err
+	}
+	delta, err := mg.DiffNameOnly(ctx, repoRoot, input.Commit, source)
+	if err != nil {
+		return res, err
+	}
+	allowed := map[string]bool{}
+	for _, e := range input.Excluded {
+		allowed[e.Path] = true
+	}
+	for _, p := range removed {
+		allowed[p] = true
+	}
+	for _, p := range delta {
+		if !allowed[p] {
+			return res, fmt.Errorf("checkout changed after merge-input capture at %s; work retained in source, target unchanged", p)
+		}
+	}
+	if err := mg.EnsureClean(ctx, res.SourcePath); err != nil {
+		return res, err
+	}
+	targetAncestor, err := mg.IsAncestor(ctx, repoRoot, res.TargetOldSHA, source)
+	if err != nil {
+		return res, err
+	}
+	if !targetAncestor {
+		ignored, err := mg.IgnoredPaths(ctx, res.SourcePath)
+		if err != nil {
+			return res, err
+		}
+		incoming, err := mg.DiffNameOnly(ctx, repoRoot, source, res.TargetOldSHA)
+		if err != nil {
+			return res, err
+		}
+		if overlap := overlappingPaths(ignored, incoming); len(overlap) > 0 {
+			return res, fmt.Errorf("source ignored files overlap rebase input: %s; target unchanged", strings.Join(overlap, ", "))
+		}
+		if err := mg.RebaseOnto(ctx, res.SourcePath, res.TargetOldSHA); err != nil {
+			return res, fmt.Errorf("rebase stopped in %s; target %s is unchanged. Resolve with git rebase --continue or git rebase --abort, then retry wi merge: %w", res.SourcePath, target, err)
+		}
+		res.Rebased = true
+	}
+	replayed, err := mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
+	if err != nil {
+		return res, err
+	}
+	ancestor, err := mg.IsAncestor(ctx, repoRoot, res.TargetOldSHA, replayed)
+	if err != nil {
+		return res, err
 	}
 	if !ancestor {
-		return a.failMergeWithRollback(ctx, m.ID, mg, tx, "fast_forward_check", fmt.Errorf("target %s cannot fast-forward to rebased source", target))
+		return res, fmt.Errorf("rebased source cannot fast-forward the fenced target")
 	}
+	tree, err := mg.ReviewTree(ctx, repoRoot, replayed)
+	if err != nil {
+		return res, err
+	}
+	targetTree, err := mg.ReviewTree(ctx, repoRoot, res.TargetOldSHA)
+	if err != nil {
+		return res, err
+	}
+	final := replayed
+	if !opts.Rebase {
+		final = res.TargetOldSHA
+		if tree != targetTree {
+			message := opts.Message
+			if strings.TrimSpace(message) == "" {
+				message = m.Title
+			}
+			final, err = mg.SquashCommit(ctx, repoRoot, tree, res.TargetOldSHA, message)
+			if err != nil {
+				return res, err
+			}
+		}
+	}
+	res.Commit, res.Tree, res.SourceNewSHA = final, tree, final
 	if res.TargetWorktreePath != "" {
 		dirty, err := mg.StatusPaths(ctx, res.TargetWorktreePath)
 		if err != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "target_dirty_check", err)
+			return res, err
 		}
-		incoming, err := mg.DiffNameOnly(ctx, repoRoot, res.TargetOldSHA, tx.Result.SourceNewSHA)
+		ignored, err := mg.IgnoredPaths(ctx, res.TargetWorktreePath)
 		if err != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "incoming_paths", err)
+			return res, err
+		}
+		dirty = append(dirty, ignored...)
+		incoming, err := mg.DiffNameOnly(ctx, repoRoot, res.TargetOldSHA, final)
+		if err != nil {
+			return res, err
 		}
 		if overlap := overlappingPaths(dirty, incoming); len(overlap) > 0 {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "target_overlap", fmt.Errorf("target worktree has local changes overlapping incoming update:\n  %s", strings.Join(overlap, "\n  ")))
+			return res, fmt.Errorf("target checkout has changes overlapping incoming update: %s; target unchanged", strings.Join(overlap, ", "))
 		}
 	}
-	if !tx.Result.Rebased || tx.Result.SourcePreserved {
-		if err := mg.EnsureNoOperationInProgress(ctx, res.SourcePath, "merge"); err != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "source_changed", err)
-		}
-		if err := mg.EnsureNoUnmerged(ctx, res.SourcePath); err != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "source_changed", err)
-		}
-		currentBranch, branchErr := a.Git.CurrentBranch(ctx, res.SourcePath)
-		currentHead, headErr := mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
-		if branchErr != nil || headErr != nil || currentBranch != res.SourceBranch || currentHead != res.SourceOldSHA {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "source_changed", fmt.Errorf("source branch or HEAD changed during merge; retry with its current committed state"))
+	if err := mg.EnsureClean(ctx, res.SourcePath); err != nil {
+		return res, err
+	}
+	currentBranch, branchErr := a.Git.CurrentBranch(ctx, res.SourcePath)
+	currentHead, headErr := mg.RevParse(ctx, res.SourcePath, "HEAD^{commit}")
+	if branchErr != nil || headErr != nil || currentBranch != res.SourceBranch || currentHead != replayed {
+		return res, fmt.Errorf("source branch or HEAD changed before target publication")
+	}
+	if err := mg.UpdateRef(ctx, repoRoot, "refs/heads/"+target, final, res.TargetOldSHA, "wi merge"); err != nil {
+		return res, fmt.Errorf("target changed during merge; source work retained, no target update: %w", err)
+	}
+	res.TargetAdvanced = final != res.TargetOldSHA
+	// Retain successful target publication even if a later record/resource step
+	// fails. There is no rollback or automatic replay after this point.
+	durableCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	state, err = a.ReviewRecords.LoadReview(durableCtx, m.ID)
+	if err != nil {
+		return res, fmt.Errorf("target published at %s; load merge evidence: %w", final, err)
+	}
+	state.Merges = append(state.Merges, reviewcore.Merge{Revision: input.ID, Commit: final, Tree: tree, Target: "refs/heads/" + target, Before: res.TargetOldSHA, After: final, CreatedAt: a.now()})
+	state.Base = final
+	operationID, err := model.NewID()
+	if err != nil {
+		return res, err
+	}
+	if err := a.ReviewRecords.StoreReview(durableCtx, state, state.Version, operationID, "merged", map[string]string{"revision_id": input.ID, "commit": final, "target_before": res.TargetOldSHA, "target_after": final}); err != nil {
+		return res, fmt.Errorf("target published at %s; recording merge failed: %w", final, err)
+	}
+	res.Recorded = true
+	if err := mg.EnsureClean(durableCtx, res.SourcePath); err != nil {
+		return res, fmt.Errorf("target published at %s; new source changes preserved, continuation not advanced: %w", final, err)
+	}
+	if replayed != final {
+		if err := mg.UpdateRef(durableCtx, repoRoot, "refs/heads/"+res.SourceBranch, final, replayed, "wi merge: continue from result"); err != nil {
+			return res, fmt.Errorf("target published at %s; source moved, continuation not updated: %w", final, err)
 		}
 	}
-	ref := "refs/heads/" + target
-	if err := mg.UpdateRef(ctx, repoRoot, ref, tx.Result.SourceNewSHA, res.TargetOldSHA, "wi merge: fast-forward"); err != nil {
-		return a.failMergeWithRollback(ctx, m.ID, mg, tx, "target_update", fmt.Errorf("target branch %s moved during merge: %w", target, err))
-	}
-	tx.Result.TargetAdvanced = true
-	a.appendMergeEvent(ctx, m.ID, "merge.target_advanced", mergeEventData(tx.Result, "", ""), &tx.Result)
-	if res.TargetWorktreePath != "" {
-		if err := mg.UpdateIndexRefresh(ctx, res.TargetWorktreePath); err != nil {
-			tx.Result.Warnings = append(tx.Result.Warnings, "target index refresh reported local changes: "+err.Error())
+	res.SourceAdvanced = true
+	if res.TargetWorktreePath != "" && res.TargetAdvanced {
+		if err := mg.UpdateIndexRefresh(durableCtx, res.TargetWorktreePath); err != nil {
+			res.Warnings = append(res.Warnings, "target index refresh: "+err.Error())
 		}
-		if err := mg.ReadTreeMergeUpdate(ctx, res.TargetWorktreePath, res.TargetOldSHA, tx.Result.SourceNewSHA); err != nil {
-			return a.failMergeWithRollback(ctx, m.ID, mg, tx, "target_sync", fmt.Errorf("sync target worktree %s: %w", res.TargetWorktreePath, err))
+		if err := mg.ReadTreeMergeUpdate(durableCtx, res.TargetWorktreePath, res.TargetOldSHA, final); err != nil {
+			return res, fmt.Errorf("target published at %s; target checkout synchronization failed: %w", final, err)
 		}
-		tx.Result.TargetSynced = true
-		a.appendMergeEvent(ctx, m.ID, "merge.target_synced", mergeEventData(tx.Result, "", ""), &tx.Result)
+		res.TargetSynced = true
 		if res.TargetManagedWorkItemID != "" && res.TargetManagedWorkItemID != m.ID {
-			data := map[string]any{"source_item_id": m.ID, "target_branch": target, "old_sha": res.TargetOldSHA, "new_sha": tx.Result.SourceNewSHA}
-			if err := a.Store.AppendEvent(ctx, res.TargetManagedWorkItemID, model.NewEvent(a.now(), "checkout.updated_by_merge", "wi", data)); err != nil {
-				tx.Result.Warnings = append(tx.Result.Warnings, "could not append target work-item event: "+err.Error())
+			data := map[string]any{"source_item_id": m.ID, "target_branch": target, "old_sha": res.TargetOldSHA, "new_sha": final}
+			if err := a.Store.AppendEvent(durableCtx, res.TargetManagedWorkItemID, model.NewEvent(a.now(), "checkout.updated_by_merge", "wi", data)); err != nil {
+				res.Warnings = append(res.Warnings, "target item event: "+err.Error())
 			}
 		}
 	}
-	currentTarget, verifyErr := mg.ResolveBranchSHA(ctx, repoRoot, target)
-	if verifyErr != nil || currentTarget != tx.Result.SourceNewSHA {
-		tx.Result.Warnings = append(tx.Result.Warnings, fmt.Sprintf("target branch moved again after merge; inspect %s and %s", target, res.TargetWorktreePath))
-	}
-	a.appendMergeEvent(ctx, m.ID, "merge.completed", mergeEventData(tx.Result, "", ""), &tx.Result)
-	return tx.Result, nil
+	a.appendMergeEvent(durableCtx, m.ID, "merge.completed", mergeEventData(res, "", ""), &res)
+	return res, nil
 }
 
-func (a *App) failMergeWithRollback(ctx context.Context, itemID string, mg mergeGit, tx *mergeTransaction, stage string, cause error) (MergeResult, error) {
-	a.appendMergeEvent(ctx, itemID, "merge.failed", mergeEventData(tx.Result, stage, cause.Error()), &tx.Result)
-	rollbackErrors := []string{}
-	if tx.Result.TargetAdvanced {
-		repoRoot := ""
-		if m, err := a.Store.LoadManifest(itemID); err == nil {
-			repoRoot = m.Repository.OperationalRoot()
-		}
-		if repoRoot == "" {
-			rollbackErrors = append(rollbackErrors, "could not resolve repository root for target rollback")
-		} else if err := mg.UpdateRef(ctx, repoRoot, "refs/heads/"+tx.Result.TargetBranch, tx.Result.TargetOldSHA, tx.Result.SourceNewSHA, "wi merge: rollback target sync failed"); err != nil {
-			rollbackErrors = append(rollbackErrors, "target ref rollback failed: "+err.Error())
-		} else {
-			tx.Result.TargetAdvanced = false
-		}
+type mergeInput struct {
+	reviewcore.Revision
+	ClaimID         string
+	ClaimGeneration uint64
+}
+
+func (a *App) ensureMergeIdle(ctx context.Context, item string) error {
+	if a.ReviewCaptures != nil && a.ReviewCaptures.Capturing(item) {
+		return fmt.Errorf("code capture is in progress; wait for capture to finish before merging")
 	}
-	if tx.Result.Rebased && !tx.Result.SourcePreserved {
-		if err := mg.ResetHard(ctx, tx.Result.SourcePath, tx.Result.SourceOldSHA); err != nil {
-			rollbackErrors = append(rollbackErrors, "source reset failed: "+err.Error())
-		} else {
-			tx.Result.Rebased = false
-		}
+	runtime, err := a.AgentRuntimeStatus(ctx, ResolveOptions{Selector: item})
+	if err != nil {
+		return err
 	}
-	tx.Result.RolledBack = len(rollbackErrors) == 0
-	rollbackData := mergeEventData(tx.Result, stage, cause.Error())
-	rollbackData["rollback_errors"] = rollbackErrors
-	a.appendMergeEvent(ctx, itemID, "merge.rolled_back", rollbackData, &tx.Result)
-	if len(rollbackErrors) > 0 {
-		return tx.Result, fmt.Errorf("merge failed during %s: %v; rollback incomplete: %s", stage, cause, strings.Join(rollbackErrors, "; "))
+	if runtime.Online && a.AgentBusy(ctx, item) {
+		return fmt.Errorf("agent is busy running a turn; wait for it to finish before merging")
 	}
-	return tx.Result, fmt.Errorf("merge failed during %s: %v; no merge was performed; source and target were restored to their previous commits", stage, cause)
+	return nil
+}
+func (a *App) captureMergeInput(ctx context.Context, opts MergeOptions) (mergeInput, error) {
+	m, err := a.ResolveItem(ctx, ResolveOptions{Selector: opts.Selector, CWD: opts.CWD, Env: opts.Env})
+	if err != nil {
+		return mergeInput{}, err
+	}
+	if m.State != model.StateActive || m.Checkout.Claim == nil {
+		return mergeInput{}, fmt.Errorf("merge requires an active item with a checkout")
+	}
+	branch, err := a.Git.CurrentBranch(ctx, m.Checkout.Claim.Path)
+	if err != nil {
+		return mergeInput{}, err
+	}
+	if branch != expectedCheckoutBranch(m) {
+		return mergeInput{}, fmt.Errorf("checkout branch mismatch: expected %s, found %s", expectedCheckoutBranch(m), branch)
+	}
+	if err := a.ensureMergeIdle(ctx, m.ID); err != nil {
+		return mergeInput{}, err
+	}
+	id, err := model.NewID()
+	if err != nil {
+		return mergeInput{}, err
+	}
+	claim := m.Checkout.Claim
+	result, err := a.CaptureCheckpoint(ctx, CheckpointOptions{ResolveOptions: ResolveOptions{Selector: m.ID}, CaptureID: id, ClaimID: claim.ID, ClaimGeneration: claim.Generation, Trigger: "merge"})
+	return mergeInput{Revision: result.Revision, ClaimID: claim.ID, ClaimGeneration: claim.Generation}, err
 }
 
 func (a *App) appendMergeEvent(ctx context.Context, itemID, eventType string, data map[string]any, res *MergeResult) {
@@ -417,8 +482,7 @@ func mergeEventData(res MergeResult, stage, failure string) map[string]any {
 		"source_branch": res.SourceBranch, "source_path": res.SourcePath, "source_old_sha": res.SourceOldSHA,
 		"source_new_sha": res.SourceNewSHA, "target_branch": res.TargetBranch, "target_old_sha": res.TargetOldSHA,
 		"target_new_sha": res.SourceNewSHA, "target_worktree_path": res.TargetWorktreePath,
-		"source_preserved": res.SourcePreserved,
-		"rebased":          res.Rebased, "target_advanced": res.TargetAdvanced, "target_synced": res.TargetSynced, "rolled_back": res.RolledBack,
+		"rebased": res.Rebased, "target_advanced": res.TargetAdvanced, "target_synced": res.TargetSynced,
 	}
 	if stage != "" {
 		data["failure_stage"] = stage

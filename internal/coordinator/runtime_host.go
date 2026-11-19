@@ -3,6 +3,7 @@ package coordinator
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -43,6 +44,11 @@ func (s *Server) validateHostStoreMutation(request StoreCommandRequest) error {
 		return fmt.Errorf("runtime workspace claim changed")
 	}
 	return nil
+}
+
+// SetRuntimeSettlementObserver installs a nonblocking daemon use-case trigger.
+func (s *Server) SetRuntimeSettlementObserver(observer func(string)) {
+	s.runtimeSettlementObserver = observer
 }
 
 // SetRuntimeSettingsObserver installs daemon-owned handling for compact native

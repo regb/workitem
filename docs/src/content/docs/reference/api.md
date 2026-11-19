@@ -63,6 +63,7 @@ A failed call answers with an HTTP error status and a JSON body such as `{"code"
 | `ControlService` | Control leases: who may send input, what taking control would do, acquire, renew, release |
 | `RepositoryService` | Repositories: registration, upstream and synchronization, integrating an item, settings, checkout setup, copied files, environment variables |
 | `AgentProfileService` | Agent profiles, the default profile, drivers |
+| `ReviewService` | Code review: revisions captured after each agent turn, comparisons, threads, drafts, rounds, replies, approvals, round notifications |
 | `ScheduleService` | Schedules that start a new item in a repository on a cron schedule |
 | `JobService` | Long operations: progress, approvals, cancellation |
 | `EventService` | The change feed |

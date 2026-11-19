@@ -1248,7 +1248,11 @@ type IntegrateItemRequest struct {
 	// target_branch defaults to the repository's integration branch.
 	TargetBranch string `protobuf:"bytes,2,opt,name=target_branch,json=targetBranch,proto3" json:"target_branch,omitempty"`
 	// local skips upstream network access and base synchronization.
-	Local         bool `protobuf:"varint,3,opt,name=local,proto3" json:"local,omitempty"`
+	Local bool `protobuf:"varint,3,opt,name=local,proto3" json:"local,omitempty"`
+	// Preserve the rebased series instead of the default single squash commit.
+	Rebase bool `protobuf:"varint,4,opt,name=rebase,proto3" json:"rebase,omitempty"`
+	// Squash message; defaults to the item title.
+	Message       string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1302,6 +1306,20 @@ func (x *IntegrateItemRequest) GetLocal() bool {
 		return x.Local
 	}
 	return false
+}
+
+func (x *IntegrateItemRequest) GetRebase() bool {
+	if x != nil {
+		return x.Rebase
+	}
+	return false
+}
+
+func (x *IntegrateItemRequest) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
 }
 
 type IntegrateItemResponse struct {
@@ -3230,11 +3248,13 @@ const file_wi_core_v1_repositories_proto_rawDesc = "" +
 	"\x04mode\x18\x02 \x01(\x0e2\x14.wi.core.v1.SyncModeR\x04mode\x12\x18\n" +
 	"\aconfirm\x18\x03 \x01(\bR\aconfirm\";\n" +
 	"\x16SyncRepositoryResponse\x12!\n" +
-	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"j\n" +
+	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\x9c\x01\n" +
 	"\x14IntegrateItemRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12#\n" +
 	"\rtarget_branch\x18\x02 \x01(\tR\ftargetBranch\x12\x14\n" +
-	"\x05local\x18\x03 \x01(\bR\x05local\":\n" +
+	"\x05local\x18\x03 \x01(\bR\x05local\x12\x16\n" +
+	"\x06rebase\x18\x04 \x01(\bR\x06rebase\x12\x18\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage\":\n" +
 	"\x15IntegrateItemResponse\x12!\n" +
 	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"$\n" +
 	"\n" +

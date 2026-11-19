@@ -69,6 +69,10 @@ func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.C
 	core.SetRuntimeSettingsObserver(s.observeRuntimeSettings)
 	s.callbacks.Add(1)
 	go s.scheduleLoop()
+	a.ReviewRecords = core
+	a.ReviewCaptures = app.NewReviewCaptureQueue(ctx, a.CaptureAfterSettlement)
+	a.ReviewCaptures.Changed = core.Database().NotifyAll
+	core.SetRuntimeSettlementObserver(a.ReviewCaptures.Trigger)
 	return s, nil
 }
 func (s *Server) Close() {
@@ -76,6 +80,7 @@ func (s *Server) Close() {
 	s.callbacksClosed = true
 	s.cancel()
 	s.callbackMu.Unlock()
+	s.App.ReviewCaptures.Close()
 	s.jobs.wait()
 	s.callbacks.Wait()
 }
@@ -158,7 +163,7 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 					if !model.ValidID(id) {
 						return nil, invalid("valid item_id is required")
 					}
-					if !readOnly {
+					if !readOnly && !strings.HasPrefix(req.Spec().Procedure, "/wi.core.v1.ReviewService/") {
 						unlock := s.lock(id)
 						defer unlock()
 					}
@@ -189,6 +194,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(corev1connect.NewItemServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewLifecycleServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewWorkspaceServiceHandler(s, opts...))
+	mux.Handle(corev1connect.NewReviewServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewAgentServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewControlServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewRepositoryServiceHandler(s, opts...))

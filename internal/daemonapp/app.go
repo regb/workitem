@@ -4,6 +4,8 @@ package daemonapp
 import (
 	"context"
 	"fmt"
+	"os"
+
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
@@ -13,7 +15,6 @@ import (
 	"github.com/regb/workitem/internal/store"
 	"github.com/regb/workitem/internal/tmux"
 	"github.com/regb/workitem/internal/xdg"
-	"os"
 )
 
 func New(ctx context.Context, server *coordinator.Server, paths xdg.Paths, cfg config.Config, host *plugin.Host, self string, env map[string]string) (*app.App, error) {

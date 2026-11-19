@@ -250,6 +250,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = rpcState(ctx, args[1:], cfg, jsonOut)
 	case "note", "notes", "attach", "attachments", "attachment":
 		err = rpcNotes(ctx, args[0], args[1:], cfg, jsonOut)
+	case "review":
+		err = rpcReview(ctx, args[1:], cfg, jsonOut)
 	case "workspace":
 		err = rpcWorkspace(ctx, args[1:], cfg, jsonOut)
 	case "agent":
@@ -265,20 +267,7 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 	case "repo":
 		err = rpcRepo(ctx, args[1:], cfg, jsonOut)
 	case "merge":
-		id, e := rpcItemArgs(ctx, cfg, "merge", args[1:])
-		if e != nil {
-			err = e
-			break
-		}
-		value, e := cfg.API.Repositories.IntegrateItem(ctx, rpcRequest(cfg, &v1.IntegrateItemRequest{ItemId: id}))
-		if e != nil {
-			err = e
-			break
-		}
-		value.Msg.Job, err = rpcWaitJob(ctx, cfg, value.Msg.Job, jsonOut)
-		if err == nil {
-			err = rpcEmit(cfg, jsonOut, value.Msg)
-		}
+		err = rpcMerge(ctx, args[1:], cfg, jsonOut)
 	case "delete":
 		fs := newFlagSet("delete", cfg.Stderr)
 		yes := fs.Bool("yes", false, "confirm deletion")

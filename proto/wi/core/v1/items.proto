@@ -152,6 +152,8 @@ message Blocker {
 // ItemObservation is what the daemon last observed about an item's agent and
 // checkout. Observations can be stale; they never replace durable intent.
 message ItemObservation {
+ // Snapshot work in progress; independent of agent state and control admission.
+ bool capturing = 13;
   AgentStatus agent_status = 1;
   // agent_reason explains a problem, or a question the agent is asking.
   string agent_reason = 2;

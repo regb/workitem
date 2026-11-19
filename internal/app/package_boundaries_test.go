@@ -13,7 +13,8 @@ import (
 const internalImportPrefix = "github.com/regb/workitem/internal/"
 
 var childPackageImports = map[string]map[string]bool{
-	"contract/": {},
+	"contract/":    {},
+	"core/review/": {},
 	"core/item/": {
 		internalImportPrefix + "app/contract": true,
 		internalImportPrefix + "model":        true,

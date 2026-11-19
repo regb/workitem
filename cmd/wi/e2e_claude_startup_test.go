@@ -86,6 +86,27 @@ func TestClaudeStartupDelivery(t *testing.T) {
 				t.Fatal(err)
 			}
 			item := started.Msg.Item.Id
+			t.Cleanup(func() {
+				if !t.Failed() || !headless {
+					return
+				}
+				diagnosticCtx, stop := context.WithTimeout(context.Background(), 3*time.Second)
+				defer stop()
+				boundary, err := f.clients.Items.GetItem(diagnosticCtx, connect.NewRequest(&v1.GetItemRequest{ItemId: item}))
+				t.Logf("item=%v err=%v", boundary, err)
+				agent, err := f.clients.Agents.GetAgent(diagnosticCtx, connect.NewRequest(&v1.GetAgentRequest{ItemId: item}))
+				t.Logf("agent=%v err=%v", agent, err)
+				_ = filepath.WalkDir(f.root, func(path string, entry os.DirEntry, walkErr error) error {
+					if walkErr == nil && !entry.IsDir() && entry.Name() == "runtime.log" {
+						data, _ := os.ReadFile(path)
+						if len(data) > 6000 {
+							data = data[len(data)-6000:]
+						}
+						t.Logf("runtime log %s: %s", path, data)
+					}
+					return nil
+				})
+			})
 			var target *v1.Terminal
 			// Wait for queue acceptance before allowing the fake native SessionStart.
 			for {
@@ -188,6 +209,25 @@ func TestClaudeStartupDelivery(t *testing.T) {
 					screen = tmux("capture-pane", "-p", "-t", pane)
 				}
 				t.Fatalf("job: %v\nscreen: %s", job.Msg.Job, screen)
+			}
+			if !reject {
+				for {
+					revisions, err := f.clients.Reviews.ListReviewRevisions(ctx, connect.NewRequest(&v1.ListReviewRevisionsRequest{ItemId: item}))
+					if err != nil {
+						t.Fatal(err)
+					}
+					if len(revisions.Msg.Revisions) > 0 {
+						if revisions.Msg.Revisions[0].Trigger != "settled" || revisions.Msg.Revisions[0].BaseCommit != revisions.Msg.Revisions[0].ObservedHead {
+							t.Fatal("wrong settlement capture base", revisions.Msg)
+						}
+						break
+					}
+					select {
+					case <-ctx.Done():
+						t.Fatal("automatic settlement capture missing")
+					case <-time.After(20 * time.Millisecond):
+					}
+				}
 			}
 			retry := connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: claudeStartupTask, ClientMessageId: "initial", Delivery: v1.Delivery_DELIVERY_PROMPT})
 			retry.Header().Set("Wi-Client-Kind", "cli")

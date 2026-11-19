@@ -28,6 +28,7 @@ var (
 	bucketEventIDs       = []byte("domain_event_ids")
 	bucketRevisions      = []byte("item_revisions")
 	bucketProjections    = []byte("projections")
+	bucketReviewRecords  = []byte("review_records")
 	bucketImportSources  = []byte("import_sources")
 	bucketSourceOffsets  = []byte("source_offsets")
 	bucketDomainCommands = []byte("domain_commands")
@@ -154,7 +155,7 @@ func (d *Database) Close() error {
 
 func (d *Database) initialize() error {
 	return d.db.Update(func(tx *bolt.Tx) error {
-		for _, name := range [][]byte{bucketMeta, bucketCommands, bucketEvents, bucketEventIDs, bucketRevisions, bucketProjections, bucketImportSources, bucketSourceOffsets, bucketDomainCommands, bucketPendingWrites, bucketSchedules} {
+		for _, name := range [][]byte{bucketMeta, bucketCommands, bucketEvents, bucketEventIDs, bucketRevisions, bucketProjections, bucketImportSources, bucketSourceOffsets, bucketDomainCommands, bucketPendingWrites, bucketSchedules, bucketReviewRecords} {
 			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
 				return err
 			}
@@ -235,6 +236,9 @@ func (d *Database) Status() (DatabaseStatus, error) {
 // projections. It is the storage primitive on which domain command handlers
 // are built; clients never invoke it directly over the public daemon protocol.
 func (d *Database) Commit(command Command, pending []PendingEvent, updates []ProjectionUpdate) (CommitResult, error) {
+	return d.commit(command, pending, updates, nil)
+}
+func (d *Database) commit(command Command, pending []PendingEvent, updates []ProjectionUpdate, writeRecords func(*bolt.Tx) error) (CommitResult, error) {
 	if command.ID == "" || command.Type == "" {
 		return CommitResult{}, errors.New("command id and type are required")
 	}
@@ -247,6 +251,11 @@ func (d *Database) Commit(command Command, pending []PendingEvent, updates []Pro
 			}
 			result.Duplicate = true
 			return nil
+		}
+		if writeRecords != nil {
+			if err := writeRecords(tx); err != nil {
+				return err
+			}
 		}
 		revisions := tx.Bucket(bucketRevisions)
 		currentRevision := decodeUint64(revisions.Get([]byte(command.ItemID)))

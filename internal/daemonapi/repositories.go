@@ -171,12 +171,27 @@ func (s *Server) IntegrateItem(ctx context.Context, req *connect.Request[v1.Inte
 	if _, err := s.canonical(ctx, req.Msg.ItemId, 0); err != nil {
 		return nil, rpcError(err)
 	}
-	job := s.startJobKey("integrate_item", "integrate_item:"+req.Msg.TargetBranch+fmt.Sprint(req.Msg.Local), req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
+	job := s.startJobKey("integrate_item", "integrate_item:"+req.Msg.TargetBranch+fmt.Sprint(req.Msg.Local, req.Msg.Rebase)+req.Msg.Message, req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(req.Msg.ItemId)
 		defer unlock()
-		result, err := s.App.MergeWorkItem(ctx, app.MergeOptions{Selector: req.Msg.ItemId, Target: req.Msg.TargetBranch, Local: req.Msg.Local})
-		if err != nil && (result.TargetAdvanced || result.SourcePreserved) {
-			return partial(err, req.Msg.ItemId, result.Warnings...)
+		result, err := s.App.MergeWorkItem(ctx, app.MergeOptions{Selector: req.Msg.ItemId, Target: req.Msg.TargetBranch, Local: req.Msg.Local, Rebase: req.Msg.Rebase, Message: req.Msg.Message})
+		if err != nil && result.RevisionID != "" {
+			completed := []string{"captured merge input " + result.RevisionID}
+			if result.SourceCommitted {
+				completed = append(completed, "committed uncommitted source work")
+			}
+			if result.TargetAdvanced {
+				completed = append(completed, "published target "+result.Commit)
+			}
+			if result.Recorded {
+				completed = append(completed, "recorded merge result")
+			}
+			return partial(err, req.Msg.ItemId, completed...)
+		}
+		if err == nil {
+			for _, warning := range result.Warnings {
+				j.change(func(job *v1.Job) { job.Warnings = append(job.Warnings, warning) })
+			}
 		}
 		return err
 	})

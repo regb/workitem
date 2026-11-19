@@ -54,12 +54,32 @@ func TestGitHubWaitBinaryWithDefaultEmptyPluginLists(t *testing.T) {
 	var created v1.CreateItemResponse
 	f.json(&created, "new", "--repo", "github-test", "--title", "Wait for review")
 	item := created.Item.Id
+	// Review and plugin commands share the ordinary operator endpoint.
+	f.run("review", "status", "--item", item)
 	url := "https://github.com/NetFabric-AI/netfabric-code/pull/3556"
 	f.run("github", "wait", url, "--item", item)
 	var shown v1.GetItemResponse
 	f.json(&shown, "show", item)
 	if len(shown.Item.Blockers) != 1 || shown.Item.Blockers[0].Meta["github.pr"] != "NetFabric-AI/netfabric-code#3556" {
 		t.Fatal(shown.String())
+	}
+	// Explicit sandbox routing cannot gain operator permission by selecting
+	// a review command or an ordinary plugin command.
+	sandbox := exec.Command(f.wi, "wait", "--clear", "--item", item)
+	sandbox.Env = append(append([]string{}, f.env...), "WI_AGENT_DAEMON_SOCKET="+f.agentSocket)
+	sandbox.Dir = f.root
+	if out, err := sandbox.CombinedOutput(); err == nil || !strings.Contains(string(out), "permission_denied") {
+		t.Fatalf("sandbox restriction or error classification regressed: %v %s", err, out)
+	}
+	sandbox = exec.Command(f.wi, "review", "status", "--item", item)
+	sandbox.Env = append(append([]string{}, f.env...), "WI_AGENT_DAEMON_SOCKET="+f.agentSocket)
+	sandbox.Dir = f.root
+	if out, err := sandbox.CombinedOutput(); err == nil || !strings.Contains(string(out), "permission_denied") {
+		t.Fatalf("sandbox review escaped restriction: %v %s", err, out)
+	}
+	f.json(&shown, "show", item)
+	if len(shown.Item.Blockers) != 1 {
+		t.Fatal("sandbox denial changed wait", shown.String())
 	}
 	writeState(fmt.Sprintf(`{"state":"OPEN","reviews":[{"author":{"login":"reviewer"},"state":"APPROVED","submittedAt":%q}]}`, time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano)))
 	f.run("plugin", "run", "github")

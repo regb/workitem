@@ -210,6 +210,10 @@ message IntegrateItemRequest {
   string target_branch = 2;
   // local skips upstream network access and base synchronization.
   bool local = 3;
+  // Preserve the rebased series instead of the default single squash commit.
+  bool rebase = 4;
+  // Squash message; defaults to the item title.
+  string message = 5;
 }
 
 message IntegrateItemResponse {

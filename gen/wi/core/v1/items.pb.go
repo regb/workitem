@@ -700,8 +700,10 @@ func (x *Blocker) GetCreatedAt() *timestamppb.Timestamp {
 // ItemObservation is what the daemon last observed about an item's agent and
 // checkout. Observations can be stale; they never replace durable intent.
 type ItemObservation struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	AgentStatus AgentStatus            `protobuf:"varint,1,opt,name=agent_status,json=agentStatus,proto3,enum=wi.core.v1.AgentStatus" json:"agent_status,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Snapshot work in progress; independent of agent state and control admission.
+	Capturing   bool        `protobuf:"varint,13,opt,name=capturing,proto3" json:"capturing,omitempty"`
+	AgentStatus AgentStatus `protobuf:"varint,1,opt,name=agent_status,json=agentStatus,proto3,enum=wi.core.v1.AgentStatus" json:"agent_status,omitempty"`
 	// agent_reason explains a problem, or a question the agent is asking.
 	AgentReason string `protobuf:"bytes,2,opt,name=agent_reason,json=agentReason,proto3" json:"agent_reason,omitempty"`
 	// asking means the agent paused its turn on a question answered in its
@@ -756,6 +758,13 @@ func (x *ItemObservation) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ItemObservation.ProtoReflect.Descriptor instead.
 func (*ItemObservation) Descriptor() ([]byte, []int) {
 	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ItemObservation) GetCapturing() bool {
+	if x != nil {
+		return x.Capturing
+	}
+	return false
 }
 
 func (x *ItemObservation) GetAgentStatus() AgentStatus {
@@ -3600,8 +3609,9 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x1a7\n" +
 	"\tMetaEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xaa\x04\n" +
-	"\x0fItemObservation\x12:\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc8\x04\n" +
+	"\x0fItemObservation\x12\x1c\n" +
+	"\tcapturing\x18\r \x01(\bR\tcapturing\x12:\n" +
 	"\fagent_status\x18\x01 \x01(\x0e2\x17.wi.core.v1.AgentStatusR\vagentStatus\x12!\n" +
 	"\fagent_reason\x18\x02 \x01(\tR\vagentReason\x12\x16\n" +
 	"\x06asking\x18\x03 \x01(\bR\x06asking\x12C\n" +

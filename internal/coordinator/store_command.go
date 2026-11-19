@@ -287,6 +287,9 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		if err := tx.Bucket(bucketImportSources).Delete([]byte(command.ItemID)); err != nil {
 			return "", nil, err
 		}
+		if err := tx.Bucket(bucketReviewRecords).Delete([]byte(command.ItemID)); err != nil {
+			return "", nil, err
+		}
 		for _, name := range []string{AgentObservationProjection, AttentionActivityProjection, RuntimeActivityProjection, ConversationProjection, RuntimeOwnershipProjection, TerminalOwnershipProjection} {
 			if bucket := tx.Bucket(bucketProjections).Bucket([]byte(name)); bucket != nil {
 				_ = bucket.Delete([]byte(command.ItemID))

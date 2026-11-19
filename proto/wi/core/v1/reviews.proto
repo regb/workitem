@@ -1,0 +1,469 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+import "wi/core/v1/workspaces.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// ReviewService reviews an item's code. The daemon captures revisions,
+// immutable snapshots of the checkout under private Git refs, after each
+// agent turn and on request; they never touch the branch, index or stash.
+// Review records (threads, drafts, rounds, approvals, merges) are canonical
+// item data in the daemon. Mutations take an operation_id as idempotency key
+// and expected_version as fence: a stale version fails with ABORTED.
+service ReviewService {
+  // ListReviewRevisions lists captured revisions, capture gaps and merges.
+  rpc ListReviewRevisions(ListReviewRevisionsRequest) returns (ListReviewRevisionsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // CaptureReviewRevision captures the checkout of the expected claim now.
+  rpc CaptureReviewRevision(CaptureReviewRevisionRequest) returns (CaptureReviewRevisionResponse);
+  // GetRevisionReview lists the files that differ between two revisions, or
+  // from a revision's base when from_revision_id is empty.
+  rpc GetRevisionReview(GetRevisionReviewRequest) returns (GetRevisionReviewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetRevisionPatch returns a unified diff of one comparison, optionally of
+  // one path.
+  rpc GetRevisionPatch(GetRevisionPatchRequest) returns (GetRevisionPatchResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetRevisionReviewFile returns both sides of one file of a comparison.
+  rpc GetRevisionReviewFile(GetRevisionReviewFileRequest) returns (GetRevisionReviewFileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetReviewThreads lists published threads and rounds.
+  rpc GetReviewThreads(GetReviewThreadsRequest) returns (GetReviewThreadsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetReviewDrafts lists the reviewer's unpublished comments.
+  rpc GetReviewDrafts(GetReviewDraftsRequest) returns (GetReviewDraftsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SaveReviewDraft adds or replaces a draft comment.
+  rpc SaveReviewDraft(SaveReviewDraftRequest) returns (SaveReviewDraftResponse);
+  rpc DeleteReviewDrafts(DeleteReviewDraftsRequest) returns (DeleteReviewDraftsResponse);
+  // PublishReviewRound publishes drafts as one round on a revision. It does
+  // not notify the agent; NotifyReviewRound does.
+  rpc PublishReviewRound(PublishReviewRoundRequest) returns (PublishReviewRoundResponse);
+  // ReplyReviewThreads adds the agent's replies, optionally capturing a new
+  // revision they address. Addressed is evidence, never a resolution.
+  rpc ReplyReviewThreads(ReplyReviewThreadsRequest) returns (ReplyReviewThreadsResponse);
+  // GetReviewIntent reads the approvals recorded on a revision. Approval is
+  // informational: nothing, merge included, requires it.
+  rpc GetReviewIntent(GetReviewIntentRequest) returns (GetReviewIntentResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // SetReviewIntent records approve, withdraw_approval, request_review or
+  // request_changes on a revision.
+  rpc SetReviewIntent(SetReviewIntentRequest) returns (SetReviewIntentResponse);
+  // NotifyReviewRound sends the agent one message pointing at a round: a
+  // prompt when idle, a follow-up when busy. It never starts an agent,
+  // takes control from another client, or retries.
+  rpc NotifyReviewRound(NotifyReviewRoundRequest) returns (NotifyReviewRoundResponse);
+  // GetReview lists the files of a live comparison of the item's branch or
+  // checkout, not of captured revisions.
+  rpc GetReview(GetReviewRequest) returns (GetReviewResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GetReviewFile returns both sides of one file of a live comparison.
+  rpc GetReviewFile(GetReviewFileRequest) returns (GetReviewFileResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // ListReviewCommits lists the item branch's commits, optionally with the
+  // integration branch's for a commit graph.
+  rpc ListReviewCommits(ListReviewCommitsRequest) returns (ListReviewCommitsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+}
+
+// CaptureGap records a capture that failed; history shows the gap.
+message CaptureGap {
+  string id = 1;
+  string reason = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message RevisionExclusion {
+  string path = 1;
+  string reason = 2;
+}
+
+// CodeRevision is an immutable snapshot of a checkout.
+message CodeRevision {
+  // id is the item-scoped alias, such as r3.
+  string id = 1;
+  string capture_id = 2;
+  // commit is the snapshot commit; its parent is observed_head.
+  string commit = 3;
+  string tree = 4;
+  string observed_head = 5;
+  string observed_branch = 6;
+  // base_commit is the review base the revision compares against by default.
+  string base_commit = 7;
+  // ref is the private ref that keeps the snapshot.
+  string ref = 8;
+  google.protobuf.Timestamp created_at = 9;
+  // trigger is settled (after an agent turn), manual, reply or merge.
+  string trigger = 10;
+  // excluded lists files left out of the snapshot, with why.
+  repeated RevisionExclusion excluded = 11;
+  bool detached_head = 12;
+}
+
+// ReviewAnchor places a thread: a range of one side of a file in a revision
+// comparison, a whole file, or the revision.
+message ReviewAnchor {
+  string revision_id = 1;
+  string from_revision_id = 2;
+  string path = 3;
+  // side is old or new.
+  string side = 4;
+  uint32 start_line = 5;
+  uint32 end_line = 6;
+  string blob_sha256 = 7;
+}
+
+message ReviewMessage {
+  string id = 1;
+  // role is reviewer or agent.
+  string role = 2;
+  string body = 3;
+  string revision_id = 4;
+  string round_id = 5;
+  // addressed is the agent's claim that the revision addresses the thread.
+  bool addressed = 6;
+  // resolution is a reviewer's open, resolved or withdrawn.
+  string resolution = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message ReviewThread {
+  string id = 1;
+  ReviewAnchor anchor = 2;
+  // status is open, addressed, resolved or withdrawn.
+  string status = 3;
+  repeated ReviewMessage messages = 4;
+}
+
+message ReviewRound {
+  string id = 1;
+  string revision_id = 2;
+  string from_revision_id = 3;
+  repeated string message_ids = 4;
+  google.protobuf.Timestamp created_at = 5;
+  // notified_at and command_id record the notification, once sent.
+  google.protobuf.Timestamp notified_at = 6;
+  string command_id = 7;
+}
+
+message ReviewDraft {
+  string id = 1;
+  // thread_id answers an existing thread; empty starts one at anchor.
+  string thread_id = 2;
+  ReviewAnchor anchor = 3;
+  string body = 4;
+  string resolution = 5;
+}
+
+message ReviewApproval {
+  string id = 1;
+  string revision_id = 2;
+  // kind is approve, withdraw_approval, request_review or request_changes.
+  string kind = 3;
+  string message = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+// ReviewMerge records a merge: the revision merged and the commit it made.
+message ReviewMerge {
+  string revision_id = 1;
+  string commit = 2;
+  string tree = 3;
+  string target_ref = 4;
+  string before = 5;
+  string after = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message ListReviewRevisionsRequest {
+  string item_id = 1;
+}
+
+message ListReviewRevisionsResponse {
+  repeated CodeRevision revisions = 1;
+  // version is the review records' version, the fence for mutations.
+  uint32 version = 2;
+  repeated CaptureGap capture_gaps = 3;
+  repeated ReviewMerge merges = 4;
+}
+
+message CaptureReviewRevisionRequest {
+  string item_id = 1;
+  string capture_id = 2;
+  string expected_claim_id = 3;
+  uint32 expected_claim_generation = 4;
+}
+
+message CaptureReviewRevisionResponse {
+  CodeRevision revision = 1;
+  uint32 version = 2;
+  // reused means capture_id was already captured; nothing new was taken.
+  bool reused = 3;
+}
+
+message GetRevisionReviewRequest {
+  string item_id = 1;
+  string revision_id = 2;
+  // from_revision_id compares two revisions; empty compares against the
+  // revision's base.
+  string from_revision_id = 3;
+}
+
+message GetRevisionReviewResponse {
+  GetReviewResponse review = 1;
+}
+
+message GetRevisionPatchRequest {
+  GetRevisionReviewRequest comparison = 1;
+  string path = 2;
+}
+
+message GetRevisionPatchResponse {
+  string patch = 1;
+  string version = 2;
+}
+
+message GetRevisionReviewFileRequest {
+  GetRevisionReviewRequest comparison = 1;
+  string path = 2;
+  string expected_version = 3;
+}
+
+message GetRevisionReviewFileResponse {
+  GetReviewFileResponse file = 1;
+}
+
+message GetReviewThreadsRequest {
+  string item_id = 1;
+}
+
+message GetReviewThreadsResponse {
+  repeated ReviewThread threads = 1;
+  repeated ReviewRound rounds = 2;
+  uint32 version = 3;
+}
+
+message GetReviewDraftsRequest {
+  string item_id = 1;
+}
+
+message GetReviewDraftsResponse {
+  repeated ReviewDraft drafts = 1;
+  uint32 version = 2;
+}
+
+message SaveReviewDraftRequest {
+  string item_id = 1;
+  string operation_id = 2;
+  ReviewDraft draft = 3;
+  uint32 expected_version = 4;
+}
+
+message DeleteReviewDraftsRequest {
+  string item_id = 1;
+  string operation_id = 2;
+  repeated string draft_ids = 3;
+  uint32 expected_version = 4;
+}
+
+message PublishReviewRoundRequest {
+  string item_id = 1;
+  string operation_id = 2;
+  string revision_id = 3;
+  string from_revision_id = 4;
+  repeated string draft_ids = 5;
+  uint32 expected_version = 6;
+}
+
+message ReviewReply {
+  string thread_id = 1;
+  string body = 2;
+  bool addressed = 3;
+}
+
+message ReplyReviewThreadsRequest {
+  string item_id = 1;
+  string operation_id = 2;
+  string revision_id = 3;
+  repeated ReviewReply replies = 4;
+  // capture captures a new revision of the expected claim and binds the
+  // replies to it, in the same operation.
+  bool capture = 5;
+  string expected_claim_id = 6;
+  uint32 expected_claim_generation = 7;
+  uint32 expected_version = 8;
+}
+
+// ReviewMutation is what a mutation created, and the records' new version.
+message ReviewMutation {
+  string round_id = 1;
+  repeated string thread_ids = 2;
+  string draft_id = 3;
+  string approval_id = 4;
+  uint32 version = 5;
+  // reused means operation_id was already applied; nothing changed.
+  bool reused = 6;
+  CodeRevision captured_revision = 7;
+}
+
+message SaveReviewDraftResponse {
+  ReviewMutation result = 1;
+}
+
+message DeleteReviewDraftsResponse {
+  ReviewMutation result = 1;
+}
+
+message PublishReviewRoundResponse {
+  ReviewMutation result = 1;
+}
+
+message ReplyReviewThreadsResponse {
+  ReviewMutation result = 1;
+}
+
+message GetReviewIntentRequest {
+  string item_id = 1;
+  string revision_id = 2;
+}
+
+message GetReviewIntentResponse {
+  repeated ReviewApproval approvals = 1;
+  // approved means the revision's latest approval stands.
+  bool approved = 2;
+  uint32 version = 3;
+}
+
+message SetReviewIntentRequest {
+  string item_id = 1;
+  string operation_id = 2;
+  string revision_id = 3;
+  string kind = 4;
+  string message = 5;
+  uint32 expected_version = 6;
+}
+
+message SetReviewIntentResponse {
+  ReviewMutation result = 1;
+}
+
+message NotifyReviewRoundRequest {
+  string item_id = 1;
+  string round_id = 2;
+  // client_message_id makes a retried notification send one message.
+  string client_message_id = 3;
+}
+
+message NotifyReviewRoundResponse {
+  ReviewRound round = 1;
+}
+
+enum ReviewComparison {
+  REVIEW_COMPARISON_UNSPECIFIED = 0;
+  // Created-from commit to working files, or branch tip without a checkout.
+  REVIEW_COMPARISON_ITEM = 1;
+  // Created-from commit to the item's branch tip.
+  REVIEW_COMPARISON_COMMITTED = 2;
+  // HEAD to working files, including untracked files.
+  REVIEW_COMPARISON_UNCOMMITTED = 3;
+  // A commit reachable from the item, integration or configured upstream
+  // branch, against its first parent. Other branch tips are not accepted.
+  REVIEW_COMPARISON_COMMIT = 4;
+  // Merge base with the local integration branch to the item's branch tip.
+  REVIEW_COMPARISON_INTEGRATION = 5;
+}
+
+message GetReviewRequest {
+  string item_id = 1;
+  ReviewComparison comparison = 2;
+  string commit = 3;
+  // Optional explicit base, restricted to the item's immutable starting
+  // commit or ancestry of its permitted history branches.
+  string base_commit = 4;
+}
+
+// ReviewRevision identifies resolved commits and, for working files, the
+// owning claim. It is not an atomic snapshot of externally edited files.
+message ReviewRevision {
+  string version = 1;
+  string base_commit = 2;
+  string head_commit = 3;
+  string claim_id = 4;
+  uint32 claim_generation = 5;
+  bool working_tree = 6;
+}
+
+message ReviewFile {
+  string path = 1;
+  // added, modified, deleted, or conflicted. Renames appear as delete/add.
+  string change = 2;
+}
+
+message GetReviewResponse {
+  ReviewRevision revision = 1;
+  repeated ReviewFile files = 2;
+  bool truncated = 3;
+  string branch = 4;
+  string integration_branch = 5;
+}
+
+message GetReviewFileRequest {
+  string item_id = 1;
+  ReviewComparison comparison = 2;
+  string commit = 3;
+  string path = 4;
+  // Required: a revision returned by GetReview. Changed refs or claims abort.
+  string expected_version = 5;
+  // Same explicit base used for GetReview.
+  string base_commit = 6;
+}
+
+message GetReviewFileResponse {
+  ReviewRevision revision = 1;
+  SourceFile old_file = 2;
+  SourceFile new_file = 3;
+}
+
+message ListReviewCommitsRequest {
+  string item_id = 1;
+  // Include the ancestry of the integration branch and its locally cached
+  // configured upstream as well as the item branch. Never fetches or lists
+  // other branch tips. False preserves the item-only commit list.
+  bool include_context = 2;
+}
+
+message ReviewCommit {
+  string sha = 1;
+  string subject = 2;
+  string author = 3;
+  string authored_at = 4;
+  repeated string parent_shas = 5;
+}
+
+message ReviewBranch {
+  string name = 1;
+  // Empty when this branch has no locally available commit.
+  string sha = 2;
+  // item, integration, or remote.
+  string kind = 3;
+}
+
+message ListReviewCommitsResponse {
+  repeated ReviewCommit commits = 1;
+  bool truncated = 2;
+  repeated ReviewBranch branches = 3;
+  repeated string warnings = 4;
+}

@@ -48,6 +48,7 @@ type Clients struct {
 	Items        corev1connect.ItemServiceClient
 	Lifecycle    corev1connect.LifecycleServiceClient
 	Workspaces   corev1connect.WorkspaceServiceClient
+	Reviews      corev1connect.ReviewServiceClient
 	Agents       corev1connect.AgentServiceClient
 	Control      corev1connect.ControlServiceClient
 	Repositories corev1connect.RepositoryServiceClient
@@ -98,6 +99,7 @@ func NewClients(socketPath string) (*Clients, error) {
 		Items:        corev1connect.NewItemServiceClient(client, baseURL, opts...),
 		Lifecycle:    corev1connect.NewLifecycleServiceClient(client, baseURL, opts...),
 		Workspaces:   corev1connect.NewWorkspaceServiceClient(client, baseURL, opts...),
+		Reviews:      corev1connect.NewReviewServiceClient(client, baseURL, opts...),
 		Agents:       corev1connect.NewAgentServiceClient(client, baseURL, opts...),
 		Control:      corev1connect.NewControlServiceClient(client, baseURL, opts...),
 		Repositories: corev1connect.NewRepositoryServiceClient(client, baseURL, opts...),

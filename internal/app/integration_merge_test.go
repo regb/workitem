@@ -2,343 +2,214 @@ package app_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/regb/workitem/internal/app"
+	reviewcore "github.com/regb/workitem/internal/app/core/review"
 	gitpkg "github.com/regb/workitem/internal/git"
-	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
 	"github.com/regb/workitem/internal/testutil"
 )
 
-func TestMergeWorkItemRebasesFastForwardsAndSyncsTargetWorktree(t *testing.T) {
-	application, repo, source, itemID := setupMergeWorkItem(t)
-	writeMergeFile(t, source, "feature.txt", "feature\n")
-	runMergeGit(t, source, "add", "feature.txt")
-	runMergeGit(t, source, "commit", "-m", "feature")
-	writeMergeFile(t, repo, "local.txt", "base\n")
-	runMergeGit(t, repo, "add", "local.txt")
-	runMergeGit(t, repo, "commit", "-m", "advance target")
-	writeMergeFile(t, repo, "local.txt", "keep dirty\n")
+type mergeRecords struct {
+	mu        sync.Mutex
+	state     reviewcore.State
+	failMerge bool
+}
 
-	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, CWD: source})
+func (r *mergeRecords) LoadReview(context.Context, string) (reviewcore.State, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	b, _ := json.Marshal(r.state)
+	var state reviewcore.State
+	_ = json.Unmarshal(b, &state)
+	return state, nil
+}
+func (r *mergeRecords) StoreReview(_ context.Context, s reviewcore.State, expected uint64, operation, kind string, ids map[string]string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if kind == "merged" && r.failMerge {
+		return errors.New("merge record failed")
+	}
+	if r.state.Version != expected {
+		return errors.New("stale")
+	}
+	s.Version = expected + 1
+	b, _ := json.Marshal(s)
+	return json.Unmarshal(b, &r.state)
+}
+func TestMergeSquashesDirtyAndCommittedWorkAndAdvancesContinuation(t *testing.T) {
+	a, repo, source, item := setupMergeWorkItem(t)
+	writeMergeFile(t, source, "feature.txt", "first\n")
+	runMergeGit(t, source, "add", ".")
+	runMergeGit(t, source, "commit", "-m", "first")
+	beforeInput := mergeGitOutput(t, source, "rev-parse", "HEAD")
+	writeMergeFile(t, source, "feature.txt", "second uncommitted\n")
+	writeMergeFile(t, repo, "main.txt", "upstream\n")
+	runMergeGit(t, repo, "add", ".")
+	runMergeGit(t, repo, "commit", "-m", "target advanced")
+	before := mergeGitOutput(t, repo, "rev-parse", "main")
+	result, err := a.MergeWorkItem(context.Background(), app.MergeOptions{Selector: item})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.TargetBranch != "main" || !res.Rebased || !res.TargetAdvanced || !res.TargetSynced || res.RolledBack || res.SourceOldSHA == res.SourceNewSHA {
-		t.Fatalf("result = %+v", res)
+	if !result.SourceCommitted || !result.Rebased || !result.SourceAdvanced || !result.Recorded {
+		t.Fatal(result)
 	}
-	if got := strings.TrimSpace(readMergeFile(t, repo, "feature.txt")); got != "feature" {
-		t.Fatalf("target content = %q", got)
+	after := mergeGitOutput(t, repo, "rev-parse", "main")
+	if mergeGitOutput(t, repo, "rev-parse", after+"^") != before || mergeGitOutput(t, source, "rev-parse", "HEAD") != after {
+		t.Fatal("wrong squash parent or continuation")
 	}
-	if got := strings.TrimSpace(readMergeFile(t, repo, "local.txt")); got != "keep dirty" {
-		t.Fatalf("non-overlapping dirty file = %q", got)
+	if mergeGitOutput(t, repo, "show", "main:feature.txt") != "second uncommitted" {
+		t.Fatal("dirty work not integrated")
 	}
-	if mainSHA, sourceSHA := mergeGitOutput(t, repo, "rev-parse", "main"), mergeGitOutput(t, source, "rev-parse", "HEAD"); mainSHA != sourceSHA {
-		t.Fatalf("main=%s source=%s", mainSHA, sourceSHA)
+	if mergeGitOutput(t, repo, "log", "-1", "--format=%s", after) != "Merge Feature" {
+		t.Fatal("squash did not default to title")
 	}
-	manifest, err := application.Store.LoadManifest(itemID)
-	if err != nil || manifest.State != model.StateActive || manifest.Checkout.Claim == nil {
-		t.Fatalf("manifest changed unexpectedly: %+v err=%v", manifest, err)
+	if mergeGitOutput(t, source, "status", "--porcelain") != "" {
+		t.Fatal("continued checkout dirty")
 	}
-	events, err := application.Store.(*store.Store).ReadEvents(itemID)
+	records, _ := a.ReviewRecords.LoadReview(context.Background(), item)
+	input := records.Revisions[0]
+	if input.Head != beforeInput || input.Trigger != "merge" || records.Base != after || records.Merges[0].Revision != input.ID || records.Merges[0].Tree != result.Tree {
+		t.Fatal("merge evidence did not separate input and result", records)
+	}
+	cmd := exec.Command("git", "-C", repo, "merge-base", "--is-ancestor", input.Commit, after)
+	if err := cmd.Run(); err == nil {
+		t.Fatal("private snapshot ancestry exported")
+	}
+	writeMergeFile(t, source, "later.txt", "next work\n")
+	second, err := a.MergeWorkItem(context.Background(), app.MergeOptions{Selector: item, Message: "Next squash"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	types := []string{}
-	for _, event := range events {
-		if strings.HasPrefix(event.Type, "merge.") {
-			types = append(types, event.Type)
-		}
-	}
-	if strings.Join(types, ",") != "merge.started,merge.rebased,merge.target_advanced,merge.target_synced,merge.completed" {
-		t.Fatalf("merge events = %v", types)
+	records, _ = a.ReviewRecords.LoadReview(context.Background(), item)
+	if records.Revisions[1].Base != after || records.Revisions[0].Base == after || records.Base != second.Commit {
+		t.Fatal("merge boundary did not establish next base")
 	}
 }
-
-func TestMergeWorkItemExplicitTargetWithoutWorktree(t *testing.T) {
-	application, repo, source, itemID := setupMergeWorkItem(t)
-	runMergeGit(t, repo, "branch", "develop", "main")
-	writeMergeFile(t, source, "feature.txt", "feature\n")
-	runMergeGit(t, source, "add", "feature.txt")
-	runMergeGit(t, source, "commit", "-m", "feature")
-	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, Target: "develop", CWD: source})
+func TestMergeRebasePreservesSeries(t *testing.T) {
+	a, repo, source, item := setupMergeWorkItem(t)
+	base := mergeGitOutput(t, repo, "rev-parse", "main")
+	for _, name := range []string{"one", "two"} {
+		writeMergeFile(t, source, name, name)
+		runMergeGit(t, source, "add", ".")
+		runMergeGit(t, source, "commit", "-m", name)
+	}
+	tip := mergeGitOutput(t, source, "rev-parse", "HEAD")
+	result, err := a.MergeWorkItem(context.Background(), app.MergeOptions{Selector: item, Rebase: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.TargetBranch != "develop" || !res.TargetAdvanced || res.TargetSynced || res.TargetWorktreePath != "" {
-		t.Fatalf("result = %+v", res)
-	}
-	if developSHA, sourceSHA := mergeGitOutput(t, repo, "rev-parse", "develop"), mergeGitOutput(t, source, "rev-parse", "HEAD"); developSHA != sourceSHA {
-		t.Fatalf("develop=%s source=%s", developSHA, sourceSHA)
+	if result.Commit != tip || mergeGitOutput(t, repo, "rev-list", "--count", base+"..main") != "2" {
+		t.Fatal("series flattened or replaced", result)
 	}
 }
-
-func TestMergeWorkItemRejectsMissingRegisteredTargetWorktreeBeforeRebase(t *testing.T) {
-	application, repo, source, itemID := setupMergeWorkItem(t)
-	targetPath := filepath.Join(t.TempDir(), "missing-target")
-	runMergeGit(t, repo, "branch", "develop", "main")
-	runMergeGit(t, repo, "worktree", "add", targetPath, "develop")
-	if err := os.RemoveAll(targetPath); err != nil {
+func TestMergeAlreadyContainedDoesNotCreateEmptyCommit(t *testing.T) {
+	a, repo, source, item := setupMergeWorkItem(t)
+	writeMergeFile(t, repo, "new.txt", "target work")
+	runMergeGit(t, repo, "add", ".")
+	runMergeGit(t, repo, "commit", "-m", "advance")
+	before := mergeGitOutput(t, repo, "rev-parse", "main")
+	result, err := a.MergeWorkItem(context.Background(), app.MergeOptions{Selector: item})
+	if err != nil {
 		t.Fatal(err)
 	}
-	writeMergeFile(t, source, "feature.txt", "feature\n")
-	runMergeGit(t, source, "add", "feature.txt")
-	runMergeGit(t, source, "commit", "-m", "feature")
-	sourceOld := mergeGitOutput(t, source, "rev-parse", "HEAD")
-	_, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, Target: "develop", CWD: source})
-	if err == nil || !strings.Contains(err.Error(), "unavailable worktree") || !strings.Contains(err.Error(), "git worktree prune") {
-		t.Fatalf("error = %v", err)
-	}
-	if got := mergeGitOutput(t, source, "rev-parse", "HEAD"); got != sourceOld {
-		t.Fatalf("source moved before preflight completed: %s != %s", got, sourceOld)
+	if result.TargetAdvanced || result.Commit != before || mergeGitOutput(t, source, "rev-parse", "HEAD") != before {
+		t.Fatal("contained merge made an empty commit", result)
 	}
 }
+func TestMergeRebaseConflictLeavesCheckoutResolvableAndTargetUntouched(t *testing.T) {
+	a, repo, source, item := setupMergeWorkItem(t)
+	writeMergeFile(t, source, "README.md", "source conflict\n")
+	writeMergeFile(t, repo, "README.md", "target conflict\n")
+	runMergeGit(t, repo, "add", ".")
+	runMergeGit(t, repo, "commit", "-m", "target")
+	before := mergeGitOutput(t, repo, "rev-parse", "main")
+	result, err := a.MergeWorkItem(context.Background(), app.MergeOptions{Selector: item})
+	if err == nil || !result.SourceCommitted || result.TargetAdvanced {
+		t.Fatal("conflict lost retained source or changed target", result, err)
+	}
+	if mergeGitOutput(t, repo, "rev-parse", "main") != before || !strings.Contains(mergeGitOutput(t, source, "status", "--porcelain"), "UU") {
+		t.Fatal("conflict was aborted or target moved")
+	}
+	runMergeGit(t, source, "rebase", "--abort")
+}
 
-func TestMergeWorkItemPreservesDirtySource(t *testing.T) {
-	for _, rebase := range []bool{false, true} {
-		for _, kind := range []string{"untracked", "unstaged", "staged", "mixed", "deleted", "renamed", "ignored", "ignored-only"} {
-			t.Run(fmt.Sprintf("rebase=%t/%s", rebase, kind), func(t *testing.T) {
-				application, repo, source, itemID := setupMergeWorkItem(t)
-				writeMergeFile(t, source, "feature.txt", "committed feature\n")
-				runMergeGit(t, source, "add", "feature.txt")
-				runMergeGit(t, source, "commit", "-m", "feature")
-				if rebase {
-					writeMergeFile(t, repo, "incoming.txt", "target commit\n")
-					runMergeGit(t, repo, "add", "incoming.txt")
-					runMergeGit(t, repo, "commit", "-m", "advance target")
-					runMergeGit(t, repo, "config", "rebase.updateRefs", "true")
+type mergeCASFault struct {
+	gitpkg.Client
+	ref    string
+	failed bool
+}
+
+func (g *mergeCASFault) UpdateRef(ctx context.Context, dir, ref, newSHA, oldSHA, message string) error {
+	if ref == g.ref && !g.failed {
+		g.failed = true
+		return errors.New("simulated ref movement")
+	}
+	return g.Client.UpdateRef(ctx, dir, ref, newSHA, oldSHA, message)
+}
+func TestMergeTargetAndSourceCASFailuresRetainSuccessfulSteps(t *testing.T) {
+	for _, sourceFailure := range []bool{false, true} {
+		t.Run(fmt.Sprint(sourceFailure), func(t *testing.T) {
+			a, repo, source, item := setupMergeWorkItem(t)
+			writeMergeFile(t, source, "work.txt", "work")
+			branch := mergeGitOutput(t, source, "branch", "--show-current")
+			ref := "refs/heads/main"
+			if sourceFailure {
+				ref = "refs/heads/" + branch
+			}
+			a.Git = &mergeCASFault{Client: gitpkg.New("git"), ref: ref}
+			before := mergeGitOutput(t, repo, "rev-parse", "main")
+			result, err := a.MergeWorkItem(context.Background(), app.MergeOptions{Selector: item})
+			if err == nil || !result.SourceCommitted {
+				t.Fatal(result, err)
+			}
+			records, _ := a.ReviewRecords.LoadReview(context.Background(), item)
+			if sourceFailure {
+				if !result.TargetAdvanced || !result.Recorded || len(records.Merges) != 1 || mergeGitOutput(t, repo, "rev-parse", "main") == before {
+					t.Fatal("successful target was rolled back")
 				}
-				switch kind {
-				case "untracked":
-					writeMergeFile(t, source, "incoming.txt", "untracked source data\n")
-					writeMergeFile(t, source, "datasets/private.csv", "untracked nested data\n")
-				case "unstaged":
-					writeMergeFile(t, source, "README.md", "unstaged changes\n")
-				case "staged":
-					writeMergeFile(t, source, "feature.txt", "staged changes\n")
-					runMergeGit(t, source, "add", "feature.txt")
-				case "mixed":
-					writeMergeFile(t, source, "feature.txt", "staged changes\n")
-					runMergeGit(t, source, "add", "feature.txt")
-					writeMergeFile(t, source, "feature.txt", "unstaged changes over staged changes\n")
-				case "deleted":
-					if err := os.Remove(filepath.Join(source, "README.md")); err != nil {
-						t.Fatal(err)
-					}
-				case "renamed":
-					runMergeGit(t, source, "mv", "README.md", "renamed.txt")
-				case "ignored-only":
-					writeMergeFile(t, source, ".gitignore", "incoming.txt\n")
-					runMergeGit(t, source, "add", ".gitignore")
-					runMergeGit(t, source, "commit", "-m", "ignore local dataset")
-					writeMergeFile(t, source, "incoming.txt", "ignored source data\n")
-				case "ignored":
-					writeMergeFile(t, source, ".gitignore", "incoming.txt\n")
-					runMergeGit(t, source, "add", ".gitignore")
-					writeMergeFile(t, source, "incoming.txt", "ignored source data\n")
+				published := result.Commit
+				retry, err := a.MergeWorkItem(context.Background(), app.MergeOptions{Selector: item})
+				if err != nil || retry.Commit != published {
+					t.Fatal("explicit retry created another target commit", retry, err)
 				}
-				before := captureMergeSource(t, source)
-				worktrees := mergeWorktreePaths(t, repo)
-				res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, CWD: source})
-				if err != nil {
-					t.Fatal(err)
-				}
-				assertMergeSource(t, source, before)
-				if !res.TargetAdvanced || !res.TargetSynced || res.Rebased != rebase || res.SourcePreserved != rebase {
-					t.Fatalf("result=%+v", res)
-				}
-				if got := mergeGitOutput(t, repo, "show", "main:feature.txt"); got != "committed feature" {
-					t.Fatalf("merged dirty content: %q", got)
-				}
-				if got := mergeWorktreePaths(t, repo); got != worktrees {
-					t.Fatal("temporary worktree leaked", got)
-				}
-				if rebase {
-					if got := mergeGitOutput(t, repo, "show", "main:incoming.txt"); got != "target commit" {
-						t.Fatal("source data was integrated", got)
-					}
-				}
-			})
-		}
+			} else if result.TargetAdvanced || len(records.Merges) != 0 || mergeGitOutput(t, repo, "rev-parse", "main") != before {
+				t.Fatal("failed target CAS published")
+			}
+		})
 	}
 }
-
-type movedTargetGit struct{ gitpkg.Client }
-
-func (f movedTargetGit) UpdateRef(ctx context.Context, repoRoot, ref, newSHA, oldSHA, message string) error {
-	if message == "wi merge: fast-forward" {
-		return errors.New("injected compare-and-swap failure")
-	}
-	return f.Client.UpdateRef(ctx, repoRoot, ref, newSHA, oldSHA, message)
-}
-
-func TestMergeWorkItemRestoresSourceWhenTargetMoves(t *testing.T) {
-	application, repo, source, itemID := setupMergeWorkItem(t)
-	application.Git = movedTargetGit{Client: gitpkg.New("git")}
-	writeMergeFile(t, source, "feature.txt", "feature\n")
-	runMergeGit(t, source, "add", "feature.txt")
-	runMergeGit(t, source, "commit", "-m", "feature")
-	sourceOld := mergeGitOutput(t, source, "rev-parse", "HEAD")
-	targetOld := mergeGitOutput(t, repo, "rev-parse", "main")
-	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, Target: "main", CWD: source})
-	if err == nil || !strings.Contains(err.Error(), "target branch main moved") || !res.RolledBack {
-		t.Fatalf("result=%+v error=%v", res, err)
-	}
-	if got := mergeGitOutput(t, source, "rev-parse", "HEAD"); got != sourceOld {
-		t.Fatalf("source was not restored: %s != %s", got, sourceOld)
-	}
-	if got := mergeGitOutput(t, repo, "rev-parse", "main"); got != targetOld {
-		t.Fatalf("target moved: %s != %s", got, targetOld)
+func TestMergeRecordFailureDoesNotRollBackPublishedTarget(t *testing.T) {
+	a, repo, source, item := setupMergeWorkItem(t)
+	writeMergeFile(t, source, "work.txt", "work")
+	a.ReviewRecords.(*mergeRecords).failMerge = true
+	before := mergeGitOutput(t, repo, "rev-parse", "main")
+	result, err := a.MergeWorkItem(context.Background(), app.MergeOptions{Selector: item})
+	if err == nil || !result.TargetAdvanced || result.Recorded || mergeGitOutput(t, repo, "rev-parse", "main") == before {
+		t.Fatal("lost durable target step", result, err)
 	}
 }
-
-type failingSyncGit struct{ gitpkg.Client }
-
-func (f failingSyncGit) ReadTreeMergeUpdate(context.Context, string, string, string) error {
-	return errors.New("injected target sync failure")
-}
-
-func TestMergeWorkItemRollsBackTargetAndSourceWhenSyncFails(t *testing.T) {
-	application, repo, source, itemID := setupMergeWorkItem(t)
-	application.Git = failingSyncGit{Client: gitpkg.New("git")}
-	writeMergeFile(t, source, "feature.txt", "feature\n")
-	runMergeGit(t, source, "add", "feature.txt")
-	runMergeGit(t, source, "commit", "-m", "feature")
-	sourceOld := mergeGitOutput(t, source, "rev-parse", "HEAD")
-	targetOld := mergeGitOutput(t, repo, "rev-parse", "main")
-	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, Target: "main", CWD: source})
-	if err == nil || !strings.Contains(err.Error(), "target_sync") || !res.RolledBack {
-		t.Fatalf("result=%+v error=%v", res, err)
+func TestMergeKeepsItemBranchSemantics(t *testing.T) {
+	a, repo, source, item := setupMergeWorkItem(t)
+	runMergeGit(t, source, "checkout", "-b", "other")
+	before := mergeGitOutput(t, repo, "rev-parse", "main")
+	if _, err := a.MergeWorkItem(context.Background(), app.MergeOptions{Selector: item}); err == nil {
+		t.Fatal("switched checkout was merged")
 	}
-	if got := mergeGitOutput(t, source, "rev-parse", "HEAD"); got != sourceOld {
-		t.Fatalf("source was not restored: %s != %s", got, sourceOld)
-	}
-	if got := mergeGitOutput(t, repo, "rev-parse", "main"); got != targetOld {
-		t.Fatalf("target was not restored: %s != %s", got, targetOld)
+	if mergeGitOutput(t, repo, "rev-parse", "main") != before {
+		t.Fatal("target moved")
 	}
 }
-
-func TestMergeWorkItemAbortsConflictingRebase(t *testing.T) {
-	application, repo, source, itemID := setupMergeWorkItem(t)
-	writeMergeFile(t, source, "README.md", "source\n")
-	runMergeGit(t, source, "add", "README.md")
-	runMergeGit(t, source, "commit", "-m", "source change")
-	sourceOld := mergeGitOutput(t, source, "rev-parse", "HEAD")
-	writeMergeFile(t, repo, "README.md", "target\n")
-	runMergeGit(t, repo, "add", "README.md")
-	runMergeGit(t, repo, "commit", "-m", "target change")
-	targetOld := mergeGitOutput(t, repo, "rev-parse", "main")
-
-	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, Target: "main", CWD: source})
-	if err == nil || !strings.Contains(err.Error(), "failed and was aborted") || !strings.Contains(err.Error(), "CONFLICT") || !res.RolledBack {
-		t.Fatalf("result=%+v error=%v", res, err)
-	}
-	if got := mergeGitOutput(t, source, "rev-parse", "HEAD"); got != sourceOld {
-		t.Fatalf("source was not restored: %s != %s", got, sourceOld)
-	}
-	if got := mergeGitOutput(t, repo, "rev-parse", "main"); got != targetOld {
-		t.Fatalf("target moved: %s != %s", got, targetOld)
-	}
-	gitDir := mergeGitOutput(t, source, "rev-parse", "--git-path", "rebase-merge")
-	if _, err := os.Stat(gitDir); !os.IsNotExist(err) {
-		t.Fatalf("rebase remains in progress: %v", err)
-	}
-}
-
-func TestMergeWorkItemRollsBackRebaseForOverlappingDirtyTarget(t *testing.T) {
-	application, repo, source, itemID := setupMergeWorkItem(t)
-	writeMergeFile(t, source, "README.md", "source committed\n")
-	runMergeGit(t, source, "add", "README.md")
-	runMergeGit(t, source, "commit", "-m", "source change")
-	sourceOld := mergeGitOutput(t, source, "rev-parse", "HEAD")
-	writeMergeFile(t, repo, "target.txt", "target commit\n")
-	runMergeGit(t, repo, "add", "target.txt")
-	runMergeGit(t, repo, "commit", "-m", "advance target")
-	targetOld := mergeGitOutput(t, repo, "rev-parse", "main")
-	writeMergeFile(t, repo, "README.md", "target dirty\n")
-
-	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: itemID, Target: "main", CWD: source})
-	if err == nil || !strings.Contains(err.Error(), "overlapping incoming update") || !res.RolledBack {
-		t.Fatalf("result=%+v error=%v", res, err)
-	}
-	if got := mergeGitOutput(t, source, "rev-parse", "HEAD"); got != sourceOld {
-		t.Fatalf("source was not rolled back: %s != %s", got, sourceOld)
-	}
-	if got := mergeGitOutput(t, repo, "rev-parse", "main"); got != targetOld {
-		t.Fatalf("target moved: %s != %s", got, targetOld)
-	}
-	if got := strings.TrimSpace(readMergeFile(t, repo, "README.md")); got != "target dirty" {
-		t.Fatalf("dirty target file changed: %q", got)
-	}
-}
-
-func TestMergeWorkItemRecordsManagedTargetEvent(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-	repo := t.TempDir()
-	runMergeGit(t, repo, "init", "-b", "main")
-	runMergeGit(t, repo, "config", "user.email", "test@example.com")
-	runMergeGit(t, repo, "config", "user.name", "Test User")
-	writeMergeFile(t, repo, "README.md", "initial\n")
-	runMergeGit(t, repo, "add", "README.md")
-	runMergeGit(t, repo, "commit", "-m", "initial")
-	st := store.New(t.TempDir())
-	application := newTestApp(st, gitpkg.New("git"))
-	application.Tmux = &fakeTmux{}
-	application.Clock = fixedClock{testutil.Time()}
-	ids := []string{testutil.ID(t, 95), testutil.ID(t, 96), testutil.ID(t, 97), testutil.ID(t, 98)}
-	idx := 0
-	application.NewID = func() (string, error) { id := ids[idx]; idx++; return id, nil }
-	targetItem, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Managed Target", CWD: repo})
-	if err != nil {
-		t.Fatal(err)
-	}
-	target, err := application.StartWorkItem(context.Background(), app.ResolveOptions{Selector: targetItem.Manifest.ID, CWD: repo}, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sourceItem, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Managed Source", CWD: repo})
-	if err != nil {
-		t.Fatal(err)
-	}
-	source, err := application.StartWorkItem(context.Background(), app.ResolveOptions{Selector: sourceItem.Manifest.ID, CWD: repo}, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	sourcePath := source.Workspace.Checkout.Claim.Path
-	writeMergeFile(t, sourcePath, "feature.txt", "feature\n")
-	runMergeGit(t, sourcePath, "add", "feature.txt")
-	runMergeGit(t, sourcePath, "commit", "-m", "feature")
-	res, err := application.MergeWorkItem(context.Background(), app.MergeOptions{Selector: sourceItem.Manifest.ID, Target: target.Workspace.Checkout.Specification.Branch, CWD: sourcePath})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.TargetManagedWorkItemID != targetItem.Manifest.ID || !res.TargetSynced {
-		t.Fatalf("result = %+v", res)
-	}
-	events, err := st.ReadEvents(targetItem.Manifest.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, event := range events {
-		if event.Type == "checkout.updated_by_merge" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("target events = %+v", events)
-	}
-}
-
 func setupMergeWorkItem(t *testing.T) (*app.App, string, string, string) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -369,6 +240,12 @@ func setupMergeWorkItem(t *testing.T) (*app.App, string, string, string) {
 	source := started.Workspace.Checkout.Claim.Path
 	runMergeGit(t, source, "config", "user.email", "test@example.com")
 	runMergeGit(t, source, "config", "user.name", "Test User")
+	m, _ := application.Store.LoadManifest(created.Manifest.ID)
+	m.Repository.CurrentRoot = filepath.Join(repo, ".git")
+	if err := application.Store.SaveManifest(context.Background(), m); err != nil {
+		t.Fatal(err)
+	}
+	application.ReviewRecords = &mergeRecords{state: reviewcore.New(m.ID, m.Repository.ID)}
 	return application, repo, source, created.Manifest.ID
 }
 

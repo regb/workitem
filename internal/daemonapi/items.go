@@ -21,6 +21,7 @@ import (
 	view "github.com/regb/workitem/internal/app/view"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/itemnotes"
+	itemlock "github.com/regb/workitem/internal/lock"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -122,7 +123,7 @@ func (s *Server) ResolveItem(ctx context.Context, req *connect.Request[v1.Resolv
 	return response(&v1.ResolveItemResponse{ItemId: m.ID}, err)
 }
 func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObservation {
-	out := &v1.ItemObservation{WorktreeStatus: v1.WorktreeStatus_WORKTREE_STATUS_ABSENT}
+	out := &v1.ItemObservation{WorktreeStatus: v1.WorktreeStatus_WORKTREE_STATUS_ABSENT, Capturing: s.App.ReviewCaptures.Capturing(m.ID)}
 	if observed, err := s.Local.AgentObservation(ctx, m.ID); err == nil && observed.Found {
 		v := observed.Observation
 		out.AgentStatus = agentStatus(v.Status)
@@ -156,12 +157,12 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 }
 
 // needsAttention reports whether an active item needs the operator. An agent
-// still working (busy, or idle until its background work re-activates it)
+// still working (busy, capturing code, or waiting on background work)
 // needs no attention for its last response or for being idle; it does for a
 // question or a problem. A waiting item needs attention only for an unread
 // response.
 func needsAttention(o *v1.ItemObservation, waiting bool) bool {
-	working := o.AgentStatus == v1.AgentStatus_AGENT_STATUS_BUSY || o.BackgroundTasks > 0
+	working := o.Capturing || o.AgentStatus == v1.AgentStatus_AGENT_STATUS_BUSY || o.BackgroundTasks > 0
 	if o.Unread && !working {
 		return true
 	}
@@ -458,6 +459,16 @@ func (s *Server) DeleteItem(ctx context.Context, req *connect.Request[v1.DeleteI
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	guard, err := itemlock.AcquireOperation(ctx, s.App.Store.LockPath(c.Manifest.ID))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	defer guard.Release()
+	// Re-read under the same operation lock used by review publication.
+	c, err = s.canonical(ctx, req.Msg.ItemId, 0)
+	if err != nil {
+		return nil, rpcError(err)
+	}
 	if c.Manifest.State != model.StateClosed || c.Manifest.Checkout.Claim != nil {
 		return nil, precondition("delete requires a closed, released item")
 	}
@@ -472,6 +483,11 @@ func (s *Server) DeleteItem(ctx context.Context, req *connect.Request[v1.DeleteI
 	if err != nil {
 		if _, readErr := s.canonical(ctx, req.Msg.ItemId, 0); readErr != nil {
 			return nil, partial(err, req.Msg.ItemId, "deleted item record")
+		}
+	}
+	if err == nil {
+		if cleanupErr := s.App.DeleteReviewSnapshots(ctx, c.Manifest); cleanupErr != nil {
+			return nil, partial(cleanupErr, req.Msg.ItemId, "deleted item record")
 		}
 	}
 	return response(&v1.DeleteItemResponse{}, err)
