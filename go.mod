@@ -14,6 +14,8 @@ require (
 	google.golang.org/protobuf v1.36.10
 )
 
+require github.com/robfig/cron/v3 v3.0.1
+
 tool (
 	connectrpc.com/connect/cmd/protoc-gen-connect-go
 	google.golang.org/protobuf/cmd/protoc-gen-go

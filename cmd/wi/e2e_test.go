@@ -259,7 +259,47 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("agent mutated lifecycle: %v", err)
 	}
+	f.schedules()
 	f.tui(repo)
 	f.cliTUICompatibility(repo)
 	f.restartJobs(repo, added.Job.Id)
+}
+
+// schedules drives `wi schedule` end to end: a run starts a normal item whose
+// agent answers the rendered prompt, as an item started from the dashboard.
+func (f *binaryFixture) schedules() {
+	profiles, err := f.clients.Profiles.ListAgentProfiles(context.Background(), connect.NewRequest(&v1.ListAgentProfilesRequest{}))
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	var added v1.PutScheduleResponse
+	f.json(&added, "schedule", "add", "--repo", "test", "--cron", "0 9 * * 1-5", "--agent", profiles.Msg.DefaultProfile, "--prompt", "scheduled check of {{repo}}", "--label", "nightly")
+	schedule := added.Schedule
+	if schedule.Id == "" || !schedule.Enabled || schedule.NextRunAt == nil || schedule.Title != "" {
+		f.t.Fatal(schedule.String())
+	}
+	if out := string(f.run("schedule")); !strings.Contains(out, schedule.Id) || !strings.Contains(out, "(generated)") {
+		f.t.Fatalf("schedule list: %s", out)
+	}
+	var ran v1.RunScheduleResponse
+	f.json(&ran, "schedule", "run", schedule.Id[:10])
+	f.historyReady(ran.ItemId, 2)
+	f.idle(ran.ItemId)
+	value, err := f.clients.Items.GetItem(context.Background(), connect.NewRequest(&v1.GetItemRequest{ItemId: ran.ItemId, IncludeDescription: true}))
+	if err != nil || value.Msg.Description != "scheduled check of test" || value.Msg.Item.State != v1.ItemState_ITEM_STATE_ACTIVE || len(value.Msg.Item.Labels) != 1 {
+		f.t.Fatalf("scheduled item: %v %v", value, err)
+	}
+	var disabled v1.PutScheduleResponse
+	f.json(&disabled, "schedule", "disable", schedule.Id)
+	if disabled.Schedule.Enabled || disabled.Schedule.NextRunAt != nil || disabled.Schedule.LastItemId != ran.ItemId {
+		f.t.Fatal(disabled.Schedule.String())
+	}
+	f.run("agent", "runtime", "stop", "--item", ran.ItemId, "--force")
+	f.run("close", ran.ItemId, "--resolution", "completed")
+	f.run("schedule", "rm", schedule.Id)
+	var listed v1.ListSchedulesResponse
+	f.json(&listed, "schedule", "list")
+	if len(listed.Schedules) != 0 {
+		f.t.Fatal(listed.String())
+	}
 }

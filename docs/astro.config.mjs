@@ -44,6 +44,7 @@ export default defineConfig({
             { label: 'Review agent work', slug: 'guides/review-and-follow-up' },
             { label: 'Use tmux', slug: 'guides/tmux' },
             { label: 'Merge completed work', slug: 'guides/merging' },
+            { label: 'Schedule recurring work', slug: 'guides/schedules' },
           ],
         },
         {

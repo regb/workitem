@@ -191,6 +191,19 @@ The former title, label, and deep metadata commands have been removed; there are
 
 `wi close` retains the record and its resolution. For unfinished work closed by mistake, run `wi reopen <item-id>`; see [restoration](../../concepts/lifecycle/#composed-workflow-commands). File a new objective as a new item.
 
+## Schedules
+
+| Command | Purpose |
+| --- | --- |
+| `wi schedule [list]` | List schedules with their next and last runs |
+| `wi schedule add --repo NAME --cron EXPR --agent PROFILE --prompt TEXT` | Start a new item on a cron schedule; `--prompt-file`, `--stdin`, `--title`, `--label` and `--disabled` are optional |
+| `wi schedule edit ID ...` | Change a schedule's settings; unset flags keep their values |
+| `wi schedule enable\|disable ID` | Turn a schedule's firings on or off |
+| `wi schedule run ID` | Fire a schedule now without changing its next run |
+| `wi schedule rm ID` | Remove a schedule; items it started are unaffected |
+
+See [Schedule recurring work](../../guides/schedules/).
+
 ## Daemon and diagnostics
 
 | Command | Purpose |

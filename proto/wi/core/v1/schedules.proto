@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+package wi.core.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
+
+// ScheduleService manages schedules: each starts a new item in a repository
+// on a cron schedule, as if its prompt had been sent from the dashboard. A
+// run is an ordinary item, created and started with its agent.
+//
+// The daemon fires a schedule at its next run time. A firing up to five
+// minutes late still runs; one missed by longer, while the daemon was down,
+// is skipped. Each firing creates a new item, even while an earlier run is
+// still open.
+service ScheduleService {
+  rpc ListSchedules(ListSchedulesRequest) returns (ListSchedulesResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // PutSchedule creates a schedule (no id) or replaces one's settings.
+  // Changing a schedule computes its next run from now.
+  rpc PutSchedule(PutScheduleRequest) returns (PutScheduleResponse);
+  // DeleteSchedule removes a schedule. Items it started are unaffected.
+  rpc DeleteSchedule(DeleteScheduleRequest) returns (DeleteScheduleResponse);
+  // RunSchedule fires a schedule now, enabled or not, without changing its
+  // next run.
+  rpc RunSchedule(RunScheduleRequest) returns (RunScheduleResponse);
+}
+
+// Schedule starts an item on a cron schedule.
+message Schedule {
+  string id = 1;
+  // revision changes on each edit; pass it back to fence an edit.
+  uint32 revision = 2;
+  string repository_id = 3;
+  // cron is a five-field cron expression (minute hour day-of-month month
+  // day-of-week), or a descriptor such as @daily, in the daemon's local time
+  // zone.
+  string cron = 4;
+  // title is the new item's title; empty generates one from the prompt, as
+  // for a new item started from the dashboard. title and prompt may use
+  // {{date}}, {{time}}, {{datetime}}, {{weekday}} (the firing's local time)
+  // and {{repo}} (the repository's name).
+  string title = 5;
+  string prompt = 6;
+  // agent_profile names the profile the new item's agent uses.
+  string agent_profile = 7;
+  repeated string labels = 8;
+  bool enabled = 9;
+  google.protobuf.Timestamp created_at = 10;
+  google.protobuf.Timestamp updated_at = 11;
+  // next_run_at is when an enabled schedule fires next.
+  google.protobuf.Timestamp next_run_at = 12;
+  // last_run_at, last_item_id and last_error describe the latest firing:
+  // the item it started, or why it could not.
+  google.protobuf.Timestamp last_run_at = 13;
+  string last_item_id = 14;
+  string last_error = 15;
+}
+
+message ListSchedulesRequest {}
+
+message ListSchedulesResponse {
+  repeated Schedule schedules = 1;
+}
+
+message PutScheduleRequest {
+  // schedule's id is empty to create one; revision and the run fields are
+  // ignored.
+  Schedule schedule = 1;
+  // expected_revision, when set, fails a stale edit with ABORTED.
+  uint32 expected_revision = 2;
+}
+
+message PutScheduleResponse {
+  Schedule schedule = 1;
+}
+
+message DeleteScheduleRequest {
+  string id = 1;
+}
+
+message DeleteScheduleResponse {}
+
+message RunScheduleRequest {
+  string id = 1;
+}
+
+message RunScheduleResponse {
+  // item_id is the item the run created; it may still be starting.
+  string item_id = 1;
+}

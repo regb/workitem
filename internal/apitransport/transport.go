@@ -51,6 +51,7 @@ type Clients struct {
 	Agents       corev1connect.AgentServiceClient
 	Control      corev1connect.ControlServiceClient
 	Repositories corev1connect.RepositoryServiceClient
+	Schedules    corev1connect.ScheduleServiceClient
 	Profiles     corev1connect.AgentProfileServiceClient
 	Jobs         corev1connect.JobServiceClient
 	Events       corev1connect.EventServiceClient
@@ -100,6 +101,7 @@ func NewClients(socketPath string) (*Clients, error) {
 		Agents:       corev1connect.NewAgentServiceClient(client, baseURL, opts...),
 		Control:      corev1connect.NewControlServiceClient(client, baseURL, opts...),
 		Repositories: corev1connect.NewRepositoryServiceClient(client, baseURL, opts...),
+		Schedules:    corev1connect.NewScheduleServiceClient(client, baseURL, opts...),
 		Profiles:     corev1connect.NewAgentProfileServiceClient(client, baseURL, opts...),
 		Jobs:         corev1connect.NewJobServiceClient(client, baseURL, opts...),
 		Events:       corev1connect.NewEventServiceClient(client, baseURL, opts...),

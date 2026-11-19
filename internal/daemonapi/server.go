@@ -67,6 +67,8 @@ func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.C
 		return nil, err
 	}
 	core.SetRuntimeSettingsObserver(s.observeRuntimeSettings)
+	s.callbacks.Add(1)
+	go s.scheduleLoop()
 	return s, nil
 }
 func (s *Server) Close() {
@@ -191,6 +193,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle(corev1connect.NewControlServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewRepositoryServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewAgentProfileServiceHandler(s, opts...))
+	mux.Handle(corev1connect.NewScheduleServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewJobServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewEventServiceHandler(s, opts...))
 	mux.Handle(corev1connect.NewSystemServiceHandler(s, opts...))

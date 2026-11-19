@@ -32,6 +32,7 @@ var (
 	bucketSourceOffsets  = []byte("source_offsets")
 	bucketDomainCommands = []byte("domain_commands")
 	bucketPendingWrites  = []byte("pending_native_writes")
+	bucketSchedules      = []byte("schedules")
 	keySchemaVersion     = []byte("schema_version")
 	keyGlobalSequence    = []byte("global_sequence")
 )
@@ -153,7 +154,7 @@ func (d *Database) Close() error {
 
 func (d *Database) initialize() error {
 	return d.db.Update(func(tx *bolt.Tx) error {
-		for _, name := range [][]byte{bucketMeta, bucketCommands, bucketEvents, bucketEventIDs, bucketRevisions, bucketProjections, bucketImportSources, bucketSourceOffsets, bucketDomainCommands, bucketPendingWrites} {
+		for _, name := range [][]byte{bucketMeta, bucketCommands, bucketEvents, bucketEventIDs, bucketRevisions, bucketProjections, bucketImportSources, bucketSourceOffsets, bucketDomainCommands, bucketPendingWrites, bucketSchedules} {
 			if _, err := tx.CreateBucketIfNotExists(name); err != nil {
 				return err
 			}

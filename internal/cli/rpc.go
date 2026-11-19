@@ -260,6 +260,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = rpcBlockers(ctx, args[0], args[1:], cfg, jsonOut)
 	case "attention":
 		err = rpcAttention(ctx, args[1:], cfg, jsonOut)
+	case "schedule", "schedules":
+		err = rpcSchedule(ctx, args[1:], cfg, jsonOut)
 	case "repo":
 		err = rpcRepo(ctx, args[1:], cfg, jsonOut)
 	case "merge":

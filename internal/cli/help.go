@@ -28,6 +28,21 @@ var helpDocs = map[string]helpDoc{
 		Description: []string{"Single-repository commands default to the current item's registered repository when NAME is omitted; explicit names or IDs override context. Rename accepts only NEW for the current repository. Outside an item, pass a selector. List remains global and add requires a new name. Repository names are unique human-facing selectors. Stable repository IDs determine Git store paths and item references. Registering a repository authorizes project-local agent resources in its verified managed worktrees. Pi receives per-launch approval; direnv shell-code approval remains separate."},
 		SeeAlso:     []string{"repo list", "repo rename", "repo archive", "repo restore", "repo settings", "repo files", "repo env"},
 	},
+	"schedule": {
+		Summary: "Start new items on a cron schedule",
+		Usage: []string{
+			"wi schedule [list]",
+			"wi schedule add --repo NAME --cron EXPR --agent PROFILE (--prompt TEXT | --prompt-file PATH | --stdin) [--title TITLE] [--label LABEL]... [--disabled]",
+			"wi schedule edit ID [--repo NAME] [--cron EXPR] [--agent PROFILE] [--prompt TEXT | --prompt-file PATH | --stdin] [--title TITLE] [--label LABEL]... [--no-labels]",
+			"wi schedule <enable|disable|run|rm> ID",
+		},
+		Description: []string{
+			"A schedule starts a new item in a repository on a cron schedule, as if its prompt had been sent from the dashboard: the item is created and its agent started with the prompt. Each firing creates a new item, even while an earlier one is open.",
+			"--cron takes five fields (minute hour day-of-month month day-of-week) or a descriptor such as @daily, in the daemon's local time zone. Without --title, the item's title is generated from the prompt. Title and prompt may use {{date}}, {{time}}, {{datetime}}, {{weekday}} and {{repo}}.",
+			"The daemon fires a schedule at its next run time; a firing up to five minutes late still runs, and one missed by longer is skipped. run fires a schedule now without changing its next run. IDs may be abbreviated to a unique prefix.",
+		},
+		Examples: []string{`wi schedule add --repo workitem --cron "0 9 * * 1-5" --agent claude --prompt-file triage.md --title "CI triage {{date}}"`, `wi schedule disable 01M7`, `wi schedule run 01M7`},
+	},
 	"repo env": {
 		Summary: "Manage a repository's environment variables",
 		Usage:   []string{"wi repo env list [NAME] [--show-values]", "wi repo env set [NAME] KEY=VALUE...", "wi repo env unset [NAME] KEY"},
@@ -780,7 +795,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Administration:")
-	printCommandRows(w, [][2]string{{"config", "Inspect global settings"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete closed work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"plugin", "List and run optional plugins"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
+	printCommandRows(w, [][2]string{{"config", "Inspect global settings"}, {"schedule", "Start new items on a cron schedule"}, {"merge", "Fast-forward a target branch, rebasing when needed"}, {"delete", "Delete closed work"}, {"shutdown", "Stop wi processes and terminals"}, {"daemon", "Inspect or control the daemon"}, {"plugin", "List and run optional plugins"}, {"info", "Show resolved paths"}, {"version", "Show version information"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "States:")
 	fmt.Fprintln(w, "  backlog | active | closed   (waiting active work stays out of the attention queue)")
