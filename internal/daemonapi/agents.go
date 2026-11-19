@@ -440,14 +440,20 @@ func (s *Server) AbortTurn(ctx context.Context, req *connect.Request[v1.AbortTur
 }
 func (s *Server) GetAgentSettings(ctx context.Context, req *connect.Request[v1.GetAgentSettingsRequest]) (*connect.Response[v1.GetAgentSettingsResponse], error) {
 	value, err := s.App.AgentSettings(ctx, resolve(req.Msg.ItemId))
-	out := &v1.GetAgentSettingsResponse{AgentProfile: value.Agent, Driver: value.Driver, Values: value.Values, Overrides: value.Overrides, Running: value.Running, CatalogError: value.CatalogError}
-	if c := value.Catalog; c != nil {
-		out.Catalog = &v1.ModelCatalog{ReasoningLevels: c.ReasoningLevels, DefaultModel: c.Default, DefaultReasoning: c.DefaultReasoning}
-		for _, m := range c.Models {
-			out.Catalog.Models = append(out.Catalog.Models, &v1.ModelOption{Value: m.Value, Resolved: m.Resolved, Label: m.Label, Description: m.Description, Reasoning: m.Reasoning, Levels: m.Levels, ImageInput: m.ImageInput})
-		}
-	}
+	out := &v1.GetAgentSettingsResponse{AgentProfile: value.Agent, Driver: value.Driver, Values: value.Values, Overrides: value.Overrides, Running: value.Running, Catalog: modelCatalog(value.Catalog), CatalogError: value.CatalogError}
 	return response(out, err)
+}
+
+// modelCatalog converts a driver's model catalog, if any.
+func modelCatalog(c *driver.ModelCatalog) *v1.ModelCatalog {
+	if c == nil {
+		return nil
+	}
+	out := &v1.ModelCatalog{ReasoningLevels: c.ReasoningLevels, DefaultModel: c.Default, DefaultReasoning: c.DefaultReasoning}
+	for _, m := range c.Models {
+		out.Models = append(out.Models, &v1.ModelOption{Value: m.Value, Resolved: m.Resolved, Label: m.Label, Description: m.Description, Reasoning: m.Reasoning, Levels: m.Levels, ImageInput: m.ImageInput})
+	}
+	return out
 }
 func (s *Server) UpdateAgentSettings(ctx context.Context, req *connect.Request[v1.UpdateAgentSettingsRequest]) (*connect.Response[v1.UpdateAgentSettingsResponse], error) {
 	opts := app.SetAgentSettingsOptions{ResolveOptions: resolve(req.Msg.ItemId), Settings: req.Msg.Settings, Restart: req.Msg.Restart}

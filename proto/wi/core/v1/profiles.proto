@@ -3,6 +3,7 @@ syntax = "proto3";
 package wi.core.v1;
 
 import "google/protobuf/struct.proto";
+import "wi/core/v1/agents.proto";
 
 option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
 
@@ -20,6 +21,12 @@ service AgentProfileService {
   // using it keep its name and ask to move when they next start.
   rpc DeleteAgentProfile(DeleteAgentProfileRequest) returns (DeleteAgentProfileResponse);
   rpc SetDefaultAgentProfile(SetDefaultAgentProfileRequest) returns (SetDefaultAgentProfileResponse);
+  // GetProfileModels lists the models and reasoning levels a profile's agent
+  // offers, with the profile's own model and reasoning, so a client can
+  // choose them for a new item, which takes them as agent_settings.
+  rpc GetProfileModels(GetProfileModelsRequest) returns (GetProfileModelsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // ListDrivers lists the drivers profiles can use and their defaults.
   rpc ListDrivers(ListDriversRequest) returns (ListDriversResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -85,4 +92,18 @@ message ListDriversRequest {}
 
 message ListDriversResponse {
   repeated Driver drivers = 1;
+}
+
+message GetProfileModelsRequest {
+  string name = 1;
+}
+
+message GetProfileModelsResponse {
+  string driver = 1;
+  // values are the profile's settings, such as model and reasoning, with the
+  // driver's defaults; sensitive and executable settings are left out.
+  map<string, string> values = 2;
+  ModelCatalog catalog = 3;
+  // catalog_error says why the driver could not list its models.
+  string catalog_error = 4;
 }

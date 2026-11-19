@@ -45,6 +45,9 @@ const (
 	// AgentProfileServiceSetDefaultAgentProfileProcedure is the fully-qualified name of the
 	// AgentProfileService's SetDefaultAgentProfile RPC.
 	AgentProfileServiceSetDefaultAgentProfileProcedure = "/wi.core.v1.AgentProfileService/SetDefaultAgentProfile"
+	// AgentProfileServiceGetProfileModelsProcedure is the fully-qualified name of the
+	// AgentProfileService's GetProfileModels RPC.
+	AgentProfileServiceGetProfileModelsProcedure = "/wi.core.v1.AgentProfileService/GetProfileModels"
 	// AgentProfileServiceListDriversProcedure is the fully-qualified name of the AgentProfileService's
 	// ListDrivers RPC.
 	AgentProfileServiceListDriversProcedure = "/wi.core.v1.AgentProfileService/ListDrivers"
@@ -60,6 +63,10 @@ type AgentProfileServiceClient interface {
 	// using it keep its name and ask to move when they next start.
 	DeleteAgentProfile(context.Context, *connect.Request[v1.DeleteAgentProfileRequest]) (*connect.Response[v1.DeleteAgentProfileResponse], error)
 	SetDefaultAgentProfile(context.Context, *connect.Request[v1.SetDefaultAgentProfileRequest]) (*connect.Response[v1.SetDefaultAgentProfileResponse], error)
+	// GetProfileModels lists the models and reasoning levels a profile's agent
+	// offers, with the profile's own model and reasoning, so a client can
+	// choose them for a new item, which takes them as agent_settings.
+	GetProfileModels(context.Context, *connect.Request[v1.GetProfileModelsRequest]) (*connect.Response[v1.GetProfileModelsResponse], error)
 	// ListDrivers lists the drivers profiles can use and their defaults.
 	ListDrivers(context.Context, *connect.Request[v1.ListDriversRequest]) (*connect.Response[v1.ListDriversResponse], error)
 }
@@ -100,6 +107,13 @@ func NewAgentProfileServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(agentProfileServiceMethods.ByName("SetDefaultAgentProfile")),
 			connect.WithClientOptions(opts...),
 		),
+		getProfileModels: connect.NewClient[v1.GetProfileModelsRequest, v1.GetProfileModelsResponse](
+			httpClient,
+			baseURL+AgentProfileServiceGetProfileModelsProcedure,
+			connect.WithSchema(agentProfileServiceMethods.ByName("GetProfileModels")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		listDrivers: connect.NewClient[v1.ListDriversRequest, v1.ListDriversResponse](
 			httpClient,
 			baseURL+AgentProfileServiceListDriversProcedure,
@@ -116,6 +130,7 @@ type agentProfileServiceClient struct {
 	putAgentProfile        *connect.Client[v1.PutAgentProfileRequest, v1.PutAgentProfileResponse]
 	deleteAgentProfile     *connect.Client[v1.DeleteAgentProfileRequest, v1.DeleteAgentProfileResponse]
 	setDefaultAgentProfile *connect.Client[v1.SetDefaultAgentProfileRequest, v1.SetDefaultAgentProfileResponse]
+	getProfileModels       *connect.Client[v1.GetProfileModelsRequest, v1.GetProfileModelsResponse]
 	listDrivers            *connect.Client[v1.ListDriversRequest, v1.ListDriversResponse]
 }
 
@@ -139,6 +154,11 @@ func (c *agentProfileServiceClient) SetDefaultAgentProfile(ctx context.Context, 
 	return c.setDefaultAgentProfile.CallUnary(ctx, req)
 }
 
+// GetProfileModels calls wi.core.v1.AgentProfileService.GetProfileModels.
+func (c *agentProfileServiceClient) GetProfileModels(ctx context.Context, req *connect.Request[v1.GetProfileModelsRequest]) (*connect.Response[v1.GetProfileModelsResponse], error) {
+	return c.getProfileModels.CallUnary(ctx, req)
+}
+
 // ListDrivers calls wi.core.v1.AgentProfileService.ListDrivers.
 func (c *agentProfileServiceClient) ListDrivers(ctx context.Context, req *connect.Request[v1.ListDriversRequest]) (*connect.Response[v1.ListDriversResponse], error) {
 	return c.listDrivers.CallUnary(ctx, req)
@@ -154,6 +174,10 @@ type AgentProfileServiceHandler interface {
 	// using it keep its name and ask to move when they next start.
 	DeleteAgentProfile(context.Context, *connect.Request[v1.DeleteAgentProfileRequest]) (*connect.Response[v1.DeleteAgentProfileResponse], error)
 	SetDefaultAgentProfile(context.Context, *connect.Request[v1.SetDefaultAgentProfileRequest]) (*connect.Response[v1.SetDefaultAgentProfileResponse], error)
+	// GetProfileModels lists the models and reasoning levels a profile's agent
+	// offers, with the profile's own model and reasoning, so a client can
+	// choose them for a new item, which takes them as agent_settings.
+	GetProfileModels(context.Context, *connect.Request[v1.GetProfileModelsRequest]) (*connect.Response[v1.GetProfileModelsResponse], error)
 	// ListDrivers lists the drivers profiles can use and their defaults.
 	ListDrivers(context.Context, *connect.Request[v1.ListDriversRequest]) (*connect.Response[v1.ListDriversResponse], error)
 }
@@ -190,6 +214,13 @@ func NewAgentProfileServiceHandler(svc AgentProfileServiceHandler, opts ...conne
 		connect.WithSchema(agentProfileServiceMethods.ByName("SetDefaultAgentProfile")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentProfileServiceGetProfileModelsHandler := connect.NewUnaryHandler(
+		AgentProfileServiceGetProfileModelsProcedure,
+		svc.GetProfileModels,
+		connect.WithSchema(agentProfileServiceMethods.ByName("GetProfileModels")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	agentProfileServiceListDriversHandler := connect.NewUnaryHandler(
 		AgentProfileServiceListDriversProcedure,
 		svc.ListDrivers,
@@ -207,6 +238,8 @@ func NewAgentProfileServiceHandler(svc AgentProfileServiceHandler, opts ...conne
 			agentProfileServiceDeleteAgentProfileHandler.ServeHTTP(w, r)
 		case AgentProfileServiceSetDefaultAgentProfileProcedure:
 			agentProfileServiceSetDefaultAgentProfileHandler.ServeHTTP(w, r)
+		case AgentProfileServiceGetProfileModelsProcedure:
+			agentProfileServiceGetProfileModelsHandler.ServeHTTP(w, r)
 		case AgentProfileServiceListDriversProcedure:
 			agentProfileServiceListDriversHandler.ServeHTTP(w, r)
 		default:
@@ -232,6 +265,10 @@ func (UnimplementedAgentProfileServiceHandler) DeleteAgentProfile(context.Contex
 
 func (UnimplementedAgentProfileServiceHandler) SetDefaultAgentProfile(context.Context, *connect.Request[v1.SetDefaultAgentProfileRequest]) (*connect.Response[v1.SetDefaultAgentProfileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.AgentProfileService.SetDefaultAgentProfile is not implemented"))
+}
+
+func (UnimplementedAgentProfileServiceHandler) GetProfileModels(context.Context, *connect.Request[v1.GetProfileModelsRequest]) (*connect.Response[v1.GetProfileModelsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.AgentProfileService.GetProfileModels is not implemented"))
 }
 
 func (UnimplementedAgentProfileServiceHandler) ListDrivers(context.Context, *connect.Request[v1.ListDriversRequest]) (*connect.Response[v1.ListDriversResponse], error) {

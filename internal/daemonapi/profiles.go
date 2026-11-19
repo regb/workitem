@@ -124,3 +124,11 @@ func (s *Server) ListDrivers(ctx context.Context, req *connect.Request[v1.ListDr
 	}
 	return response(out, nil)
 }
+
+func (s *Server) GetProfileModels(ctx context.Context, req *connect.Request[v1.GetProfileModelsRequest]) (*connect.Response[v1.GetProfileModelsResponse], error) {
+	value, err := s.App.ProfileModels(ctx, req.Msg.Name)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return connect.NewResponse(&v1.GetProfileModelsResponse{Driver: value.Driver, Values: value.Values, Catalog: modelCatalog(value.Catalog), CatalogError: value.CatalogError}), nil
+}

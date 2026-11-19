@@ -260,6 +260,18 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 		t.Fatalf("agent mutated lifecycle: %v", err)
 	}
 	f.schedules()
+	// A profile's models can be listed before any item uses it.
+	profiles, err := f.clients.Profiles.ListAgentProfiles(context.Background(), connect.NewRequest(&v1.ListAgentProfilesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	models, err := f.clients.Profiles.GetProfileModels(context.Background(), connect.NewRequest(&v1.GetProfileModelsRequest{Name: profiles.Msg.DefaultProfile}))
+	if err != nil || models.Msg.Catalog == nil || len(models.Msg.Catalog.Models) == 0 || models.Msg.Catalog.Models[0].Value != "test/model" || models.Msg.Driver == "" || models.Msg.Values["executable"] != "" {
+		t.Fatalf("profile models: %v %v", models, err)
+	}
+	if _, err := f.clients.Profiles.GetProfileModels(context.Background(), connect.NewRequest(&v1.GetProfileModelsRequest{Name: "missing"})); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("unknown profile: %v", err)
+	}
 	// The daemon answers usage from its plugin host; here the plugin is off.
 	if value, err := f.clients.System.GetUsage(context.Background(), connect.NewRequest(&v1.GetUsageRequest{Wait: true})); err != nil || value.Msg.Enabled || value.Msg.Error != "" || value.Msg.CheckedAt == nil {
 		t.Fatalf("usage: %v %v", value, err)

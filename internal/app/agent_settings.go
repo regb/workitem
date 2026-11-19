@@ -115,6 +115,35 @@ func (a *App) agentModelCatalog(ctx context.Context, name string) (driverprotoco
 	return catalog, err
 }
 
+// ProfileModelsView is a profile's settings and its driver's model choices.
+type ProfileModelsView struct {
+	Driver       string
+	Values       map[string]string
+	Catalog      *driverprotocol.ModelCatalog
+	CatalogError string
+}
+
+// ProfileModels reports a profile's settings and the models its driver
+// offers, for choosing a new item's model before the item exists.
+func (a *App) ProfileModels(ctx context.Context, name string) (ProfileModelsView, error) {
+	definition, ok := a.Agents()[name]
+	if !ok {
+		return ProfileModelsView{}, fmt.Errorf("no agent profile %s", name)
+	}
+	view := ProfileModelsView{Driver: definition.Driver, Values: map[string]string{}}
+	for key, value := range a.driverConfig(definition, nil) {
+		if text, ok := value.(string); ok && key != "executable" {
+			view.Values[key] = text
+		}
+	}
+	if catalog, err := a.agentModelCatalog(ctx, name); err == nil {
+		view.Catalog = &catalog
+	} else {
+		view.CatalogError = err.Error()
+	}
+	return view, nil
+}
+
 // AgentSettings reports an item's effective settings and the driver's choices.
 func (a *App) AgentSettings(ctx context.Context, opts ResolveOptions) (AgentSettingsView, error) {
 	m, err := a.ResolveItem(ctx, opts)

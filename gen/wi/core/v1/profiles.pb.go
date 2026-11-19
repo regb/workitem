@@ -635,12 +635,127 @@ func (x *ListDriversResponse) GetDrivers() []*Driver {
 	return nil
 }
 
+type GetProfileModelsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetProfileModelsRequest) Reset() {
+	*x = GetProfileModelsRequest{}
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProfileModelsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProfileModelsRequest) ProtoMessage() {}
+
+func (x *GetProfileModelsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProfileModelsRequest.ProtoReflect.Descriptor instead.
+func (*GetProfileModelsRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetProfileModelsRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type GetProfileModelsResponse struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Driver string                 `protobuf:"bytes,1,opt,name=driver,proto3" json:"driver,omitempty"`
+	// values are the profile's settings, such as model and reasoning, with the
+	// driver's defaults; sensitive and executable settings are left out.
+	Values  map[string]string `protobuf:"bytes,2,rep,name=values,proto3" json:"values,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Catalog *ModelCatalog     `protobuf:"bytes,3,opt,name=catalog,proto3" json:"catalog,omitempty"`
+	// catalog_error says why the driver could not list its models.
+	CatalogError  string `protobuf:"bytes,4,opt,name=catalog_error,json=catalogError,proto3" json:"catalog_error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetProfileModelsResponse) Reset() {
+	*x = GetProfileModelsResponse{}
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetProfileModelsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetProfileModelsResponse) ProtoMessage() {}
+
+func (x *GetProfileModelsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetProfileModelsResponse.ProtoReflect.Descriptor instead.
+func (*GetProfileModelsResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetProfileModelsResponse) GetDriver() string {
+	if x != nil {
+		return x.Driver
+	}
+	return ""
+}
+
+func (x *GetProfileModelsResponse) GetValues() map[string]string {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+func (x *GetProfileModelsResponse) GetCatalog() *ModelCatalog {
+	if x != nil {
+		return x.Catalog
+	}
+	return nil
+}
+
+func (x *GetProfileModelsResponse) GetCatalogError() string {
+	if x != nil {
+		return x.CatalogError
+	}
+	return ""
+}
+
 var File_wi_core_v1_profiles_proto protoreflect.FileDescriptor
 
 const file_wi_core_v1_profiles_proto_rawDesc = "" +
 	"\n" +
 	"\x19wi/core/v1/profiles.proto\x12\n" +
-	"wi.core.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x97\x01\n" +
+	"wi.core.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17wi/core/v1/agents.proto\"\x97\x01\n" +
 	"\fAgentProfile\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06driver\x18\x02 \x01(\tR\x06driver\x12\x14\n" +
@@ -674,12 +789,23 @@ const file_wi_core_v1_profiles_proto_rawDesc = "" +
 	"\brevision\x18\x01 \x01(\rR\brevision\"\x14\n" +
 	"\x12ListDriversRequest\"C\n" +
 	"\x13ListDriversResponse\x12,\n" +
-	"\adrivers\x18\x01 \x03(\v2\x12.wi.core.v1.DriverR\adrivers2\x83\x04\n" +
+	"\adrivers\x18\x01 \x03(\v2\x12.wi.core.v1.DriverR\adrivers\"-\n" +
+	"\x17GetProfileModelsRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\x90\x02\n" +
+	"\x18GetProfileModelsResponse\x12\x16\n" +
+	"\x06driver\x18\x01 \x01(\tR\x06driver\x12H\n" +
+	"\x06values\x18\x02 \x03(\v20.wi.core.v1.GetProfileModelsResponse.ValuesEntryR\x06values\x122\n" +
+	"\acatalog\x18\x03 \x01(\v2\x18.wi.core.v1.ModelCatalogR\acatalog\x12#\n" +
+	"\rcatalog_error\x18\x04 \x01(\tR\fcatalogError\x1a9\n" +
+	"\vValuesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xe7\x04\n" +
 	"\x13AgentProfileService\x12e\n" +
 	"\x11ListAgentProfiles\x12$.wi.core.v1.ListAgentProfilesRequest\x1a%.wi.core.v1.ListAgentProfilesResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\x0fPutAgentProfile\x12\".wi.core.v1.PutAgentProfileRequest\x1a#.wi.core.v1.PutAgentProfileResponse\x12c\n" +
 	"\x12DeleteAgentProfile\x12%.wi.core.v1.DeleteAgentProfileRequest\x1a&.wi.core.v1.DeleteAgentProfileResponse\x12o\n" +
-	"\x16SetDefaultAgentProfile\x12).wi.core.v1.SetDefaultAgentProfileRequest\x1a*.wi.core.v1.SetDefaultAgentProfileResponse\x12S\n" +
+	"\x16SetDefaultAgentProfile\x12).wi.core.v1.SetDefaultAgentProfileRequest\x1a*.wi.core.v1.SetDefaultAgentProfileResponse\x12b\n" +
+	"\x10GetProfileModels\x12#.wi.core.v1.GetProfileModelsRequest\x1a$.wi.core.v1.GetProfileModelsResponse\"\x03\x90\x02\x01\x12S\n" +
 	"\vListDrivers\x12\x1e.wi.core.v1.ListDriversRequest\x1a\x1f.wi.core.v1.ListDriversResponse\"\x03\x90\x02\x01B0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
 var (
@@ -694,7 +820,7 @@ func file_wi_core_v1_profiles_proto_rawDescGZIP() []byte {
 	return file_wi_core_v1_profiles_proto_rawDescData
 }
 
-var file_wi_core_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_wi_core_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_wi_core_v1_profiles_proto_goTypes = []any{
 	(*AgentProfile)(nil),                   // 0: wi.core.v1.AgentProfile
 	(*Driver)(nil),                         // 1: wi.core.v1.Driver
@@ -708,30 +834,38 @@ var file_wi_core_v1_profiles_proto_goTypes = []any{
 	(*SetDefaultAgentProfileResponse)(nil), // 9: wi.core.v1.SetDefaultAgentProfileResponse
 	(*ListDriversRequest)(nil),             // 10: wi.core.v1.ListDriversRequest
 	(*ListDriversResponse)(nil),            // 11: wi.core.v1.ListDriversResponse
-	(*structpb.Struct)(nil),                // 12: google.protobuf.Struct
+	(*GetProfileModelsRequest)(nil),        // 12: wi.core.v1.GetProfileModelsRequest
+	(*GetProfileModelsResponse)(nil),       // 13: wi.core.v1.GetProfileModelsResponse
+	nil,                                    // 14: wi.core.v1.GetProfileModelsResponse.ValuesEntry
+	(*structpb.Struct)(nil),                // 15: google.protobuf.Struct
+	(*ModelCatalog)(nil),                   // 16: wi.core.v1.ModelCatalog
 }
 var file_wi_core_v1_profiles_proto_depIdxs = []int32{
-	12, // 0: wi.core.v1.AgentProfile.config:type_name -> google.protobuf.Struct
-	12, // 1: wi.core.v1.Driver.defaults:type_name -> google.protobuf.Struct
+	15, // 0: wi.core.v1.AgentProfile.config:type_name -> google.protobuf.Struct
+	15, // 1: wi.core.v1.Driver.defaults:type_name -> google.protobuf.Struct
 	0,  // 2: wi.core.v1.ListAgentProfilesResponse.profiles:type_name -> wi.core.v1.AgentProfile
 	0,  // 3: wi.core.v1.PutAgentProfileRequest.profile:type_name -> wi.core.v1.AgentProfile
 	0,  // 4: wi.core.v1.PutAgentProfileResponse.profile:type_name -> wi.core.v1.AgentProfile
 	1,  // 5: wi.core.v1.ListDriversResponse.drivers:type_name -> wi.core.v1.Driver
-	2,  // 6: wi.core.v1.AgentProfileService.ListAgentProfiles:input_type -> wi.core.v1.ListAgentProfilesRequest
-	4,  // 7: wi.core.v1.AgentProfileService.PutAgentProfile:input_type -> wi.core.v1.PutAgentProfileRequest
-	6,  // 8: wi.core.v1.AgentProfileService.DeleteAgentProfile:input_type -> wi.core.v1.DeleteAgentProfileRequest
-	8,  // 9: wi.core.v1.AgentProfileService.SetDefaultAgentProfile:input_type -> wi.core.v1.SetDefaultAgentProfileRequest
-	10, // 10: wi.core.v1.AgentProfileService.ListDrivers:input_type -> wi.core.v1.ListDriversRequest
-	3,  // 11: wi.core.v1.AgentProfileService.ListAgentProfiles:output_type -> wi.core.v1.ListAgentProfilesResponse
-	5,  // 12: wi.core.v1.AgentProfileService.PutAgentProfile:output_type -> wi.core.v1.PutAgentProfileResponse
-	7,  // 13: wi.core.v1.AgentProfileService.DeleteAgentProfile:output_type -> wi.core.v1.DeleteAgentProfileResponse
-	9,  // 14: wi.core.v1.AgentProfileService.SetDefaultAgentProfile:output_type -> wi.core.v1.SetDefaultAgentProfileResponse
-	11, // 15: wi.core.v1.AgentProfileService.ListDrivers:output_type -> wi.core.v1.ListDriversResponse
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	14, // 6: wi.core.v1.GetProfileModelsResponse.values:type_name -> wi.core.v1.GetProfileModelsResponse.ValuesEntry
+	16, // 7: wi.core.v1.GetProfileModelsResponse.catalog:type_name -> wi.core.v1.ModelCatalog
+	2,  // 8: wi.core.v1.AgentProfileService.ListAgentProfiles:input_type -> wi.core.v1.ListAgentProfilesRequest
+	4,  // 9: wi.core.v1.AgentProfileService.PutAgentProfile:input_type -> wi.core.v1.PutAgentProfileRequest
+	6,  // 10: wi.core.v1.AgentProfileService.DeleteAgentProfile:input_type -> wi.core.v1.DeleteAgentProfileRequest
+	8,  // 11: wi.core.v1.AgentProfileService.SetDefaultAgentProfile:input_type -> wi.core.v1.SetDefaultAgentProfileRequest
+	12, // 12: wi.core.v1.AgentProfileService.GetProfileModels:input_type -> wi.core.v1.GetProfileModelsRequest
+	10, // 13: wi.core.v1.AgentProfileService.ListDrivers:input_type -> wi.core.v1.ListDriversRequest
+	3,  // 14: wi.core.v1.AgentProfileService.ListAgentProfiles:output_type -> wi.core.v1.ListAgentProfilesResponse
+	5,  // 15: wi.core.v1.AgentProfileService.PutAgentProfile:output_type -> wi.core.v1.PutAgentProfileResponse
+	7,  // 16: wi.core.v1.AgentProfileService.DeleteAgentProfile:output_type -> wi.core.v1.DeleteAgentProfileResponse
+	9,  // 17: wi.core.v1.AgentProfileService.SetDefaultAgentProfile:output_type -> wi.core.v1.SetDefaultAgentProfileResponse
+	13, // 18: wi.core.v1.AgentProfileService.GetProfileModels:output_type -> wi.core.v1.GetProfileModelsResponse
+	11, // 19: wi.core.v1.AgentProfileService.ListDrivers:output_type -> wi.core.v1.ListDriversResponse
+	14, // [14:20] is the sub-list for method output_type
+	8,  // [8:14] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_profiles_proto_init() }
@@ -739,13 +873,14 @@ func file_wi_core_v1_profiles_proto_init() {
 	if File_wi_core_v1_profiles_proto != nil {
 		return
 	}
+	file_wi_core_v1_agents_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_profiles_proto_rawDesc), len(file_wi_core_v1_profiles_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
