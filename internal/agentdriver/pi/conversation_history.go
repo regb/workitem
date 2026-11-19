@@ -163,6 +163,11 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 				message.Error = true
 				message.Text = strings.TrimSpace(failure)
 			}
+			// Pi notes a resized image in the prompt's text; the operator never
+			// wrote it, so history shows the message as sent.
+			if message.Role == "user" {
+				message.Text = strings.TrimSpace(piImageNote.ReplaceAllString(message.Text, ""))
+			}
 			if message.Role == "toolResult" {
 				id, _ := entry.Message["toolCallId"].(string)
 				name, _ := entry.Message["toolName"].(string)
@@ -270,6 +275,9 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 
 // historyContent reads a message's text, tool calls, images, and the
 // reasoning before it, reporting whether there was any.
+// piImageNote is the note Pi adds to a prompt whose image it resized.
+var piImageNote = regexp.MustCompile(`\n*\[Image: original \d+x\d+[^\]\n]*\]`)
+
 func historyContent(content any) (string, []driverprotocol.HistoryTool, []driverprotocol.HistoryImage, string, bool) {
 	if s, ok := content.(string); ok {
 		return s, nil, nil, "", false

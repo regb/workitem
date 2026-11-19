@@ -80,6 +80,17 @@ function textFromContent(content: unknown): string {
     .join("\n");
 }
 
+// Pi adds a note to a prompt whose image it resized, such as "[Image:
+// original 3679x1008, displayed at 2000x548. Multiply coordinates by 1.84 to
+// map to original image.]". The sender never wrote it.
+const imageNote = /\n*\[Image: original \d+x\d+[^\]\n]*\]/g;
+
+// savedPromptText is a saved user message's text as its sender wrote it,
+// for matching it to the prompt that was sent.
+export function savedPromptText(content: unknown): string {
+  return textFromContent(content).replace(imageNote, "").trim();
+}
+
 type NativeObservation = { agent_state: "active" | "idle" | "failed"; leaf_id: string; readiness: "busy" | "ready" };
 
 // Pi owns branch selection and run finality. Never derive current state from
@@ -453,7 +464,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   // the same text and reports the entry holding it to the prompt's sender.
   const linkPrompt = (message: { role?: string; timestamp?: number; content?: unknown }) => {
     if (message.role !== "user" || typeof message.timestamp !== "number") return;
-    const text = textFromContent(message.content).trim();
+    const text = savedPromptText(message.content);
     const index = submittedPrompts.findIndex((prompt) => prompt.text === text);
     if (index < 0) return;
     const { requestId } = submittedPrompts[index];
