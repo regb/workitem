@@ -38,6 +38,7 @@ var helpDocs = map[string]helpDoc{
 		},
 		Description: []string{
 			"A schedule starts a new item in a repository on a cron schedule, as if its prompt had been sent from the dashboard: the item is created and its agent started with the prompt. Each firing creates a new item, even while an earlier one is open.",
+			"The prompt is stored in the schedule. --prompt-file and --stdin are read once, when add or edit runs; the file is not kept or read again, so changing it later has no effect. To change the prompt, run edit with the new text.",
 			"--cron takes five fields (minute hour day-of-month month day-of-week) or a descriptor such as @daily, in the daemon's local time zone. Without --title, the item's title is generated from the prompt. Title and prompt may use {{date}}, {{time}}, {{datetime}}, {{weekday}} and {{repo}}.",
 			"The daemon fires a schedule at its next run time; a firing up to five minutes late still runs, and one missed by longer is skipped. run fires a schedule now without changing its next run. IDs may be abbreviated to a unique prefix.",
 		},

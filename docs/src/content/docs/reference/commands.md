@@ -196,7 +196,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | Command | Purpose |
 | --- | --- |
 | `wi schedule [list]` | List schedules with their next and last runs |
-| `wi schedule add --repo NAME --cron EXPR --agent PROFILE --prompt TEXT` | Start a new item on a cron schedule; `--prompt-file`, `--stdin`, `--title`, `--label` and `--disabled` are optional |
+| `wi schedule add --repo NAME --cron EXPR --agent PROFILE (--prompt TEXT \| --prompt-file PATH \| --stdin)` | Start a new item on a cron schedule; `--title`, `--label` and `--disabled` are optional. The prompt is stored in the schedule: a prompt file or standard input is read once, when the command runs |
 | `wi schedule edit ID ...` | Change a schedule's settings; unset flags keep their values |
 | `wi schedule enable\|disable ID` | Turn a schedule's firings on or off |
 | `wi schedule run ID` | Fire a schedule now without changing its next run |
