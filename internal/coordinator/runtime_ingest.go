@@ -164,6 +164,12 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 
 		observation := AgentObservation{WorkItemID: event.WorkItemID, Activity: AttentionActivity{WorkItemID: event.WorkItemID}, Warnings: []string{}}
 		_, _ = database.ReadProjection(AgentObservationProjection, event.WorkItemID, &observation)
+		if observation.Runtime != nil && observation.Runtime.ID == owner.ID {
+			// Readers take readiness, such as a pending question, from the
+			// observation's copy of the owner; keep it current with the event.
+			ownerCopy := owner
+			observation.Runtime = &ownerCopy
+		}
 		applyLiveRuntimeObservation(&observation, event, activity)
 		observation.ObservedAt = activity.ObservedAt
 		observationBytes, _ := json.Marshal(observation)

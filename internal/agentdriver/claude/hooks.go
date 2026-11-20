@@ -99,6 +99,10 @@ func hookSettings(self, socket string) (string, func(), error) {
 	for _, event := range []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop", "StopFailure", "SessionEnd", "MessageDisplay", "Notification"} {
 		hooks[event] = []any{map[string]any{"hooks": []any{map[string]any{"type": "command", "command": command, "timeout": 5}}}}
 	}
+	// A question waits for an answer through wi for as long as the operator
+	// takes, unless the terminal is attached and Claude shows its dialog.
+	ask := quote(self) + " internal-driver claude ask " + quote(socket)
+	hooks["PreToolUse"] = append(hooks["PreToolUse"].([]any), map[string]any{"matcher": "AskUserQuestion", "hooks": []any{map[string]any{"type": "command", "command": ask, "timeout": askHookTimeout}}})
 	data, err := json.Marshal(map[string]any{"hooks": hooks})
 	if err != nil {
 		cleanup()
@@ -201,4 +205,51 @@ func exportSkills(skills []protocol.Skill) (string, func(), error) {
 		}
 	}
 	return dir, cleanup, nil
+}
+
+// askHookTimeout bounds how long Claude lets the question hook wait for an
+// answer, in seconds.
+const askHookTimeout = 7 * 24 * 60 * 60
+
+// askInput is what the question hook sends its runtime: the question Claude
+// asks, to answer through CommandAnswer.
+type askInput struct {
+	SessionID string         `json:"session_id"`
+	ToolUseID string         `json:"tool_use_id"`
+	Input     map[string]any `json:"tool_input"`
+}
+
+// askResult is the runtime's reply to the question hook: answers, or none
+// when Claude should show its own dialog.
+type askResult struct {
+	Answers map[string]string `json:"answers,omitempty"`
+}
+
+// RunAskHook is Claude's PreToolUse hook for AskUserQuestion. It waits for
+// the runtime to answer the question and returns the answers as the tool's
+// input, so Claude takes them as the user's. Without answers, or on any
+// failure, it returns nothing and Claude shows its dialog as usual.
+func RunAskHook(ctx context.Context, path string, input io.Reader, output io.Writer) {
+	var value askInput
+	if json.NewDecoder(io.LimitReader(input, 1<<20)).Decode(&value) != nil || len(value.ToolUseID) > 200 {
+		return
+	}
+	data, err := json.Marshal(value)
+	if err != nil || len(data) > protocol.MaxControlMessageBytes {
+		return
+	}
+	result, err := protocol.SubmitControlResult(ctx, path, protocol.ControlCommand{ProtocolVersion: protocol.RuntimeVersion, ID: fmt.Sprintf("ask-%d", time.Now().UnixNano()), Type: "ask", Message: string(data)})
+	if err != nil || result == "" {
+		return
+	}
+	var answered askResult
+	if json.Unmarshal([]byte(result), &answered) != nil || len(answered.Answers) == 0 {
+		return
+	}
+	updated := make(map[string]any, len(value.Input)+1)
+	for key, field := range value.Input {
+		updated[key] = field
+	}
+	updated["answers"] = answered.Answers
+	_ = json.NewEncoder(output).Encode(map[string]any{"hookSpecificOutput": map[string]any{"hookEventName": "PreToolUse", "permissionDecision": "allow", "updatedInput": updated}})
 }

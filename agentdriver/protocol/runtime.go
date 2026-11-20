@@ -14,6 +14,10 @@ const (
 	// running agent. Drivers accept it only for settings their runtime
 	// reports as live in Capabilities.Settings.
 	CommandSet = "set"
+	// CommandAnswer answers the question the agent is waiting on: the
+	// pending AskUserQuestion call named by ToolCallID, with Answers keyed by
+	// question text. Drivers accept it only when Capabilities.Answer is set.
+	CommandAnswer = "answer"
 )
 
 // RuntimeVersion is independent of process bootstrap so conversation transport
@@ -37,7 +41,12 @@ type ControlCommand struct {
 	Images          []ImageContent `json:"images,omitempty"`
 	RequireIdle     bool           `json:"require_idle,omitempty"`
 	Setting         *Setting       `json:"setting,omitempty"`
-	CreatedAt       time.Time      `json:"created_at"`
+	// ToolCallID and Answers belong to CommandAnswer. An answer is the
+	// chosen option's label, labels joined by ", " for a multi-select
+	// question, or the operator's own text.
+	ToolCallID string            `json:"tool_call_id,omitempty"`
+	Answers    map[string]string `json:"answers,omitempty"`
+	CreatedAt  time.Time         `json:"created_at"`
 }
 
 // Setting is one profile setting value carried by CommandSet. Names are the

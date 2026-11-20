@@ -16,6 +16,7 @@ const (
 	CommandAbort    = driverprotocol.CommandAbort
 	CommandShutdown = driverprotocol.CommandShutdown
 	CommandSet      = driverprotocol.CommandSet
+	CommandAnswer   = driverprotocol.CommandAnswer
 )
 
 type ControlCommand = driverprotocol.ControlCommand

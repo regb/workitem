@@ -110,7 +110,7 @@ func Runtime(itemID string, v *v1.Agent) app.AgentRuntimeStatusResult {
 		case v1.ControlChannel_CONTROL_CHANNEL_EMULATED:
 			channel = model.ControlEmulated
 		}
-		out.Capabilities = model.RuntimeCapabilities{Control: channel, IdleGuard: c.AtomicIdle, LiveContent: c.LiveContent, ImageInput: c.ImageInput, Prompt: c.Prompt, Steering: c.Steering, FollowUp: c.FollowUp, Cancel: c.Cancel, Settings: c.LiveSettings, NativeTUI: v.Mode == v1.AgentMode_AGENT_MODE_TUI, Headless: v.Mode == v1.AgentMode_AGENT_MODE_HEADLESS}
+		out.Capabilities = model.RuntimeCapabilities{Control: channel, IdleGuard: c.AtomicIdle, LiveContent: c.LiveContent, ImageInput: c.ImageInput, Prompt: c.Prompt, Steering: c.Steering, FollowUp: c.FollowUp, Cancel: c.Cancel, Settings: c.LiveSettings, Answer: c.Answer, NativeTUI: v.Mode == v1.AgentMode_AGENT_MODE_TUI, Headless: v.Mode == v1.AgentMode_AGENT_MODE_HEADLESS}
 	}
 	if v.Generation != 0 {
 		out.Runtime = &model.AgentRuntime{ID: strconv.FormatUint(uint64(v.Generation), 10), Generation: v.Generation, WorkItemID: itemID, Mode: Mode(v.Mode), StartedAt: Time(v.StartedAt), Capabilities: out.Capabilities, Settings: v.RunningSettings}
@@ -236,6 +236,10 @@ func Content(v *v1.LiveContent) driver.Content {
 	for _, p := range v.Prompts {
 		out.Prompts = append(out.Prompts, driver.PromptLink{RequestID: p.ClientMessageId, NativeIDs: p.NativeIds})
 	}
+	if q := v.Question; q != nil {
+		value := tool(q)
+		out.Question = &driver.ContentTool{ID: value.ID, Name: value.Name, Input: value.Input, Status: value.Status}
+	}
 	return out
 }
 func ContentEvent(v *v1.WatchLiveContentResponse, sequence uint64) driver.ContentEvent {
@@ -281,6 +285,12 @@ func ContentEvent(v *v1.WatchLiveContentResponse, sequence uint64) driver.Conten
 		}
 	case *v1.WatchLiveContentResponse_TurnSettled:
 		out.Type = driver.ContentTurnSettled
+	case *v1.WatchLiveContentResponse_Question:
+		out.Type = driver.ContentQuestion
+		if q := e.Question.Question; q != nil {
+			value := tool(q)
+			out.Tool = &driver.ContentTool{ID: value.ID, Name: value.Name, Input: value.Input, Status: value.Status}
+		}
 	case *v1.WatchLiveContentResponse_Tool:
 		out.Type = driver.ContentToolUpdated
 		switch e.Tool.Phase {

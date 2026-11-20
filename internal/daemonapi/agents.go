@@ -56,7 +56,7 @@ func (s *Server) agent(ctx context.Context, itemID string) (*v1.Agent, *v1.Contr
 		case model.ControlEmulated:
 			channel = v1.ControlChannel_CONTROL_CHANNEL_EMULATED
 		}
-		out.Capabilities = &v1.AgentCapabilities{Control: channel, Prompt: c.Prompt, Steering: c.Steering, FollowUp: c.FollowUp, Cancel: c.Cancel, AtomicIdle: c.IdleGuard, LiveContent: c.LiveContent, ImageInput: c.ImageInput, LiveSettings: c.Settings}
+		out.Capabilities = &v1.AgentCapabilities{Control: channel, Prompt: c.Prompt, Steering: c.Steering, FollowUp: c.FollowUp, Cancel: c.Cancel, AtomicIdle: c.IdleGuard, LiveContent: c.LiveContent, ImageInput: c.ImageInput, LiveSettings: c.Settings, Answer: c.Answer}
 		if runtime.Online && r.Mode == "tui" {
 			tmp := os.Getenv("TMUX_TMPDIR")
 			if tmp == "" {
@@ -430,6 +430,43 @@ func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMe
 	})
 	return response(&v1.SendMessageResponse{Generation: current.Generation, Job: job}, nil)
 }
+
+// AnswerQuestion answers the agent's pending question through its driver.
+// The caller takes vacant control, as when sending a message, but the agent
+// must already be running: only a running agent asks.
+func (s *Server) AnswerQuestion(ctx context.Context, req *connect.Request[v1.AnswerQuestionRequest]) (*connect.Response[v1.AnswerQuestionResponse], error) {
+	r := req.Msg
+	if len(r.Answers) == 0 {
+		return nil, invalid("answers are required")
+	}
+	if len(r.ToolCallId) > 200 {
+		return nil, invalid("tool_call_id is too long")
+	}
+	answer := agent.ControlCommand{Type: agent.CommandAnswer, ToolCallID: r.ToolCallId, Answers: r.Answers}
+	if err := answer.ValidateContent(); err != nil {
+		return nil, invalid(err.Error())
+	}
+	runtime, err := s.App.AgentRuntimeStatus(ctx, resolve(r.ItemId))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	if runtime.Runtime == nil || !runtime.Online {
+		return nil, precondition("agent is not running")
+	}
+	lease, err := s.controlLeaseStarting(ctx, r.ItemId, r.LeaseId, true, false)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	_, err = s.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: resolve(r.ItemId), CommandType: agent.CommandAnswer, ToolCallID: r.ToolCallId, Answers: r.Answers, Actor: controlActor(ctx), ExpectedRuntimeID: runtime.Runtime.ID, ControllerHolder: lease.Holder, ControllerClientID: lease.ClientID, ControllerLeaseID: lease.ID})
+	if err != nil {
+		var refused *driver.ControlRejectedError
+		if errors.As(err, &refused) {
+			return nil, precondition(refused.Message)
+		}
+		return nil, rpcError(err)
+	}
+	return response(&v1.AnswerQuestionResponse{}, nil)
+}
 func (s *Server) AbortTurn(ctx context.Context, req *connect.Request[v1.AbortTurnRequest]) (*connect.Response[v1.AbortTurnResponse], error) {
 	lease, err := s.controlLease(ctx, req.Msg.ItemId, req.Msg.LeaseId, false)
 	if err != nil {
@@ -554,6 +591,9 @@ func live(value driver.Content, generation uint32) *v1.LiveContent {
 	for _, p := range value.Prompts {
 		out.Prompts = append(out.Prompts, &v1.PromptLink{ClientMessageId: p.RequestID, NativeIds: p.NativeIDs})
 	}
+	if q := value.Question; q != nil {
+		out.Question = tool(driver.HistoryTool{ID: q.ID, Name: q.Name, Status: q.Status, Input: q.Input})
+	}
 	return out
 }
 func (s *Server) WatchLiveContent(ctx context.Context, req *connect.Request[v1.WatchLiveContentRequest], stream *connect.ServerStream[v1.WatchLiveContentResponse]) error {
@@ -627,6 +667,12 @@ func (s *Server) sendContentEvent(stream *connect.ServerStream[v1.WatchLiveConte
 		out.Event = &v1.WatchLiveContentResponse_Activity{Activity: &v1.ActivityChanged{Activity: e.Activity}}
 	case driver.ContentTurnSettled:
 		out.Event = &v1.WatchLiveContentResponse_TurnSettled{TurnSettled: &v1.TurnSettled{}}
+	case driver.ContentQuestion:
+		changed := &v1.QuestionChanged{}
+		if q := e.Tool; q != nil {
+			changed.Question = tool(driver.HistoryTool{ID: q.ID, Name: q.Name, Status: q.Status, Input: q.Input})
+		}
+		out.Event = &v1.WatchLiveContentResponse_Question{Question: changed}
 	default:
 		if e.Tool == nil {
 			return nil

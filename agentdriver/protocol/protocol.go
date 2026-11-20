@@ -71,6 +71,9 @@ type Capabilities struct {
 	// Settings lists the profile settings this runtime can change while it
 	// runs, through CommandSet.
 	Settings []string `json:"settings,omitempty"`
+	// Answer says the runtime answers the agent's questions through
+	// CommandAnswer, as well as wherever the agent shows them natively.
+	Answer bool `json:"answer,omitempty"`
 }
 
 const (

@@ -1,6 +1,7 @@
 package claude
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"slices"
@@ -30,7 +31,22 @@ type headlessControls struct {
 	reported                          *settingsReport
 	initialized, stopping, nativeBusy bool
 	cancelQueued                      bool
-	emit                              func(protocol.RuntimeEvent)
+	// question is the AskUserQuestion call Claude waits on, held open
+	// until CommandAnswer answers it.
+	question *headlessQuestion
+	// answered is the last question answered, so a repeated answer to it
+	// succeeds without reaching Claude again.
+	answered string
+	// showQuestion publishes the held question's tool call and input as
+	// live content; an empty id clears it.
+	showQuestion func(id, input string)
+	emit         func(protocol.RuntimeEvent)
+}
+
+// headlessQuestion is Claude's can_use_tool request for AskUserQuestion.
+type headlessQuestion struct {
+	requestID, toolUseID string
+	input                map[string]any
 }
 
 func (s *headlessControls) busy() bool { return s.nativeBusy || len(s.work) > 0 || s.aborting != nil }
@@ -76,6 +92,8 @@ func (s *headlessControls) accept(c protocol.ControlCommand) error {
 	switch c.Type {
 	case protocol.CommandSet:
 		return s.applySetting(c)
+	case protocol.CommandAnswer:
+		return s.answer(c)
 	case protocol.CommandPrompt, protocol.CommandSteer, protocol.CommandFollowUp, protocol.CommandAbort:
 	default:
 		return fmt.Errorf("unsupported Claude headless control")
@@ -434,4 +452,87 @@ func (s *headlessControls) settingResponse(f headlessFrame) {
 	if s.reported != nil && d.command.Setting != nil {
 		s.reported.report(d.command.Setting.Name, d.command.Setting.Value)
 	}
+}
+
+// ask holds Claude's request to use AskUserQuestion until the operator
+// answers through CommandAnswer. Other tools are not held.
+func (s *headlessControls) ask(f headlessFrame) bool {
+	if f.Request.ToolName != "AskUserQuestion" || f.RequestID == "" || len(f.RequestID) > 200 || len(f.Request.ToolUseID) > 200 {
+		return false
+	}
+	var input map[string]any
+	if json.Unmarshal(f.Request.Input, &input) != nil {
+		return false
+	}
+	if _, ok := input["questions"].([]any); !ok {
+		return false
+	}
+	s.question = &headlessQuestion{requestID: f.RequestID, toolUseID: f.Request.ToolUseID, input: input}
+	if s.showQuestion != nil {
+		s.showQuestion(f.Request.ToolUseID, string(f.Request.Input))
+	}
+	return true
+}
+
+// dropQuestion forgets the held question, which Claude withdrew or whose
+// turn ended.
+func (s *headlessControls) dropQuestion() {
+	if s.question != nil && s.showQuestion != nil {
+		s.showQuestion("", "")
+	}
+	s.question = nil
+}
+
+// answer answers the held question: Claude runs AskUserQuestion with the
+// answers in its input, as when the user answers its dialog.
+func (s *headlessControls) answer(c protocol.ControlCommand) error {
+	q := s.question
+	if q == nil && c.ToolCallID != "" && c.ToolCallID == s.answered {
+		return nil
+	}
+	if q == nil {
+		return fmt.Errorf("Claude is not waiting for an answer")
+	}
+	if c.ToolCallID != "" && c.ToolCallID != q.toolUseID {
+		return fmt.Errorf("Claude is waiting on another question")
+	}
+	if err := matchAnswers(q.input, c.Answers); err != nil {
+		return err
+	}
+	input := make(map[string]any, len(q.input)+1)
+	for key, value := range q.input {
+		input[key] = value
+	}
+	input["answers"] = c.Answers
+	response := map[string]any{"subtype": "success", "request_id": q.requestID, "response": map[string]any{"behavior": "allow", "updatedInput": input}}
+	if _, err := writeHeadlessFrame(s.input, map[string]any{"type": "control_response", "response": response}); err != nil {
+		s.inputBroken = true
+		return fmt.Errorf("Claude answer delivery uncertain: %w", err)
+	}
+	s.dropQuestion()
+	s.answered = q.toolUseID
+	return nil
+}
+
+// matchAnswers checks that answers answer the questions asked: one answer
+// per question text, for every question.
+func matchAnswers(input map[string]any, answers map[string]string) error {
+	questions, _ := input["questions"].([]any)
+	asked := map[string]bool{}
+	for _, value := range questions {
+		if question, ok := value.(map[string]any); ok {
+			if text, ok := question["question"].(string); ok {
+				asked[text] = true
+			}
+		}
+	}
+	for text := range answers {
+		if !asked[text] {
+			return fmt.Errorf("Claude did not ask %q", text)
+		}
+	}
+	if len(answers) != len(asked) {
+		return fmt.Errorf("answer each of Claude's %d questions", len(asked))
+	}
+	return nil
 }

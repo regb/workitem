@@ -53,6 +53,9 @@ type Content struct {
 	// Prompts link recently submitted prompts, by the request ID their sender
 	// gave, to the native history entries holding them; newest last.
 	Prompts []PromptLink `json:"prompts,omitempty"`
+	// Question is the question tool call the agent waits on, which
+	// CommandAnswer answers. Its input holds the questions.
+	Question *ContentTool `json:"question,omitempty"`
 }
 
 // PromptLink names the history entries that hold one submitted prompt.
@@ -95,6 +98,9 @@ const (
 	ContentPromptSaved      = "prompt.saved"
 	ContentActivity         = "activity"
 	ContentTurnSettled      = "turn.settled"
+	// ContentQuestion sets the question the agent waits on, or clears it
+	// without a tool.
+	ContentQuestion = "question"
 )
 
 // ContentEvent is one change to a runtime's live content. Sequences increase
@@ -129,6 +135,12 @@ func ApplyContent(value Content, event ContentEvent) Content {
 		value.SavedAs = append([]string(nil), value.SavedAs...)
 		value.Tools = append([]ContentTool(nil), value.Tools...)
 		value.Prompts = append([]PromptLink(nil), value.Prompts...)
+		value.Question = cloneTool(value.Question)
+		return value
+	}
+	if event.Type == ContentQuestion {
+		value.Sequence = event.Sequence
+		value.Question = cloneTool(event.Tool)
 		return value
 	}
 	value.Sequence = event.Sequence
@@ -579,6 +591,23 @@ func (s *ContentServer) UpdateTool(eventType, text, toolID, toolName, input, out
 	case EventAgentSettled:
 		s.publish(ContentEvent{Type: ContentTurnSettled, Activity: "Idle"})
 	}
+}
+
+// SetQuestion publishes the question tool call the agent waits on, with its
+// input; an empty id clears it.
+func (s *ContentServer) SetQuestion(id, name, input string) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id == "" {
+		if s.value.Question != nil {
+			s.publish(ContentEvent{Type: ContentQuestion})
+		}
+		return
+	}
+	s.publish(ContentEvent{Type: ContentQuestion, Tool: &ContentTool{ID: id, Name: name, Status: "running", Input: boundedContentField(input)}})
 }
 
 // StartMessage begins a new message for drivers that otherwise publish whole

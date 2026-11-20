@@ -48,6 +48,10 @@ type headlessFrame struct {
 	RequestID string `json:"request_id"`
 	Request   struct {
 		Subtype string `json:"subtype"`
+		// can_use_tool: the tool Claude asks to use, and its input.
+		ToolName  string          `json:"tool_name"`
+		ToolUseID string          `json:"tool_use_id"`
+		Input     json.RawMessage `json:"input"`
 	} `json:"request"`
 	Response struct {
 		Subtype   string `json:"subtype"`

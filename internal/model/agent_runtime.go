@@ -28,6 +28,8 @@ type RuntimeCapabilities struct {
 	Control string `json:"control,omitempty"`
 	// Settings are the profile settings this runtime can change live.
 	Settings []string `json:"settings,omitempty"`
+	// Answer means the runtime answers the agent's questions.
+	Answer bool `json:"answer,omitempty"`
 }
 
 // LiveSetting reports whether the runtime can change a setting while running.

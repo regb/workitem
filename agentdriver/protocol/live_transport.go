@@ -44,11 +44,15 @@ type ControlResponse struct {
 	Accepted bool   `json:"accepted"`
 	Error    string `json:"error,omitempty"`
 	Reason   string `json:"reason,omitempty"`
+	// Result is what an accepted command returns, for the few that return
+	// something, such as a driver's own hook asking for an answer.
+	Result string `json:"result,omitempty"`
 }
 
 type socketReply struct {
-	err  error
-	sent chan struct{}
+	err    error
+	result string
+	sent   chan struct{}
 }
 
 type ControlRequest struct {
@@ -57,8 +61,11 @@ type ControlRequest struct {
 	closed  <-chan struct{}
 }
 
-func (r ControlRequest) Respond(err error) {
-	response := socketReply{err: err, sent: make(chan struct{})}
+func (r ControlRequest) Respond(err error) { r.RespondWith("", err) }
+
+// RespondWith answers an accepted command with a result.
+func (r ControlRequest) RespondWith(result string, err error) {
+	response := socketReply{err: err, result: result, sent: make(chan struct{})}
 	select {
 	case r.reply <- response:
 	case <-r.closed:
@@ -148,7 +155,7 @@ func (s *ControlServer) accept() {
 			}
 			select {
 			case result := <-reply:
-				response := ControlResponse{Accepted: result.err == nil}
+				response := ControlResponse{Accepted: result.err == nil, Result: result.result}
 				if result.err != nil {
 					response.Error = result.err.Error()
 					if errors.Is(result.err, ErrNotIdle) {
@@ -172,27 +179,33 @@ func (s *ControlServer) closeConnections() {
 }
 
 func SubmitControl(ctx context.Context, path string, command ControlCommand) error {
+	_, err := SubmitControlResult(ctx, path, command)
+	return err
+}
+
+// SubmitControlResult submits a command and returns its result.
+func SubmitControlResult(ctx context.Context, path string, command ControlCommand) (string, error) {
 	if err := command.ValidateContent(); err != nil {
-		return err
+		return "", err
 	}
 	encoded, err := json.Marshal(command)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if len(encoded) > MaxControlCommandBytes {
-		return fmt.Errorf("control command exceeds 12 MiB")
+		return "", fmt.Errorf("control command exceeds 12 MiB")
 	}
 	var response ControlResponse
 	if err := exchangeRuntimeSocket(ctx, path, command, &response); err != nil {
-		return err
+		return "", err
 	}
 	if !response.Accepted {
 		if response.Error == "" {
 			response.Error = "runtime rejected control command"
 		}
-		return &ControlRejectedError{Message: response.Error, Reason: response.Reason}
+		return "", &ControlRejectedError{Message: response.Error, Reason: response.Reason}
 	}
-	return nil
+	return response.Result, nil
 }
 
 // EventRejectedError distinguishes retryable relay/transport failures from

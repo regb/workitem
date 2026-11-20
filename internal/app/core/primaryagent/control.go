@@ -25,6 +25,9 @@ type ControlOptions struct {
 	RequireIdle       bool
 	// Setting is the change carried by CommandSet.
 	Setting *agent.Setting
+	// ToolCallID and Answers are carried by CommandAnswer.
+	ToolCallID string
+	Answers    map[string]string
 }
 
 type ControlResult struct {
@@ -85,6 +88,10 @@ func (s *Service) Control(ctx context.Context, opts ControlOptions) (ControlResu
 		if !runtime.Capabilities.LiveSetting(opts.Setting.Name) {
 			return ControlResult{}, fmt.Errorf("agent runtime cannot change %s while it runs", opts.Setting.Name)
 		}
+	case agent.CommandAnswer:
+		if len(opts.Answers) == 0 || strings.TrimSpace(opts.Message) != "" || len(opts.Images) != 0 {
+			return ControlResult{}, fmt.Errorf("agent control answer requires answers and no message content")
+		}
 	default:
 		return ControlResult{}, fmt.Errorf("unsupported agent control command %q", commandType)
 	}
@@ -102,7 +109,7 @@ func (s *Service) Control(ctx context.Context, opts ControlOptions) (ControlResu
 	if actor == "" {
 		actor = "operator"
 	}
-	command := agent.ControlCommand{ID: commandID, RequestID: strings.TrimSpace(opts.RequestID), Type: commandType, Actor: actor, Message: strings.TrimSpace(opts.Message), Images: opts.Images, CreatedAt: s.now(), RequireIdle: opts.RequireIdle, Setting: opts.Setting}
+	command := agent.ControlCommand{ID: commandID, RequestID: strings.TrimSpace(opts.RequestID), Type: commandType, Actor: actor, Message: strings.TrimSpace(opts.Message), Images: opts.Images, CreatedAt: s.now(), RequireIdle: opts.RequireIdle, Setting: opts.Setting, ToolCallID: opts.ToolCallID, Answers: opts.Answers}
 	if err := s.SubmitControl(ctx, m.ID, *runtime, command); err != nil {
 		return ControlResult{}, err
 	}
@@ -123,6 +130,8 @@ func supportsControl(capabilities model.RuntimeCapabilities, commandType string)
 		return true
 	case agent.CommandSet:
 		return len(capabilities.Settings) > 0
+	case agent.CommandAnswer:
+		return capabilities.Answer
 	default:
 		return false
 	}

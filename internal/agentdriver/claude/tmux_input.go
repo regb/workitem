@@ -77,6 +77,17 @@ func supportsControl(input tuiInput, kind string) bool {
 	}
 	return true
 }
+
+// Attached reports whether a client is attached to the pane's session.
+func (t *tmuxInput) Attached(ctx context.Context) bool {
+	out, err := t.run(ctx, nil, "display-message", "-p", "-t", t.pane, "#{session_attached}")
+	if err != nil {
+		return false
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(out))
+	return err == nil && n > 0
+}
+
 func (t *tmuxInput) keyPlan() inputBindings {
 	if t.bindingPath == "" {
 		return defaultInputBindings()

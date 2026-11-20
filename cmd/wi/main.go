@@ -20,6 +20,12 @@ func main() {
 			}
 			return
 		}
+		if len(args) == 4 && args[1] == "claude" && args[2] == "ask" {
+			// Never fails the tool call: without an answer, Claude shows its
+			// own dialog.
+			claudedriver.RunAskHook(ctx, args[3], os.Stdin, os.Stdout)
+			return
+		}
 		var run func(context.Context) error
 		if len(args) == 2 {
 			switch args[1] {

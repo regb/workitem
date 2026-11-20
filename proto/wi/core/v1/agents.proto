@@ -42,6 +42,10 @@ service AgentService {
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   // AbortTurn stops the agent's current turn.
   rpc AbortTurn(AbortTurnRequest) returns (AbortTurnResponse);
+  // AnswerQuestion answers the question the agent waits on, an
+  // AskUserQuestion tool call in its history, as if answered in its own
+  // interface. It needs control, like SendMessage.
+  rpc AnswerQuestion(AnswerQuestionRequest) returns (AnswerQuestionResponse);
   // GetAgentSettings reads the item's model and reasoning: effective values,
   // overrides, what the running agent uses and the driver's model catalog.
   rpc GetAgentSettings(GetAgentSettingsRequest) returns (GetAgentSettingsResponse) {
@@ -92,6 +96,8 @@ message AgentCapabilities {
   bool image_input = 8;
   // live_settings are the settings it can change while running.
   repeated string live_settings = 9;
+  // answer means its questions can be answered with AnswerQuestion.
+  bool answer = 10;
 }
 
 // Terminal is where an agent in TUI mode runs its native interface. People
@@ -222,6 +228,19 @@ message AbortTurnRequest {
 }
 
 message AbortTurnResponse {}
+
+message AnswerQuestionRequest {
+  string item_id = 1;
+  // tool_call_id is the AskUserQuestion call answered.
+  string tool_call_id = 2;
+  // answers are keyed by question text. An answer is the chosen option's
+  // label, labels joined by ", " for a multi-select question, or the
+  // operator's own text.
+  map<string, string> answers = 3;
+  string lease_id = 4;
+}
+
+message AnswerQuestionResponse {}
 
 // ModelOption is a model the driver offers and the reasoning levels it
 // accepts.
@@ -407,6 +426,10 @@ message LiveContent {
   repeated PromptLink prompts = 8;
   string error = 9;
   bool truncated = 10;
+  // question is the question the agent waits on, such as Claude's
+  // AskUserQuestion call, whose input holds the questions and their
+  // options. AnswerQuestion answers it.
+  ToolCall question = 11;
 }
 
 // PromptLink matches a client's message to the history entries it became.
@@ -488,6 +511,12 @@ message ActivityChanged {
 // TurnSettled says the turn ended and live content will be found in history.
 message TurnSettled {}
 
+// QuestionChanged sets the question the agent waits on; without one, the
+// question is over.
+message QuestionChanged {
+  ToolCall question = 1;
+}
+
 message WatchLiveContentResponse {
   // cursor resumes the stream after this event; it is opaque.
   string cursor = 1;
@@ -505,6 +534,7 @@ message WatchLiveContentResponse {
     PromptSaved prompt_saved = 10;
     ActivityChanged activity = 11;
     TurnSettled turn_settled = 12;
+    QuestionChanged question = 13;
   }
 }
 

@@ -207,7 +207,7 @@ func rpcLifecycle(ctx context.Context, command string, args []string, cfg Config
 }
 func rpcAgent(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	if len(args) == 0 {
-		return usageErr{errors.New("agent requires status, runtime, control, monitor, settings or profile")}
+		return usageErr{errors.New("agent requires status, runtime, control, answer, monitor, settings or profile")}
 	}
 	switch args[0] {
 	case "profile":
@@ -262,6 +262,8 @@ func rpcAgent(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 		return rpcAgentSettings(ctx, args[1:], cfg, jsonOut)
 	case "control":
 		return rpcControl(ctx, args[1:], cfg, jsonOut)
+	case "answer":
+		return rpcAgentAnswer(ctx, args[1:], cfg, jsonOut)
 	}
 	return usageErr{fmt.Errorf("unknown agent command %q", args[0])}
 }

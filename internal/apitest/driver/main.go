@@ -138,7 +138,7 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 	}
 	var settings map[string]any
 	_ = json.Unmarshal(r.Config, &settings)
-	caps := p.Capabilities{LiveContent: true, IdleGuard: true, ImageInput: true, BundledSkills: true, NativeTUI: r.Runtime.Mode == p.ModeTUI, Headless: r.Runtime.Mode == p.ModeHeadless, Streaming: true, Prompt: true, Steering: true, FollowUp: true, Cancel: true, Monitor: true, Control: p.ControlStructured, Settings: []string{"model", "reasoning"}}
+	caps := p.Capabilities{LiveContent: true, IdleGuard: true, ImageInput: true, BundledSkills: true, NativeTUI: r.Runtime.Mode == p.ModeTUI, Headless: r.Runtime.Mode == p.ModeHeadless, Streaming: true, Prompt: true, Steering: true, FollowUp: true, Cancel: true, Monitor: true, Control: p.ControlStructured, Settings: []string{"model", "reasoning"}, Answer: true}
 	if emulated, _ := settings["emulated_tui"].(bool); emulated && r.Runtime.Mode == p.ModeTUI {
 		caps.Control = p.ControlEmulated
 		caps.Prompt = false
@@ -146,6 +146,7 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 		caps.FollowUp = false
 		caps.Cancel = false
 		caps.Settings = nil
+		caps.Answer = false
 	}
 	if err := reply(p.Response{ProtocolVersion: p.Version, Ready: &p.Ready{ProtocolVersion: p.Version, Capabilities: caps}}); err != nil {
 		return err
@@ -160,6 +161,8 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 	_ = emit(p.RuntimeEvent{Type: p.EventSettingsChanged, Settings: map[string]string{"model": modelName, "reasoning": "medium"}})
 	var mu sync.Mutex
 	busy := false
+	// asked is the AskUserQuestion call waiting for an answer.
+	asked := ""
 	leaf := "-"
 	seen := map[string]bool{}
 	counter := 0
@@ -173,6 +176,13 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 		message := map[string]any{"role": role, "content": []map[string]string{{"type": "text", "text": text}}}
 		if role == "assistant" {
 			message["stopReason"] = "stop"
+		}
+		if role == "ask" {
+			// An AskUserQuestion call, waiting for its answer.
+			message = map[string]any{"role": "assistant", "stopReason": "toolUse", "content": []any{map[string]any{"type": "toolCall", "id": "ask-" + entry, "name": "AskUserQuestion", "arguments": map[string]any{"questions": []any{map[string]any{"question": "Which color?", "header": "Color", "multiSelect": false, "options": []any{map[string]any{"label": "Red", "description": "Warm"}, map[string]any{"label": "Blue", "description": "Cool"}}}}}}}}
+		}
+		if role == "answer" {
+			message = map[string]any{"role": "toolResult", "toolCallId": text, "toolName": "AskUserQuestion", "content": []map[string]string{{"type": "text", "text": "answered"}}}
 		}
 		if role == "error" {
 			// A provider refusal, as Pi records it: an empty failed reply.
@@ -196,6 +206,29 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 			if c.RequireIdle && busy {
 				mu.Unlock()
 				request.Respond(p.NotIdle("test agent is busy"))
+				continue
+			}
+			if c.Type == p.CommandAnswer {
+				call := asked
+				if call == "" || c.ToolCallID != call || c.Answers["Which color?"] == "" {
+					mu.Unlock()
+					request.Respond(fmt.Errorf("test agent is not waiting on that question"))
+					continue
+				}
+				request.Respond(nil)
+				asked = ""
+				content.SetQuestion("", "", "")
+				appendMessage("answer", call)
+				answer := "Chosen: " + c.Answers["Which color?"]
+				assistant := appendMessage("assistant", answer)
+				busy = false
+				current := leaf
+				mu.Unlock()
+				content.Update(p.EventMessageDelta, answer, "")
+				content.MarkSaved(answer, []string{assistant})
+				content.SetActivity("Idle")
+				_ = emit(p.RuntimeEvent{Type: p.EventAgentSettled, Outcome: "completed", Readiness: "ready"})
+				_ = emit(p.RuntimeEvent{Type: p.EventRuntimeStatus, Readiness: "ready", AgentState: "idle", LeafID: current})
 				continue
 			}
 			if c.RequestID != "" && seen[c.RequestID] {
@@ -247,6 +280,17 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 					continue
 				}
 				time.Sleep(30 * time.Millisecond)
+				if strings.Contains(c.Message, "ask me") {
+					// The agent asks a question and waits for its answer.
+					mu.Lock()
+					entry := appendMessage("ask", "")
+					asked = "ask-" + entry
+					mu.Unlock()
+					content.SetQuestion(asked, "AskUserQuestion", `{"questions":[{"question":"Which color?","header":"Color","multiSelect":false,"options":[{"label":"Red","description":"Warm"},{"label":"Blue","description":"Cool"}]}]}`)
+					content.SetActivity("Waiting for your answer")
+					_ = emit(p.RuntimeEvent{Type: p.EventRuntimeStatus, Readiness: "waiting_input", ReasonCode: "question_pending"})
+					continue
+				}
 				if strings.Contains(c.Message, "usage limit") {
 					// The provider refuses the turn: its usage limit is reached.
 					mu.Lock()

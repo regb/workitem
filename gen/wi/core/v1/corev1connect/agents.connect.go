@@ -49,6 +49,9 @@ const (
 	AgentServiceSendMessageProcedure = "/wi.core.v1.AgentService/SendMessage"
 	// AgentServiceAbortTurnProcedure is the fully-qualified name of the AgentService's AbortTurn RPC.
 	AgentServiceAbortTurnProcedure = "/wi.core.v1.AgentService/AbortTurn"
+	// AgentServiceAnswerQuestionProcedure is the fully-qualified name of the AgentService's
+	// AnswerQuestion RPC.
+	AgentServiceAnswerQuestionProcedure = "/wi.core.v1.AgentService/AnswerQuestion"
 	// AgentServiceGetAgentSettingsProcedure is the fully-qualified name of the AgentService's
 	// GetAgentSettings RPC.
 	AgentServiceGetAgentSettingsProcedure = "/wi.core.v1.AgentService/GetAgentSettings"
@@ -100,6 +103,10 @@ type AgentServiceClient interface {
 	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
 	// AbortTurn stops the agent's current turn.
 	AbortTurn(context.Context, *connect.Request[v1.AbortTurnRequest]) (*connect.Response[v1.AbortTurnResponse], error)
+	// AnswerQuestion answers the question the agent waits on, an
+	// AskUserQuestion tool call in its history, as if answered in its own
+	// interface. It needs control, like SendMessage.
+	AnswerQuestion(context.Context, *connect.Request[v1.AnswerQuestionRequest]) (*connect.Response[v1.AnswerQuestionResponse], error)
 	// GetAgentSettings reads the item's model and reasoning: effective values,
 	// overrides, what the running agent uses and the driver's model catalog.
 	GetAgentSettings(context.Context, *connect.Request[v1.GetAgentSettingsRequest]) (*connect.Response[v1.GetAgentSettingsResponse], error)
@@ -168,6 +175,12 @@ func NewAgentServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(agentServiceMethods.ByName("AbortTurn")),
 			connect.WithClientOptions(opts...),
 		),
+		answerQuestion: connect.NewClient[v1.AnswerQuestionRequest, v1.AnswerQuestionResponse](
+			httpClient,
+			baseURL+AgentServiceAnswerQuestionProcedure,
+			connect.WithSchema(agentServiceMethods.ByName("AnswerQuestion")),
+			connect.WithClientOptions(opts...),
+		),
 		getAgentSettings: connect.NewClient[v1.GetAgentSettingsRequest, v1.GetAgentSettingsResponse](
 			httpClient,
 			baseURL+AgentServiceGetAgentSettingsProcedure,
@@ -218,6 +231,7 @@ type agentServiceClient struct {
 	restartAgent        *connect.Client[v1.RestartAgentRequest, v1.RestartAgentResponse]
 	sendMessage         *connect.Client[v1.SendMessageRequest, v1.SendMessageResponse]
 	abortTurn           *connect.Client[v1.AbortTurnRequest, v1.AbortTurnResponse]
+	answerQuestion      *connect.Client[v1.AnswerQuestionRequest, v1.AnswerQuestionResponse]
 	getAgentSettings    *connect.Client[v1.GetAgentSettingsRequest, v1.GetAgentSettingsResponse]
 	updateAgentSettings *connect.Client[v1.UpdateAgentSettingsRequest, v1.UpdateAgentSettingsResponse]
 	suggestTitle        *connect.Client[v1.SuggestTitleRequest, v1.SuggestTitleResponse]
@@ -254,6 +268,11 @@ func (c *agentServiceClient) SendMessage(ctx context.Context, req *connect.Reque
 // AbortTurn calls wi.core.v1.AgentService.AbortTurn.
 func (c *agentServiceClient) AbortTurn(ctx context.Context, req *connect.Request[v1.AbortTurnRequest]) (*connect.Response[v1.AbortTurnResponse], error) {
 	return c.abortTurn.CallUnary(ctx, req)
+}
+
+// AnswerQuestion calls wi.core.v1.AgentService.AnswerQuestion.
+func (c *agentServiceClient) AnswerQuestion(ctx context.Context, req *connect.Request[v1.AnswerQuestionRequest]) (*connect.Response[v1.AnswerQuestionResponse], error) {
+	return c.answerQuestion.CallUnary(ctx, req)
 }
 
 // GetAgentSettings calls wi.core.v1.AgentService.GetAgentSettings.
@@ -306,6 +325,10 @@ type AgentServiceHandler interface {
 	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
 	// AbortTurn stops the agent's current turn.
 	AbortTurn(context.Context, *connect.Request[v1.AbortTurnRequest]) (*connect.Response[v1.AbortTurnResponse], error)
+	// AnswerQuestion answers the question the agent waits on, an
+	// AskUserQuestion tool call in its history, as if answered in its own
+	// interface. It needs control, like SendMessage.
+	AnswerQuestion(context.Context, *connect.Request[v1.AnswerQuestionRequest]) (*connect.Response[v1.AnswerQuestionResponse], error)
 	// GetAgentSettings reads the item's model and reasoning: effective values,
 	// overrides, what the running agent uses and the driver's model catalog.
 	GetAgentSettings(context.Context, *connect.Request[v1.GetAgentSettingsRequest]) (*connect.Response[v1.GetAgentSettingsResponse], error)
@@ -370,6 +393,12 @@ func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(agentServiceMethods.ByName("AbortTurn")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentServiceAnswerQuestionHandler := connect.NewUnaryHandler(
+		AgentServiceAnswerQuestionProcedure,
+		svc.AnswerQuestion,
+		connect.WithSchema(agentServiceMethods.ByName("AnswerQuestion")),
+		connect.WithHandlerOptions(opts...),
+	)
 	agentServiceGetAgentSettingsHandler := connect.NewUnaryHandler(
 		AgentServiceGetAgentSettingsProcedure,
 		svc.GetAgentSettings,
@@ -423,6 +452,8 @@ func NewAgentServiceHandler(svc AgentServiceHandler, opts ...connect.HandlerOpti
 			agentServiceSendMessageHandler.ServeHTTP(w, r)
 		case AgentServiceAbortTurnProcedure:
 			agentServiceAbortTurnHandler.ServeHTTP(w, r)
+		case AgentServiceAnswerQuestionProcedure:
+			agentServiceAnswerQuestionHandler.ServeHTTP(w, r)
 		case AgentServiceGetAgentSettingsProcedure:
 			agentServiceGetAgentSettingsHandler.ServeHTTP(w, r)
 		case AgentServiceUpdateAgentSettingsProcedure:
@@ -466,6 +497,10 @@ func (UnimplementedAgentServiceHandler) SendMessage(context.Context, *connect.Re
 
 func (UnimplementedAgentServiceHandler) AbortTurn(context.Context, *connect.Request[v1.AbortTurnRequest]) (*connect.Response[v1.AbortTurnResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.AgentService.AbortTurn is not implemented"))
+}
+
+func (UnimplementedAgentServiceHandler) AnswerQuestion(context.Context, *connect.Request[v1.AnswerQuestionRequest]) (*connect.Response[v1.AnswerQuestionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.AgentService.AnswerQuestion is not implemented"))
 }
 
 func (UnimplementedAgentServiceHandler) GetAgentSettings(context.Context, *connect.Request[v1.GetAgentSettingsRequest]) (*connect.Response[v1.GetAgentSettingsResponse], error) {

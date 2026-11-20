@@ -12,11 +12,6 @@ import (
 	"time"
 )
 
-// headlessDisallowedTools removes tools that wait for an interactive answer.
-// A headless runtime has no channel for replying to an agent's question, so
-// the agent proceeds on its own judgment instead of stalling the turn.
-const headlessDisallowedTools = "AskUserQuestion"
-
 func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(protocol.Ready) error) error {
 	replied := false
 	fail := func(err error) error {
@@ -33,7 +28,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 	defer prepared.close()
 	executable, session, env := prepared.executable, prepared.session, prepared.env
 	control, contentServer := prepared.control, prepared.content
-	args, err := prepared.args("--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--replay-user-messages", "--disallowed-tools", headlessDisallowedTools, "--permission-prompts", "none")
+	args, err := prepared.args("--print", "--verbose", "--input-format", "stream-json", "--output-format", "stream-json", "--include-partial-messages", "--replay-user-messages", "--permission-prompt-tool", "stdio", "--permission-prompts", "host")
 	if err != nil {
 		return fail(err)
 	}
@@ -108,7 +103,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 	}
 	reported := &settingsReport{emit: emit, aliases: map[string]string{}}
 	replies := &transcriptFeed{factAfter: time.Now()}
-	state := &headlessControls{input: writer, emit: emit, session: session, reported: reported}
+	state := &headlessControls{input: writer, emit: emit, session: session, reported: reported, showQuestion: func(id, input string) { contentServer.SetQuestion(id, "AskUserQuestion", input) }}
 	defer func() {
 		if !processDone {
 			_ = cmd.Process.Kill()
@@ -154,6 +149,8 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 			readiness, reason = "stopping", "runtime_stopping"
 		} else if state.inputBroken {
 			readiness, reason = "blocked", "headless_input_unavailable"
+		} else if state.question != nil {
+			readiness, reason = "waiting_input", "question_pending"
 		} else if state.nativeBusy {
 			readiness, reason = "busy", "active_turn"
 		} else if state.busy() {
@@ -268,7 +265,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 					initDeadline = nil
 					initialization.Stop()
 					replied = true
-					if err := reply(protocol.Ready{ProtocolVersion: protocol.Version, BackendPath: executable, BackendVersion: f.Response.Response.Version, Capabilities: protocol.Capabilities{Headless: true, LiveContent: true, Streaming: true, ImageInput: true, BundledSkills: true, Monitor: true, Prompt: true, Steering: true, FollowUp: true, Cancel: true, Control: protocol.ControlStructured, Settings: []string{protocol.SettingModel, protocol.SettingReasoning}}}); err != nil {
+					if err := reply(protocol.Ready{ProtocolVersion: protocol.Version, BackendPath: executable, BackendVersion: f.Response.Response.Version, Capabilities: protocol.Capabilities{Headless: true, LiveContent: true, Streaming: true, ImageInput: true, BundledSkills: true, Monitor: true, Prompt: true, Steering: true, FollowUp: true, Cancel: true, Control: protocol.ControlStructured, Settings: []string{protocol.SettingModel, protocol.SettingReasoning}, Answer: true}}); err != nil {
 						return err
 					}
 					emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeReady, Readiness: "ready", ReasonCode: "headless_ready"})
@@ -292,10 +289,16 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 					state.settingResponse(f)
 				}
 			case "control_request":
+				if f.Request.Subtype == "can_use_tool" && state.ask(f) {
+					// The question waits for CommandAnswer.
+					status()
+					continue
+				}
 				response := map[string]any{"subtype": "error", "request_id": f.RequestID, "error": "Unsupported headless control request"}
 				if f.Request.Subtype == "can_use_tool" {
-					response = map[string]any{"subtype": "success", "request_id": f.RequestID, "response": map[string]any{"behavior": "deny", "message": "Interactive approval or user input is unavailable in Wi headless mode. Ask in the conversation instead."}}
-					emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeStatus, Readiness: "blocked", ReasonCode: "interaction_required"})
+					// Permissions are bypassed: only tools that need the
+					// user, such as a plan approval, ask. Nothing answers them.
+					response = map[string]any{"subtype": "success", "request_id": f.RequestID, "response": map[string]any{"behavior": "deny", "message": "Interactive approval is unavailable in Wi headless mode. Ask in the conversation instead."}}
 				}
 				if _, err := writeHeadlessFrame(writer, map[string]any{"type": "control_response", "response": response}); err != nil {
 					return protocolFailure("could not answer a control request: " + err.Error())
@@ -313,6 +316,13 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 						return protocolFailure("Claude requested work before initialization")
 					}
 					startWork()
+				}
+			case "control_cancel_request":
+				// Claude withdrew a request, such as the question of a turn
+				// that was interrupted.
+				if state.question != nil && state.question.requestID == f.RequestID {
+					state.dropQuestion()
+					status()
 				}
 			case "command_lifecycle":
 				if f.State == "queued" {
@@ -368,6 +378,8 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 					contentFault(f.Type, err)
 				}
 			case "result":
+				// A settled turn has no question left to answer.
+				state.dropQuestion()
 				if _, err := replies.refresh(r.Conversation.Locator, ignoredTranscript{}); err == nil {
 					reported.replies(replies)
 				}

@@ -24,6 +24,9 @@ type AgentControlOptions struct {
 	ControllerLeaseID  string
 	// Setting is the change carried by agent.CommandSet.
 	Setting *agent.Setting
+	// ToolCallID and Answers are carried by agent.CommandAnswer.
+	ToolCallID string
+	Answers    map[string]string
 }
 
 type AgentControlResult = agentcore.ControlResult
@@ -56,7 +59,7 @@ func (a *App) agentControlWithLease(ctx context.Context, opts AgentControlOption
 		return AgentControlResult{}, err
 	}
 	defer release()
-	return a.primaryAgentService().Control(ctx, agentcore.ControlOptions{ResolveOptions: contract.ResolveOptions(opts.ResolveOptions), CommandType: opts.CommandType, Message: opts.Message, Images: opts.Images, Actor: opts.Actor, RequestID: opts.RequestID, CommandID: opts.CommandID, ExpectedRuntimeID: opts.ExpectedRuntimeID, RequireIdle: opts.RequireIdle, Setting: opts.Setting})
+	return a.primaryAgentService().Control(ctx, agentcore.ControlOptions{ResolveOptions: contract.ResolveOptions(opts.ResolveOptions), CommandType: opts.CommandType, Message: opts.Message, Images: opts.Images, Actor: opts.Actor, RequestID: opts.RequestID, CommandID: opts.CommandID, ExpectedRuntimeID: opts.ExpectedRuntimeID, RequireIdle: opts.RequireIdle, Setting: opts.Setting, ToolCallID: opts.ToolCallID, Answers: opts.Answers})
 }
 
 func (a *App) runtimeControlSocketPath(itemID string, runtime *model.AgentRuntime) string {

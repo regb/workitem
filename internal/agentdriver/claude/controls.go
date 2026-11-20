@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -41,12 +42,19 @@ type tuiControls struct {
 	executionPending      bool
 	// asking names the dialog in which Claude waits for the user's answer
 	// mid-turn: a question, a plan approval or a permission prompt.
-	asking   string
-	pending  *commandDelivery
-	aborting *commandDelivery
-	queue    []*commandDelivery
-	seen     map[string]*commandDelivery
-	emit     func(string, protocol.ControlCommand, bool)
+	asking string
+	// held is the question whose hook waits for an answer through wi.
+	held *heldQuestion
+	// answered is the last question answered through wi.
+	answered string
+	// showQuestion publishes the held question as live content; an empty id
+	// clears it.
+	showQuestion func(id, input string)
+	pending      *commandDelivery
+	aborting     *commandDelivery
+	queue        []*commandDelivery
+	seen         map[string]*commandDelivery
+	emit         func(string, protocol.ControlCommand, bool)
 }
 
 func (d *commandDelivery) releaseImages() {
@@ -404,6 +412,7 @@ func (s *tuiControls) close() {
 		}
 	}()
 	s.stopping = true
+	s.release()
 	if s.pending != nil {
 		s.pending.phase = "uncertain"
 		s.pending.reasonCode = "runtime_stopped"
@@ -419,4 +428,86 @@ func (s *tuiControls) close() {
 		s.aborting = nil
 	}
 	s.cancelQueued("Claude runtime stopped before follow-up delivery")
+}
+
+// heldQuestion is an AskUserQuestion call whose hook waits for the runtime
+// to answer it.
+type heldQuestion struct {
+	request   protocol.ControlRequest
+	toolUseID string
+	input     map[string]any
+	checkedAt time.Time
+}
+
+// hold keeps a question's hook waiting for CommandAnswer. A question asked
+// again, or another question, releases the previous one.
+func (s *tuiControls) hold(request protocol.ControlRequest, value askInput) {
+	s.release()
+	s.held = &heldQuestion{request: request, toolUseID: value.ToolUseID, input: value.Input, checkedAt: time.Now()}
+	if s.showQuestion != nil {
+		input, _ := json.Marshal(value.Input)
+		s.showQuestion(value.ToolUseID, string(input))
+	}
+}
+
+// release lets Claude show its own dialog for a held question, or ends a
+// hook whose question is over.
+func (s *tuiControls) release() {
+	if s.held != nil {
+		s.held.request.RespondWith("", nil)
+		s.held = nil
+		if s.showQuestion != nil {
+			s.showQuestion("", "")
+		}
+	}
+}
+
+// answer answers the held question through its hook.
+func (s *tuiControls) answer(c protocol.ControlCommand) error {
+	q := s.held
+	if q == nil && c.ToolCallID != "" && c.ToolCallID == s.answered {
+		return nil
+	}
+	if q == nil {
+		if s.asking != "" {
+			return fmt.Errorf("Claude shows this question in its terminal; answer it there")
+		}
+		return fmt.Errorf("Claude is not waiting for an answer")
+	}
+	if c.ToolCallID != "" && c.ToolCallID != q.toolUseID {
+		return fmt.Errorf("Claude is waiting on another question")
+	}
+	if err := matchAnswers(q.input, c.Answers); err != nil {
+		return err
+	}
+	data, err := json.Marshal(askResult{Answers: c.Answers})
+	if err != nil {
+		return err
+	}
+	q.request.RespondWith(string(data), nil)
+	s.held = nil
+	s.answered = q.toolUseID
+	if s.showQuestion != nil {
+		s.showQuestion("", "")
+	}
+	return nil
+}
+
+// releaseIfAttached hands a held question to Claude's dialog once someone
+// attaches to its terminal, at most once a second.
+func (s *tuiControls) releaseIfAttached(ctx context.Context, now time.Time) {
+	if s.held == nil || now.Sub(s.held.checkedAt) < time.Second {
+		return
+	}
+	s.held.checkedAt = now
+	if terminalAttached(ctx, s.input) {
+		s.release()
+	}
+}
+
+// terminalAttached reports whether a client is attached to Claude's tmux
+// session, where its dialogs can be answered.
+func terminalAttached(ctx context.Context, input tuiInput) bool {
+	attached, ok := input.(interface{ Attached(context.Context) bool })
+	return ok && attached.Attached(ctx)
 }

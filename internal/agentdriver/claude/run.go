@@ -156,7 +156,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 	cmd.Env = env
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	input := discoverTUIInput(env)
-	if err := reply(protocol.Ready{ProtocolVersion: protocol.Version, BackendPath: executable, Capabilities: protocol.Capabilities{NativeTUI: true, Monitor: true, BundledSkills: true, LiveContent: true, Streaming: true, ImageInput: supportsImageInput(input), Prompt: supportsControl(input, protocol.CommandPrompt), Steering: supportsControl(input, protocol.CommandSteer), FollowUp: supportsControl(input, protocol.CommandFollowUp), Cancel: supportsControl(input, protocol.CommandAbort), Control: protocol.ControlEmulated}}); err != nil {
+	if err := reply(protocol.Ready{ProtocolVersion: protocol.Version, BackendPath: executable, Capabilities: protocol.Capabilities{NativeTUI: true, Monitor: true, BundledSkills: true, LiveContent: true, Streaming: true, ImageInput: supportsImageInput(input), Prompt: supportsControl(input, protocol.CommandPrompt), Steering: supportsControl(input, protocol.CommandSteer), FollowUp: supportsControl(input, protocol.CommandFollowUp), Cancel: supportsControl(input, protocol.CommandAbort), Control: protocol.ControlEmulated, Answer: true}}); err != nil {
 		return err
 	}
 	if err := cmd.Start(); err != nil {
@@ -195,7 +195,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 	controls = &tuiControls{input: input, emit: func(kind string, c protocol.ControlCommand, failed bool) {
 		state, reason := controls.deliveryFacts(c)
 		_ = emitFact(protocol.RuntimeEvent{Type: kind, Failed: failed, CommandID: c.ID, RequestID: c.RequestID, DeliveryState: state, ReasonCode: reason})
-	}}
+	}, showQuestion: func(id, input string) { contentServer.SetQuestion(id, "AskUserQuestion", input) }}
 	readiness := &readinessTracker{started: time.Now()}
 	readiness.tick(ctx, controls, time.Now(), emitFact)
 	defer func() { closingDeadline = time.Now().Add(3 * time.Second); controls.close() }()
@@ -253,6 +253,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 				_ = emitFact(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: fact.Failed, ReasonCode: reason, CommandID: turns.commandID, RequestID: turns.requestID})
 			}
 			controls.tick(ctx, time.Now())
+			controls.releaseIfAttached(ctx, time.Now())
 			readiness.tick(ctx, controls, time.Now(), emitFact)
 		case <-stopDeadline:
 			if err := cmd.Process.Kill(); err != nil {
@@ -268,6 +269,10 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 			if command.Type == protocol.CommandPrompt || command.Type == protocol.CommandSteer || command.Type == protocol.CommandFollowUp || command.Type == protocol.CommandAbort {
 				err := controls.accept(ctx, command)
 				request.Respond(err)
+				continue
+			}
+			if command.Type == protocol.CommandAnswer {
+				request.Respond(controls.answer(command))
 				continue
 			}
 			if command.Type != protocol.CommandShutdown {
@@ -317,6 +322,21 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 			}
 			request.Respond(err)
 		case request := <-hooks.Requests():
+			if request.Command.Type == "ask" {
+				// The question hook waits here for an answer through wi,
+				// unless the terminal is attached to answer Claude's dialog.
+				var value askInput
+				if request.Command.ProtocolVersion != protocol.RuntimeVersion || json.Unmarshal([]byte(request.Command.Message), &value) != nil || value.SessionID != session || value.ToolUseID == "" {
+					request.Respond(fmt.Errorf("invalid Claude question hook"))
+					continue
+				}
+				if terminalAttached(ctx, input) {
+					request.RespondWith("", nil)
+					continue
+				}
+				controls.hold(request, value)
+				continue
+			}
 			var h hookInput
 			err := json.Unmarshal([]byte(request.Command.Message), &h)
 			if request.Command.ProtocolVersion != protocol.RuntimeVersion || request.Command.Type != "hook" {
@@ -339,6 +359,12 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 				startExecution := false
 				pending := controls.pending
 				controls.hook(h.Event, h.PromptDigest)
+				switch {
+				case (h.Event == "PostToolUse" || h.Event == "PostToolUseFailure") && h.Tool == "AskUserQuestion", h.Event == "UserPromptSubmit", h.Event == "Stop", h.Event == "StopFailure", h.Event == "SessionEnd":
+					// The question is over: answered in the terminal, or its
+					// turn was interrupted or ended.
+					controls.release()
+				}
 				asking := controls.asking
 				controls.observeQuestion(h.Event, h.Tool, h.Notification)
 				if h.Event == "UserPromptSubmit" && pending != nil && pending.phase == "confirmed" {

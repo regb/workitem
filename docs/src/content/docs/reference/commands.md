@@ -155,6 +155,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi agent profile set PROFILE [NAME=VALUE...]` | Move a stopped item to another profile of its conversation's driver |
 | `wi agent control send` | Send steering or follow-up text and optional repeatable `--image` attachments |
 | `wi agent control abort` | Abort the current agent run |
+| `wi agent answer [ANSWER...]` | Show the question the agent waits on, or answer it: one answer per question, an option number or label, or your own text |
 
 ## Attention and views
 

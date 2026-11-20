@@ -9,8 +9,11 @@ import (
 
 const (
 	MaxControlMessageBytes = 64 << 10
-	MaxControlImages       = 4
-	MaxControlImageBytes   = 8 << 20
+	// MaxControlAnswers and MaxControlAnswerBytes bound CommandAnswer.
+	MaxControlAnswers     = 16
+	MaxControlAnswerBytes = 8 << 10
+	MaxControlImages      = 4
+	MaxControlImageBytes  = 8 << 20
 	// Allow base64 expansion, escaped message text, and envelope metadata.
 	MaxControlCommandBytes = 12 << 20
 )
@@ -18,6 +21,23 @@ const (
 // ValidateContent bounds prompt content independently of the access mechanism.
 // Drivers must also enforce these limits for clients connecting directly.
 func (c ControlCommand) ValidateContent() error {
+	if c.Type == CommandAnswer {
+		if c.Message != "" || len(c.Images) > 0 || c.Setting != nil {
+			return fmt.Errorf("control answer carries only its answers")
+		}
+		if len(c.ToolCallID) > 200 || len(c.Answers) == 0 || len(c.Answers) > MaxControlAnswers {
+			return fmt.Errorf("control answer requires a bounded tool call and one to %d answers", MaxControlAnswers)
+		}
+		for question, answer := range c.Answers {
+			if question == "" || len(question) > MaxControlAnswerBytes || len(answer) > MaxControlAnswerBytes || !utf8.ValidString(question) || !utf8.ValidString(answer) || strings.TrimSpace(answer) == "" {
+				return fmt.Errorf("control answers must be nonempty UTF-8 text of at most %d bytes", MaxControlAnswerBytes)
+			}
+		}
+		return nil
+	}
+	if c.ToolCallID != "" || len(c.Answers) > 0 {
+		return fmt.Errorf("control %s does not accept answers", c.Type)
+	}
 	if c.Type == CommandSet {
 		if c.Setting == nil || c.Message != "" || len(c.Images) > 0 {
 			return fmt.Errorf("control set requires one setting and no message content")

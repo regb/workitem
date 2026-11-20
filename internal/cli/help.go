@@ -690,9 +690,19 @@ var helpDocs = map[string]helpDoc{
 	},
 	"agent": {
 		Summary:     "Inspect, run, monitor, and communicate with the primary agent",
-		Usage:       []string{"wi agent <status|control|runtime|monitor|settings|profile> [options]"},
+		Usage:       []string{"wi agent <status|control|answer|runtime|monitor|settings|profile> [options]"},
 		Description: []string{"Agent commands derive status from runtime events and expose direct runtime control."},
-		SeeAlso:     []string{"agent status", "agent control", "agent runtime", "agent monitor", "agent settings", "agent profile"},
+		SeeAlso:     []string{"agent status", "agent control", "agent answer", "agent runtime", "agent monitor", "agent settings", "agent profile"},
+	},
+	"agent answer": {
+		Summary: "Show or answer the question the agent waits on",
+		Usage:   []string{"wi agent answer [--item <selector>]", "wi agent answer [--item <selector>] ANSWER..."},
+		Description: []string{
+			"When the agent asks a question (Claude's AskUserQuestion), its turn waits for the answer. Without answers, the command shows the questions and their options. With one ANSWER per question, in order, it answers them as if answered in the agent's own interface: an option number or label, several separated by commas for a question that allows several, or your own text.",
+			"A headless agent waits for the answer from wi. A TUI agent waits for it too while no terminal is attached; once one is, Claude shows its own dialog there and the question is answered in the terminal. Answering takes control of the agent when nobody holds it, like sending a message.",
+		},
+		Options:  []helpOption{{"--item <selector>", "Select an item explicitly."}},
+		Examples: []string{`wi agent answer`, `wi agent answer 2`, `wi agent answer "Blue" "1,3"`, `wi agent answer "Use the existing table"`},
 	},
 	"agent profile": {
 		Summary: "Manage agent profiles, or move an item to another",
