@@ -26,6 +26,10 @@ func TestAWorkingAgentNeedsNoAttentionForItsLastResponse(t *testing.T) {
 		{"problem", &v1.ItemObservation{AgentStatus: problem, Unread: true}, false, true},
 		{"waiting item with an unread reply", &v1.ItemObservation{AgentStatus: idle, Unread: true}, true, true},
 		{"waiting item, idle agent", &v1.ItemObservation{AgentStatus: idle}, true, false},
+		{"busy agent on another branch with changes", &v1.ItemObservation{AgentStatus: busy, BranchMismatch: true, WorktreeStatus: v1.WorktreeStatus_WORKTREE_STATUS_PROBLEM, WorktreeDirty: true}, false, false},
+		{"branch mismatch while background work runs", &v1.ItemObservation{AgentStatus: idle, BranchMismatch: true, BackgroundTasks: 1}, false, false},
+		{"settled agent on another branch", &v1.ItemObservation{AgentStatus: idle, BranchMismatch: true}, false, true},
+		{"checkout problem with no agent running", &v1.ItemObservation{WorktreeStatus: v1.WorktreeStatus_WORKTREE_STATUS_PROBLEM}, false, true},
 	} {
 		if got := needsAttention(c.o, c.waiting); got != c.want {
 			t.Errorf("%s: needsAttention=%v, want %v", c.name, got, c.want)

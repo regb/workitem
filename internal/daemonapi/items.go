@@ -158,9 +158,10 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 
 // needsAttention reports whether an active item needs the operator. An agent
 // still working (busy, capturing code, or waiting on background work)
-// needs no attention for its last response or for being idle; it does for a
-// question or a problem. A waiting item needs attention only for an unread
-// response.
+// needs no attention for its last response, for being idle, or for its
+// checkout: a branch the agent switched or a checkout problem waits until it
+// settles, when the item needs attention anyway. It does for a question or an
+// agent problem. A waiting item needs attention only for an unread response.
 func needsAttention(o *v1.ItemObservation, waiting bool) bool {
 	working := o.Capturing || o.AgentStatus == v1.AgentStatus_AGENT_STATUS_BUSY || o.BackgroundTasks > 0
 	if o.Unread && !working {
@@ -169,7 +170,10 @@ func needsAttention(o *v1.ItemObservation, waiting bool) bool {
 	if waiting {
 		return false
 	}
-	return o.AgentStatus == v1.AgentStatus_AGENT_STATUS_IDLE && !working || o.AgentStatus == v1.AgentStatus_AGENT_STATUS_PROBLEM || o.WorktreeStatus == v1.WorktreeStatus_WORKTREE_STATUS_PROBLEM || o.BranchMismatch || o.Asking
+	if o.Asking || o.AgentStatus == v1.AgentStatus_AGENT_STATUS_PROBLEM {
+		return true
+	}
+	return !working && (o.AgentStatus == v1.AgentStatus_AGENT_STATUS_IDLE || o.WorktreeStatus == v1.WorktreeStatus_WORKTREE_STATUS_PROBLEM || o.BranchMismatch)
 }
 func (s *Server) GetItem(ctx context.Context, req *connect.Request[v1.GetItemRequest]) (*connect.Response[v1.GetItemResponse], error) {
 	c, err := s.canonical(ctx, req.Msg.ItemId, 0)
