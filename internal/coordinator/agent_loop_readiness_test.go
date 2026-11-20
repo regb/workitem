@@ -136,7 +136,7 @@ func TestObserverKeepsAQuestionAskedAfterTheLastRequest(t *testing.T) {
 	if err := NewExternalObserver(db, root).applyActionability(importTestID, &observation); err != nil {
 		t.Fatal(err)
 	}
-	if observation.Status != "idle" || observation.Reason != "Claude is waiting for your answer" {
+	if observation.Status != "idle" || observation.Reason != "The agent is waiting for your answer" {
 		t.Fatalf("question was not left for the operator: %+v", observation)
 	}
 }

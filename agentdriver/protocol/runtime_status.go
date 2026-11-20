@@ -62,7 +62,7 @@ func RuntimeReasonText(code string) string {
 	case "editor_not_visible":
 		return "Claude chat editor is not visible; inspect its TUI"
 	case "question_pending":
-		return "Claude is waiting for your answer"
+		return "The agent is waiting for your answer"
 	case "plan_approval_pending":
 		return "Claude is waiting for plan approval"
 	case "permission_pending":

@@ -40,7 +40,7 @@ wi agent runtime ensure --mode headless item-slug
 wi agent runtime restart item-slug     # same mode, current settings and repository variables
 ```
 
-Bundled Pi and Claude support both modes. Claude headless requires Claude Code 2.1.299 or later and keeps one persistent process for successive turns. Its private output uses API text deltas; the native TUI still uses line batches. Neither Claude mode offers atomic idle-only controls. A question the agent asks (Claude's `AskUserQuestion`) pauses its turn: Wi reports the agent as waiting for your answer, under NEEDS ATTENTION rather than NEEDS FIXING. You answer it in the web conversation, which shows each question with its options and a field for your own answer, or with `wi agent answer`, in either Claude mode. In the TUI, the question waits for an answer through Wi while no terminal is attached; once you attach, Claude shows its own dialog there instead, and you answer it in the terminal. Plan approvals and permission prompts are still answered in the Claude TUI's terminal; headless Claude runs with permissions bypassed, and refuses a plan approval it cannot ask. Drivers must advertise the requested mode. Force cleanup affects only verified Wi-owned processes.
+Bundled Pi and Claude support both modes; the bundled Antigravity driver is headless only (see below). Claude headless requires Claude Code 2.1.299 or later and keeps one persistent process for successive turns. Its private output uses API text deltas; the native TUI still uses line batches. Neither Claude mode offers atomic idle-only controls. A question the agent asks (Claude's `AskUserQuestion`) pauses its turn: Wi reports the agent as waiting for your answer, under NEEDS ATTENTION rather than NEEDS FIXING. You answer it in the web conversation, which shows each question with its options and a field for your own answer, or with `wi agent answer`, in either Claude mode. In the TUI, the question waits for an answer through Wi while no terminal is attached; once you attach, Claude shows its own dialog there instead, and you answer it in the terminal. Plan approvals and permission prompts are still answered in the Claude TUI's terminal; headless Claude runs with permissions bypassed, and refuses a plan approval it cannot ask. Drivers must advertise the requested mode. Force cleanup affects only verified Wi-owned processes.
 
 ## Channels
 
@@ -91,3 +91,15 @@ The Pi driver exports the skill embedded in the Wi executable to a private tempo
 The Claude driver exports the same bundled skill as a temporary native plugin in both modes.
 
 An already running agent keeps its existing skill and driver code. Installing a new Wi build affects agents started by a daemon of that build, not running ones. See the [driver protocol](../../reference/agent-driver-protocol/#bundled-skills).
+
+## Antigravity
+
+The bundled `antigravity` driver runs Google's Antigravity CLI headless, through the Agent Client Protocol: `agy acp`, version 1.5 or later. Sign in once by running `agy`; wi uses that login and never opens a browser itself. Add a profile with `wi agent profile add antigravity --driver antigravity` (and `executable=/path/to/agy` when `agy` is not on the `PATH`).
+
+- **Conversations.** Antigravity keeps its sessions in its own store, so the driver writes a journal of each conversation (`sessions/antigravity/*.jsonl` in the item directory) that wi shows as its history, and a new runtime resumes the same native session with `session/resume`.
+- **Instructions.** `agent.append_system_prompt` is appended to Antigravity's system prompt when the CLI offers it (1.5.7 and later); older versions start without it.
+- **Work after a prompt.** A command or timer can keep running after its prompt ends, and Antigravity replies by itself when it finishes: the agent stays busy until that work is done and the reply is over.
+- **Messages.** A message sent during a turn steers it (1.5.0 and later); a follow-up waits for the turn to end. Stop cancels the turn, and with it the commands it runs.
+- **Permissions and questions.** Agents run with full access, so wi allows each tool request; a fixed-choice question waits for your answer, in the web conversation or with `wi agent answer`.
+- **Models.** The model and reasoning level are session settings that change live; reasoning maps onto the levels the chosen model offers.
+- **Usage limits.** An exhausted quota stops the turn as a usage limit, and the item waits on the `antigravity` usage provider (see [Usage limits](../lifecycle/#usage-limits)).

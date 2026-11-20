@@ -77,15 +77,16 @@ func answerText(q agentQuestion, given string) string {
 		return label
 	}
 	if q.MultiSelect && strings.Contains(given, ",") {
-		labels := []string{}
+		// Each part is an option, or the operator's own text.
+		parts := []string{}
 		for _, part := range strings.Split(given, ",") {
-			label, ok := pick(part)
-			if !ok {
-				return given
+			if label, ok := pick(part); ok {
+				parts = append(parts, label)
+			} else if part = strings.TrimSpace(part); part != "" {
+				parts = append(parts, part)
 			}
-			labels = append(labels, label)
 		}
-		return strings.Join(labels, ", ")
+		return strings.Join(parts, ", ")
 	}
 	return given
 }

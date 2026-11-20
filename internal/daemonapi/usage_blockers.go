@@ -248,8 +248,13 @@ func (s *Server) itemUsageProvider(ctx context.Context, m model.Manifest) string
 }
 
 func usageProvider(driver, modelName string) string {
-	if driver == "claude" {
+	switch driver {
+	case "claude":
 		return "claude"
+	case "antigravity":
+		// Antigravity's quota belongs to the Google account, whatever model
+		// it runs.
+		return "antigravity"
 	}
 	prefix, _, ok := strings.Cut(modelName, "/")
 	if !ok || prefix == "" {

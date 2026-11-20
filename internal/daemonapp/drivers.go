@@ -20,7 +20,7 @@ func configuredDriverClients(cfg config.Config, selfPath string, environment map
 	}
 	for driverName, definition := range cfg.Drivers {
 		path, args := definition.Command, []string(nil)
-		if path == "" && (driverName == "pi" || driverName == "claude") && selfPath != "" {
+		if path == "" && (driverName == "pi" || driverName == "claude" || driverName == "antigravity") && selfPath != "" {
 			path, args = selfPath, []string{"internal-driver", driverName}
 		}
 		if path != "" {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	antigravitydriver "github.com/regb/workitem/internal/agentdriver/antigravity"
 	claudedriver "github.com/regb/workitem/internal/agentdriver/claude"
 	pidriver "github.com/regb/workitem/internal/agentdriver/pi"
 	"github.com/regb/workitem/internal/cli"
@@ -33,10 +34,12 @@ func main() {
 				run = pidriver.Run
 			case "claude":
 				run = claudedriver.Run
+			case "antigravity":
+				run = antigravitydriver.Run
 			}
 		}
 		if run == nil {
-			os.Stderr.WriteString("usage: wi internal-driver <pi|claude>\n")
+			os.Stderr.WriteString("usage: wi internal-driver <pi|claude|antigravity>\n")
 			os.Exit(2)
 		}
 		if err := run(ctx); err != nil {

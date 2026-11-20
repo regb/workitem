@@ -15,7 +15,7 @@ Install these programs before building `wi`:
 - [tmux](https://github.com/tmux/tmux) for interactive TUI mode
 - [fzf](https://github.com/junegunn/fzf) 0.71+ for the optional `wi switch` picker
 
-Headless agents do not require tmux or fzf. Pi and Claude support TUI and headless modes. Claude headless requires Claude Code 2.1.299 or later and the native receipt/identity capabilities used by the adapter. Configure your chosen agent's normal authentication before starting an agent. The Wi skill is embedded in the Wi executable. When an agent starts, the Pi driver exports a private temporary copy and passes it explicitly with `--skill`; do not add a separate copy to Pi configuration. Global skills and settings are not modified.
+Headless agents do not require tmux or fzf. Pi and Claude support TUI and headless modes; Antigravity (`agy` 1.5 or later) runs headless. Claude headless requires Claude Code 2.1.299 or later and the native receipt/identity capabilities used by the adapter. Configure your chosen agent's normal authentication before starting an agent. The Wi skill is embedded in the Wi executable. When an agent starts, the Pi driver exports a private temporary copy and passes it explicitly with `--skill`; do not add a separate copy to Pi configuration. Global skills and settings are not modified.
 
 Check the prerequisites available for your workflow:
 

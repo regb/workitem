@@ -114,7 +114,7 @@ type AgentStatusMarkersConfig struct {
 }
 
 func Default() Config {
-	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt, UsageLimitMessage: DefaultUsageLimitMessage}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Repo: RepoConfig{FollowUpstream: FollowUpstreamFastForward}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, PluginSettings: map[string]map[string]any{}}
+	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt, UsageLimitMessage: DefaultUsageLimitMessage}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Repo: RepoConfig{FollowUpstream: FollowUpstreamFastForward}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}, "antigravity": {Defaults: map[string]any{}}}, PluginSettings: map[string]map[string]any{}}
 }
 
 // PluginRegistrations reads only installation metadata to build a declarative

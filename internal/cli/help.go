@@ -715,11 +715,11 @@ var helpDocs = map[string]helpDoc{
 			"wi agent profile set [--item <selector>] PROFILE [NAME=VALUE...]",
 		},
 		Description: []string{
-			"An agent profile names a coding agent setup: a driver (pi or claude) and the settings it launches with, such as executable, model, reasoning, and Pi's extensions. Profiles are kept by the daemon, not in config.toml, and the web Settings → Agents page edits the same list. When there are none, the first wi command adds one for each agent its drivers find installed, Pi's first, which becomes the default. New items use the default profile unless created with --agent. Agents log in on their own; profiles hold no credentials.",
+			"An agent profile names a coding agent setup: a driver (pi, claude or antigravity) and the settings it launches with, such as executable, model, reasoning, and Pi's extensions. Profiles are kept by the daemon, not in config.toml, and the web Settings → Agents page edits the same list. When there are none, the first wi command adds one for each agent its drivers find installed, Pi's first, which becomes the default. New items use the default profile unless created with --agent. Agents log in on their own; profiles hold no credentials.",
 			"KEY=VALUE sets a driver setting and KEY= removes it; the driver validates the settings before they are saved, and executable must be an absolute path to an executable file. A removed profile's items keep its name and ask to move when they next start. The default profile cannot be removed while another exists.",
 			"set moves an item to another profile: when its profile was removed or renamed, or to run its conversation with another profile of the same driver, such as another account. The conversation belongs to its driver, so only a profile of that driver can take it over; before the item has a conversation, any profile can. No agent may be running for the item. NAME=VALUE changes the item's model or reasoning in the same step, as wi agent settings set does; an empty VALUE resets one to the profile.",
 		},
-		Options:  []helpOption{{"--driver DRIVER", "With add: the driver, pi or claude."}, {"--label LABEL", "The name shown for the profile."}, {"--item <selector>", "With set: select an item explicitly."}},
+		Options:  []helpOption{{"--driver DRIVER", "With add: the driver, pi, claude or antigravity."}, {"--label LABEL", "The name shown for the profile."}, {"--item <selector>", "With set: select an item explicitly."}},
 		Examples: []string{`wi agent profile list`, `wi agent profile add pi-work --driver pi --label "Pi (work)" executable=/usr/local/bin/pi model=anthropic/claude-sonnet`, `wi agent profile default pi-work`, `wi agent profile set --item auth claude model=`},
 	},
 	"agent settings": {

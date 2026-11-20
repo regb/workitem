@@ -33,7 +33,7 @@ func withClient(ctx context.Context, local *coordinator.Client, paths xdg.Paths,
 	a.AgentConfig, a.AgentStatusConfig, a.AttentionConfig, a.DriversConfig = cfg.Agent, cfg.AgentStatus, cfg.Attention, cfg.Drivers
 	a.Plugins, a.Tmux, a.SelfPath = host, tmux.New("tmux"), self
 	a.AgentRuntimeStateRoot, a.AgentRuntimeSocketRoot = paths.DataStateRoot, paths.DataRuntimeRoot
-	for _, driver := range []string{"pi", "claude"} {
+	for _, driver := range []string{"pi", "claude", "antigravity"} {
 		a.BundledDriverCommands[driver] = app.BundledDriverCommand{Path: self, Args: []string{"internal-driver", driver}}
 	}
 	clients := configuredDriverClients(cfg, self, env)
