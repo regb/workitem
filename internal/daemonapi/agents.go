@@ -214,6 +214,13 @@ func (s *Server) RestartAgent(ctx context.Context, req *connect.Request[v1.Resta
 	return response(&v1.RestartAgentResponse{Agent: current, Job: job}, nil)
 }
 func (s *Server) controlLease(ctx context.Context, itemID, leaseID string, takeVacant bool) (*model.ControlLease, error) {
+	return s.controlLeaseStarting(ctx, itemID, leaseID, takeVacant, true)
+}
+
+// controlLeaseStarting is controlLease; start says whether taking vacant
+// control may also start the agent. A caller that starts the agent itself,
+// in a job that can ask for approvals, takes control without it.
+func (s *Server) controlLeaseStarting(ctx context.Context, itemID, leaseID string, takeVacant, start bool) (*model.ControlLease, error) {
 	lease, err := s.Local.Lease(ctx, itemID)
 	if err != nil {
 		return nil, err
@@ -230,7 +237,7 @@ func (s *Server) controlLease(ctx context.Context, itemID, leaseID string, takeV
 	}
 	// Taking vacant control may replace the agent with one this caller can
 	// drive (a TUI with a headless one); the replacement must be started.
-	result, err := s.App.AcquireControl(ctx, s.controlRequest(ctx, itemID, who.client, false, true))
+	result, err := s.App.AcquireControl(ctx, s.controlRequest(ctx, itemID, who.client, false, start))
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +405,10 @@ func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMe
 			return nil, aborted("previous message delivery is uncertain on a stopped agent; inspect its history")
 		}
 	}
-	if _, err := s.controlLease(ctx, r.ItemId, r.LeaseId, true); err != nil {
+	// Control is taken here without starting the agent: the job starts it,
+	// where an approval it needs, such as trusting a worktree .envrc, can be
+	// asked for and answered.
+	if _, err := s.controlLeaseStarting(ctx, r.ItemId, r.LeaseId, true, false); err != nil {
 		return nil, rpcError(err)
 	}
 	who := caller(ctx)
@@ -406,7 +416,7 @@ func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMe
 		ctx = context.WithValue(ctx, identityKey{}, who)
 		unlock := s.lock(r.ItemId)
 		defer unlock()
-		if _, err := s.controlLease(ctx, r.ItemId, r.LeaseId, true); err != nil {
+		if _, err := s.controlLeaseStarting(ctx, r.ItemId, r.LeaseId, true, false); err != nil {
 			return err
 		}
 		j.phase("starting agent")
