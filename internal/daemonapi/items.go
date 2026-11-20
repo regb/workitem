@@ -586,7 +586,7 @@ func (s *Server) ListItemEvents(ctx context.Context, req *connect.Request[v1.Lis
 }
 func (s *Server) AddBlocker(ctx context.Context, req *connect.Request[v1.AddBlockerRequest]) (*connect.Response[v1.AddBlockerResponse], error) {
 	r := req.Msg
-	if r.Kind < 1 || r.Kind > 3 {
+	if r.Kind < v1.BlockerKind_BLOCKER_KIND_TIME || r.Kind > v1.BlockerKind_BLOCKER_KIND_USAGE {
 		return nil, invalid("valid blocker kind is required")
 	}
 	if r.Until != nil {
@@ -594,7 +594,7 @@ func (s *Server) AddBlocker(ctx context.Context, req *connect.Request[v1.AddBloc
 			return nil, invalid(err.Error())
 		}
 	}
-	b := model.Blocker{Kind: strings.ToLower(strings.TrimPrefix(r.Kind.String(), "BLOCKER_KIND_")), ItemID: r.BlockingItemId, Event: r.Event, Label: r.Label, Meta: r.Meta}
+	b := model.Blocker{Kind: strings.ToLower(strings.TrimPrefix(r.Kind.String(), "BLOCKER_KIND_")), ItemID: r.BlockingItemId, Event: r.Event, Label: r.Label, Meta: r.Meta, Provider: r.Provider, FollowUp: r.FollowUp}
 	if r.Until != nil {
 		t := r.Until.AsTime()
 		b.Until = &t
@@ -614,6 +614,7 @@ func (s *Server) ClearBlocker(ctx context.Context, req *connect.Request[v1.Clear
 		if !req.Msg.ClearAll {
 			c.BlockerID = req.Msg.BlockerId
 		}
+		c.DropFollowUp = req.Msg.DropFollowUp
 	})
 	return response(&v1.ClearBlockerResponse{Item: item(result.Manifest, result.Revision)}, err)
 }

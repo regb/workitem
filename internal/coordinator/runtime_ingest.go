@@ -202,6 +202,12 @@ func allowedLiveRuntimeEvent(eventType string) bool {
 }
 
 func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSemanticEvent, activity RuntimeActivity) {
+	defer func() {
+		// Only a problem keeps the reason code of the failure behind it.
+		if observation.Status != "problem" {
+			observation.FailureReason = ""
+		}
+	}()
 	at := event.Timestamp.UTC()
 	observation.AgentLoopState = activity.AgentState
 	observation.LastActivityAt = &at
@@ -227,6 +233,7 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 		if activity.AgentState == "failed" {
 			observation.Status = "problem"
 			observation.Reason = "live agent loop settled with a failure"
+			observation.FailureReason = activity.FailureReason
 			if reason := driverprotocol.RuntimeReasonText(activity.FailureReason); reason != "" {
 				observation.Reason = reason
 			}
@@ -240,6 +247,7 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 		if event.Failed {
 			observation.Status = "problem"
 			observation.Reason = "live runtime event reports failed or interrupted work"
+			observation.FailureReason = event.ReasonCode
 			if reason := driverprotocol.RuntimeReasonText(event.ReasonCode); reason != "" {
 				observation.Reason = reason
 			}

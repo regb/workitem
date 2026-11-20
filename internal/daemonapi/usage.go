@@ -38,6 +38,9 @@ type usageState struct {
 	checkedAt    time.Time
 	running      chan struct{}
 	lastActivity atomic.Int64
+	// blocked is set while an item waits on a usage blocker: checks then go
+	// on without API use, to clear it.
+	blocked atomic.Bool
 	// run checks usage once; tests replace it.
 	run func(ctx context.Context, refresh bool) (*v1.GetUsageResponse, error)
 }
@@ -119,7 +122,8 @@ func (s *Server) startUsageCheck(refresh bool) chan struct{} {
 	return done
 }
 
-// usageLoop checks usage every usageInterval while the API is in use.
+// usageLoop checks usage every usageInterval while the API is in use or an
+// item waits on a usage blocker.
 func (s *Server) usageLoop() {
 	defer s.callbacks.Done()
 	ticker := time.NewTicker(usageTick)
@@ -135,10 +139,11 @@ func (s *Server) usageLoop() {
 }
 
 // maybeCheckUsage starts a background check when the last one is older than
-// usageInterval and the API was used within usageIdle.
+// usageInterval and the API was used within usageIdle, or an item waits on a
+// usage blocker.
 func (s *Server) maybeCheckUsage(now time.Time) {
 	u := &s.usage
-	if now.Sub(time.Unix(u.lastActivity.Load(), 0)) > usageIdle {
+	if now.Sub(time.Unix(u.lastActivity.Load(), 0)) > usageIdle && !u.blocked.Load() {
 		return
 	}
 	u.mu.Lock()

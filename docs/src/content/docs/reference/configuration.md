@@ -66,6 +66,7 @@ trust = "prompt"
 
 [agent]
 startup_message = "Read this work item's description with `wi show`. Work on the task it describes. Run relevant checks and report the outcome."
+usage_limit_message = "Continue where you left off."
 
 [agent_status.markers]
 busy = "agent"
@@ -210,6 +211,10 @@ All are repository-scoped, so set them with `wi repo settings set NAME plugins.s
 `agent.startup_message` is the global message the daemon sends when an item starts with a message but none is given, as `wi new --start` does. It must be a non-empty quoted string. Escape newlines as `\n` within the string. `--prompt TEXT` overrides this message for that creation and implies `--start`. It conflicts with an explicit `--start=false`. Neither message changes the durable description supplied through `--desc-file`.
 
 `wi resume` never sends a startup message. `wi start` for an existing item starts its agent without submitting a message. Use `wi agent control send` to explicitly start a turn in an existing conversation.
+
+## Usage limits
+
+When an agent stops on a usage limit, the daemon makes its item wait on a usage blocker until quota is back (see [Usage limits](../../concepts/lifecycle/#usage-limits)). `agent.usage_limit_message` is the blocker's follow-up, the message sent to the agent once it is cleared; the default is `Continue where you left off.` An empty string sets the blocker without a follow-up, so the item waits and then returns to the attention queue for you to continue. It applies to blockers set after the daemon restarts.
 
 ## Appended system instructions
 

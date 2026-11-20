@@ -18,6 +18,10 @@ const (
 	BlockerTime     = "time"
 	BlockerItem     = "item"
 	BlockerExternal = "external"
+	// BlockerUsage waits for a provider's usage limit to reset. The daemon
+	// sets it when an agent stops on a usage limit and clears it once a usage
+	// check shows the provider allows work again.
+	BlockerUsage = "usage"
 
 	// Pre-schema-6 lifecycle names, read only by the one-time database upgrade.
 	LegacyStateWorking  = "working"
@@ -28,16 +32,23 @@ const (
 	MaxBlockerLabelLength = 40
 	MaxBlockerMetaKeys    = 16
 	MaxBlockerMetaValue   = 256
+	MaxBlockerProvider    = 64
+	// MaxFollowUpLength bounds a blocker's follow-up message.
+	MaxFollowUpLength = 16 * 1024
 )
 
 var blockerMetaKey = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,63}$`)
 
 // Blocker is durable operator intent: the item cannot make progress until it
 // is cleared. Time and item blockers are cleared by the coordinator when their
-// condition is met; external blockers are cleared explicitly or by automation.
-// Each kind is self-describing: a time, another item, or the name of the
-// external event. Meta is opaque structured data that automation can match
-// before clearing the blocker through the same API.
+// condition is met; usage blockers by the daemon once quota is back; external
+// blockers are cleared explicitly or by automation. Each kind is
+// self-describing: a time, another item, a provider's usage limit, or the
+// name of the external event. Meta is opaque structured data that automation
+// can match before clearing the blocker through the same API.
+//
+// FollowUp is a message for the item's agent: when the blocker is cleared,
+// it is sent once the item no longer waits.
 type Blocker struct {
 	ID     string     `json:"id"`
 	Kind   string     `json:"kind"`
@@ -46,9 +57,25 @@ type Blocker struct {
 	Event  string     `json:"event,omitempty"`
 	// Label is an optional short display form chosen by whoever creates the
 	// blocker, such as "#1234" for a pull request.
-	Label     string            `json:"label,omitempty"`
-	Meta      map[string]string `json:"meta,omitempty"`
-	CreatedAt time.Time         `json:"created_at"`
+	Label string            `json:"label,omitempty"`
+	Meta  map[string]string `json:"meta,omitempty"`
+	// Provider names the usage provider a usage blocker waits on, such as
+	// claude or codex; Until is then the expected reset, if known.
+	Provider  string    `json:"provider,omitempty"`
+	FollowUp  string    `json:"follow_up,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// FollowUp is a message armed by a cleared blocker. It is sent to the agent
+// once the item no longer waits, unless the item was prompted after the
+// blocker was set: then the operator has moved on and it is dropped.
+type FollowUp struct {
+	// ID is the blocker's ID.
+	ID      string `json:"id"`
+	Message string `json:"message"`
+	// BlockedAt is when the blocker was set; ClearedAt when it was cleared.
+	BlockedAt time.Time `json:"blocked_at"`
+	ClearedAt time.Time `json:"cleared_at"`
 }
 
 // Open reports whether the blocker still prevents progress at now. An expired
@@ -68,6 +95,15 @@ func (b Blocker) Describe() string {
 		return "until " + b.Until.Local().Format("2006-01-02 15:04")
 	case b.Kind == BlockerItem:
 		return "on " + b.ItemID
+	case b.Kind == BlockerUsage:
+		text := "usage limit"
+		if b.Provider != "" {
+			text = b.Provider + " " + text
+		}
+		if b.Until != nil {
+			text += ", resets " + b.Until.Local().Format("2006-01-02 15:04")
+		}
+		return text
 	case b.Event != "":
 		return b.Event
 	default:
@@ -83,15 +119,12 @@ func (b Blocker) Short(now time.Time, itemName func(string) string) string {
 	}
 	switch {
 	case b.Kind == BlockerTime && b.Until != nil:
-		until := b.Until.In(now.Location())
-		switch {
-		case until.Year() == now.Year() && until.YearDay() == now.YearDay():
-			return "until " + until.Format("15:04")
-		case until.Sub(now) < 6*24*time.Hour:
-			return "until " + until.Format("Mon 15:04")
-		default:
-			return "until " + until.Format("Jan 2")
+		return "until " + shortTime(*b.Until, now)
+	case b.Kind == BlockerUsage:
+		if b.Until != nil && b.Until.After(now) {
+			return "usage, resets " + shortTime(*b.Until, now)
 		}
+		return "usage limit"
 	case b.Kind == BlockerItem:
 		if itemName != nil {
 			if name := itemName(b.ItemID); name != "" {
@@ -101,6 +134,19 @@ func (b Blocker) Short(now time.Time, itemName func(string) string) string {
 		return "on " + b.ItemID
 	}
 	return b.Describe()
+}
+
+// shortTime renders a time near now compactly.
+func shortTime(at, now time.Time) string {
+	at = at.In(now.Location())
+	switch {
+	case at.Year() == now.Year() && at.YearDay() == now.YearDay():
+		return at.Format("15:04")
+	case at.Sub(now) < 6*24*time.Hour:
+		return at.Format("Mon 15:04")
+	default:
+		return at.Format("Jan 2")
+	}
 }
 
 // ShortList renders several blockers for one item.
@@ -170,7 +216,7 @@ func ValidResolution(resolution string) bool {
 }
 
 func ValidBlockerKind(kind string) bool {
-	return kind == BlockerTime || kind == BlockerItem || kind == BlockerExternal
+	return kind == BlockerTime || kind == BlockerItem || kind == BlockerExternal || kind == BlockerUsage
 }
 
 // NormalizeStateInput maps operator input to a lifecycle state.
@@ -186,7 +232,13 @@ func NormalizeStateInput(value string) (string, error) {
 // ValidateBlocker checks a blocker's shape independent of other items.
 func ValidateBlocker(b Blocker, itemID string, now time.Time) error {
 	if !ValidBlockerKind(b.Kind) {
-		return fmt.Errorf("invalid blocker kind %q; expected time, item, or external", b.Kind)
+		return fmt.Errorf("invalid blocker kind %q; expected time, item, external, or usage", b.Kind)
+	}
+	if len(b.FollowUp) > MaxFollowUpLength || !utf8.ValidString(b.FollowUp) || strings.ContainsRune(b.FollowUp, 0) {
+		return fmt.Errorf("blocker follow-up must be valid text of up to %d bytes", MaxFollowUpLength)
+	}
+	if b.Kind != BlockerUsage && b.Provider != "" {
+		return fmt.Errorf("only usage blockers name a provider")
 	}
 	if len(b.Event) > MaxBlockerEventLength || strings.IndexFunc(b.Event, unicode.IsControl) >= 0 {
 		return fmt.Errorf("blocker event must be a single line of up to %d bytes", MaxBlockerEventLength)
@@ -225,6 +277,13 @@ func ValidateBlocker(b Blocker, itemID string, now time.Time) error {
 		}
 		if b.Until != nil {
 			return fmt.Errorf("item blocker must not have a time")
+		}
+	case BlockerUsage:
+		if len(b.Provider) > MaxBlockerProvider || strings.IndexFunc(b.Provider, func(r rune) bool { return unicode.IsControl(r) || unicode.IsSpace(r) }) >= 0 {
+			return fmt.Errorf("usage blocker provider must be a single word of up to %d bytes", MaxBlockerProvider)
+		}
+		if b.ItemID != "" {
+			return fmt.Errorf("usage blocker must not reference an item")
 		}
 	case BlockerExternal:
 		if strings.TrimSpace(b.Event) == "" {

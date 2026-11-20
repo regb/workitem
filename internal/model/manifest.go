@@ -53,6 +53,9 @@ type Manifest struct {
 	SnoozedUntil  *time.Time        `json:"snoozed_until,omitempty"`
 	Resolution    string            `json:"resolution,omitempty"`
 	Blockers      []Blocker         `json:"blockers,omitempty"`
+	// FollowUps are messages from cleared blockers, waiting to be sent to the
+	// agent once the item no longer waits.
+	FollowUps []FollowUp `json:"follow_ups,omitempty"`
 }
 
 func (m Manifest) TerminalSessionName() string {

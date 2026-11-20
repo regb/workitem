@@ -24,7 +24,7 @@ func rpcBlockers(ctx context.Context, command string, args []string, cfg Config,
 	}
 	fs := newFlagSet(command+" "+action, cfg.Stderr)
 	selected := fs.String("item", "", "item")
-	kind := fs.String("kind", "", "time, item or external")
+	kind := fs.String("kind", "", "time, item, external or usage")
 	until := fs.String("until", "", "absolute time or duration")
 	on := fs.String("on", "", "blocking item")
 	event := fs.String("for", "", "external event")
@@ -32,6 +32,9 @@ func rpcBlockers(ctx context.Context, command string, args []string, cfg Config,
 	clear := fs.Bool("clear", false, "clear all blockers")
 	all := fs.Bool("all", false, "clear all blockers")
 	label := fs.String("label", "", "blocker label")
+	then := fs.String("then", "", "message to send the agent once the blocker is cleared")
+	provider := fs.String("provider", "", "usage provider")
+	dropFollowUp := fs.Bool("drop-follow-up", false, "clear without sending follow-ups")
 	blockerID := fs.String("blocker", "", "blocker id")
 	fs.StringVar(blockerID, "id", "", "blocker id")
 	var meta repeatFlag
@@ -52,7 +55,13 @@ func rpcBlockers(ctx context.Context, command string, args []string, cfg Config,
 	if !clearing && *blockerID != "" {
 		return usageErr{errors.New("--id requires clearing a blocker")}
 	}
-	if (clearing || action == "list") && (*kind != "" || *until != "" || *on != "" || *event != "" || *label != "" || len(meta) > 0) {
+	if !clearing && *dropFollowUp {
+		return usageErr{errors.New("--drop-follow-up requires clearing a blocker")}
+	}
+	if *provider != "" && *kind != "usage" {
+		return usageErr{errors.New("--provider requires --kind usage")}
+	}
+	if (clearing || action == "list") && (*kind != "" || *until != "" || *on != "" || *event != "" || *label != "" || *then != "" || len(meta) > 0) {
 		return usageErr{errors.New("blocker creation flags cannot be used when listing or clearing")}
 	}
 	switch *kind {
@@ -68,6 +77,10 @@ func rpcBlockers(ctx context.Context, command string, args []string, cfg Config,
 	case "external":
 		if *event == "" {
 			return usageErr{errors.New("external blockers require --event or --for")}
+		}
+	case "usage":
+		if *on != "" || *event != "" {
+			return usageErr{errors.New("usage blockers take only --provider and --until")}
 		}
 	default:
 		return usageErr{fmt.Errorf("unknown blocker kind %q", *kind)}
@@ -97,7 +110,7 @@ func rpcBlockers(ctx context.Context, command string, args []string, cfg Config,
 		return rpcEmit(cfg, jsonOut, value.Msg)
 	}
 	if clearing {
-		value, err := cfg.API.Items.ClearBlocker(ctx, rpcRequest(cfg, &v1.ClearBlockerRequest{ItemId: id, BlockerId: *blockerID, ClearAll: *blockerID == ""}))
+		value, err := cfg.API.Items.ClearBlocker(ctx, rpcRequest(cfg, &v1.ClearBlockerRequest{ItemId: id, BlockerId: *blockerID, ClearAll: *blockerID == "", DropFollowUp: *dropFollowUp}))
 		if err != nil {
 			return err
 		}
@@ -107,15 +120,27 @@ func rpcBlockers(ctx context.Context, command string, args []string, cfg Config,
 	if err != nil {
 		return usageErr{err}
 	}
-	r, err := rpcBlockerRequest(ctx, cfg, id, *until, *on, *event)
-	if err != nil {
-		return err
+	var r *v1.AddBlockerRequest
+	if *kind == "usage" {
+		r = &v1.AddBlockerRequest{ItemId: id, Kind: v1.BlockerKind_BLOCKER_KIND_USAGE, Provider: *provider}
+		if *until != "" {
+			at, err := parseBlockUntil(time.Now(), *until)
+			if err != nil {
+				return usageErr{err}
+			}
+			r.Until = timestamp(at)
+		}
+	} else {
+		r, err = rpcBlockerRequest(ctx, cfg, id, *until, *on, *event)
+		if err != nil {
+			return err
+		}
 	}
 	if r == nil {
 		// The operator cancelled the picker for --on -.
 		return nil
 	}
-	r.Label, r.Meta = *label, metadata
+	r.Label, r.Meta, r.FollowUp = *label, metadata, *then
 	value, err := cfg.API.Items.AddBlocker(ctx, rpcRequest(cfg, r))
 	if err != nil {
 		return err

@@ -72,6 +72,8 @@ func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.C
 	go s.scheduleLoop()
 	s.callbacks.Add(1)
 	go s.usageLoop()
+	s.callbacks.Add(1)
+	go s.blockerLoop()
 	a.ReviewRecords = core
 	a.ReviewCaptures = app.NewReviewCaptureQueue(ctx, a.CaptureAfterSettlement)
 	a.ReviewCaptures.Changed = core.Database().NotifyAll
@@ -342,7 +344,7 @@ func checkout(m model.Checkout) *v1.Checkout {
 func blockers(values []model.Blocker) []*v1.Blocker {
 	out := []*v1.Blocker{}
 	for _, b := range values {
-		out = append(out, &v1.Blocker{Id: b.ID, Kind: v1.BlockerKind(v1.BlockerKind_value["BLOCKER_KIND_"+strings.ToUpper(b.Kind)]), Until: optionalStamp(b.Until), ItemId: b.ItemID, Event: b.Event, Label: b.Label, Meta: b.Meta, CreatedAt: stamp(b.CreatedAt)})
+		out = append(out, &v1.Blocker{Id: b.ID, Kind: v1.BlockerKind(v1.BlockerKind_value["BLOCKER_KIND_"+strings.ToUpper(b.Kind)]), Until: optionalStamp(b.Until), ItemId: b.ItemID, Event: b.Event, Label: b.Label, Meta: b.Meta, CreatedAt: stamp(b.CreatedAt), Provider: b.Provider, FollowUp: b.FollowUp})
 	}
 	return out
 }
@@ -350,6 +352,9 @@ func item(m model.Manifest, revision uint64) *v1.Item {
 	result := &v1.Item{Id: m.ID, Slug: m.Slug, Title: m.Title, State: state(m.State), Resolution: resolution(m.Resolution), Labels: m.Labels, DeepWork: m.DeepWork, Repository: &v1.RepositoryRef{Id: m.Repository.ID, Name: m.Repository.Name}, CreatedFromCommit: m.Repository.CreatedFromCommit, Checkout: checkout(m.Checkout), AgentProfile: m.Agent, AgentSettings: m.AgentSettings, Blockers: blockers(m.Blockers), CreatedAt: stamp(m.CreatedAt), UpdatedAt: stamp(m.UpdatedAt), StateChangedAt: stamp(m.StateChangedAt), Revision: uint32(revision), Priority: m.Priority, Pinned: m.Pinned, SnoozedUntil: optionalStamp(m.SnoozedUntil)}
 	if m.PrimaryConversation != nil {
 		result.Conversation = &v1.ConversationRef{Id: m.PrimaryConversation.ID, Driver: m.PrimaryConversation.Driver}
+	}
+	for _, f := range m.FollowUps {
+		result.FollowUps = append(result.FollowUps, &v1.FollowUp{Id: f.ID, Message: f.Message, BlockedAt: stamp(f.BlockedAt), ClearedAt: stamp(f.ClearedAt)})
 	}
 	return result
 }

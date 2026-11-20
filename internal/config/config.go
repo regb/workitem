@@ -19,6 +19,7 @@ const (
 	DefaultMaxDeepWorkActive  = 2
 	DefaultRepositoryFolders  = 2
 	DefaultAppendSystemPrompt = "This conversation belongs to a Wi work item. Read its task with `wi show` and inspect task context with `wi show --json`. File unrelated work as a separate item; do not change lifecycle, workspaces, or terminals without the user's authorization."
+	DefaultUsageLimitMessage  = "Continue where you left off."
 	DefaultStartupMessage     = "Read this work item's description with `wi show`. Work on the task it describes. Run relevant checks and report the outcome."
 )
 
@@ -65,6 +66,10 @@ type RepoConfig struct {
 type AgentConfig struct {
 	AppendSystemPrompt string `json:"append_system_prompt"`
 	StartupMessage     string `json:"startup_message"`
+	// UsageLimitMessage is the follow-up of the usage blocker the daemon sets
+	// when an agent stops on a usage limit: it is sent once quota is back.
+	// Empty sets the blocker without a follow-up.
+	UsageLimitMessage string `json:"usage_limit_message"`
 }
 type DriverDefinitionConfig struct {
 	Command  string         `json:"command,omitempty"`
@@ -109,7 +114,7 @@ type AgentStatusMarkersConfig struct {
 }
 
 func Default() Config {
-	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Repo: RepoConfig{FollowUpstream: FollowUpstreamFastForward}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, PluginSettings: map[string]map[string]any{}}
+	return Config{Agent: AgentConfig{StartupMessage: DefaultStartupMessage, AppendSystemPrompt: DefaultAppendSystemPrompt, UsageLimitMessage: DefaultUsageLimitMessage}, DeepWork: DeepWorkConfig{MaxActive: DefaultMaxDeepWorkActive}, List: ListConfig{RepositoryFolders: DefaultRepositoryFolders}, Repo: RepoConfig{FollowUpstream: FollowUpstreamFastForward}, Attention: AttentionConfig{Priority: priority.DefaultStrategy}, Drivers: map[string]DriverDefinitionConfig{"pi": {Defaults: map[string]any{}}, "claude": {Defaults: map[string]any{}}}, PluginSettings: map[string]map[string]any{}}
 }
 
 // PluginRegistrations reads only installation metadata to build a declarative
@@ -190,7 +195,7 @@ func LoadWithRegistry(path string, registry *options.Registry) (Config, []string
 	}
 	// Validate the typed core and preserve plugin options for registered schemas.
 	known := map[string]map[string]bool{
-		"deep_work": {"max_active": true}, "item": {"defaults": true}, "list": {"repository_folders": true, "labels": true}, "agent": {"startup_message": true, "append_system_prompt": true}, "agent_status": {"markers": true}, "attention": {"priority": true},
+		"deep_work": {"max_active": true}, "item": {"defaults": true}, "list": {"repository_folders": true, "labels": true}, "agent": {"startup_message": true, "append_system_prompt": true, "usage_limit_message": true}, "agent_status": {"markers": true}, "attention": {"priority": true},
 		"daemon": {"managed": true}, "repo": {"follow_upstream": true},
 	}
 	for section, value := range root {
@@ -331,6 +336,9 @@ func (cfg Config) ResolvedPluginSettings(registry *options.Registry) map[string]
 func Validate(cfg Config) error {
 	if strings.ContainsRune(cfg.Agent.AppendSystemPrompt, 0) {
 		return fmt.Errorf("agent.append_system_prompt must not contain NUL")
+	}
+	if strings.ContainsRune(cfg.Agent.UsageLimitMessage, 0) || len(cfg.Agent.UsageLimitMessage) > model.MaxFollowUpLength {
+		return fmt.Errorf("agent.usage_limit_message must be text of up to %d bytes", model.MaxFollowUpLength)
 	}
 	if strings.TrimSpace(cfg.Agent.StartupMessage) == "" {
 		return fmt.Errorf("agent.startup_message must not be empty")

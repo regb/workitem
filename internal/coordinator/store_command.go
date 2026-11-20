@@ -171,6 +171,9 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		if (len(previous.Blockers) > 0 || len(normalized.Blockers) > 0) && string(oldBlockers) != string(newBlockers) {
 			return "", nil, errors.New("blocker changes require a typed manifest command")
 		}
+		// Follow-ups belong to blocker commands; a whole-manifest save keeps
+		// the stored ones, however old the caller's copy.
+		normalized.FollowUps = previous.FollowUps
 		if err := validateRepositoryReference(tx, normalized); err != nil {
 			return "", nil, err
 		}

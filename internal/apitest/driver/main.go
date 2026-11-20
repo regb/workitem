@@ -174,6 +174,10 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 		if role == "assistant" {
 			message["stopReason"] = "stop"
 		}
+		if role == "error" {
+			// A provider refusal, as Pi records it: an empty failed reply.
+			message = map[string]any{"role": "assistant", "content": []any{}, "stopReason": "error", "errorMessage": text}
+		}
 		_ = json.NewEncoder(file).Encode(map[string]any{"type": "message", "id": entry, "parentId": parent, "timestamp": time.Now().UTC().Format(time.RFC3339Nano), "message": message})
 		_ = file.Sync()
 		leaf = entry
@@ -243,6 +247,17 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 					continue
 				}
 				time.Sleep(30 * time.Millisecond)
+				if strings.Contains(c.Message, "usage limit") {
+					// The provider refuses the turn: its usage limit is reached.
+					mu.Lock()
+					failed := appendMessage("error", "You have hit your usage limit")
+					busy = false
+					mu.Unlock()
+					content.MarkSaved("", []string{failed})
+					content.SetActivity("Idle")
+					_ = emit(p.RuntimeEvent{Type: p.EventAgentSettled, Outcome: "failed", Failed: true, ReasonCode: "usage_limit", Readiness: "ready"})
+					continue
+				}
 				answer := "Echo: " + c.Message
 				content.Update(p.EventMessageDelta, answer, "")
 				mu.Lock()

@@ -68,9 +68,12 @@ type AgentObservation struct {
 	Activity           AttentionActivity      `json:"activity"`
 	// BackgroundTasks counts background work the idle agent waits on: it
 	// re-activates the agent when it completes.
-	BackgroundTasks int       `json:"background_tasks,omitempty"`
-	ObservedAt      time.Time `json:"observed_at"`
-	Warnings        []string  `json:"warnings,omitempty"`
+	BackgroundTasks int `json:"background_tasks,omitempty"`
+	// FailureReason is the reason code of the failure behind a problem
+	// status, such as usage_limit.
+	FailureReason string    `json:"failure_reason,omitempty"`
+	ObservedAt    time.Time `json:"observed_at"`
+	Warnings      []string  `json:"warnings,omitempty"`
 }
 
 type AgentObservationResult struct {
@@ -280,6 +283,7 @@ func (o *ExternalObserver) ReconcileActionability(ctx context.Context) error {
 }
 
 func (o *ExternalObserver) applyActionability(itemID string, observation *AgentObservation) error {
+	observation.FailureReason = ""
 	var owner model.AgentRuntime
 	ownerFound, err := o.database.ReadProjection(RuntimeOwnershipProjection, itemID, &owner)
 	if err != nil {
@@ -369,6 +373,7 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 	case liveCurrent && live.AgentState == "failed":
 		observation.Status = "problem"
 		observation.Reason = "live agent loop settled with a failure"
+		observation.FailureReason = live.FailureReason
 		if reason := driverprotocol.RuntimeReasonText(live.FailureReason); reason != "" {
 			observation.Reason = reason
 		} else if live.LeafID != "" {
@@ -411,6 +416,7 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 		observation.Reason = "latest terminal assistant message failed"
 		if last := conversation.LastTerminalAssistant; last != nil && last.StopReason == "usage_limit" {
 			observation.Reason = driverprotocol.RuntimeReasonText(last.StopReason)
+			observation.FailureReason = last.StopReason
 		}
 	case conversation.InferredTurnState == "idle":
 		observation.Status = "idle"

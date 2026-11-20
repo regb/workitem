@@ -23,6 +23,15 @@ const (
 	// BlockerClearedPrompted ends a snooze: prompting the item means the
 	// operator decided it is time to work on it.
 	BlockerClearedPrompted = "prompted"
+	// BlockerClearedUsageAvailable ends a usage blocker: a usage check shows
+	// the provider allows work again.
+	BlockerClearedUsageAvailable = "usage_available"
+)
+
+// Follow-up outcomes recorded by CommandFollowUpDone.
+const (
+	FollowUpSent    = "sent"
+	FollowUpDropped = "dropped"
 )
 
 func blockerID(commandID string, index int) string {
@@ -47,7 +56,65 @@ func blockerEventData(blocker model.Blocker) map[string]any {
 	if len(blocker.Meta) > 0 {
 		data["meta"] = blocker.Meta
 	}
+	if blocker.Provider != "" {
+		data["provider"] = blocker.Provider
+	}
+	if blocker.FollowUp != "" {
+		// Events stay compact: the message itself lives on the item.
+		data["follow_up"] = true
+	}
 	return data
+}
+
+// clearBlocker records a blocker's clearance and arms its follow-up, unless
+// the operator dropped it, prompted the item, or closed it.
+func clearBlocker(manifest *model.Manifest, blocker model.Blocker, data map[string]any, cause string, drop bool, now time.Time, appendEvent func(string, map[string]any)) {
+	data["cause"] = cause
+	arm := blocker.FollowUp != "" && !drop && cause != BlockerClearedPrompted && cause != BlockerClearedClosed
+	if blocker.FollowUp != "" && !arm {
+		data["follow_up_dropped"] = true
+	}
+	appendEvent("blocker.cleared", data)
+	if arm {
+		manifest.FollowUps = append(manifest.FollowUps, model.FollowUp{ID: blocker.ID, Message: blocker.FollowUp, BlockedAt: blocker.CreatedAt, ClearedAt: now})
+	}
+}
+
+// dropFollowUps discards armed follow-ups, for example when the item closes.
+func dropFollowUps(manifest *model.Manifest, reason string, appendEvent func(string, map[string]any)) {
+	for _, followUp := range manifest.FollowUps {
+		appendEvent("follow_up.dropped", map[string]any{"follow_up_id": followUp.ID, "reason": reason})
+	}
+	manifest.FollowUps = nil
+}
+
+// applyFollowUpDoneCommand removes a follow-up once it was sent or dropped.
+// A follow-up already gone is a no-op, so a repeated report is harmless.
+func applyFollowUpDoneCommand(command ManifestCommand, manifest *model.Manifest, appendEvent func(string, map[string]any)) error {
+	if command.FollowUpOutcome != FollowUpSent && command.FollowUpOutcome != FollowUpDropped {
+		return fmt.Errorf("follow-up outcome must be sent or dropped")
+	}
+	reason := strings.TrimSpace(command.Reason)
+	if len(reason) > 512 {
+		reason = reason[:512]
+	}
+	remaining := []model.FollowUp{}
+	for _, followUp := range manifest.FollowUps {
+		if followUp.ID != command.FollowUpID {
+			remaining = append(remaining, followUp)
+			continue
+		}
+		data := map[string]any{"follow_up_id": followUp.ID}
+		if reason != "" {
+			data["reason"] = reason
+		}
+		appendEvent("follow_up."+command.FollowUpOutcome, data)
+	}
+	if len(remaining) == 0 {
+		remaining = nil
+	}
+	manifest.FollowUps = remaining
+	return nil
 }
 
 // applyBlockerAddCommand adds one or more blockers atomically; one invalid
@@ -106,6 +173,16 @@ func applyBlockerAddCommand(command ManifestCommand, manifest *model.Manifest, a
 				return fmt.Errorf("work item %s already waits, directly or indirectly, on %s; refusing a dependency cycle", blocker.ItemID, manifest.ID)
 			}
 		}
+		if blocker.Kind == model.BlockerUsage {
+			// One usage blocker is enough: the item waits for quota either way.
+			duplicate := false
+			for _, existing := range manifest.Blockers {
+				duplicate = duplicate || existing.Kind == model.BlockerUsage
+			}
+			if duplicate {
+				continue
+			}
+		}
 		manifest.Blockers = append(manifest.Blockers, blocker)
 		byID[manifest.ID] = *manifest
 		appendEvent("blocker.added", blockerEventData(blocker))
@@ -144,19 +221,35 @@ func blocksTransitively(byID map[string]model.Manifest, from, target string) boo
 }
 
 func applyBlockerClearCommand(command ManifestCommand, manifest *model.Manifest, appendEvent func(string, map[string]any)) error {
+	now := command.CreatedAt.UTC()
+	cause := BlockerClearedManual
+	switch command.ClearCause {
+	case "":
+	case BlockerClearedUsageAvailable, BlockerClearedExpired:
+		cause = command.ClearCause
+	default:
+		return fmt.Errorf("unsupported blocker clear cause %q", command.ClearCause)
+	}
 	id := strings.TrimSpace(command.BlockerID)
 	if id == "" {
-		clearAllBlockers(manifest, BlockerClearedManual, appendEvent)
+		if cause != BlockerClearedManual {
+			return errors.New("clearing a blocker for a cause requires its id")
+		}
+		for _, blocker := range manifest.Blockers {
+			clearBlocker(manifest, blocker, blockerEventData(blocker), cause, command.DropFollowUp, now, appendEvent)
+		}
+		manifest.Blockers = nil
 		return nil
 	}
 	remaining := []model.Blocker{}
 	found := false
 	for _, blocker := range manifest.Blockers {
 		if blocker.ID == id {
+			if cause != BlockerClearedManual && blocker.Kind != model.BlockerUsage {
+				return fmt.Errorf("blocker %s does not wait on usage", id)
+			}
 			found = true
-			data := blockerEventData(blocker)
-			data["cause"] = BlockerClearedManual
-			appendEvent("blocker.cleared", data)
+			clearBlocker(manifest, blocker, blockerEventData(blocker), cause, command.DropFollowUp, now, appendEvent)
 			continue
 		}
 		remaining = append(remaining, blocker)
@@ -168,11 +261,9 @@ func applyBlockerClearCommand(command ManifestCommand, manifest *model.Manifest,
 	return nil
 }
 
-func clearAllBlockers(manifest *model.Manifest, cause string, appendEvent func(string, map[string]any)) {
+func clearAllBlockers(manifest *model.Manifest, cause string, now time.Time, appendEvent func(string, map[string]any)) {
 	for _, blocker := range manifest.Blockers {
-		data := blockerEventData(blocker)
-		data["cause"] = cause
-		appendEvent("blocker.cleared", data)
+		clearBlocker(manifest, blocker, blockerEventData(blocker), cause, false, now, appendEvent)
 	}
 	manifest.Blockers = nil
 }
@@ -185,7 +276,8 @@ func nilIfEmpty(blockers []model.Blocker) []model.Blocker {
 }
 
 // SweepBlockers clears blockers whose condition the coordinator can observe:
-// expired time blockers, time blockers followed by a prompt to the item, and
+// expired time blockers, time and usage blockers followed by a prompt to the
+// item, and
 // item blockers whose blocking item closed or no longer exists. Item and
 // external blockers are facts about the world and survive prompts. Each clearance is an ordinary item event, so an item's
 // history records when and why it unblocked even if the daemon was offline at
@@ -227,7 +319,7 @@ func (d *Database) SweepBlockers(now time.Time) (int, error) {
 				switch {
 				case blocker.Kind == model.BlockerTime && blocker.Until != nil && !blocker.Until.After(now):
 					data["cause"] = BlockerClearedExpired
-				case blocker.Kind == model.BlockerTime && requested != nil && requested.After(blocker.CreatedAt):
+				case (blocker.Kind == model.BlockerTime || blocker.Kind == model.BlockerUsage) && requested != nil && requested.After(blocker.CreatedAt):
 					data["cause"] = BlockerClearedPrompted
 					data["prompted_at"] = requested.UTC()
 				case blocker.Kind == model.BlockerItem:
@@ -245,8 +337,10 @@ func (d *Database) SweepBlockers(now time.Time) (int, error) {
 					remaining = append(remaining, blocker)
 					continue
 				}
-				payload, _ := json.Marshal(data)
-				pending = append(pending, commandEvent{Type: "blocker.cleared", Payload: payload})
+				clearBlocker(&manifest, blocker, data, data["cause"].(string), false, now, func(eventType string, data map[string]any) {
+					payload, _ := json.Marshal(data)
+					pending = append(pending, commandEvent{Type: eventType, Payload: payload})
+				})
 			}
 			if len(pending) == 0 {
 				continue

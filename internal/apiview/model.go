@@ -64,7 +64,7 @@ func Worktree(value v1.WorktreeStatus) string {
 func Blockers(values []*v1.Blocker) []model.Blocker {
 	out := []model.Blocker{}
 	for _, v := range values {
-		b := model.Blocker{ID: v.Id, Kind: strings.ToLower(strings.TrimPrefix(v.Kind.String(), "BLOCKER_KIND_")), ItemID: v.ItemId, Event: v.Event, Label: v.Label, Meta: v.Meta, CreatedAt: Time(v.CreatedAt)}
+		b := model.Blocker{ID: v.Id, Kind: strings.ToLower(strings.TrimPrefix(v.Kind.String(), "BLOCKER_KIND_")), ItemID: v.ItemId, Event: v.Event, Label: v.Label, Meta: v.Meta, Provider: v.Provider, FollowUp: v.FollowUp, CreatedAt: Time(v.CreatedAt)}
 		if v.Until != nil {
 			t := v.Until.AsTime()
 			b.Until = &t
@@ -90,6 +90,9 @@ func Manifest(v *v1.Item) model.Manifest {
 	}
 	if c := v.Conversation; c != nil {
 		m.PrimaryConversation = &model.Conversation{ID: c.Id, Driver: c.Driver}
+	}
+	for _, f := range v.FollowUps {
+		m.FollowUps = append(m.FollowUps, model.FollowUp{ID: f.Id, Message: f.Message, BlockedAt: Time(f.BlockedAt), ClearedAt: Time(f.ClearedAt)})
 	}
 	return m
 }

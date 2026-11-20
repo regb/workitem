@@ -98,6 +98,9 @@ message Item {
   int32 priority = 19;
   bool pinned = 20;
   google.protobuf.Timestamp snoozed_until = 21;
+  // follow_ups are messages from cleared blockers that the daemon sends once
+  // the item no longer waits.
+  repeated FollowUp follow_ups = 22;
 }
 
 // Checkout is where the item's work happens: its branch and, while active,
@@ -133,10 +136,14 @@ enum BlockerKind {
   BLOCKER_KIND_TIME = 1;
   BLOCKER_KIND_ITEM = 2;
   BLOCKER_KIND_EXTERNAL = 3;
+  // BLOCKER_KIND_USAGE waits for a provider's usage limit to reset. The
+  // daemon sets one when an agent stops on a usage limit.
+  BLOCKER_KIND_USAGE = 4;
 }
 
 // Blocker is durable intent that an item waits. The daemon clears time and
-// item blockers; external ones are cleared explicitly.
+// item blockers, and usage blockers once a usage check shows quota is back;
+// external ones are cleared explicitly.
 message Blocker {
   string id = 1;
   BlockerKind kind = 2;
@@ -147,6 +154,22 @@ message Blocker {
   string label = 6;
   map<string, string> meta = 7;
   google.protobuf.Timestamp created_at = 8;
+  // provider is the usage provider a usage blocker waits on, such as claude;
+  // until is then the expected reset, if known.
+  string provider = 9;
+  // follow_up is a message for the agent: once the blocker is cleared and the
+  // item no longer waits, the daemon sends it, unless the item was prompted
+  // since the blocker was set.
+  string follow_up = 10;
+}
+
+// FollowUp is a message from a cleared blocker, about to be sent.
+message FollowUp {
+  // id is the blocker's ID.
+  string id = 1;
+  string message = 2;
+  google.protobuf.Timestamp blocked_at = 3;
+  google.protobuf.Timestamp cleared_at = 4;
 }
 
 // ItemObservation is what the daemon last observed about an item's agent and
@@ -420,6 +443,10 @@ message AddBlockerRequest {
   string event = 5;
   string label = 6;
   map<string, string> meta = 7;
+  // provider names the usage provider of a usage blocker.
+  string provider = 8;
+  // follow_up is sent to the agent once the blocker is cleared.
+  string follow_up = 9;
 }
 
 message AddBlockerResponse {
@@ -431,6 +458,8 @@ message ClearBlockerRequest {
   string item_id = 1;
   string blocker_id = 2;
   bool clear_all = 3;
+  // drop_follow_up clears without sending the blockers' follow-ups.
+  bool drop_follow_up = 4;
 }
 
 message ClearBlockerResponse {

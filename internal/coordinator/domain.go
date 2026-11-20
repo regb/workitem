@@ -27,6 +27,8 @@ const (
 	CommandEdit         = "item.edit"
 	CommandBlockerAdd   = "item.blocker.add"
 	CommandBlockerClear = "item.blocker.clear"
+	// CommandFollowUpDone records that a follow-up was sent or dropped.
+	CommandFollowUpDone = "item.follow_up.done"
 )
 
 type ManifestCommand struct {
@@ -47,7 +49,16 @@ type ManifestCommand struct {
 	Resolution       string          `json:"resolution,omitempty"`
 	Blockers         []model.Blocker `json:"blockers,omitempty"`
 	BlockerID        string          `json:"blocker_id,omitempty"`
-	CreatedAt        time.Time       `json:"created_at"`
+	// ClearCause is why the daemon clears a blocker; empty is a manual clear.
+	ClearCause string `json:"clear_cause,omitempty"`
+	// DropFollowUp clears blockers without sending their follow-ups.
+	DropFollowUp bool `json:"drop_follow_up,omitempty"`
+	// FollowUpID, FollowUpOutcome (sent or dropped) and Reason settle a
+	// follow-up.
+	FollowUpID      string    `json:"follow_up_id,omitempty"`
+	FollowUpOutcome string    `json:"follow_up_outcome,omitempty"`
+	Reason          string    `json:"reason,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 type CanonicalManifest struct {
@@ -366,6 +377,13 @@ func applyManifestCommand(command ManifestCommand, manifest *model.Manifest, all
 		if len(pending) == 0 {
 			return pending, false, nil
 		}
+	case CommandFollowUpDone:
+		if err := applyFollowUpDoneCommand(command, manifest, appendEvent); err != nil {
+			return nil, false, err
+		}
+		if len(pending) == 0 {
+			return pending, false, nil
+		}
 	case CommandStateSet:
 		if err := applyStateSetCommand(command, manifest, allManifests, appendEvent); err != nil {
 			return nil, false, err
@@ -536,7 +554,8 @@ func applyStateSetCommand(command ManifestCommand, manifest *model.Manifest, all
 		if !model.ValidResolution(resolution) {
 			return fmt.Errorf("invalid resolution %q; expected completed, abandoned, or superseded", resolution)
 		}
-		clearAllBlockers(manifest, "closed", appendEvent)
+		clearAllBlockers(manifest, BlockerClearedClosed, command.CreatedAt.UTC(), appendEvent)
+		dropFollowUps(manifest, "item closed", appendEvent)
 		previousSlug := manifest.Slug
 		manifest.State, manifest.Slug, manifest.Resolution = model.StateClosed, "", resolution
 		appendEvent("work_item.state_set", map[string]any{"previous_state": previous, "new_state": manifest.State, "previous_slug": previousSlug, "resolution": resolution, "workspace_unchanged": true})
