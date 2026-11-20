@@ -106,23 +106,25 @@ func TestAgentExecTUIDriverUsesPublicControlAndEventProtocol(t *testing.T) {
 			t.Fatalf("TUI driver exited before runtime.ready: %v", err)
 		default:
 		}
+		// The ready event and the negotiated runtime record are written
+		// independently: the event is relayed while the host saves the
+		// driver's ready reply. Wait for both.
 		result, err := client.RuntimeEvents(context.Background(), coordinator.RuntimeEventsRequest{ItemID: itemID, Limit: 20})
+		relayed := false
 		if err == nil {
 			for _, event := range result.Events {
-				if event.Type == driverprotocol.EventRuntimeReady {
-					goto ready
-				}
+				relayed = relayed || event.Type == driverprotocol.EventRuntimeReady
 			}
 		}
+		stored, loadErr := st.LoadAgentRuntime(itemID)
+		negotiated := loadErr == nil && stored != nil && stored.Capabilities.NativeTUI && stored.Capabilities.Prompt
+		if relayed && negotiated {
+			break
+		}
 		if time.Now().After(deadline) {
-			t.Fatalf("runtime.ready not relayed: %v", err)
+			t.Fatalf("runtime.ready relayed=%v; negotiated runtime=%+v err=%v %v", relayed, stored, err, loadErr)
 		}
 		time.Sleep(10 * time.Millisecond)
-	}
-ready:
-	stored, err := st.LoadAgentRuntime(itemID)
-	if err != nil || stored == nil || !stored.Capabilities.NativeTUI || !stored.Capabilities.Prompt {
-		t.Fatalf("negotiated runtime=%+v err=%v", stored, err)
 	}
 	controlPath := applicationRuntimeControlPath(application.AgentRuntimeSocketRoot, itemID, runtimeID)
 	shutdown := driverprotocol.ControlCommand{ProtocolVersion: driverprotocol.RuntimeVersion, ID: "shutdown-tui", RuntimeID: runtimeID, WorkItemID: itemID, Type: driverprotocol.CommandShutdown, CreatedAt: time.Now().UTC()}
