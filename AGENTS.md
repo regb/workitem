@@ -10,9 +10,9 @@ Short-lived work has a durable record: restarting an agent, releasing a worktree
 
 - A work item owns a stable ID, title, description, lifecycle, labels, deep-work classification, repository reference, checkout specification, primary conversation identity, and optional agent settings that override its profile's driver configuration (model, reasoning) for every runtime of its conversation.
 - Repositories are explicitly registered independent bare Git stores. Items retain the repository ID and immutable created-from commit. External onboarding checkouts are not operational dependencies.
-- IDs and branch specifications are immutable. Active slugs stay fixed until close clears them; reopening allocates a new slug without renaming the branch. Titles and descriptions remain editable without implicit prompts.
+- IDs and branch specifications are immutable. Active slugs stay fixed until close clears them (a closed item stays selectable by the slug it had); reopening allocates a new slug without renaming the branch. Titles and descriptions remain editable without implicit prompts.
 - Drivers validate merged profile config through stateless `config.validate` before new runtime startup. Plain backlog capture is driver-independent; existing owners are not reconfigured.
-- Lifecycle is `backlog|active|closed` and describes resources only; closing records a resolution (`completed|abandoned|superseded`). Typed blockers (`time|item|external`) are durable intent on backlog or active items; the coordinator clears time and item blockers, external ones are cleared explicitly. Deep work is a capacity-controlled classification, not a label.
+- Lifecycle is `backlog|active|closed` and describes resources only; closing records a resolution (`completed|abandoned|superseded`). Typed blockers (`time|item|external|usage`) are durable intent on backlog or active items; the coordinator clears time and item blockers, the daemon sets and clears usage blockers around a provider's usage limit, external ones are cleared explicitly. A blocker may carry a follow-up message, sent to the agent once the item no longer waits. Deep work is a capacity-controlled classification, not a label.
 - A workspace is a generation-fenced checkout claim. Managed slots are reusable wi-owned worktrees; release preserves the branch and warm slot. A workspace is not an agent process or terminal.
 - Each item has at most one durable primary conversation and one active runtime owner. Successive runtimes may resume the conversation; drivers own its native format and content.
 - TUI runtimes use tmux. Headless runtimes must remain tmux-independent. Terminal metadata is rebuildable access information, not item or conversation identity.
@@ -21,11 +21,12 @@ Short-lived work has a durable record: restarting an agent, releasing a worktree
 - One daemon per data root runs every operation and owns all adapters (Git, tmux, processes, direnv, plugins, drivers). It serves the public API `wi.core.v1` (protobuf in `proto/`, served with Connect: Connect JSON, gRPC and gRPC-Web on its unix sockets). Its coordinator owns structured writes, revisions, compact append-only events, and projections in the private bbolt `wi.db`. Descriptions and native conversations remain canonical filesystem content outside that database.
 - Clients (the CLI and other tools) use only the API through generated clients. They never run use cases or adapters, nor read wi's storage. Client-side only: argument parsing and selector resolution (with `ResolveItem`), default labels and label filters from config and environment (sent explicitly), contextual Git bases resolved read-only in the caller's own checkout, reading files and stdin (sent as content), the editor, fzf selection, attaching to tmux with the terminal target the daemon reports, rendering and exit codes, daemon start/stop, and plugin commands.
 - The API has two levels, like Git. Plumbing is the domain services' small operations (item state, claim, commit and release of checkouts, start and stop of agents); porcelain is `LifecycleService` (create and start, start, shelve, close, reopen), each documented as the plumbing it performs. Plumbing enforces lifecycle invariants atomically, so no order of calls leaves an unsafe state. Fencing tokens (`expected_revision`, `expected_generation`, claim generations, plan tokens) fail stale requests with `ABORTED`; `FAILED_PRECONDITION` means the state does not allow the operation. Creation and messages take idempotency keys.
+- Review records (revisions, threads, rounds, merges) and schedules (cron prompts that start ordinary items) are coordinator records. Git keeps only immutable revision snapshots under private create-only refs.
 - Operations that can outlive a request run as daemon-owned jobs, with progress, approval pauses and cancellation. Job summaries persist; a job unfinished when the daemon stops ends as failed (interrupted) and stays queryable.
 - The API speaks of agents: a durable conversation that is running or not, started, stopped and restarted, with a generation that changes on each start. Runtimes are the daemon's internal implementation of a running agent.
 - Observations can become stale and must not replace durable intent. Runtime and terminal caches are rebuildable. Logs live under XDG state; sockets under XDG runtime.
 - The operator endpoint serves the full API. The restricted agent endpoint allows safe backlog creation but rejects lifecycle, workspace, agent control, terminal, delete, and shutdown operations. The caller's access comes from the endpoint, never from request metadata; `GetInfo` reports it.
-- Driver-owned runtime control sockets accept prompt, steer, follow-up, abort, and shutdown commands. Host-owned event sockets validate owner identity and relay compact semantic facts, never unrestricted native content.
+- Driver-owned runtime control sockets accept prompt, steer, follow-up, abort, shutdown, set (live model/reasoning) and answer (the agent's pending question) commands. Host-owned event sockets validate owner identity and relay compact semantic facts, never unrestricted native content.
 - A partial outcome retains a successful durable step when a later resource operation fails. Report it rather than silently rolling it back.
 
 ## Code map
@@ -34,11 +35,11 @@ Short-lived work has a durable record: restarting an agent, releasing a worktree
 - `internal/apitransport/`, `internal/socketpeer/`: the Connect transport over unix sockets and socket peer checks. `internal/daemonapi/`: the API handlers. `internal/daemonapp/`: daemon-side composition of application policy, drivers, plugins and adapters.
 - `cmd/wi/`, `internal/cli/`: entrypoint, command parsing, client-side input, rendering, and generated-client calls. `internal/apiview/`: conversions from API messages to presentation types.
 - `internal/app/`: use cases hosted by the daemon: service composition, cross-cutting `usecase_*.go`, merge integration, shared `contract/`, and read composition in `view/`.
-- `internal/app/core/`: separate `item/`, `workspace/`, `primaryagent/`, and `attention/` policy. Preserve these dependency boundaries.
+- `internal/app/core/`: separate `item/`, `workspace/`, `primaryagent/`, `attention/`, and `review/` policy. Preserve these dependency boundaries.
 - `internal/coordinator/`: daemon, sole structured-state writer, bbolt events/projections, repository registry, and native-content indexing.
 - `internal/model/`, `internal/store/`: record types and filesystem access. Live structured state belongs to the coordinator; drivers own native conversations.
-- `agentdriver/`, `internal/agent/`, `internal/agentdriver/`, `skills/`: public driver contracts, runtime support, process host/clients, bundled Pi implementation, and embedded skills.
-- `internal/git/`, `internal/tmux/`, `internal/direnv/`, `internal/process/`: system adapters. `internal/app/adapter/tmux/` separates terminal operations from interactive navigation.
+- `agentdriver/`, `internal/agent/`, `internal/agentdriver/`, `skills/`: public driver contracts, runtime support, process host/clients, bundled Pi and Claude implementations, and embedded skills.
+- `internal/git/`, `internal/tmux/`, `internal/direnv/`, `internal/process/`: system adapters. `internal/plugin/`, `internal/plugins/`: the plugin host and bundled native plugins (direnv, setup, files). `internal/usage/`: subscription usage providers. `internal/app/adapter/tmux/` separates terminal operations from interactive navigation.
 - Support and tooling: configuration/path/locking/ranking/version/test helpers under `internal/`; offline conversion in `internal/migraterepositories/`; install/release and popup helpers in `scripts/`.
 
 ## Architectural constraints
@@ -75,6 +76,8 @@ After a successful change that affects the `wi` executable, install the developm
    ```
 
 A dirty-build warning is expected before commit. The script installs through `go install -buildvcs=true` and prints the installed path and version. Use `scripts/install-local --clean` only when an exact clean-commit build is required.
+
+Running agents keep the build that started them. After a change to drivers or runtime behavior, restart idle agents with `wi agent runtime stop --item ID` then `wi resume ID --agent-mode tui|headless`.
 
 If `~/.agentbox/tools/bin` exists, also update its sandbox copy after installing:
 
