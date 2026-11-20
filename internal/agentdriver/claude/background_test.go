@@ -19,6 +19,8 @@ func TestBackgroundWorkIsReadFromTheTranscript(t *testing.T) {
 		{"killed task", `{"type":"user","timestamp":"2026-11-18T19:54:38Z","message":{"role":"user","content":[{"type":"text","text":"<task-notification><task-id>b01nw8bli</task-id><status>killed</status></task-notification>"}]}}`, nil, []string{"b01nw8bli"}},
 		{"monitor event keeps it running", `{"type":"user","timestamp":"2026-11-18T16:31:36Z","message":{"role":"user","content":"<task-notification>\n<task-id>bhuyi5vdq</task-id>\n<summary>Monitor event</summary>\n<event>MISMATCH</event>\n</task-notification>"}}`, nil, nil},
 		{"monitor expiry ends it", `{"type":"user","timestamp":"2026-11-18T17:01:50Z","message":{"role":"user","content":"<task-notification>\n<task-id>b1kdxwv8s</task-id>\n<event>[Monitor expired after 30m with 1 event delivered.]</event>\n</task-notification>"}}`, nil, []string{"b1kdxwv8s"}},
+		{"task notification queued into a running turn", `{"type":"attachment","timestamp":"2026-11-20T08:49:31Z","attachment":{"type":"queued_command","prompt":"<task-notification>\n<task-id>b0vn8fq20</task-id>\n<tool-use-id>t</tool-use-id>\n<status>completed</status>\n<summary>done</summary>\n</task-notification>","commandMode":"task-notification"}}`, nil, []string{"b0vn8fq20"}},
+		{"operator message queued into a running turn", `{"type":"attachment","timestamp":"2026-11-20T08:49:31Z","attachment":{"type":"queued_command","prompt":"also check the docs","commandMode":"prompt"}}`, nil, nil},
 		{"ordinary tool result", `{"type":"user","timestamp":"2026-11-18T20:04:22Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t","content":"ok"}]},"toolUseResult":{"stdout":"ok","stderr":""}}`, nil, nil},
 	} {
 		fact, ok := summarize(1, []byte(c.record))

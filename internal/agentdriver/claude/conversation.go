@@ -198,7 +198,11 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 		PreventContinuation bool            `json:"preventContinuation"`
 		Content             json.RawMessage `json:"content"`
 		ToolUseResult       json.RawMessage `json:"toolUseResult"`
-		Message             struct {
+		Attachment          struct {
+			Type   string          `json:"type"`
+			Prompt json.RawMessage `json:"prompt"`
+		} `json:"attachment"`
+		Message struct {
 			Role    string          `json:"role"`
 			Stop    string          `json:"stop_reason"`
 			Content json.RawMessage `json:"content"`
@@ -213,6 +217,15 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 	var systemText string
 	if record.Type == "system" && record.Subtype == "informational" && record.PreventContinuation && json.Unmarshal(record.Content, &systemText) == nil && strings.HasPrefix(systemText, "UserPromptSubmit operation blocked by hook:\n") {
 		return protocol.ConversationFact{Line: line, Type: "message", Role: "assistant", Timestamp: record.Timestamp, Terminal: true, Failed: true, StopReason: "prompt_blocked"}, true
+	}
+	if record.Type == "attachment" && record.Attachment.Type == "queued_command" {
+		// A task notification that arrives during a turn is queued into it
+		// as an attachment, not a user message. It is not turn activity, but
+		// it ends its background work.
+		if _, ended := backgroundWork(nil, record.Attachment.Prompt); len(ended) > 0 {
+			return protocol.ConversationFact{Line: line, Type: "background", Timestamp: record.Timestamp, BackgroundEnded: ended}, true
+		}
+		return protocol.ConversationFact{}, true
 	}
 	if record.Type != "user" && record.Type != "assistant" {
 		return protocol.ConversationFact{}, true
@@ -388,7 +401,8 @@ func observe(path string, now time.Time) (protocol.ConversationObservation, []st
 			result.MalformedLines++
 			continue
 		}
-		if fact.Type == "" {
+		// Background facts only end background work; they are no turn.
+		if fact.Type == "" || fact.Type == "background" {
 			continue
 		}
 		copy := fact
