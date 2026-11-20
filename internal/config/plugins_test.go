@@ -21,18 +21,25 @@ func TestRegisteredGlobalConfigResolution(t *testing.T) {
 		t.Fatalf("warnings=%v err=%v", warnings, err)
 	}
 	values := cfg.ResolvedPluginSettings(bundled.Registry())
-	if values["direnv"]["load"] != false || values["direnv"]["trust"] != "prompt" {
+	if values["direnv"]["load"] != false || values["setup"]["trust"] != "never" {
 		t.Fatal(values)
 	}
-	if cfg.PluginOrigins()["plugins.direnv.load"] != "user" || cfg.PluginOrigins()["plugins.direnv.trust"] != "default" {
+	if cfg.PluginOrigins()["plugins.direnv.load"] != "user" || cfg.PluginOrigins()["plugins.setup.trust"] != "default" {
 		t.Fatal(cfg.PluginOrigins())
+	}
+}
+
+func TestRetiredDirenvTrustIsIgnoredWithAWarning(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	writeFile(t, path, "[plugins.direnv]\ntrust = \"always\"\n")
+	_, warnings, err := config.LoadWithRegistry(path, bundled.Registry())
+	if err != nil || len(warnings) != 1 || !strings.Contains(warnings[0], "plugins.direnv.trust no longer applies") {
+		t.Fatalf("warnings=%v err=%v", warnings, err)
 	}
 }
 
 func TestRegisteredConfigurationRejectsInvalidOptionsAndBindings(t *testing.T) {
 	for _, body := range []string{
-		`[plugins.direnv]
-trust = "typo"`,
 		`[plugins.direnv]
 load = "true"`,
 		`[plugins.direnv]

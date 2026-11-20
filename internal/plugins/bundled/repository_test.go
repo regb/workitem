@@ -18,51 +18,64 @@ func fixturePreparation(cfg config.Config, read plugin.RepositoryReader) plugin.
 	if err != nil {
 		panic(err)
 	}
-	return plugin.NewHost(catalog, cfg.Plugins, cfg.PluginSettings, "wi", read).Preparation(nil)
+	return plugin.NewHost(catalog, cfg.Plugins, cfg.PluginSettings, "wi", read).Preparation()
 }
 
 func TestHostResolvesFrozenRepositoryOptionsWithoutPluginDatabaseAccess(t *testing.T) {
 	cfg := config.Default()
-	cfg.PluginSettings = map[string]map[string]any{"direnv": {"load": true, "trust": "prompt"}}
+	cfg.PluginSettings = map[string]map[string]any{"setup": {"trust": "never"}, "direnv": {"load": true}}
 	reads := 0
 	trust := `"always"`
 	read := func(ctx context.Context, id string) (model.RepositorySettings, error) {
 		reads++
-		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"plugins.direnv": {"load": json.RawMessage(`false`), "trust": json.RawMessage(trust)}}}, nil
+		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"plugins.setup": {"trust": json.RawMessage(trust)}, "plugins.direnv": {"load": json.RawMessage(`false`)}}}, nil
 	}
 	p := fixturePreparation(cfg, read)
-	first, err := p.Options(context.Background(), "repo-id", "direnv")
-	if err != nil || first["load"] != false || first["trust"] != "always" {
+	first, err := p.Options(context.Background(), "repo-id", "setup")
+	if err != nil || first["trust"] != "always" {
 		t.Fatal(first, err)
+	}
+	if direnv, err := p.Options(context.Background(), "repo-id", "direnv"); err != nil || direnv["load"] != false {
+		t.Fatal(direnv, err)
 	}
 	first["trust"] = "mutated"
 	trust = `"never"`
-	again, err := p.Options(context.Background(), "repo-id", "direnv")
+	again, err := p.Options(context.Background(), "repo-id", "setup")
 	if err != nil || reads != 1 || again["trust"] != "always" {
 		t.Fatal("operation snapshot changed", again, reads, err)
 	}
 	next := fixturePreparation(cfg, read)
-	newValue, err := next.Options(context.Background(), "repo-id", "direnv")
+	newValue, err := next.Options(context.Background(), "repo-id", "setup")
 	if err != nil || reads != 2 || newValue["trust"] != "never" {
 		t.Fatal("next operation did not refresh", newValue, reads, err)
 	}
-	global, err := p.Options(context.Background(), "", "direnv")
-	if err != nil || global["trust"] != "prompt" {
+	global, err := p.Options(context.Background(), "", "setup")
+	if err != nil || global["trust"] != "never" {
 		t.Fatal("repository policy polluted global defaults", global, err)
 	}
 }
-func TestUnavailableRepositoryStateCannotFallBackToBroadGlobalTrust(t *testing.T) {
+func TestUnavailableRepositoryStateCannotFallBackToGlobalOptions(t *testing.T) {
 	cfg := config.Default()
-	cfg.PluginSettings = map[string]map[string]any{"direnv": {"trust": "always"}}
+	cfg.PluginSettings = map[string]map[string]any{"setup": {"trust": "always"}}
 	for _, read := range []plugin.RepositoryReader{nil, func(context.Context, string) (model.RepositorySettings, error) {
 		return model.RepositorySettings{}, errors.New("unavailable")
 	}, func(context.Context, string) (model.RepositorySettings, error) {
 		return model.RepositorySettings{RepositoryID: "different"}, nil
 	}} {
 		p := fixturePreparation(cfg, read)
-		if _, err := p.Options(context.Background(), "repo-id", "direnv"); err == nil {
-			t.Fatal("lookup failure silently applied global auto-trust")
+		if _, err := p.Options(context.Background(), "repo-id", "setup"); err == nil {
+			t.Fatal("lookup failure silently applied global options")
 		}
+	}
+}
+
+func TestRetiredRepositorySettingIsIgnored(t *testing.T) {
+	read := func(ctx context.Context, id string) (model.RepositorySettings, error) {
+		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"plugins.direnv": {"trust": json.RawMessage(`"prompt"`), "load": json.RawMessage(`false`)}}}, nil
+	}
+	values, err := fixturePreparation(config.Default(), read).Options(context.Background(), "repo-id", "direnv")
+	if err != nil || values["load"] != false || values["trust"] != nil {
+		t.Fatal(values, err)
 	}
 }
 

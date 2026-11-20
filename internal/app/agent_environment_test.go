@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"os"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/regb/workitem/internal/agent"
@@ -29,11 +28,10 @@ type runtimeDirenv struct {
 func (d *runtimeDirenv) Status(context.Context, string) (direnvpkg.Status, error) {
 	return d.status, nil
 }
-func (d *runtimeDirenv) Allow(context.Context, string) error {
+func (d *runtimeDirenv) Allow(context.Context, string, map[string]string) error {
 	d.allowCalls++
 	return nil
 }
-func (*runtimeDirenv) Deny(context.Context, string) error { return nil }
 func (d *runtimeDirenv) Environment(_ context.Context, _ string, base map[string]string) (map[string]string, error) {
 	d.envCalls++
 	d.base = base
@@ -80,17 +78,17 @@ func encodeTestDirenvDiff(t *testing.T) string {
 func runtimeHooks(t *testing.T, d *runtimeDirenv) plugin.Pipeline {
 	t.Helper()
 	if d == nil {
-		return plugin.Pipeline{Hooks: []plugin.Hooks{direnvext.New(nil, nil)}}
+		return plugin.Pipeline{Hooks: []plugin.Hooks{direnvext.New(nil)}}
 	}
 	if d != nil && d.status.Found {
 		if err := os.WriteFile(d.status.RCPath, []byte("fixture"), 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return plugin.Pipeline{Hooks: []plugin.Hooks{direnvext.New(d, nil)}}
+	return plugin.Pipeline{Hooks: []plugin.Hooks{direnvext.New(d)}}
 }
 
-func TestAgentRuntimeEnvironmentLoadsOnlyTrustedEnvrc(t *testing.T) {
+func TestAgentRuntimeEnvironmentLoadsAnAllowedEnvrc(t *testing.T) {
 	path := t.TempDir()
 	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, Allowed: true, RCPath: path + "/.envrc"}, env: map[string]string{"TOKEN": "value"}}
 	a := &App{Preparation: runtimeHooks(t, d)}
@@ -99,34 +97,13 @@ func TestAgentRuntimeEnvironmentLoadsOnlyTrustedEnvrc(t *testing.T) {
 		t.Fatalf("env=%v warnings=%v calls=%d", env, warnings, d.envCalls)
 	}
 }
-func TestAgentRuntimeEnvironmentPromptsBeforeAllowingUntrustedEnvrc(t *testing.T) {
+func TestAgentRuntimeEnvironmentAllowsAndLoadsAWorktreeEnvrc(t *testing.T) {
 	path := t.TempDir()
 	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, RCPath: path + "/.envrc"}, env: map[string]string{"TOKEN": "value"}}
-	hooks := runtimeHooks(t, d)
-	hooks.Hooks = []plugin.Hooks{direnvext.New(d, func(context.Context, plugin.Approval) (bool, error) { return true, nil })}
-	a := &App{Preparation: hooks}
+	a := &App{Preparation: runtimeHooks(t, d)}
 	env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, agent.ModeTUI)
-	if err != nil || env["TOKEN"] != "value" || d.allowCalls != 1 || d.envCalls != 1 || len(warnings) != 1 || !strings.Contains(warnings[0], "operator approval") {
-		t.Fatalf("env=%v warnings=%v allow=%d environment=%d", env, warnings, d.allowCalls, d.envCalls)
-	}
-}
-
-func TestAgentRuntimeEnvironmentAutoTrustsOnlyConfiguredRepository(t *testing.T) {
-	repository := "01KZYHGDCECSFS4BJ2SNTQP49V"
-	checkout := t.TempDir()
-	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, RCPath: checkout + "/.envrc"}, env: map[string]string{"TOKEN": "value"}}
-	hooks := runtimeHooks(t, d)
-	hooks.Options = func(_ context.Context, id, name string) (map[string]any, error) {
-		policy := "prompt"
-		if id == repository {
-			policy = "always"
-		}
-		return map[string]any{"trust": policy}, nil
-	}
-	a := &App{Preparation: hooks}
-	env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Repository: model.Repository{ID: repository}, Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: checkout}}}, agent.ModeTUI)
-	if err != nil || env["TOKEN"] != "value" || d.allowCalls != 1 || len(warnings) != 1 || !strings.Contains(warnings[0], "configuration") {
-		t.Fatalf("env=%v warnings=%v allow=%d", env, warnings, d.allowCalls)
+	if err != nil || env["TOKEN"] != "value" || d.allowCalls != 1 || d.envCalls != 1 || len(warnings) != 0 {
+		t.Fatalf("env=%v warnings=%v allow=%d environment=%d err=%v", env, warnings, d.allowCalls, d.envCalls, err)
 	}
 }
 
@@ -203,13 +180,18 @@ func TestAgentRuntimeEnvironmentRemovesValuesLeftByEarlierLaunch(t *testing.T) {
 	}
 }
 
-func TestAgentRuntimeEnvironmentWarnsWithoutEvaluatingUntrustedEnvrc(t *testing.T) {
-	path := t.TempDir()
-	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, Allowed: false, RCPath: path + "/.envrc"}}
-	a := &App{Preparation: runtimeHooks(t, d)}
-	env, _, warnings, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: path}}}, agent.ModeTUI)
-	if err != nil || env["PATH"] == "" || env["TOKEN"] != "" || len(warnings) != 1 || !strings.Contains(warnings[0], "not trusted") || d.envCalls != 0 {
-		t.Fatalf("token=%q warnings=%v calls=%d", env["TOKEN"], warnings, d.envCalls)
+func TestAgentRuntimeEnvironmentSkipsEnvrcWhereARepositoryTurnsLoadingOff(t *testing.T) {
+	repository := "01KZYHGDCECSFS4BJ2SNTQP49V"
+	checkout := t.TempDir()
+	d := &runtimeDirenv{status: direnvpkg.Status{Found: true, RCPath: checkout + "/.envrc"}, env: map[string]string{"TOKEN": "value"}}
+	hooks := runtimeHooks(t, d)
+	hooks.Options = func(_ context.Context, id, name string) (map[string]any, error) {
+		return map[string]any{"load": id != repository}, nil
+	}
+	a := &App{Preparation: hooks}
+	env, _, _, err := a.agentRuntimeEnvironment(context.Background(), model.Manifest{Repository: model.Repository{ID: repository}, Checkout: model.Checkout{Specification: model.CheckoutSpecification{}, ClaimGeneration: 1, Claim: &model.WorkspaceClaim{ID: "test-claim", Generation: 1, Executor: model.ExecutorLocal, Path: checkout}}}, agent.ModeTUI)
+	if err != nil || env["TOKEN"] != "" || d.allowCalls != 0 || d.envCalls != 0 {
+		t.Fatalf("env=%v allow=%d environment=%d err=%v", env, d.allowCalls, d.envCalls, err)
 	}
 }
 

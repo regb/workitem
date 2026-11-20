@@ -101,7 +101,7 @@ func TestManifestIsDeclarativeBoundedAndPackageContained(t *testing.T) {
 	}
 }
 func TestNativeAndExecutableUseOneSettingsResolver(t *testing.T) {
-	r, err := NewRegistry(Definition{Name: "native", Required: true, Native: func(Approver) Hooks {
+	r, err := NewRegistry(Definition{Name: "native", Required: true, Native: func() Hooks {
 		return Hooks{Sanitize: func(_ context.Context, _ EnvironmentRequest, v map[string]any) (Patch, error) {
 			if v["load"] != false {
 				return Patch{}, os.ErrInvalid
@@ -118,7 +118,7 @@ func TestNativeAndExecutableUseOneSettingsResolver(t *testing.T) {
 		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"plugins.native": {"load": json.RawMessage(`false`)}, "plugins.external": {"labels": json.RawMessage(`[]`)}}}, nil
 	}
 	h := NewHost(r, map[string]Registration{"external": {Enabled: true}}, nil, "wi", reader)
-	env, _, _, err := h.Preparation(nil).Environment(context.Background(), "sanitize", EnvironmentRequest{Subject: Subject{RepositoryID: "repo"}, Values: map[string]string{"OLD_SECRET": "private"}})
+	env, _, _, err := h.Preparation().Environment(context.Background(), "sanitize", EnvironmentRequest{Subject: Subject{RepositoryID: "repo"}, Values: map[string]string{"OLD_SECRET": "private"}})
 	if err != nil || env["OLD_SECRET"] != "" {
 		t.Fatal("native preparation did not receive repository overrides", err)
 	}

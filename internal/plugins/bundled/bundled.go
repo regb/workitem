@@ -20,9 +20,9 @@ func Catalog(self string, registrations map[string]plugin.Registration, configDi
 	schema := direnvplugin.Definition()
 	min, max := int64(30), int64(86400)
 	definitions := []plugin.Definition{
-		{Name: schema.Name, Options: schema.Options, RetiredSections: schema.RetiredSections, Required: true, Native: func(approve plugin.Approver) plugin.Hooks { return direnvplugin.New(adapter.New("direnv"), approve) }},
-		{Name: "files", Options: filesplugin.Definition().Options, Required: true, Native: func(plugin.Approver) plugin.Hooks { return filesplugin.New() }},
-		{Name: "setup", Options: setupplugin.Definition().Options, Required: true, Native: func(plugin.Approver) plugin.Hooks { return setupplugin.New() }},
+		{Name: schema.Name, Options: schema.Options, RetiredSections: schema.RetiredSections, RetiredOptions: schema.RetiredOptions, Required: true, Native: func() plugin.Hooks { return direnvplugin.New(adapter.New("direnv")) }},
+		{Name: "files", Options: filesplugin.Definition().Options, Required: true, Native: func() plugin.Hooks { return filesplugin.New() }},
+		{Name: "setup", Options: setupplugin.Definition().Options, Required: true, Native: func() plugin.Hooks { return setupplugin.New() }},
 		{Name: "usage", Commands: []string{"show"}, Command: []string{filepath.Join(filepath.Dir(self), "wi-usage")}, Instructions: "wi usage shows how much of each subscription's quota is left (Claude, OpenAI through Codex, OpenCode Go). Run `wi usage --json` before starting a large task to check that the subscription you rely on has room."},
 		{Name: "github", Options: []options.Option{{Name: "ignore_authors", Type: "strings", Default: []string{}, Repository: true, Description: "Authors whose comments or reviews do not satisfy a wait."}, {Name: "interval_seconds", Type: "integer", Default: int64(300), Min: &min, Max: &max, Description: "Polling interval in seconds."}}, Commands: []string{"wait", "sync"}, Jobs: []plugin.Job{{Name: "check", Args: []string{"sync"}, IntervalOption: "interval_seconds", Repository: true}}, Command: []string{filepath.Join(filepath.Dir(self), "wi-github")}, Instructions: githubplugin.Skill},
 	}

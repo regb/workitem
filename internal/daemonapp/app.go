@@ -70,11 +70,6 @@ func withClient(ctx context.Context, local *coordinator.Client, paths xdg.Paths,
 		}
 		return ids, err
 	}
-	a.Preparation = host.Preparation(func(ctx context.Context, request plugin.Approval) (bool, error) {
-		if approve := plugin.ContextApprover(ctx); approve != nil {
-			return approve(ctx, request)
-		}
-		return false, &plugin.ApprovalRequired{Approval: request}
-	})
+	a.Preparation = host.Preparation()
 	return a, nil
 }

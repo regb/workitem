@@ -59,7 +59,7 @@ func newFixture(t *testing.T) *fixture {
 		value, err := core.LocalClient().RepositorySettings(ctx, id)
 		return value.Settings, err
 	}
-	a.Preparation = host.Preparation(nil)
+	a.Preparation = host.Preparation()
 	daemonapp.Bind(a, st, core.LocalClient())
 	a.LoadAgentProfiles = core.LocalClient().AgentProfiles
 	_, err = core.LocalClient().ChangeAgentProfile(context.Background(), coordinator.ChangeAgentProfileCommand{Put: &model.AgentProfile{Name: "test", Driver: "pi"}})

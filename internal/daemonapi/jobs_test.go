@@ -11,7 +11,6 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/plugin"
 )
 
 func jobState(t *testing.T, f *fixture, id string, state v1.JobState) *v1.Job {
@@ -31,59 +30,6 @@ func jobState(t *testing.T, f *fixture, id string, state v1.JobState) *v1.Job {
 		time.Sleep(time.Millisecond)
 	}
 }
-func TestJobApprovalIsBoundToChallengeAndFileContent(t *testing.T) {
-	f := newFixture(t)
-	path := filepath.Join(f.root, "approval.txt")
-	if err := os.WriteFile(path, []byte("first"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	job := f.api.jobs.start("approval_test", "", "", func(ctx context.Context, _ *jobRun) error {
-		allowed, err := plugin.ContextApprover(ctx)(ctx, plugin.Approval{Question: "Trust this file?", Path: path})
-		if err != nil {
-			return err
-		}
-		if !allowed {
-			return precondition("approval denied")
-		}
-		return nil
-	})
-	first := jobState(t, f, job.Id, v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL)
-	if first.Approval == nil || first.Approval.Digest == "" || first.Approval.ExpiresAt == nil {
-		t.Fatal(first)
-	}
-	_, err := f.clients.Jobs.AnswerApproval(context.Background(), connect.NewRequest(&v1.AnswerApprovalRequest{JobId: job.Id, ChallengeId: "wrong", Decision: v1.ApprovalDecision_APPROVAL_DECISION_ALLOW}))
-	if connect.CodeOf(err) != connect.CodeAborted {
-		t.Fatalf("wrong challenge: %v", err)
-	}
-	if err := os.WriteFile(path, []byte("changed"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	_, err = f.clients.Jobs.AnswerApproval(context.Background(), connect.NewRequest(&v1.AnswerApprovalRequest{JobId: job.Id, ChallengeId: first.Approval.ChallengeId, Decision: v1.ApprovalDecision_APPROVAL_DECISION_ALLOW}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var next *v1.Job
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		next = jobState(t, f, job.Id, v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL)
-		if next.Approval.ChallengeId != first.Approval.ChallengeId {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	if next.Approval.ChallengeId == first.Approval.ChallengeId || next.Approval.Digest == first.Approval.Digest {
-		t.Fatal("changed content reused approval", next)
-	}
-	_, err = f.clients.Jobs.AnswerApproval(context.Background(), connect.NewRequest(&v1.AnswerApprovalRequest{JobId: job.Id, ChallengeId: first.Approval.ChallengeId, Decision: v1.ApprovalDecision_APPROVAL_DECISION_ALLOW}))
-	if connect.CodeOf(err) != connect.CodeAborted {
-		t.Fatalf("old challenge replay: %v", err)
-	}
-	_, err = f.clients.Jobs.AnswerApproval(context.Background(), connect.NewRequest(&v1.AnswerApprovalRequest{JobId: job.Id, ChallengeId: next.Approval.ChallengeId, Decision: v1.ApprovalDecision_APPROVAL_DECISION_ALLOW}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	jobState(t, f, job.Id, v1.JobState_JOB_STATE_SUCCEEDED)
-}
 func TestCancelJobRetainsPartialOutcome(t *testing.T) {
 	f := newFixture(t)
 	job := f.api.jobs.start("cancel_test", "", "", func(ctx context.Context, j *jobRun) error {
@@ -91,10 +37,10 @@ func TestCancelJobRetainsPartialOutcome(t *testing.T) {
 		if err := os.WriteFile(path, []byte("durable"), 0600); err != nil {
 			return err
 		}
-		_, err := plugin.ContextApprover(ctx)(ctx, plugin.Approval{Question: "Continue?", Path: path})
-		return partial(err, "", "created retained file")
+		<-ctx.Done()
+		return partial(ctx.Err(), "", "created retained file")
 	})
-	jobState(t, f, job.Id, v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL)
+	jobState(t, f, job.Id, v1.JobState_JOB_STATE_RUNNING)
 	if _, err := f.clients.Jobs.CancelJob(context.Background(), connect.NewRequest(&v1.CancelJobRequest{JobId: job.Id})); err != nil {
 		t.Fatal(err)
 	}

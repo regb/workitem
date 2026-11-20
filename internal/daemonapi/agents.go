@@ -247,6 +247,16 @@ func (s *Server) controlLeaseStarting(ctx context.Context, itemID, leaseID strin
 	s.rememberLease(result.Lease)
 	return result.Lease, nil
 }
+
+// agentBusyMessage refuses a prompt to an agent at work.
+const agentBusyMessage = "agent is busy; use steer or follow_up"
+
+// agentBusy reports a prompt refused because the agent was at work.
+func agentBusy(err error) bool {
+	var refused *connect.Error
+	return errors.As(err, &refused) && refused.Code() == connect.CodeFailedPrecondition && refused.Message() == agentBusyMessage
+}
+
 func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 	var receipt coordinator.APIMessageReceipt
 	pending := false
@@ -282,7 +292,7 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 		}
 	case v1.Delivery_DELIVERY_PROMPT:
 		if busy && !pending {
-			return precondition("agent is busy; use steer or follow_up")
+			return precondition(agentBusyMessage)
 		}
 	case v1.Delivery_DELIVERY_STEER:
 		delivery = "steer"

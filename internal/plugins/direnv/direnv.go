@@ -1,5 +1,5 @@
 // Package direnv supplies the bundled environment plugin. All direnv
-// commands, formats, and trust policy belong here, not in workspace/agent core.
+// commands and formats belong here, not in workspace/agent core.
 package direnv
 
 import (
@@ -9,34 +9,33 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/regb/workitem/internal/app/contract"
 	adapter "github.com/regb/workitem/internal/direnv"
 	"github.com/regb/workitem/internal/options"
 	"github.com/regb/workitem/internal/plugin"
 )
 
 func Definition() options.Definition {
-	return options.Definition{Name: "direnv", RetiredSections: []string{"direnv"}, Options: []options.Option{
-		{Name: "load", Type: "bool", Default: true, Repository: true, Description: "Load approved project environments. Inherited-state cleanup remains enabled."},
-		{Name: "trust", Type: "string", Default: "prompt", Choices: []string{"prompt", "always", "never"}, Repository: true, Description: "Approval policy for runtime startup; user configuration only."},
+	// trust is retired: a registered repository's .envrc is loaded without
+	// asking, like the rest of its code its agents run.
+	return options.Definition{Name: "direnv", RetiredSections: []string{"direnv"}, RetiredOptions: []string{"trust"}, Options: []options.Option{
+		{Name: "load", Type: "bool", Default: true, Repository: true, Description: "Load the worktree's .envrc into agents and the commands wi runs there. Inherited-state cleanup remains enabled."},
 	}}
 }
 
 type Client interface {
 	Status(context.Context, string) (adapter.Status, error)
-	Allow(context.Context, string) error
-	Deny(context.Context, string) error
+	// Allow allows an .envrc for direnv run with the given environment.
+	Allow(context.Context, string, map[string]string) error
 	Environment(context.Context, string, map[string]string) (map[string]string, error)
 }
 
-func New(client Client, approve plugin.Approver) plugin.Hooks {
-	d := &implementation{client: client, approve: approve}
-	return plugin.Hooks{Name: "direnv", Sanitize: d.sanitize, CommandEnvironment: d.command, RuntimeEnvironment: d.runtime, PrepareCheckout: d.checkout}
+func New(client Client) plugin.Hooks {
+	d := &implementation{client: client}
+	return plugin.Hooks{Name: "direnv", Sanitize: d.sanitize, CommandEnvironment: d.command, RuntimeEnvironment: d.runtime}
 }
 
 type implementation struct {
-	client  Client
-	approve plugin.Approver
+	client Client
 }
 
 func enabled(settings map[string]any) bool { load, ok := settings["load"].(bool); return !ok || load }
@@ -94,7 +93,11 @@ func (d *implementation) runtime(ctx context.Context, r plugin.EnvironmentReques
 	if d.client == nil || !enabled(settings) || r.Subject.CheckoutPath == "" {
 		return patch, nil
 	}
-	status, err := d.client.Status(ctx, r.Subject.CheckoutPath)
+	// direnv records an allowance under the file's resolved path but checks
+	// the path it is given, so a checkout reached through a symlink (such
+	// as /tmp on macOS) is inspected, allowed and loaded resolved.
+	checkout := canonical(r.Subject.CheckoutPath)
+	status, err := d.client.Status(ctx, checkout)
 	if err != nil {
 		if absent(err) {
 			return patch, nil
@@ -109,38 +112,16 @@ func (d *implementation) runtime(ctx context.Context, r plugin.EnvironmentReques
 		return patch, fmt.Errorf("direnv .envrc is outside the verified checkout or is not a regular local file")
 	}
 	if !status.Allowed {
-		before, err := snapshot(status.RCPath)
-		if err != nil {
-			return patch, err
-		}
-		policy, _ := settings["trust"].(string)
-		approved := policy == "always"
-		if !approved && policy != "never" && d.approve != nil {
-			approved, err = d.approve(ctx, plugin.Approval{ItemID: r.Subject.ItemID, Path: status.RCPath, Question: "Allow worktree .envrc?"})
-			if err != nil {
-				return patch, fmt.Errorf("request direnv approval: %w", err)
-			}
-		}
-		if !approved {
-			patch.Warnings = append(patch.Warnings, fmt.Sprintf("worktree .envrc is not trusted; agent runtime will start without it (run `direnv allow %s` to trust it)", status.RCPath))
-			return patch, nil
-		}
-		after, err := snapshot(status.RCPath)
-		if err != nil || before != after || !contained(r.Subject.CheckoutPath, status.RCPath) {
-			return patch, fmt.Errorf("worktree .envrc changed while approval was pending; retry")
-		}
-		if err := d.client.Allow(ctx, status.RCPath); err != nil {
+		// Registering a repository lets its agents run its code; its
+		// worktree's .envrc is part of that. Allow it with the environment
+		// the agent loads it with, which decides where direnv keeps it.
+		if err := d.client.Allow(ctx, canonical(status.RCPath), r.Values); err != nil {
 			return patch, fmt.Errorf("allow worktree .envrc: %w", err)
 		}
-		if policy == "always" {
-			patch.Warnings = append(patch.Warnings, "auto-trusted worktree .envrc by operator extension configuration")
-		} else {
-			patch.Warnings = append(patch.Warnings, "trusted worktree .envrc after operator approval")
-		}
 	}
-	exported, err := d.client.Environment(ctx, r.Subject.CheckoutPath, r.Values)
+	exported, err := d.client.Environment(ctx, checkout, r.Values)
 	if err != nil {
-		return patch, fmt.Errorf("load trusted worktree .envrc: %w", err)
+		return patch, fmt.Errorf("load worktree .envrc: %w", err)
 	}
 	patch.Set = map[string]string{}
 	for key, value := range exported {
@@ -149,28 +130,6 @@ func (d *implementation) runtime(ctx context.Context, r plugin.EnvironmentReques
 		}
 	}
 	return patch, nil
-}
-func (d *implementation) checkout(ctx context.Context, r contract.CheckoutPreparation, _ map[string]any) ([]string, error) {
-	if d.client == nil || !r.Reused {
-		return nil, nil
-	}
-	status, err := d.client.Status(ctx, r.Path)
-	if err != nil {
-		if absent(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	if !status.Found || !status.Allowed {
-		return nil, nil
-	}
-	if !contained(r.Path, status.RCPath) {
-		return nil, fmt.Errorf("refusing to revoke direnv trust outside the reserved checkout")
-	}
-	if err := d.client.Deny(ctx, status.RCPath); err != nil {
-		return nil, err
-	}
-	return []string{"revoked prior direnv trust for reused slot; runtime startup will request approval again"}, nil
 }
 func (d *implementation) command(ctx context.Context, r plugin.EnvironmentRequest, settings map[string]any) (plugin.Patch, error) {
 	patch := plugin.Patch{Set: map[string]string{}}
@@ -183,7 +142,7 @@ func (d *implementation) command(ctx context.Context, r plugin.EnvironmentReques
 	if d.client == nil || !enabled(settings) || r.Subject.CheckoutPath == "" {
 		return patch, nil
 	}
-	status, err := d.client.Status(ctx, r.Subject.CheckoutPath)
+	status, err := d.client.Status(ctx, canonical(r.Subject.CheckoutPath))
 	if err != nil {
 		if absent(err) {
 			return patch, nil
@@ -215,7 +174,7 @@ func (d *implementation) command(ctx context.Context, r plugin.EnvironmentReques
 			base[key] = value
 		}
 	}
-	exported, err := d.client.Environment(ctx, r.Subject.CheckoutPath, base)
+	exported, err := d.client.Environment(ctx, canonical(r.Subject.CheckoutPath), base)
 	if err != nil {
 		return patch, fmt.Errorf("load current direnv environment: %w", err)
 	}
@@ -228,4 +187,12 @@ func (d *implementation) command(ctx context.Context, r plugin.EnvironmentReques
 		}
 	}
 	return patch, nil
+}
+
+// canonical resolves symlinks in a path, or returns it as given.
+func canonical(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
 }

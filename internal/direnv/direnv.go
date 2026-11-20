@@ -109,15 +109,17 @@ func (c Client) Environment(ctx context.Context, dir string, base map[string]str
 	return env, nil
 }
 
-func (c Client) Allow(ctx context.Context, rcPath string) error {
-	return c.setTrust(ctx, "allow", rcPath)
+// Allow allows an .envrc for direnv run with the given environment, which
+// decides where direnv keeps its allowances; an empty one is wi's own.
+func (c Client) Allow(ctx context.Context, rcPath string, base map[string]string) error {
+	return c.setTrust(ctx, "allow", rcPath, base)
 }
 
 func (c Client) Deny(ctx context.Context, rcPath string) error {
-	return c.setTrust(ctx, "deny", rcPath)
+	return c.setTrust(ctx, "deny", rcPath, nil)
 }
 
-func (c Client) setTrust(ctx context.Context, action, rcPath string) error {
+func (c Client) setTrust(ctx context.Context, action, rcPath string, base map[string]string) error {
 	if strings.TrimSpace(rcPath) == "" {
 		return fmt.Errorf(".envrc path is required")
 	}
@@ -129,7 +131,11 @@ func (c Client) setTrust(ctx context.Context, action, rcPath string) error {
 	if runner == nil {
 		runner = ExecRunner{}
 	}
-	out, err := runner.Run(ctx, c.Path, []string{action, abs}, filepath.Dir(abs), nil)
+	var env []string
+	for key, value := range base {
+		env = append(env, key+"="+value)
+	}
+	out, err := runner.Run(ctx, c.Path, []string{action, abs}, filepath.Dir(abs), env)
 	if err != nil {
 		return fmt.Errorf("direnv %s: %w: %s", action, err, strings.TrimSpace(string(out)))
 	}

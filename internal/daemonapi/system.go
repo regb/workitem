@@ -181,7 +181,7 @@ func (s *Server) ListPlugins(ctx context.Context, req *connect.Request[v1.ListPl
 			if def.Name != spec.Name || def.Native == nil {
 				continue
 			}
-			hooks := def.Native(nil)
+			hooks := def.Native()
 			if hooks.SetupCheckout != nil {
 				p.Hooks = append(p.Hooks, "setup_checkout")
 			}

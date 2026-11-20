@@ -87,9 +87,8 @@ func encodedDirenvDiff(t *testing.T, value string) string {
 	return base64.URLEncoding.EncodeToString(compressed.Bytes())
 }
 
-func (f *fakeCLIDirenv) Allow(context.Context, string) error { return nil }
-func (f *fakeCLIDirenv) Deny(context.Context, string) error  { return nil }
-func cloneEnvironment(v map[string]string) map[string]string { return maps.Clone(v) }
+func (f *fakeCLIDirenv) Allow(context.Context, string, map[string]string) error { return nil }
+func cloneEnvironment(v map[string]string) map[string]string                    { return maps.Clone(v) }
 func loadCLIProjectEnvironment(ctx context.Context, client *fakeCLIDirenv, _ string, source map[string]string) (map[string]string, error) {
 	root, err := os.MkdirTemp("", "wi-direnv-command-")
 	if err != nil {
@@ -102,7 +101,7 @@ func loadCLIProjectEnvironment(ctx context.Context, client *fakeCLIDirenv, _ str
 			return nil, err
 		}
 	}
-	p := plugin.Pipeline{Hooks: []plugin.Hooks{New(client, nil)}}
+	p := plugin.Pipeline{Hooks: []plugin.Hooks{New(client)}}
 	result, _, _, err := p.Environment(ctx, "command", plugin.EnvironmentRequest{Subject: plugin.Subject{CheckoutPath: root}, Values: source, Source: source, AllowedKeys: []string{"WI_LIST_LABELS", "WI_ITEM_DEFAULT_LABELS"}})
 	return result, err
 }

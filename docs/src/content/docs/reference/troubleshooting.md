@@ -82,13 +82,7 @@ wi agent control send --item ITEM 'Read the task with wi show, implement it, and
 
 ## An `.envrc` is not loaded
 
-Starting an agent asks before trusting an unapproved `.envrc`: the daemon's start job waits for an answer, which `wi` asks for on its terminal. Declining continues without it. With `--json` the command does not ask; it prints the job waiting for approval, which another client can answer with `JobService.AnswerApproval`. An unanswered question expires after ten minutes and the start fails.
-
-Approve the checkout's `.envrc` with `direnv allow /path/to/checkout/.envrc`, or start the agent interactively. Existing agent environments are not changed in place; restart the agent to pick up a newly approved `.envrc`.
-
-For automatic approval, run `wi repo settings set NAME plugins.direnv.trust always`. This is operator-owned repository policy and also approves changed contents. Inspect stored overrides and effective policy with `wi repo settings show NAME`. Use `wi repo settings unset NAME plugins.direnv.trust` to restore global/default inheritance.
-
-The bundled extension still revokes stale approval on slot reuse. Checked-in `.config/wi.toml` cannot grant approval. See [Configuration](../configuration/#direnv-trust) for loading and trust options.
+Wi loads a worktree's `.envrc` when an agent starts, without asking, unless the repository turns loading off: check `wi repo settings show NAME` for `plugins.direnv.load`. Existing agent environments are not changed in place; restart the agent to pick up a changed `.envrc`. A start reports a warning when direnv cannot evaluate the file. See [Configuration](../configuration/#direnv).
 
 ## `wi next` says nothing needs attention
 

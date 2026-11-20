@@ -76,11 +76,11 @@ func (h *Host) Settings(ctx context.Context, repo, name string) (map[string]any,
 	}
 	return options.CloneValues(values[name]), nil
 }
-func (h *Host) Preparation(approve Approver) Pipeline {
+func (h *Host) Preparation() Pipeline {
 	hooks := []Hooks{}
 	for _, d := range h.Registry.Definitions() {
 		if h.enabled(d) && d.Native != nil {
-			hook := d.Native(approve)
+			hook := d.Native()
 			hook.Name = d.Name
 			hooks = append(hooks, hook)
 		}

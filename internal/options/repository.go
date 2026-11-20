@@ -110,6 +110,10 @@ func (r *Registry) ResolveRepository(global map[string]map[string]any, stored ma
 		}
 		overrides[name] = map[string]any{}
 		for key, raw := range entries {
+			if r.retired(name, key) {
+				warnings = append(warnings, "ignored retired setting "+namespace+"."+key)
+				continue
+			}
 			value, err := DecodeValue(raw)
 			if err != nil {
 				return nil, warnings, err

@@ -2,10 +2,7 @@ package daemonapi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"os"
 	"sort"
 	"sync"
 	"time"
@@ -13,7 +10,6 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/plugin"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -188,7 +184,7 @@ func (r *jobRegistry) startKey(kind, key, item, repo string, run func(context.Co
 		}) {
 			return
 		}
-		err := run(plugin.WithApprover(ctx, job.approve), job)
+		err := run(ctx, job)
 		job.change(func(v *v1.Job) {
 			v.FinishedAt = stamp(time.Now())
 			v.Approval = nil
@@ -260,45 +256,6 @@ func (r *jobRegistry) list(item string, running bool) []*v1.Job {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.AsTime().After(out[j].CreatedAt.AsTime()) })
 	return out
-}
-func digest(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
-}
-func (j *jobRun) approve(ctx context.Context, request plugin.Approval) (bool, error) {
-	for {
-		approval := &v1.Approval{ChallengeId: id(), Question: request.Question, Path: request.Path, Digest: digest(request.Path), ExpiresAt: stamp(time.Now().Add(10 * time.Minute))}
-		answer := make(chan v1.ApprovalDecision, 1)
-		j.mu.Lock()
-		j.answer = answer
-		j.mu.Unlock()
-		if !j.change(func(v *v1.Job) { v.Approval = approval; v.State = v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL }) {
-			return false, j.persistErr
-		}
-		timer := time.NewTimer(time.Until(approval.ExpiresAt.AsTime()))
-		var decision v1.ApprovalDecision
-		select {
-		case decision = <-answer:
-		case <-ctx.Done():
-			timer.Stop()
-			return false, ctx.Err()
-		case <-timer.C:
-			return false, precondition("approval expired")
-		}
-		timer.Stop()
-		j.change(func(v *v1.Job) { v.Approval = nil; v.State = v1.JobState_JOB_STATE_RUNNING })
-		if decision == v1.ApprovalDecision_APPROVAL_DECISION_DENY {
-			return false, nil
-		}
-		if digest(request.Path) != approval.Digest {
-			continue
-		}
-		return true, nil
-	}
 }
 func (s *Server) GetJob(ctx context.Context, req *connect.Request[v1.GetJobRequest]) (*connect.Response[v1.GetJobResponse], error) {
 	job, err := s.jobs.get(req.Msg.JobId)

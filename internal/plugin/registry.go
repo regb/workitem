@@ -68,15 +68,18 @@ type Job struct {
 	Repository     bool     `json:"repository"`
 }
 type Definition struct {
-	Name            string               `json:"name"`
-	Options         []options.Option     `json:"options"`
-	Commands        []string             `json:"commands,omitempty"`
-	Jobs            []Job                `json:"jobs,omitempty"`
-	Command         []string             `json:"command,omitempty"`
-	Instructions    string               `json:"-"`
-	Native          func(Approver) Hooks `json:"-"`
-	Required        bool                 `json:"-"`
-	RetiredSections []string             `json:"-"`
+	Name            string           `json:"name"`
+	Options         []options.Option `json:"options"`
+	Commands        []string         `json:"commands,omitempty"`
+	Jobs            []Job            `json:"jobs,omitempty"`
+	Command         []string         `json:"command,omitempty"`
+	Instructions    string           `json:"-"`
+	Native          func() Hooks     `json:"-"`
+	Required        bool             `json:"-"`
+	RetiredSections []string         `json:"-"`
+	// RetiredOptions are options that no longer exist; settings naming one
+	// are ignored with a warning.
+	RetiredOptions []string `json:"-"`
 }
 type Registry struct {
 	definitions map[string]Definition
@@ -148,7 +151,7 @@ func NewRegistry(definitions ...Definition) (*Registry, error) {
 			return nil, fmt.Errorf("empty plugin executable")
 		}
 		r.definitions[d.Name] = d
-		schemas = append(schemas, options.Definition{Name: d.Name, Options: d.Options, RetiredSections: d.RetiredSections})
+		schemas = append(schemas, options.Definition{Name: d.Name, Options: d.Options, RetiredSections: d.RetiredSections, RetiredOptions: d.RetiredOptions})
 	}
 	var err error
 	r.settings, err = options.New(schemas...)
@@ -171,6 +174,7 @@ func cloneDefinition(d Definition) Definition {
 	d.Command = append([]string(nil), d.Command...)
 	d.Commands = append([]string(nil), d.Commands...)
 	d.RetiredSections = append([]string(nil), d.RetiredSections...)
+	d.RetiredOptions = append([]string(nil), d.RetiredOptions...)
 	d.Options = append([]options.Option(nil), d.Options...)
 	for i, o := range d.Options {
 		d.Options[i].Default = options.CloneValues(map[string]any{"v": o.Default})["v"]

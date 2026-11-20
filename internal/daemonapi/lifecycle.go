@@ -67,12 +67,25 @@ func (s *Server) startItem(ctx context.Context, itemID string, options *v1.Start
 			return nil
 		}
 		// A new agent is busy, or not yet observed, while it starts; its first
-		// prompt waits until it is idle rather than being refused.
-		j.phase("waiting for the agent")
-		s.waitAgentIdle(ctx, itemID, agentStartIdleTimeout)
-		j.phase("delivering startup message")
+		// prompt waits until it is idle rather than being refused. An
+		// observation from before the start can look idle a moment too
+		// early, so a prompt refused as busy waits again, within the bound.
 		text := s.App.AgentStartupMessage(options.Prompt)
-		return partial(s.send(ctx, &v1.SendMessageRequest{ItemId: itemID, Text: text, Delivery: v1.Delivery_DELIVERY_PROMPT, ClientMessageId: options.ClientMessageId, StartMode: options.Mode}), itemID, append(completed, "started agent")...)
+		deadline := time.Now().Add(agentStartIdleTimeout)
+		for {
+			j.phase("waiting for the agent")
+			s.waitAgentIdle(ctx, itemID, time.Until(deadline))
+			j.phase("delivering startup message")
+			err := s.send(ctx, &v1.SendMessageRequest{ItemId: itemID, Text: text, Delivery: v1.Delivery_DELIVERY_PROMPT, ClientMessageId: options.ClientMessageId, StartMode: options.Mode})
+			if err == nil || !agentBusy(err) || !time.Now().Before(deadline) || ctx.Err() != nil {
+				return partial(err, itemID, append(completed, "started agent")...)
+			}
+			select {
+			case <-ctx.Done():
+				return partial(ctx.Err(), itemID, append(completed, "started agent")...)
+			case <-time.After(250 * time.Millisecond):
+			}
+		}
 	})
 	value, err := s.item(ctx, itemID)
 	if err != nil {

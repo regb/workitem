@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 )
 
@@ -21,8 +22,11 @@ type Option struct {
 }
 type Definition struct {
 	RetiredSections []string `json:"retired_sections,omitempty"`
-	Name            string   `json:"name"`
-	Options         []Option `json:"options"`
+	// RetiredOptions are options that no longer exist. Settings that still
+	// name one are ignored with a warning rather than refused.
+	RetiredOptions []string `json:"retired_options,omitempty"`
+	Name           string   `json:"name"`
+	Options        []Option `json:"options"`
 }
 type Registry struct{ definitions map[string]Definition }
 
@@ -64,6 +68,7 @@ func clone(d Definition) Definition {
 	out := d
 	out.Options = append([]Option(nil), d.Options...)
 	out.RetiredSections = append([]string(nil), d.RetiredSections...)
+	out.RetiredOptions = append([]string(nil), d.RetiredOptions...)
 	for i := range out.Options {
 		out.Options[i].Choices = append([]string(nil), out.Options[i].Choices...)
 		if d.Options[i].Min != nil {
@@ -110,6 +115,10 @@ func (r *Registry) Validate(settings map[string]map[string]any, repository bool)
 		}
 		for key, value := range values {
 			o, ok := known[key]
+			if !ok && slices.Contains(d.RetiredOptions, key) {
+				warnings = append(warnings, fmt.Sprintf("plugins.%s.%s no longer applies and is ignored", name, key))
+				continue
+			}
 			if !ok {
 				return warnings, fmt.Errorf("unknown plugin option plugins.%s.%s", name, key)
 			}
@@ -245,4 +254,12 @@ func (r *Registry) Redact(settings map[string]any) {
 			}
 		}
 	}
+}
+
+// retired reports whether a plugin option was retired.
+func (r *Registry) retired(name, key string) bool {
+	if r == nil {
+		return false
+	}
+	return slices.Contains(r.definitions[name].RetiredOptions, key)
 }

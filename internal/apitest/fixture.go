@@ -66,7 +66,7 @@ func New(t testing.TB) *Fixture {
 		v, e := core.LocalClient().RepositorySettings(ctx, id)
 		return v.Settings, e
 	}
-	application.Preparation = host.Preparation(nil)
+	application.Preparation = host.Preparation()
 	_, err = core.LocalClient().ChangeAgentProfile(context.Background(), coordinator.ChangeAgentProfileCommand{Put: &model.AgentProfile{Name: "test", Driver: "pi"}})
 	if err != nil {
 		t.Fatal(err)

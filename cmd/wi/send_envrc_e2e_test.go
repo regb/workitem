@@ -13,10 +13,10 @@ import (
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 )
 
-// TestSendingToAStoppedAgentAsksForApprovalsItsStartNeeds: a message to a
-// stopped agent starts it in a job, which asks for an approval such as
-// trusting a new worktree .envrc instead of failing the send.
-func TestSendingToAStoppedAgentAsksForApprovalsItsStartNeeds(t *testing.T) {
+// TestSendingToAStoppedAgentLoadsItsEnvrcWithoutAsking: a message to a
+// stopped agent starts it in a job, which loads a new worktree .envrc
+// without asking, and delivers the message.
+func TestSendingToAStoppedAgentLoadsItsEnvrcWithoutAsking(t *testing.T) {
 	if _, err := exec.LookPath("direnv"); err != nil {
 		t.Skip("direnv is not installed")
 	}
@@ -53,7 +53,7 @@ func TestSendingToAStoppedAgentAsksForApprovalsItsStartNeeds(t *testing.T) {
 	var sent *connect.Response[v1.SendMessageResponse]
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		// Sent as the browser sends it: a web client, which takes control.
-		request := connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: "after approval", ClientMessageId: "approval-1", StartMode: v1.AgentMode_AGENT_MODE_HEADLESS})
+		request := connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: "after the start", ClientMessageId: "approval-1", StartMode: v1.AgentMode_AGENT_MODE_HEADLESS})
 		request.Header().Set("Wi-Client-Id", "browser-1")
 		request.Header().Set("Wi-Client-Kind", "web")
 		sent, err = f.clients.Agents.SendMessage(ctx, request)
@@ -65,6 +65,8 @@ func TestSendingToAStoppedAgentAsksForApprovalsItsStartNeeds(t *testing.T) {
 	if err != nil || sent.Msg.Job == nil {
 		t.Fatalf("send to a stopped agent: %v %v", sent, err)
 	}
+	// The start loads the worktree's new .envrc without asking: direnv
+	// allows it where the agent's environment keeps allowances.
 	var job *v1.Job
 	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		value, err := f.clients.Jobs.GetJob(ctx, connect.NewRequest(&v1.GetJobRequest{JobId: sent.Msg.Job.Id}))
@@ -72,27 +74,10 @@ func TestSendingToAStoppedAgentAsksForApprovalsItsStartNeeds(t *testing.T) {
 			t.Fatal(err)
 		}
 		job = value.Msg.Job
-		if job.State == v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL || job.State == v1.JobState_JOB_STATE_FAILED || job.State == v1.JobState_JOB_STATE_SUCCEEDED || time.Now().After(deadline) {
-			break
-		}
-	}
-	if job.State != v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL || job.Approval == nil || job.Approval.Question != "Allow worktree .envrc?" {
-		t.Fatalf("job did not ask for the .envrc: %v", job)
-	}
-	// Denied, the agent starts without the .envrc and gets the message.
-	if _, err := f.clients.Jobs.AnswerApproval(ctx, connect.NewRequest(&v1.AnswerApprovalRequest{JobId: job.Id, ChallengeId: job.Approval.ChallengeId, Decision: v1.ApprovalDecision_APPROVAL_DECISION_DENY})); err != nil {
-		t.Fatal(err)
-	}
-	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(50 * time.Millisecond) {
-		value, err := f.clients.Jobs.GetJob(ctx, connect.NewRequest(&v1.GetJobRequest{JobId: job.Id}))
-		if err != nil {
-			t.Fatal(err)
-		}
-		job = value.Msg.Job
 		if job.State == v1.JobState_JOB_STATE_SUCCEEDED {
 			break
 		}
-		if job.State == v1.JobState_JOB_STATE_FAILED || time.Now().After(deadline) {
+		if job.State == v1.JobState_JOB_STATE_FAILED || job.State == v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL || time.Now().After(deadline) {
 			t.Fatalf("send job: %v", job)
 		}
 	}
@@ -103,7 +88,7 @@ func TestSendingToAStoppedAgentAsksForApprovalsItsStartNeeds(t *testing.T) {
 	}
 	delivered := false
 	for _, message := range history.Msg.Messages {
-		delivered = delivered || message.Role == v1.MessageRole_MESSAGE_ROLE_USER && message.Text == "after approval"
+		delivered = delivered || message.Role == v1.MessageRole_MESSAGE_ROLE_USER && message.Text == "after the start"
 	}
 	if !delivered {
 		t.Fatalf("message not delivered: %v", history.Msg.Messages)
