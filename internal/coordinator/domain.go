@@ -542,7 +542,7 @@ func applyStateSetCommand(command ManifestCommand, manifest *model.Manifest, all
 			return err
 		}
 		previousResolution := manifest.Resolution
-		manifest.Slug, manifest.State, manifest.Resolution = slug, model.StateBacklog, ""
+		manifest.Slug, manifest.State, manifest.Resolution, manifest.ClosedSlug = slug, model.StateBacklog, "", ""
 		appendEvent("work_item.state_set", map[string]any{"previous_state": previous, "new_state": manifest.State, "slug": slug, "previous_resolution": previousResolution, "workspace_unchanged": true})
 		return nil
 	}
@@ -558,6 +558,9 @@ func applyStateSetCommand(command ManifestCommand, manifest *model.Manifest, all
 		dropFollowUps(manifest, "item closed", appendEvent)
 		previousSlug := manifest.Slug
 		manifest.State, manifest.Slug, manifest.Resolution = model.StateClosed, "", resolution
+		if previousSlug != "" {
+			manifest.ClosedSlug = previousSlug
+		}
 		appendEvent("work_item.state_set", map[string]any{"previous_state": previous, "new_state": manifest.State, "previous_slug": previousSlug, "resolution": resolution, "workspace_unchanged": true})
 		return nil
 	}

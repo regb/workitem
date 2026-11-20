@@ -339,3 +339,35 @@ func TestResolveWholeIDOfMissingItemIsNotFound(t *testing.T) {
 		t.Fatalf("own ID = %+v err=%v", resolved, err)
 	}
 }
+
+func TestResolveNamesAClosedItemByTheSlugItHad(t *testing.T) {
+	now := testutil.Time()
+	closed := manifest(t, testutil.ID(t, 40), "Auth refactor", now)
+	closed.State, closed.Slug, closed.ClosedSlug = model.StateClosed, "", "auth-refactor"
+	other := manifest(t, testutil.ID(t, 41), "Auth refactor follow-up", now)
+	other.Slug = "auth-refactor-v2"
+	describe := func(m model.Manifest) string {
+		if m.ID == other.ID {
+			return "Continues auth-refactor"
+		}
+		return ""
+	}
+	// Neither the other slug containing it nor a mention takes it.
+	resolved, err := store.ResolveFromManifests([]model.Manifest{closed, other}, "auth-refactor", describe)
+	if err != nil || resolved.ID != closed.ID {
+		t.Fatalf("closed slug = %+v err=%v", resolved, err)
+	}
+	// A new active item with the slug takes precedence.
+	reused := manifest(t, testutil.ID(t, 42), "Auth refactor again", now)
+	reused.Slug = "auth-refactor"
+	if resolved, err := store.ResolveFromManifests([]model.Manifest{closed, other, reused}, "auth-refactor", describe); err != nil || resolved.ID != reused.ID {
+		t.Fatalf("active slug = %+v err=%v", resolved, err)
+	}
+	// Two closed items that had it are ambiguous, not either one.
+	again := closed
+	again.ID = testutil.ID(t, 43)
+	var ambiguous store.AmbiguousError
+	if _, err := store.ResolveFromManifests([]model.Manifest{closed, again, other}, "auth-refactor", describe); !errors.As(err, &ambiguous) {
+		t.Fatalf("two closed items: %v", err)
+	}
+}

@@ -174,6 +174,13 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 		// Follow-ups belong to blocker commands; a whole-manifest save keeps
 		// the stored ones, however old the caller's copy.
 		normalized.FollowUps = previous.FollowUps
+		// A closing item keeps the slug it had, to still be named by it.
+		if normalized.State == model.StateClosed {
+			normalized.ClosedSlug = previous.ClosedSlug
+			if previous.State != model.StateClosed && previous.Slug != "" {
+				normalized.ClosedSlug = previous.Slug
+			}
+		}
 		if err := validateRepositoryReference(tx, normalized); err != nil {
 			return "", nil, err
 		}

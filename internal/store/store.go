@@ -246,6 +246,9 @@ func normalizeManifest(m *model.Manifest) error {
 		return fmt.Errorf("invalid work item id %q", m.ID)
 	}
 	m.Slug = strings.TrimSpace(m.Slug)
+	if m.State != model.StateClosed {
+		m.ClosedSlug = ""
+	}
 	if strings.TrimSpace(m.Title) == "" {
 		return fmt.Errorf("title is required")
 	}
@@ -690,6 +693,22 @@ func ResolveFromManifests(manifests []model.Manifest, selector string, descripti
 	slugMatches := matchActiveSlugs(manifests, selector)
 	if slugMatches.exact != nil {
 		return *slugMatches.exact, nil
+	}
+	// A closed item keeps naming itself by the slug it had, before any
+	// keyword search could find another item that mentions it.
+	if slugMatches.normalized != "" {
+		var closed []model.Manifest
+		for _, m := range manifests {
+			if m.State == model.StateClosed && m.ClosedSlug == slugMatches.normalized {
+				closed = append(closed, m)
+			}
+		}
+		if len(closed) == 1 {
+			return closed[0], nil
+		}
+		if len(closed) > 1 {
+			return model.Manifest{}, AmbiguousError{Selector: selector, Candidates: closed}
+		}
 	}
 
 	var title []model.Manifest

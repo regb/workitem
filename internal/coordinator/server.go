@@ -96,6 +96,10 @@ func newServer(dataRoot, socketPath, agentSocketPath string, conversationDecoder
 		database.Close()
 		return nil, fmt.Errorf("materialize native writes: %w", err)
 	}
+	if _, err := database.RecoverClosedSlugs(time.Now()); err != nil {
+		database.Close()
+		return nil, fmt.Errorf("recover closed slugs: %w", err)
+	}
 	if err := CleanupOrphanedStages(database); err != nil {
 		database.Close()
 		return nil, fmt.Errorf("clean orphaned command staging: %w", err)

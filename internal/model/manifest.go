@@ -52,7 +52,10 @@ type Manifest struct {
 	Pinned        bool              `json:"pinned,omitempty"`
 	SnoozedUntil  *time.Time        `json:"snoozed_until,omitempty"`
 	Resolution    string            `json:"resolution,omitempty"`
-	Blockers      []Blocker         `json:"blockers,omitempty"`
+	// ClosedSlug is the slug a closed item had, so that it still names the
+	// item; a new active item with that slug takes precedence.
+	ClosedSlug string    `json:"closed_slug,omitempty"`
+	Blockers   []Blocker `json:"blockers,omitempty"`
 	// FollowUps are messages from cleared blockers, waiting to be sent to the
 	// agent once the item no longer waits.
 	FollowUps []FollowUp `json:"follow_ups,omitempty"`
