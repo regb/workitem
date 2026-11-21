@@ -7,6 +7,14 @@ Attention answers a practical question: which active item should you inspect nex
 
 An item needs attention when it is `active`, its agent is idle, neither agent nor worktree observation reports a problem, and it is not [waiting](../lifecycle/#waiting). Busy work appears in progress. So does an idle agent waiting on background work it started, such as a background command or subagent, which re-activates the agent when it completes: the agent's reason says how many tasks it waits on. Only work started by the running agent process counts, since it ends with that process.
 
+The daemon decides an agent's status in one place, and every client shows that status. An agent is busy only on evidence of work:
+- **Live events.** The agent's live events report a turn in progress.
+- **Starting.** A job is starting it, for example setting up its checkout. Its reason says `starting the agent` and the job's phase.
+- **Coming up.** It is coming up and has written nothing yet, for at most three minutes. After that, or as soon as it reports itself ready, a running agent that has written nothing is idle, waiting for its first message.
+- **An unfinished turn.** Without live events, its conversation shows an unfinished turn with activity in the last ten minutes, or ends on a tool call still waiting for its result, since a long test run can work quietly.
+
+An unfinished turn that has been quiet for longer is a problem, since the agent may have stopped without finishing, so the item needs attention instead of reading busy forever.
+
 ## State in the daemon, ranking in clients
 
 The daemon keeps the facts attention works from: each item's activity (when you last prompted it, when the agent last completed, read, unread, deferred), whether a response is unread, its blockers, the latest agent and worktree observations, and whether it **needs attention**: an unread response or an idle agent waiting for input, unless the agent is still working; a question; or a problem. It also keeps ranking knobs that people or automation set on an item: `priority` (higher first), `pinned`, and `snoozed_until`.

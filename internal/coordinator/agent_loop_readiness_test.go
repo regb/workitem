@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,7 +144,8 @@ func TestObserverKeepsAQuestionAskedAfterTheLastRequest(t *testing.T) {
 
 // Before an agent writes its first turn, only a runtime that should run but
 // is gone is a problem: a starting agent is working, and an item with no
-// agent yet waits for a message.
+// agent yet waits for a message, as does an agent that is up and ready, or
+// has run for agentStartLimit without writing anything.
 func TestAnAgentBeforeItsFirstTurnIsOnlyAProblemWhenItsRuntimeIsGone(t *testing.T) {
 	root := t.TempDir()
 	db, err := OpenDatabase(root)
@@ -176,10 +178,21 @@ func TestAnAgentBeforeItsFirstTurnIsOnlyAProblemWhenItsRuntimeIsGone(t *testing.
 		t.Fatalf("starting agent: %s", got)
 	}
 	owner.State = model.AgentRuntimeRunning
-	owner.UpdatedAt = time.Now().Add(-time.Hour)
 	save()
 	if got := status(true); got != "busy" {
-		t.Fatalf("running agent before its first turn: %s", got)
+		t.Fatalf("running agent coming up: %s", got)
+	}
+	owner.Readiness = "ready"
+	save()
+	if got := status(true); got != "idle" {
+		t.Fatalf("ready agent before its first message: %s", got)
+	}
+	owner.Readiness = ""
+	owner.StartedAt = time.Now().Add(-time.Hour)
+	owner.UpdatedAt = owner.StartedAt
+	save()
+	if got := status(true); got != "idle" {
+		t.Fatalf("agent up for an hour without a first turn: %s", got)
 	}
 	if got := status(false); got != "problem" {
 		t.Fatalf("vanished agent: %s", got)
@@ -230,5 +243,41 @@ func TestAReceivedPromptIsWorkInProgress(t *testing.T) {
 	applyLiveRuntimeObservation(&submitted, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: "awaiting_confirmation", ReasonCode: "command_submitted", Timestamp: at}, RuntimeActivity{})
 	if submitted.Status != "idle" {
 		t.Fatalf("submitted=%+v", submitted)
+	}
+}
+
+// Without live events, an unfinished turn reads busy only while the agent
+// shows activity, or while a tool call awaits its result; a turn that died
+// without a final record is a problem, never busy forever.
+func TestAQuietUnfinishedTurnIsAProblem(t *testing.T) {
+	root := t.TempDir()
+	db, err := OpenDatabase(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	observer := NewExternalObserver(db, root)
+	owner, _ := json.Marshal(model.AgentRuntime{ID: "owner", WorkItemID: importTestID, State: model.AgentRuntimeRunning, StartedAt: time.Now().Add(-time.Hour)})
+	status := func(last ConversationEventFact) AgentObservation {
+		t.Helper()
+		index, _ := json.Marshal(ConversationIndex{WorkItemID: importTestID, InferredTurnState: "incomplete", LastTurnActivity: &last})
+		if err := db.UpdateProjections([]ProjectionUpdate{{Projection: RuntimeOwnershipProjection, Key: importTestID, Value: owner}, {Projection: ConversationProjection, Key: importTestID, Value: index}}); err != nil {
+			t.Fatal(err)
+		}
+		observation := AgentObservation{WorkItemID: importTestID, ProcessOnline: true}
+		if err := observer.applyActionability(importTestID, &observation); err != nil {
+			t.Fatal(err)
+		}
+		return observation
+	}
+	if got := status(ConversationEventFact{Timestamp: time.Now().Add(-time.Minute), Role: "user"}); got.Status != "busy" {
+		t.Fatalf("recent unfinished turn: %+v", got)
+	}
+	quiet := time.Now().Add(-agentQuietLimit - time.Minute)
+	if got := status(ConversationEventFact{Timestamp: quiet, Role: "assistant", ContentTypes: []string{"text"}}); got.Status != "problem" || !strings.Contains(got.Reason, "never finished") {
+		t.Fatalf("quiet unfinished turn: %+v", got)
+	}
+	if got := status(ConversationEventFact{Timestamp: quiet, Role: "assistant", ContentTypes: []string{"text", "tool_use"}}); got.Status != "busy" {
+		t.Fatalf("long tool call: %+v", got)
 	}
 }

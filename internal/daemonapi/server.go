@@ -67,6 +67,7 @@ func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.C
 		cancel()
 		return nil, err
 	}
+	s.jobs.itemChanged = func(itemID string) { core.Database().NotifyItems(itemID) }
 	core.SetRuntimeSettingsObserver(s.observeRuntimeSettings)
 	s.callbacks.Add(1)
 	go s.scheduleLoop()

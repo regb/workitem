@@ -416,8 +416,7 @@ func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMe
 		}
 	}
 	// Control is taken here without starting the agent: the job starts it,
-	// where an approval it needs, such as trusting a worktree .envrc, can be
-	// asked for and answered.
+	// which can take a while, such as setting up its checkout.
 	if _, err := s.controlLeaseStarting(ctx, r.ItemId, r.LeaseId, true, false); err != nil {
 		return nil, rpcError(err)
 	}

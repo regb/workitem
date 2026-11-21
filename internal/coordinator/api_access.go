@@ -8,6 +8,11 @@ import (
 // NotifyAll publishes changes to repository/profile state that affect many items.
 func (d *Database) NotifyAll() { d.changes.recordAll() }
 
+// NotifyItems wakes change readers of the given items, for state the daemon
+// keeps outside the database that changes how they are shown, such as a job
+// starting their agent.
+func (d *Database) NotifyItems(itemIDs ...string) { d.changes.record(itemIDs...) }
+
 // updateNotify commits a write to state many items or clients show, such as
 // agent profiles, schedules or a repository's environment, and wakes change
 // readers once it is durable. Writes made through it cannot forget to.

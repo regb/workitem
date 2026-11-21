@@ -400,11 +400,16 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 		observation.Reason = "live runtime event reports settled work"
 		observation.TurnState = "idle"
 		observation.LastActivityAt = live.LastEventAt
-	case !conversationFound && ownerFound && startingRuntime(owner, observation.ProcessOnline):
+	case !conversationFound && ownerFound && startingRuntime(owner, observation.ProcessOnline) && owner.Readiness != "ready" && time.Since(startedAt(owner)) < agentStartLimit:
 		// Nothing is written before the first turn; the agent is coming up.
 		observation.Status = "busy"
 		observation.Reason = "agent is starting"
 		observation.TurnState = "incomplete"
+	case !conversationFound && ownerFound && observation.ProcessOnline:
+		// Up, but nothing written: it waits for a first message, such as an
+		// agent started without a prompt. Busy would never end.
+		observation.Status = "idle"
+		observation.Reason = "the agent is running and waiting for its first message"
 	case !conversationFound && (!ownerFound || owner.State == model.AgentRuntimeStopped):
 		observation.Status = "idle"
 		observation.Reason = "agent has not started; send it a message to start it"
@@ -421,9 +426,16 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 	case conversation.InferredTurnState == "idle":
 		observation.Status = "idle"
 		observation.Reason = "latest assistant answer is terminal"
-	case observation.ProcessOnline:
+	case observation.ProcessOnline && (awaitingTool(conversation) || quietFor(observation.LastActivityAt, live) < agentQuietLimit):
 		observation.Status = "busy"
 		observation.Reason = "latest conversation activity is incomplete and runtime ownership is online"
+	case observation.ProcessOnline:
+		// Without live events, an unfinished turn is the only sign of work.
+		// A turn that died without a final record would read busy forever;
+		// after a quiet spell it is a problem the operator should look at.
+		// A tool call awaiting its result may run long quietly and is not.
+		observation.Status = "problem"
+		observation.Reason = fmt.Sprintf("the agent's turn never finished and it has shown no activity for %s; it may have stopped", agentQuietLimit)
 	default:
 		observation.Status = "problem"
 		observation.Reason = "latest conversation activity is incomplete and runtime ownership is offline"
@@ -444,6 +456,45 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 // agentStartGrace bounds how long a runtime may be recorded as starting
 // without its process being seen before it counts as a failed start.
 const agentStartGrace = 30 * time.Second
+
+// agentStartLimit bounds how long an agent that has written nothing counts
+// as starting; after it, a running agent waits for its first message.
+const agentStartLimit = 3 * time.Minute
+
+// agentQuietLimit bounds how long an unfinished turn with no live events
+// counts as busy without any activity.
+const agentQuietLimit = 10 * time.Minute
+
+// startedAt is when a runtime started, or else when it last changed.
+func startedAt(owner model.AgentRuntime) time.Time {
+	if !owner.StartedAt.IsZero() {
+		return owner.StartedAt
+	}
+	return owner.UpdatedAt
+}
+
+// awaitingTool reports whether a turn's latest record is a tool call still
+// waiting for its result: a tool, such as a long test run, can work quietly.
+func awaitingTool(conversation ConversationIndex) bool {
+	f := conversation.LastTurnActivity
+	return f != nil && f.Role == "assistant" && containsCoordinator(f.ContentTypes, "toolCall", "bashExecution", "tool_use")
+}
+
+// quietFor is how long since the agent's latest activity: the turn's latest
+// record or live event, whichever is later. Unknown activity is not quiet.
+func quietFor(lastActivity *time.Time, live RuntimeActivity) time.Duration {
+	latest := time.Time{}
+	if lastActivity != nil {
+		latest = *lastActivity
+	}
+	if live.LastEventAt != nil && live.LastEventAt.After(latest) {
+		latest = *live.LastEventAt
+	}
+	if latest.IsZero() {
+		return 0
+	}
+	return time.Since(latest)
+}
 
 // startingRuntime reports a runtime that is coming up: its process is seen,
 // or it was recorded moments ago and its host may not run yet.

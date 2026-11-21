@@ -22,6 +22,10 @@ type jobRegistry struct {
 	store   *coordinator.Database
 	errMu   sync.Mutex
 	err     error
+	// itemChanged wakes change readers of an item whose job started,
+	// changed phase or finished: a job starting an agent shows in its
+	// status.
+	itemChanged func(itemID string)
 }
 type jobRun struct {
 	mu         sync.Mutex
@@ -31,6 +35,8 @@ type jobRun struct {
 	cancel     context.CancelFunc
 	save       func(*v1.Job) error
 	persistErr error
+	// changed is told when the job's state or phase changes.
+	changed func(itemID string)
 }
 
 func newJobRegistry(ctx context.Context) *jobRegistry {
@@ -135,9 +141,13 @@ func (j *jobRun) change(apply func(*v1.Job)) bool {
 			next.FinishedAt = stamp(time.Now())
 		}
 	}
+	moved := next.State != j.value.State || next.Phase != j.value.Phase
 	j.value = next
 	close(j.notify)
 	j.notify = make(chan struct{})
+	if moved && j.changed != nil && next.ItemId != "" {
+		j.changed(next.ItemId)
+	}
 	return j.persistErr == nil
 }
 func (r *jobRegistry) start(kind, item, repo string, run func(context.Context, *jobRun) error) *v1.Job {
@@ -161,7 +171,7 @@ func (r *jobRegistry) startKey(kind, key, item, repo string, run func(context.Co
 		}
 	}
 	ctx, cancel := context.WithCancel(r.ctx)
-	job := &jobRun{key: key, value: &v1.Job{Id: id(), Kind: kind, ItemId: item, RepositoryId: repo, State: v1.JobState_JOB_STATE_QUEUED, CreatedAt: stamp(time.Now())}, notify: make(chan struct{}), cancel: cancel, save: r.persist}
+	job := &jobRun{key: key, value: &v1.Job{Id: id(), Kind: kind, ItemId: item, RepositoryId: repo, State: v1.JobState_JOB_STATE_QUEUED, CreatedAt: stamp(time.Now())}, notify: make(chan struct{}), cancel: cancel, save: r.persist, changed: r.itemChanged}
 	if err := r.persist(job.value); err != nil {
 		r.mu.Unlock()
 		cancel()
@@ -173,6 +183,9 @@ func (r *jobRegistry) startKey(kind, key, item, repo string, run func(context.Co
 	r.entries[job.value.Id] = job
 	r.wg.Add(1)
 	r.mu.Unlock()
+	if r.itemChanged != nil && item != "" {
+		r.itemChanged(item)
+	}
 	go func() {
 		defer r.wg.Done()
 		defer cancel()

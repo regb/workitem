@@ -149,6 +149,12 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 		out.Activity = &v1.AttentionActivity{LastRequestedAt: optionalStamp(a.LastRequestedAt), LastCompletedAt: optionalStamp(a.LastCompletedAt), LastReadAt: optionalStamp(a.LastReadAt), LastUnreadAt: optionalStamp(a.LastUnreadAt), LastDeferredAt: optionalStamp(a.LastDeferredAt)}
 		out.Unread = (view.Activity{LastRequestedAt: a.LastRequestedAt, LastCompletedAt: a.LastCompletedAt, LastReadAt: a.LastReadAt, LastUnreadAt: a.LastUnreadAt, LastDeferredAt: a.LastDeferredAt}).Unread()
 	}
+	if m.State != model.StateClosed {
+		if reason, starting := s.startingAgent(m.ID); starting {
+			out.AgentStatus = v1.AgentStatus_AGENT_STATUS_BUSY
+			out.AgentReason = reason
+		}
+	}
 	out.NeedsAttention = m.State == model.StateActive && needsAttention(out, m.Waiting(time.Now()))
 	if m.SnoozedUntil != nil && m.SnoozedUntil.After(time.Now()) && !out.Unread {
 		out.NeedsAttention = false
@@ -158,6 +164,25 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 		out.NeedsAttention = false
 	}
 	return out
+}
+
+// agentStartingJobs are the jobs that start or replace an item's agent.
+var agentStartingJobs = map[string]bool{"start_item": true, "start_agent": true, "restart_agent": true, "send_message": true, "acquire_control": true}
+
+// startingAgent reports a job starting the item's agent, with its phase as
+// the reason. Until the runtime exists, the coordinator cannot see it: the
+// item would read idle, or a problem, while its checkout is set up.
+func (s *Server) startingAgent(itemID string) (string, bool) {
+	for _, job := range s.jobs.list(itemID, true) {
+		if !agentStartingJobs[job.Kind] {
+			continue
+		}
+		if job.Phase != "" && job.Phase != job.Kind {
+			return "starting the agent: " + job.Phase, true
+		}
+		return "starting the agent", true
+	}
+	return "", false
 }
 
 // needsAttention reports whether an active item needs the operator. An agent
