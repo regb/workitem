@@ -164,31 +164,29 @@ Plugins run outside the daemon. The daemon keeps the registry and the options pl
 
 - **Hooks** take part in core operations (checkout setup, agent environment). They are executables the daemon calls, through a declared contract.
 - **Automation** (GitHub sync, auto-defer) is a client of this API: it watches events, calls the API, and keeps its own credentials. The daemon may supervise it, as scheduled jobs work today.
-- **Commands** (`wi github`, `wi usage`) run client-side. Usage reads the native clients on the host, so the CLI and the web adapter run it directly; it is not part of this API.
+- **Commands** (`wi github`) run client-side. Subscription usage is read by a plugin the daemon runs (`SystemService.GetUsage`), so every client sees the same answer.
 
-## Web backend mapping
+## Web exposure
 
-| `wi web` backend | API |
-| --- | --- |
-| CheckItem, Chat | `ViewService.GetItemView` |
-| Projects, Repositories | `RepositoryService.ListRepositories`, `ListRepositoryFiles` |
-| Agents, AgentProfiles, ChangeAgentProfile | `AgentProfileService` |
-| List, Search, Next | `ItemService.ListItems` (attention order), `SearchItems`; next is the first item needing attention |
-| CreateBacklog, Create, StartCreated | `ItemService.CreateItem`; `LifecycleService.CreateAndStartItem` with a title from `AgentService.SuggestTitle` set afterwards |
-| History, SubagentHistory, Content, ContentStream | `AgentService.GetHistory`, `GetSubagentHistory`, `WatchLiveContent` |
-| Notes, Attachment, AddNote, Attach | `ItemService.ListNotes`, `ReadAttachment`, `AddNote`, `Attach` |
-| Changes | `EventService.WatchChanges` |
-| Send, Stop, TakeControl, ReleaseControl | `AgentService.SendMessage`, `AbortTurn`; `ControlService.AcquireControl`, `ReleaseControl` |
-| Files, ProjectFiles | `WorkspaceService.SearchWorkspaceFiles`, `RepositoryService.SearchRepositoryFiles` |
-| Block, ClearBlocker, MarkRead | `ItemService.AddBlocker`, `ClearBlocker`, `MarkRead` |
-| Start, Shelve, Close, Reopen, Setup | `LifecycleService` (`StartItem` also retries a failed setup) |
-| Settings, SetSettings, Restart | `AgentService.GetAgentSettings`, `UpdateAgentSettings`, `RestartAgent` |
-| Uncommitted, TerminalClients | `WorkspaceService.GetUncommittedChanges`, `Agent.terminal.attached_clients` |
-| GeneralSettings | `SystemService.GetInfo` |
-| Usage | Not in this API: the adapter runs the usage tool itself |
-| RepositorySetup, SetRepositorySetup | `RepositoryService.GetCheckoutSetup`, `UpdateCheckoutSetup` |
-| Add/RemoveRepositoryFile, AddRepository | `RepositoryService.PutRepositoryFile`, `DeleteRepositoryFile`, `AddRepository` |
-| Environment, SetEnvironment | `RepositoryService.GetEnvironment`, `UpdateEnvironment` |
+`wi web` serves the page and forwards its API calls, unchanged, to the daemon's web-adapter socket, under the tab's identity (`Wi-Client-Id`) and the user its proxy vouches for (`Wi-Client-Label`). The page uses the generated clients like any other client; `wi web` adds nothing to the API. It serves only what a browser needs at a URL: item attachments and checkout documents, so the browser can show or download them.
+
+What the web listener may call is a table in the daemon, `internal/daemonapi/exposure.go`, default deny: a test fails when a procedure is in neither list, so exposing a call to browsers is a reviewed line. Locally the browser is the operator and the allowed calls can already run code on the machine, so the table reduces surface and keeps secrets and irreversible operations out of a page bug's reach; with callers that are not the operator it becomes the authorization boundary.
+
+| Service | The page may call | Refused, and why |
+| --- | --- | --- |
+| `ItemService` | `CreateItem`, `GetItem`, `ListItems`, `SearchItems`, notes and attachments, blockers, `MarkRead` | `DeleteItem` (irreversible); `SetItemState`, `UpdateItem`, `DeferItem`, `ResolveItem`, `ListItemEvents` (plumbing the page does not use) |
+| `LifecycleService` | all: create and start, start, shelve, close, reopen | |
+| `AgentService` | messages, `AbortTurn`, `AnswerQuestion`, history, live content, settings, `RestartAgent`, `SuggestTitle` | `StartAgent`, `StopAgent` (plumbing; the page uses the porcelain) |
+| `ControlService` | all | |
+| `ViewService`, `EventService` | all: `GetItemView`, `Watch`, `WatchChanges` | |
+| `JobService` | `GetJob`, `ListJobs`, `WatchJob`, `CancelJob` | `AnswerApproval` (no job asks any more) |
+| `WorkspaceService` | files, documents, uncommitted changes, `CommitWorkspace` | `EnsureWorkspace`, `GetWorkspace`, `ReleaseWorkspace`, `SetupWorkspace` (plumbing) |
+| `ReviewService` | everything the review panel does | `GetRevisionPatch` (unused) |
+| `RepositoryService` | list, add, files, checkout setup, environment, `IntegrateItem` | `ReadRepositoryFile` (stored files can hold secrets); `ArchiveRepository`, `RestoreRepository` (irreversible for the page's purposes); renaming, upstream, sync and raw settings (operator commands) |
+| `AgentProfileService`, `ScheduleService` | all | |
+| `SystemService` | `GetInfo`, `GetHealth`, `GetUsage` | `GetConfig` (configuration can hold secrets), `ListPlugins`, `RunDiagnostics`, `Shutdown` (operator's, from a terminal) |
+
+The table in code is the reference; this summary groups it.
 
 ## CLI mapping
 
