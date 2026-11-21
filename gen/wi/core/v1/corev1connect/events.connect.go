@@ -36,6 +36,8 @@ const (
 	// EventServiceWatchChangesProcedure is the fully-qualified name of the EventService's WatchChanges
 	// RPC.
 	EventServiceWatchChangesProcedure = "/wi.core.v1.EventService/WatchChanges"
+	// EventServiceWatchProcedure is the fully-qualified name of the EventService's Watch RPC.
+	EventServiceWatchProcedure = "/wi.core.v1.EventService/Watch"
 )
 
 // EventServiceClient is a client for the wi.core.v1.EventService service.
@@ -44,6 +46,14 @@ type EventServiceClient interface {
 	// message answers at once: with changes since the cursor, or with all set
 	// when the cursor is from another daemon instance or too old to resume.
 	WatchChanges(context.Context, *connect.Request[v1.WatchChangesRequest]) (*connect.ServerStreamForClient[v1.WatchChangesResponse], error)
+	// Watch carries on one stream what one client view follows: the change
+	// feed, the jobs, and optionally one item's live content, with a
+	// heartbeat every 15 seconds while nothing else is sent. One stream per
+	// view keeps a browser, which shares a few connections between all its
+	// tabs, from running out of them. While any Watch is open, the daemon
+	// also observes agents and worktrees every 10 seconds, and reports the
+	// items whose observation changed as changes.
+	Watch(context.Context, *connect.Request[v1.WatchRequest]) (*connect.ServerStreamForClient[v1.WatchResponse], error)
 }
 
 // NewEventServiceClient constructs a client for the wi.core.v1.EventService service. By default, it
@@ -63,17 +73,29 @@ func NewEventServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(eventServiceMethods.ByName("WatchChanges")),
 			connect.WithClientOptions(opts...),
 		),
+		watch: connect.NewClient[v1.WatchRequest, v1.WatchResponse](
+			httpClient,
+			baseURL+EventServiceWatchProcedure,
+			connect.WithSchema(eventServiceMethods.ByName("Watch")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // eventServiceClient implements EventServiceClient.
 type eventServiceClient struct {
 	watchChanges *connect.Client[v1.WatchChangesRequest, v1.WatchChangesResponse]
+	watch        *connect.Client[v1.WatchRequest, v1.WatchResponse]
 }
 
 // WatchChanges calls wi.core.v1.EventService.WatchChanges.
 func (c *eventServiceClient) WatchChanges(ctx context.Context, req *connect.Request[v1.WatchChangesRequest]) (*connect.ServerStreamForClient[v1.WatchChangesResponse], error) {
 	return c.watchChanges.CallServerStream(ctx, req)
+}
+
+// Watch calls wi.core.v1.EventService.Watch.
+func (c *eventServiceClient) Watch(ctx context.Context, req *connect.Request[v1.WatchRequest]) (*connect.ServerStreamForClient[v1.WatchResponse], error) {
+	return c.watch.CallServerStream(ctx, req)
 }
 
 // EventServiceHandler is an implementation of the wi.core.v1.EventService service.
@@ -82,6 +104,14 @@ type EventServiceHandler interface {
 	// message answers at once: with changes since the cursor, or with all set
 	// when the cursor is from another daemon instance or too old to resume.
 	WatchChanges(context.Context, *connect.Request[v1.WatchChangesRequest], *connect.ServerStream[v1.WatchChangesResponse]) error
+	// Watch carries on one stream what one client view follows: the change
+	// feed, the jobs, and optionally one item's live content, with a
+	// heartbeat every 15 seconds while nothing else is sent. One stream per
+	// view keeps a browser, which shares a few connections between all its
+	// tabs, from running out of them. While any Watch is open, the daemon
+	// also observes agents and worktrees every 10 seconds, and reports the
+	// items whose observation changed as changes.
+	Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.WatchResponse]) error
 }
 
 // NewEventServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -97,10 +127,18 @@ func NewEventServiceHandler(svc EventServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(eventServiceMethods.ByName("WatchChanges")),
 		connect.WithHandlerOptions(opts...),
 	)
+	eventServiceWatchHandler := connect.NewServerStreamHandler(
+		EventServiceWatchProcedure,
+		svc.Watch,
+		connect.WithSchema(eventServiceMethods.ByName("Watch")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/wi.core.v1.EventService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EventServiceWatchChangesProcedure:
 			eventServiceWatchChangesHandler.ServeHTTP(w, r)
+		case EventServiceWatchProcedure:
+			eventServiceWatchHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -112,4 +150,8 @@ type UnimplementedEventServiceHandler struct{}
 
 func (UnimplementedEventServiceHandler) WatchChanges(context.Context, *connect.Request[v1.WatchChangesRequest], *connect.ServerStream[v1.WatchChangesResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.EventService.WatchChanges is not implemented"))
+}
+
+func (UnimplementedEventServiceHandler) Watch(context.Context, *connect.Request[v1.WatchRequest], *connect.ServerStream[v1.WatchResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.EventService.Watch is not implemented"))
 }

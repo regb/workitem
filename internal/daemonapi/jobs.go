@@ -26,6 +26,10 @@ type jobRegistry struct {
 	// changed phase or finished: a job starting an agent shows in its
 	// status.
 	itemChanged func(itemID string)
+	// moved is closed, and replaced, whenever a job is created or changes
+	// state or phase; Watch streams wait on it.
+	movedMu sync.Mutex
+	moved   chan struct{}
 }
 type jobRun struct {
 	mu         sync.Mutex
@@ -37,10 +41,27 @@ type jobRun struct {
 	persistErr error
 	// changed is told when the job's state or phase changes.
 	changed func(itemID string)
+	// moved is told the same, for any job.
+	moved func()
+}
+
+// signal wakes Watch streams: a job was created or changed state or phase.
+func (r *jobRegistry) signal() {
+	r.movedMu.Lock()
+	close(r.moved)
+	r.moved = make(chan struct{})
+	r.movedMu.Unlock()
+}
+
+// movement is closed at the next job movement.
+func (r *jobRegistry) movement() <-chan struct{} {
+	r.movedMu.Lock()
+	defer r.movedMu.Unlock()
+	return r.moved
 }
 
 func newJobRegistry(ctx context.Context) *jobRegistry {
-	return &jobRegistry{ctx: ctx, entries: map[string]*jobRun{}}
+	return &jobRegistry{ctx: ctx, entries: map[string]*jobRun{}, moved: make(chan struct{})}
 }
 func newPersistentJobRegistry(ctx context.Context, db *coordinator.Database) (*jobRegistry, error) {
 	r := newJobRegistry(ctx)
@@ -148,6 +169,9 @@ func (j *jobRun) change(apply func(*v1.Job)) bool {
 	if moved && j.changed != nil && next.ItemId != "" {
 		j.changed(next.ItemId)
 	}
+	if moved && j.moved != nil {
+		j.moved()
+	}
 	return j.persistErr == nil
 }
 func (r *jobRegistry) start(kind, item, repo string, run func(context.Context, *jobRun) error) *v1.Job {
@@ -171,7 +195,7 @@ func (r *jobRegistry) startKey(kind, key, item, repo string, run func(context.Co
 		}
 	}
 	ctx, cancel := context.WithCancel(r.ctx)
-	job := &jobRun{key: key, value: &v1.Job{Id: id(), Kind: kind, ItemId: item, RepositoryId: repo, State: v1.JobState_JOB_STATE_QUEUED, CreatedAt: stamp(time.Now())}, notify: make(chan struct{}), cancel: cancel, save: r.persist, changed: r.itemChanged}
+	job := &jobRun{key: key, value: &v1.Job{Id: id(), Kind: kind, ItemId: item, RepositoryId: repo, State: v1.JobState_JOB_STATE_QUEUED, CreatedAt: stamp(time.Now())}, notify: make(chan struct{}), cancel: cancel, save: r.persist, changed: r.itemChanged, moved: r.signal}
 	if err := r.persist(job.value); err != nil {
 		r.mu.Unlock()
 		cancel()
@@ -186,6 +210,7 @@ func (r *jobRegistry) startKey(kind, key, item, repo string, run func(context.Co
 	if r.itemChanged != nil && item != "" {
 		r.itemChanged(item)
 	}
+	r.signal()
 	go func() {
 		defer r.wg.Done()
 		defer cancel()

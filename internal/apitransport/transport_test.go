@@ -42,6 +42,7 @@ func (systemFixture) GetHealth(context.Context, *connect.Request[corev1.GetHealt
 }
 
 type eventFixture struct {
+	corev1connect.UnimplementedEventServiceHandler
 	cancelled chan struct{}
 }
 

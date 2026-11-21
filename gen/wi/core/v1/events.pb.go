@@ -21,6 +21,267 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type WatchRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// after is a change-feed cursor, as in WatchChanges.
+	After string `protobuf:"bytes,1,opt,name=after,proto3" json:"after,omitempty"`
+	// item_id also follows this item's live content, as WatchLiveContent.
+	ItemId        string `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchRequest) Reset() {
+	*x = WatchRequest{}
+	mi := &file_wi_core_v1_events_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchRequest) ProtoMessage() {}
+
+func (x *WatchRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_events_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchRequest.ProtoReflect.Descriptor instead.
+func (*WatchRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_events_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *WatchRequest) GetAfter() string {
+	if x != nil {
+		return x.After
+	}
+	return ""
+}
+
+func (x *WatchRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+type WatchResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Event:
+	//
+	//	*WatchResponse_Changes
+	//	*WatchResponse_Content
+	//	*WatchResponse_Jobs
+	//	*WatchResponse_Heartbeat
+	Event         isWatchResponse_Event `protobuf_oneof:"event"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchResponse) Reset() {
+	*x = WatchResponse{}
+	mi := &file_wi_core_v1_events_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchResponse) ProtoMessage() {}
+
+func (x *WatchResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_events_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchResponse.ProtoReflect.Descriptor instead.
+func (*WatchResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_events_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *WatchResponse) GetEvent() isWatchResponse_Event {
+	if x != nil {
+		return x.Event
+	}
+	return nil
+}
+
+func (x *WatchResponse) GetChanges() *WatchChangesResponse {
+	if x != nil {
+		if x, ok := x.Event.(*WatchResponse_Changes); ok {
+			return x.Changes
+		}
+	}
+	return nil
+}
+
+func (x *WatchResponse) GetContent() *WatchLiveContentResponse {
+	if x != nil {
+		if x, ok := x.Event.(*WatchResponse_Content); ok {
+			return x.Content
+		}
+	}
+	return nil
+}
+
+func (x *WatchResponse) GetJobs() *JobsChanged {
+	if x != nil {
+		if x, ok := x.Event.(*WatchResponse_Jobs); ok {
+			return x.Jobs
+		}
+	}
+	return nil
+}
+
+func (x *WatchResponse) GetHeartbeat() *Heartbeat {
+	if x != nil {
+		if x, ok := x.Event.(*WatchResponse_Heartbeat); ok {
+			return x.Heartbeat
+		}
+	}
+	return nil
+}
+
+type isWatchResponse_Event interface {
+	isWatchResponse_Event()
+}
+
+type WatchResponse_Changes struct {
+	Changes *WatchChangesResponse `protobuf:"bytes,1,opt,name=changes,proto3,oneof"`
+}
+
+type WatchResponse_Content struct {
+	Content *WatchLiveContentResponse `protobuf:"bytes,2,opt,name=content,proto3,oneof"`
+}
+
+type WatchResponse_Jobs struct {
+	Jobs *JobsChanged `protobuf:"bytes,3,opt,name=jobs,proto3,oneof"`
+}
+
+type WatchResponse_Heartbeat struct {
+	Heartbeat *Heartbeat `protobuf:"bytes,4,opt,name=heartbeat,proto3,oneof"`
+}
+
+func (*WatchResponse_Changes) isWatchResponse_Event() {}
+
+func (*WatchResponse_Content) isWatchResponse_Event() {}
+
+func (*WatchResponse_Jobs) isWatchResponse_Event() {}
+
+func (*WatchResponse_Heartbeat) isWatchResponse_Event() {}
+
+// JobsChanged reports jobs as they change state or phase. The first one is
+// a snapshot listing every unfinished job; later ones list the jobs that
+// changed, finished ones included.
+type JobsChanged struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Jobs          []*Job                 `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`
+	Snapshot      bool                   `protobuf:"varint,2,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *JobsChanged) Reset() {
+	*x = JobsChanged{}
+	mi := &file_wi_core_v1_events_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *JobsChanged) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JobsChanged) ProtoMessage() {}
+
+func (x *JobsChanged) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_events_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JobsChanged.ProtoReflect.Descriptor instead.
+func (*JobsChanged) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_events_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *JobsChanged) GetJobs() []*Job {
+	if x != nil {
+		return x.Jobs
+	}
+	return nil
+}
+
+func (x *JobsChanged) GetSnapshot() bool {
+	if x != nil {
+		return x.Snapshot
+	}
+	return false
+}
+
+// Heartbeat keeps an idle stream open through proxies that close silent
+// responses.
+type Heartbeat struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Heartbeat) Reset() {
+	*x = Heartbeat{}
+	mi := &file_wi_core_v1_events_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Heartbeat) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Heartbeat) ProtoMessage() {}
+
+func (x *Heartbeat) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_events_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Heartbeat.ProtoReflect.Descriptor instead.
+func (*Heartbeat) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_events_proto_rawDescGZIP(), []int{3}
+}
+
 type WatchChangesRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// after is the last cursor the client saw; empty starts from now. A
@@ -32,7 +293,7 @@ type WatchChangesRequest struct {
 
 func (x *WatchChangesRequest) Reset() {
 	*x = WatchChangesRequest{}
-	mi := &file_wi_core_v1_events_proto_msgTypes[0]
+	mi := &file_wi_core_v1_events_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +305,7 @@ func (x *WatchChangesRequest) String() string {
 func (*WatchChangesRequest) ProtoMessage() {}
 
 func (x *WatchChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_events_proto_msgTypes[0]
+	mi := &file_wi_core_v1_events_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +318,7 @@ func (x *WatchChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchChangesRequest.ProtoReflect.Descriptor instead.
 func (*WatchChangesRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_events_proto_rawDescGZIP(), []int{0}
+	return file_wi_core_v1_events_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *WatchChangesRequest) GetAfter() string {
@@ -83,7 +344,7 @@ type WatchChangesResponse struct {
 
 func (x *WatchChangesResponse) Reset() {
 	*x = WatchChangesResponse{}
-	mi := &file_wi_core_v1_events_proto_msgTypes[1]
+	mi := &file_wi_core_v1_events_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -95,7 +356,7 @@ func (x *WatchChangesResponse) String() string {
 func (*WatchChangesResponse) ProtoMessage() {}
 
 func (x *WatchChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_events_proto_msgTypes[1]
+	mi := &file_wi_core_v1_events_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -108,7 +369,7 @@ func (x *WatchChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchChangesResponse.ProtoReflect.Descriptor instead.
 func (*WatchChangesResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_events_proto_rawDescGZIP(), []int{1}
+	return file_wi_core_v1_events_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *WatchChangesResponse) GetCursor() string {
@@ -151,7 +412,20 @@ var File_wi_core_v1_events_proto protoreflect.FileDescriptor
 const file_wi_core_v1_events_proto_rawDesc = "" +
 	"\n" +
 	"\x17wi/core/v1/events.proto\x12\n" +
-	"wi.core.v1\"+\n" +
+	"wi.core.v1\x1a\x17wi/core/v1/agents.proto\x1a\x15wi/core/v1/jobs.proto\"=\n" +
+	"\fWatchRequest\x12\x14\n" +
+	"\x05after\x18\x01 \x01(\tR\x05after\x12\x17\n" +
+	"\aitem_id\x18\x02 \x01(\tR\x06itemId\"\xfe\x01\n" +
+	"\rWatchResponse\x12<\n" +
+	"\achanges\x18\x01 \x01(\v2 .wi.core.v1.WatchChangesResponseH\x00R\achanges\x12@\n" +
+	"\acontent\x18\x02 \x01(\v2$.wi.core.v1.WatchLiveContentResponseH\x00R\acontent\x12-\n" +
+	"\x04jobs\x18\x03 \x01(\v2\x17.wi.core.v1.JobsChangedH\x00R\x04jobs\x125\n" +
+	"\theartbeat\x18\x04 \x01(\v2\x15.wi.core.v1.HeartbeatH\x00R\theartbeatB\a\n" +
+	"\x05event\"N\n" +
+	"\vJobsChanged\x12#\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x0f.wi.core.v1.JobR\x04jobs\x12\x1a\n" +
+	"\bsnapshot\x18\x02 \x01(\bR\bsnapshot\"\v\n" +
+	"\tHeartbeat\"+\n" +
 	"\x13WatchChangesRequest\x12\x14\n" +
 	"\x05after\x18\x01 \x01(\tR\x05after\"\xad\x01\n" +
 	"\x14WatchChangesResponse\x12\x16\n" +
@@ -159,9 +433,10 @@ const file_wi_core_v1_events_proto_rawDesc = "" +
 	"\bitem_ids\x18\x02 \x03(\tR\aitemIds\x12%\n" +
 	"\x0erepository_ids\x18\x03 \x03(\tR\rrepositoryIds\x12\x10\n" +
 	"\x03all\x18\x04 \x01(\bR\x03all\x12)\n" +
-	"\x10profiles_changed\x18\x05 \x01(\bR\x0fprofilesChanged2c\n" +
+	"\x10profiles_changed\x18\x05 \x01(\bR\x0fprofilesChanged2\xa3\x01\n" +
 	"\fEventService\x12S\n" +
-	"\fWatchChanges\x12\x1f.wi.core.v1.WatchChangesRequest\x1a .wi.core.v1.WatchChangesResponse0\x01B0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
+	"\fWatchChanges\x12\x1f.wi.core.v1.WatchChangesRequest\x1a .wi.core.v1.WatchChangesResponse0\x01\x12>\n" +
+	"\x05Watch\x12\x18.wi.core.v1.WatchRequest\x1a\x19.wi.core.v1.WatchResponse0\x01B0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
 var (
 	file_wi_core_v1_events_proto_rawDescOnce sync.Once
@@ -175,19 +450,32 @@ func file_wi_core_v1_events_proto_rawDescGZIP() []byte {
 	return file_wi_core_v1_events_proto_rawDescData
 }
 
-var file_wi_core_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_wi_core_v1_events_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_wi_core_v1_events_proto_goTypes = []any{
-	(*WatchChangesRequest)(nil),  // 0: wi.core.v1.WatchChangesRequest
-	(*WatchChangesResponse)(nil), // 1: wi.core.v1.WatchChangesResponse
+	(*WatchRequest)(nil),             // 0: wi.core.v1.WatchRequest
+	(*WatchResponse)(nil),            // 1: wi.core.v1.WatchResponse
+	(*JobsChanged)(nil),              // 2: wi.core.v1.JobsChanged
+	(*Heartbeat)(nil),                // 3: wi.core.v1.Heartbeat
+	(*WatchChangesRequest)(nil),      // 4: wi.core.v1.WatchChangesRequest
+	(*WatchChangesResponse)(nil),     // 5: wi.core.v1.WatchChangesResponse
+	(*WatchLiveContentResponse)(nil), // 6: wi.core.v1.WatchLiveContentResponse
+	(*Job)(nil),                      // 7: wi.core.v1.Job
 }
 var file_wi_core_v1_events_proto_depIdxs = []int32{
-	0, // 0: wi.core.v1.EventService.WatchChanges:input_type -> wi.core.v1.WatchChangesRequest
-	1, // 1: wi.core.v1.EventService.WatchChanges:output_type -> wi.core.v1.WatchChangesResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	5, // 0: wi.core.v1.WatchResponse.changes:type_name -> wi.core.v1.WatchChangesResponse
+	6, // 1: wi.core.v1.WatchResponse.content:type_name -> wi.core.v1.WatchLiveContentResponse
+	2, // 2: wi.core.v1.WatchResponse.jobs:type_name -> wi.core.v1.JobsChanged
+	3, // 3: wi.core.v1.WatchResponse.heartbeat:type_name -> wi.core.v1.Heartbeat
+	7, // 4: wi.core.v1.JobsChanged.jobs:type_name -> wi.core.v1.Job
+	4, // 5: wi.core.v1.EventService.WatchChanges:input_type -> wi.core.v1.WatchChangesRequest
+	0, // 6: wi.core.v1.EventService.Watch:input_type -> wi.core.v1.WatchRequest
+	5, // 7: wi.core.v1.EventService.WatchChanges:output_type -> wi.core.v1.WatchChangesResponse
+	1, // 8: wi.core.v1.EventService.Watch:output_type -> wi.core.v1.WatchResponse
+	7, // [7:9] is the sub-list for method output_type
+	5, // [5:7] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_events_proto_init() }
@@ -195,13 +483,21 @@ func file_wi_core_v1_events_proto_init() {
 	if File_wi_core_v1_events_proto != nil {
 		return
 	}
+	file_wi_core_v1_agents_proto_init()
+	file_wi_core_v1_jobs_proto_init()
+	file_wi_core_v1_events_proto_msgTypes[1].OneofWrappers = []any{
+		(*WatchResponse_Changes)(nil),
+		(*WatchResponse_Content)(nil),
+		(*WatchResponse_Jobs)(nil),
+		(*WatchResponse_Heartbeat)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_events_proto_rawDesc), len(file_wi_core_v1_events_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

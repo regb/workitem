@@ -4,6 +4,9 @@ package wi.core.v1;
 
 option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
 
+import "wi/core/v1/agents.proto";
+import "wi/core/v1/jobs.proto";
+
 // EventService reports that state changed, so clients re-read what they
 // show instead of polling.
 service EventService {
@@ -11,7 +14,43 @@ service EventService {
   // message answers at once: with changes since the cursor, or with all set
   // when the cursor is from another daemon instance or too old to resume.
   rpc WatchChanges(WatchChangesRequest) returns (stream WatchChangesResponse);
+  // Watch carries on one stream what one client view follows: the change
+  // feed, the jobs, and optionally one item's live content, with a
+  // heartbeat every 15 seconds while nothing else is sent. One stream per
+  // view keeps a browser, which shares a few connections between all its
+  // tabs, from running out of them. While any Watch is open, the daemon
+  // also observes agents and worktrees every 10 seconds, and reports the
+  // items whose observation changed as changes.
+  rpc Watch(WatchRequest) returns (stream WatchResponse);
 }
+
+message WatchRequest {
+  // after is a change-feed cursor, as in WatchChanges.
+  string after = 1;
+  // item_id also follows this item's live content, as WatchLiveContent.
+  string item_id = 2;
+}
+
+message WatchResponse {
+  oneof event {
+    WatchChangesResponse changes = 1;
+    WatchLiveContentResponse content = 2;
+    JobsChanged jobs = 3;
+    Heartbeat heartbeat = 4;
+  }
+}
+
+// JobsChanged reports jobs as they change state or phase. The first one is
+// a snapshot listing every unfinished job; later ones list the jobs that
+// changed, finished ones included.
+message JobsChanged {
+  repeated Job jobs = 1;
+  bool snapshot = 2;
+}
+
+// Heartbeat keeps an idle stream open through proxies that close silent
+// responses.
+message Heartbeat {}
 
 message WatchChangesRequest {
   // after is the last cursor the client saw; empty starts from now. A

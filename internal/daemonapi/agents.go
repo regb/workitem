@@ -653,9 +653,21 @@ func (s *Server) WatchLiveContent(ctx context.Context, req *connect.Request[v1.W
 	if _, err := s.canonical(ctx, req.Msg.ItemId, 0); err != nil {
 		return rpcError(err)
 	}
+	return s.followContent(ctx, req.Msg.ItemId, stream.Send)
+}
+
+// contentPollInterval paces snapshot reads from a runtime that cannot
+// stream its content.
+const contentPollInterval = 400 * time.Millisecond
+
+// followContent sends an item's live content until ctx ends: a snapshot,
+// then the events after it. Without a running agent it sends an empty
+// snapshot each second; a runtime that cannot stream is polled for
+// snapshots, sent when they change.
+func (s *Server) followContent(ctx context.Context, itemID string, send func(*v1.WatchLiveContentResponse) error) error {
 	var previousGeneration uint32
 	for {
-		runtime, err := s.App.AgentRuntimeStatus(ctx, resolve(req.Msg.ItemId))
+		runtime, err := s.App.AgentRuntimeStatus(ctx, resolve(itemID))
 		if err != nil {
 			return rpcError(err)
 		}
@@ -666,7 +678,7 @@ func (s *Server) WatchLiveContent(ctx context.Context, req *connect.Request[v1.W
 			runtimeID = runtime.Runtime.ID
 		}
 		if !runtime.Online {
-			if err := stream.Send(&v1.WatchLiveContentResponse{Cursor: fmt.Sprintf("%s:0", runtimeID), Event: &v1.WatchLiveContentResponse_Snapshot{Snapshot: &v1.LiveContent{Generation: generation}}}); err != nil {
+			if err := send(&v1.WatchLiveContentResponse{Cursor: fmt.Sprintf("%s:0", runtimeID), Event: &v1.WatchLiveContentResponse_Snapshot{Snapshot: &v1.LiveContent{Generation: generation}}}); err != nil {
 				return err
 			}
 			select {
@@ -677,15 +689,21 @@ func (s *Server) WatchLiveContent(ctx context.Context, req *connect.Request[v1.W
 			continue
 		}
 		previousGeneration = generation
-		err = s.App.AgentContentStream(ctx, resolve(req.Msg.ItemId), func(event driver.ContentEvent) error {
+		err = s.App.AgentContentStream(ctx, resolve(itemID), func(event driver.ContentEvent) error {
 			// Native streams always begin with a snapshot. Sending a normalized snapshot
 			// per change also safely resets cursors that cannot be replayed by the driver.
-			return s.sendContentEvent(stream, runtimeID, generation, event)
+			return s.sendContentEvent(send, runtimeID, generation, event)
 		})
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		current, e := s.App.AgentRuntimeStatus(ctx, resolve(req.Msg.ItemId))
+		if errors.Is(err, driver.ErrContentStreamUnsupported) {
+			err = s.pollContent(ctx, itemID, runtimeID, generation, send)
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+		}
+		current, e := s.App.AgentRuntimeStatus(ctx, resolve(itemID))
 		if e != nil {
 			return rpcError(e)
 		}
@@ -694,7 +712,31 @@ func (s *Server) WatchLiveContent(ctx context.Context, req *connect.Request[v1.W
 		}
 	}
 }
-func (s *Server) sendContentEvent(stream *connect.ServerStream[v1.WatchLiveContentResponse], runtimeID string, generation uint32, e driver.ContentEvent) error {
+
+// pollContent sends snapshots of a runtime that cannot stream, when they
+// change, until a read fails, as it does once the runtime stops.
+func (s *Server) pollContent(ctx context.Context, itemID, runtimeID string, generation uint32, send func(*v1.WatchLiveContentResponse) error) error {
+	var last *v1.LiveContent
+	for sequence := uint64(1); ; sequence++ {
+		value, err := s.App.AgentContent(ctx, resolve(itemID))
+		if err != nil {
+			return err
+		}
+		snapshot := live(value, generation)
+		if last == nil || !proto.Equal(snapshot, last) {
+			last = snapshot
+			if err := send(&v1.WatchLiveContentResponse{Cursor: base64.RawURLEncoding.EncodeToString([]byte(runtimeID + ":" + strconv.FormatUint(sequence, 10))), Event: &v1.WatchLiveContentResponse_Snapshot{Snapshot: snapshot}}); err != nil {
+				return err
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(contentPollInterval):
+		}
+	}
+}
+func (s *Server) sendContentEvent(send func(*v1.WatchLiveContentResponse) error, runtimeID string, generation uint32, e driver.ContentEvent) error {
 	out := &v1.WatchLiveContentResponse{Cursor: base64.RawURLEncoding.EncodeToString([]byte(runtimeID + ":" + strconv.FormatUint(e.Sequence, 10)))}
 	switch e.Type {
 	case driver.ContentSnapshot:
@@ -741,5 +783,5 @@ func (s *Server) sendContentEvent(stream *connect.ServerStream[v1.WatchLiveConte
 		}
 		out.Event = &v1.WatchLiveContentResponse_Tool{Tool: &v1.ToolCallUpdate{Phase: phase, Tool: tool(driver.HistoryTool{ID: e.Tool.ID, Name: e.Tool.Name, Input: e.Tool.Input, Output: e.Tool.Output, Status: e.Tool.Status})}}
 	}
-	return stream.Send(out)
+	return send(out)
 }

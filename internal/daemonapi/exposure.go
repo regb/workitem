@@ -37,6 +37,7 @@ var webProcedures = map[string]bool{
 	corev1connect.ControlServiceReleaseControlProcedure:              true,
 	corev1connect.ControlServiceRenewControlProcedure:                true,
 	corev1connect.EventServiceWatchChangesProcedure:                  true,
+	corev1connect.EventServiceWatchProcedure:                         true,
 	corev1connect.ItemServiceAddBlockerProcedure:                     true,
 	corev1connect.ItemServiceAddNoteProcedure:                        true,
 	corev1connect.ItemServiceAttachProcedure:                         true,

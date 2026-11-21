@@ -53,6 +53,11 @@ type Server struct {
 	callbacksClosed bool
 	callbacks       sync.WaitGroup
 	usage           usageState
+	// watchers counts open Watch and WatchChanges streams; stopBeat ends
+	// the observation beat they keep running.
+	watchMu  sync.Mutex
+	watchers int
+	stopBeat context.CancelFunc
 }
 
 func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.Config, host *plugin.Host, root string) (*Server, error) {
