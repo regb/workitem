@@ -140,6 +140,9 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 		defer cancel()
 		return p.SubmitEvent(ctx, r.Runtime.EventSocketPath, event)
 	}
+	content.Linked = func(requestID string, nativeIDs []string) {
+		_ = emit(p.RuntimeEvent{Type: p.EventPromptSaved, RequestID: requestID, NativeIDs: nativeIDs})
+	}
 	var settings map[string]any
 	_ = json.Unmarshal(r.Config, &settings)
 	caps := p.Capabilities{LiveContent: true, IdleGuard: true, ImageInput: true, BundledSkills: true, NativeTUI: r.Runtime.Mode == p.ModeTUI, Headless: r.Runtime.Mode == p.ModeHeadless, Streaming: true, Prompt: true, Steering: true, FollowUp: true, Cancel: true, Monitor: true, Control: p.ControlStructured, Settings: []string{"model", "reasoning"}, Answer: true}

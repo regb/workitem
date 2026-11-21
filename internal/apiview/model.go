@@ -200,7 +200,7 @@ func History(v *v1.GetHistoryResponse) driver.History {
 	out.Truncated = v.Truncated
 	out.Warnings = v.Warnings
 	for _, m := range v.Messages {
-		message := driver.HistoryMessage{ID: m.Id, NativeIDs: m.NativeIds, Role: strings.ToLower(strings.TrimPrefix(m.Role.String(), "MESSAGE_ROLE_")), Text: m.Text, Images: images(m.Images), Error: m.Error, Aborted: m.Aborted, Subagent: subagent(m.Subagent)}
+		message := driver.HistoryMessage{ID: m.Id, NativeIDs: m.NativeIds, Role: strings.ToLower(strings.TrimPrefix(m.Role.String(), "MESSAGE_ROLE_")), Text: m.Text, Images: images(m.Images), Error: m.Error, Aborted: m.Aborted, Subagent: subagent(m.Subagent), ClientMessageID: m.ClientMessageId}
 		if m.Time != nil {
 			message.Timestamp = m.Time.AsTime().Format(time.RFC3339Nano)
 		}
@@ -235,6 +235,9 @@ func Content(v *v1.LiveContent) driver.Content {
 	}
 	for _, p := range v.Prompts {
 		out.Prompts = append(out.Prompts, driver.PromptLink{RequestID: p.ClientMessageId, NativeIDs: p.NativeIds})
+	}
+	for _, p := range v.Parts {
+		out.Parts = append(out.Parts, driver.ContentPart{Text: p.Text, ToolID: p.ToolId, ToolName: p.ToolName})
 	}
 	if q := v.Question; q != nil {
 		value := tool(q)

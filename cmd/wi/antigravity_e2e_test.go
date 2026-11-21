@@ -107,6 +107,28 @@ func TestAntigravityDriverEndToEnd(t *testing.T) {
 		t.Fatalf("capabilities: %v", capabilities)
 	}
 
+	// A message sent with a client ID comes back in history marked with it:
+	// the driver links the prompt to its entry, and the daemon keeps it.
+	if _, err := f.clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: "linked", Delivery: v1.Delivery_DELIVERY_PROMPT, ClientMessageId: "page-1"})); err != nil {
+		t.Fatal(err)
+	}
+	waitReply("Echo: linked")
+	f.idle(item)
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
+		linked := ""
+		for _, m := range history() {
+			if m.Role == v1.MessageRole_MESSAGE_ROLE_USER && m.Text == "linked" {
+				linked = m.ClientMessageId
+			}
+		}
+		if linked == "page-1" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("sent message not linked in history: %q", linked)
+		}
+	}
+
 	// wi's instructions reach the agent's system prompt.
 	send("system", v1.Delivery_DELIVERY_PROMPT)
 	waitReply("System: ")

@@ -2268,9 +2268,13 @@ type ConversationMessage struct {
 	// error means the harness answered instead of the model.
 	Error bool `protobuf:"varint,11,opt,name=error,proto3" json:"error,omitempty"`
 	// aborted marks where the operator stopped a reply.
-	Aborted       bool `protobuf:"varint,12,opt,name=aborted,proto3" json:"aborted,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Aborted bool `protobuf:"varint,12,opt,name=aborted,proto3" json:"aborted,omitempty"`
+	// client_message_id is the ID the message was sent with (SendMessage's
+	// client_message_id, or a start's), when the agent linked it to this
+	// entry. Clients confirm what they sent by it.
+	ClientMessageId string `protobuf:"bytes,13,opt,name=client_message_id,json=clientMessageId,proto3" json:"client_message_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ConversationMessage) Reset() {
@@ -2385,6 +2389,13 @@ func (x *ConversationMessage) GetAborted() bool {
 		return x.Aborted
 	}
 	return false
+}
+
+func (x *ConversationMessage) GetClientMessageId() string {
+	if x != nil {
+		return x.ClientMessageId
+	}
+	return ""
 }
 
 type GetHistoryRequest struct {
@@ -2667,7 +2678,11 @@ type LiveContent struct {
 	// question is the question the agent waits on, such as Claude's
 	// AskUserQuestion call, whose input holds the questions and their
 	// options. AnswerQuestion answers it.
-	Question      *ToolCall `protobuf:"bytes,11,opt,name=question,proto3" json:"question,omitempty"`
+	Question *ToolCall `protobuf:"bytes,11,opt,name=question,proto3" json:"question,omitempty"`
+	// parts is the message in the order it was written: its text split where
+	// tool calls came between. Clients show it in this order; text and tools
+	// hold the same content, merged.
+	Parts         []*LivePart `protobuf:"bytes,12,rep,name=parts,proto3" json:"parts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2779,6 +2794,75 @@ func (x *LiveContent) GetQuestion() *ToolCall {
 	return nil
 }
 
+func (x *LiveContent) GetParts() []*LivePart {
+	if x != nil {
+		return x.Parts
+	}
+	return nil
+}
+
+// LivePart is a stretch of a live message: text, or a tool call named by its
+// ID (or, without one, its name) in the message's tools.
+type LivePart struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	ToolId        string                 `protobuf:"bytes,2,opt,name=tool_id,json=toolId,proto3" json:"tool_id,omitempty"`
+	ToolName      string                 `protobuf:"bytes,3,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LivePart) Reset() {
+	*x = LivePart{}
+	mi := &file_wi_core_v1_agents_proto_msgTypes[35]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LivePart) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LivePart) ProtoMessage() {}
+
+func (x *LivePart) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_agents_proto_msgTypes[35]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LivePart.ProtoReflect.Descriptor instead.
+func (*LivePart) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{35}
+}
+
+func (x *LivePart) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *LivePart) GetToolId() string {
+	if x != nil {
+		return x.ToolId
+	}
+	return ""
+}
+
+func (x *LivePart) GetToolName() string {
+	if x != nil {
+		return x.ToolName
+	}
+	return ""
+}
+
 // PromptLink matches a client's message to the history entries it became.
 type PromptLink struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
@@ -2790,7 +2874,7 @@ type PromptLink struct {
 
 func (x *PromptLink) Reset() {
 	*x = PromptLink{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[35]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2802,7 +2886,7 @@ func (x *PromptLink) String() string {
 func (*PromptLink) ProtoMessage() {}
 
 func (x *PromptLink) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[35]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2815,7 +2899,7 @@ func (x *PromptLink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromptLink.ProtoReflect.Descriptor instead.
 func (*PromptLink) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{35}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *PromptLink) GetClientMessageId() string {
@@ -2844,7 +2928,7 @@ type WatchLiveContentRequest struct {
 
 func (x *WatchLiveContentRequest) Reset() {
 	*x = WatchLiveContentRequest{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[36]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2856,7 +2940,7 @@ func (x *WatchLiveContentRequest) String() string {
 func (*WatchLiveContentRequest) ProtoMessage() {}
 
 func (x *WatchLiveContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[36]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2869,7 +2953,7 @@ func (x *WatchLiveContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchLiveContentRequest.ProtoReflect.Descriptor instead.
 func (*WatchLiveContentRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{36}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *WatchLiveContentRequest) GetItemId() string {
@@ -2896,7 +2980,7 @@ type MessageStarted struct {
 
 func (x *MessageStarted) Reset() {
 	*x = MessageStarted{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[37]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2908,7 +2992,7 @@ func (x *MessageStarted) String() string {
 func (*MessageStarted) ProtoMessage() {}
 
 func (x *MessageStarted) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[37]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2921,7 +3005,7 @@ func (x *MessageStarted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageStarted.ProtoReflect.Descriptor instead.
 func (*MessageStarted) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{37}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *MessageStarted) GetMessageId() string {
@@ -2943,7 +3027,7 @@ type MessageDelta struct {
 
 func (x *MessageDelta) Reset() {
 	*x = MessageDelta{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[38]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2955,7 +3039,7 @@ func (x *MessageDelta) String() string {
 func (*MessageDelta) ProtoMessage() {}
 
 func (x *MessageDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[38]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2968,7 +3052,7 @@ func (x *MessageDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageDelta.ProtoReflect.Descriptor instead.
 func (*MessageDelta) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{38}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *MessageDelta) GetMessageId() string {
@@ -3004,7 +3088,7 @@ type MessageReplaced struct {
 
 func (x *MessageReplaced) Reset() {
 	*x = MessageReplaced{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[39]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3016,7 +3100,7 @@ func (x *MessageReplaced) String() string {
 func (*MessageReplaced) ProtoMessage() {}
 
 func (x *MessageReplaced) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[39]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3029,7 +3113,7 @@ func (x *MessageReplaced) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageReplaced.ProtoReflect.Descriptor instead.
 func (*MessageReplaced) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{39}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *MessageReplaced) GetMessageId() string {
@@ -3063,7 +3147,7 @@ type MessageCompleted struct {
 
 func (x *MessageCompleted) Reset() {
 	*x = MessageCompleted{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[40]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3075,7 +3159,7 @@ func (x *MessageCompleted) String() string {
 func (*MessageCompleted) ProtoMessage() {}
 
 func (x *MessageCompleted) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[40]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3088,7 +3172,7 @@ func (x *MessageCompleted) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageCompleted.ProtoReflect.Descriptor instead.
 func (*MessageCompleted) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{40}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *MessageCompleted) GetMessageId() string {
@@ -3109,7 +3193,7 @@ type MessageSaved struct {
 
 func (x *MessageSaved) Reset() {
 	*x = MessageSaved{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[41]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3121,7 +3205,7 @@ func (x *MessageSaved) String() string {
 func (*MessageSaved) ProtoMessage() {}
 
 func (x *MessageSaved) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[41]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3134,7 +3218,7 @@ func (x *MessageSaved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MessageSaved.ProtoReflect.Descriptor instead.
 func (*MessageSaved) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{41}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *MessageSaved) GetMessageId() string {
@@ -3162,7 +3246,7 @@ type ThoughtDelta struct {
 
 func (x *ThoughtDelta) Reset() {
 	*x = ThoughtDelta{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[42]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3174,7 +3258,7 @@ func (x *ThoughtDelta) String() string {
 func (*ThoughtDelta) ProtoMessage() {}
 
 func (x *ThoughtDelta) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[42]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3187,7 +3271,7 @@ func (x *ThoughtDelta) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ThoughtDelta.ProtoReflect.Descriptor instead.
 func (*ThoughtDelta) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{42}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *ThoughtDelta) GetMessageId() string {
@@ -3215,7 +3299,7 @@ type ToolCallUpdate struct {
 
 func (x *ToolCallUpdate) Reset() {
 	*x = ToolCallUpdate{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[43]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3227,7 +3311,7 @@ func (x *ToolCallUpdate) String() string {
 func (*ToolCallUpdate) ProtoMessage() {}
 
 func (x *ToolCallUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[43]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3240,7 +3324,7 @@ func (x *ToolCallUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolCallUpdate.ProtoReflect.Descriptor instead.
 func (*ToolCallUpdate) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{43}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ToolCallUpdate) GetPhase() ToolCallPhase {
@@ -3267,7 +3351,7 @@ type PromptSaved struct {
 
 func (x *PromptSaved) Reset() {
 	*x = PromptSaved{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[44]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3279,7 +3363,7 @@ func (x *PromptSaved) String() string {
 func (*PromptSaved) ProtoMessage() {}
 
 func (x *PromptSaved) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[44]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3292,7 +3376,7 @@ func (x *PromptSaved) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PromptSaved.ProtoReflect.Descriptor instead.
 func (*PromptSaved) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{44}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *PromptSaved) GetLink() *PromptLink {
@@ -3313,7 +3397,7 @@ type ActivityChanged struct {
 
 func (x *ActivityChanged) Reset() {
 	*x = ActivityChanged{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[45]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3325,7 +3409,7 @@ func (x *ActivityChanged) String() string {
 func (*ActivityChanged) ProtoMessage() {}
 
 func (x *ActivityChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[45]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3338,7 +3422,7 @@ func (x *ActivityChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivityChanged.ProtoReflect.Descriptor instead.
 func (*ActivityChanged) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{45}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *ActivityChanged) GetActivity() string {
@@ -3357,7 +3441,7 @@ type TurnSettled struct {
 
 func (x *TurnSettled) Reset() {
 	*x = TurnSettled{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[46]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3369,7 +3453,7 @@ func (x *TurnSettled) String() string {
 func (*TurnSettled) ProtoMessage() {}
 
 func (x *TurnSettled) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[46]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3382,7 +3466,7 @@ func (x *TurnSettled) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TurnSettled.ProtoReflect.Descriptor instead.
 func (*TurnSettled) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{46}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{47}
 }
 
 // QuestionChanged sets the question the agent waits on; without one, the
@@ -3396,7 +3480,7 @@ type QuestionChanged struct {
 
 func (x *QuestionChanged) Reset() {
 	*x = QuestionChanged{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[47]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3408,7 +3492,7 @@ func (x *QuestionChanged) String() string {
 func (*QuestionChanged) ProtoMessage() {}
 
 func (x *QuestionChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[47]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3421,7 +3505,7 @@ func (x *QuestionChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuestionChanged.ProtoReflect.Descriptor instead.
 func (*QuestionChanged) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{47}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *QuestionChanged) GetQuestion() *ToolCall {
@@ -3456,7 +3540,7 @@ type WatchLiveContentResponse struct {
 
 func (x *WatchLiveContentResponse) Reset() {
 	*x = WatchLiveContentResponse{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[48]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3468,7 +3552,7 @@ func (x *WatchLiveContentResponse) String() string {
 func (*WatchLiveContentResponse) ProtoMessage() {}
 
 func (x *WatchLiveContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[48]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3481,7 +3565,7 @@ func (x *WatchLiveContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchLiveContentResponse.ProtoReflect.Descriptor instead.
 func (*WatchLiveContentResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{48}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *WatchLiveContentResponse) GetCursor() string {
@@ -3701,7 +3785,7 @@ type ControlLease struct {
 
 func (x *ControlLease) Reset() {
 	*x = ControlLease{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[49]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3713,7 +3797,7 @@ func (x *ControlLease) String() string {
 func (*ControlLease) ProtoMessage() {}
 
 func (x *ControlLease) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[49]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3726,7 +3810,7 @@ func (x *ControlLease) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlLease.ProtoReflect.Descriptor instead.
 func (*ControlLease) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{49}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *ControlLease) GetId() string {
@@ -3801,7 +3885,7 @@ type ControlPlan struct {
 
 func (x *ControlPlan) Reset() {
 	*x = ControlPlan{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[50]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3813,7 +3897,7 @@ func (x *ControlPlan) String() string {
 func (*ControlPlan) ProtoMessage() {}
 
 func (x *ControlPlan) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[50]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3826,7 +3910,7 @@ func (x *ControlPlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlPlan.ProtoReflect.Descriptor instead.
 func (*ControlPlan) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{50}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *ControlPlan) GetNeedsConfirmation() bool {
@@ -3907,7 +3991,7 @@ type ControlStatus struct {
 
 func (x *ControlStatus) Reset() {
 	*x = ControlStatus{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[51]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3919,7 +4003,7 @@ func (x *ControlStatus) String() string {
 func (*ControlStatus) ProtoMessage() {}
 
 func (x *ControlStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[51]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3932,7 +4016,7 @@ func (x *ControlStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ControlStatus.ProtoReflect.Descriptor instead.
 func (*ControlStatus) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{51}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ControlStatus) GetLease() *ControlLease {
@@ -3973,7 +4057,7 @@ type GetControlRequest struct {
 
 func (x *GetControlRequest) Reset() {
 	*x = GetControlRequest{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[52]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3985,7 +4069,7 @@ func (x *GetControlRequest) String() string {
 func (*GetControlRequest) ProtoMessage() {}
 
 func (x *GetControlRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[52]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3998,7 +4082,7 @@ func (x *GetControlRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetControlRequest.ProtoReflect.Descriptor instead.
 func (*GetControlRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{52}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *GetControlRequest) GetItemId() string {
@@ -4024,7 +4108,7 @@ type GetControlResponse struct {
 
 func (x *GetControlResponse) Reset() {
 	*x = GetControlResponse{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[53]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4036,7 +4120,7 @@ func (x *GetControlResponse) String() string {
 func (*GetControlResponse) ProtoMessage() {}
 
 func (x *GetControlResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[53]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4049,7 +4133,7 @@ func (x *GetControlResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetControlResponse.ProtoReflect.Descriptor instead.
 func (*GetControlResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{53}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GetControlResponse) GetControl() *ControlStatus {
@@ -4076,7 +4160,7 @@ type AcquireControlRequest struct {
 
 func (x *AcquireControlRequest) Reset() {
 	*x = AcquireControlRequest{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[54]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4088,7 +4172,7 @@ func (x *AcquireControlRequest) String() string {
 func (*AcquireControlRequest) ProtoMessage() {}
 
 func (x *AcquireControlRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[54]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4101,7 +4185,7 @@ func (x *AcquireControlRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcquireControlRequest.ProtoReflect.Descriptor instead.
 func (*AcquireControlRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{54}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *AcquireControlRequest) GetItemId() string {
@@ -4156,7 +4240,7 @@ type AcquireControlResponse struct {
 
 func (x *AcquireControlResponse) Reset() {
 	*x = AcquireControlResponse{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[55]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4168,7 +4252,7 @@ func (x *AcquireControlResponse) String() string {
 func (*AcquireControlResponse) ProtoMessage() {}
 
 func (x *AcquireControlResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[55]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4181,7 +4265,7 @@ func (x *AcquireControlResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcquireControlResponse.ProtoReflect.Descriptor instead.
 func (*AcquireControlResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{55}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *AcquireControlResponse) GetControl() *ControlStatus {
@@ -4207,7 +4291,7 @@ type RenewControlRequest struct {
 
 func (x *RenewControlRequest) Reset() {
 	*x = RenewControlRequest{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[56]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4219,7 +4303,7 @@ func (x *RenewControlRequest) String() string {
 func (*RenewControlRequest) ProtoMessage() {}
 
 func (x *RenewControlRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[56]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4232,7 +4316,7 @@ func (x *RenewControlRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewControlRequest.ProtoReflect.Descriptor instead.
 func (*RenewControlRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{56}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *RenewControlRequest) GetLeaseId() string {
@@ -4251,7 +4335,7 @@ type RenewControlResponse struct {
 
 func (x *RenewControlResponse) Reset() {
 	*x = RenewControlResponse{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[57]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4263,7 +4347,7 @@ func (x *RenewControlResponse) String() string {
 func (*RenewControlResponse) ProtoMessage() {}
 
 func (x *RenewControlResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[57]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4276,7 +4360,7 @@ func (x *RenewControlResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewControlResponse.ProtoReflect.Descriptor instead.
 func (*RenewControlResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{57}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *RenewControlResponse) GetLease() *ControlLease {
@@ -4295,7 +4379,7 @@ type ReleaseControlRequest struct {
 
 func (x *ReleaseControlRequest) Reset() {
 	*x = ReleaseControlRequest{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[58]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4307,7 +4391,7 @@ func (x *ReleaseControlRequest) String() string {
 func (*ReleaseControlRequest) ProtoMessage() {}
 
 func (x *ReleaseControlRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[58]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4320,7 +4404,7 @@ func (x *ReleaseControlRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseControlRequest.ProtoReflect.Descriptor instead.
 func (*ReleaseControlRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{58}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *ReleaseControlRequest) GetLeaseId() string {
@@ -4338,7 +4422,7 @@ type ReleaseControlResponse struct {
 
 func (x *ReleaseControlResponse) Reset() {
 	*x = ReleaseControlResponse{}
-	mi := &file_wi_core_v1_agents_proto_msgTypes[59]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4350,7 +4434,7 @@ func (x *ReleaseControlResponse) String() string {
 func (*ReleaseControlResponse) ProtoMessage() {}
 
 func (x *ReleaseControlResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_agents_proto_msgTypes[59]
+	mi := &file_wi_core_v1_agents_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4363,7 +4447,7 @@ func (x *ReleaseControlResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReleaseControlResponse.ProtoReflect.Descriptor instead.
 func (*ReleaseControlResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{59}
+	return file_wi_core_v1_agents_proto_rawDescGZIP(), []int{60}
 }
 
 var File_wi_core_v1_agents_proto protoreflect.FileDescriptor
@@ -4541,7 +4625,7 @@ const file_wi_core_v1_agents_proto_rawDesc = "" +
 	"durationMs\"B\n" +
 	"\aSummary\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12#\n" +
-	"\rtokens_before\x18\x02 \x01(\rR\ftokensBefore\"\xd5\x03\n" +
+	"\rtokens_before\x18\x02 \x01(\rR\ftokensBefore\"\x81\x04\n" +
 	"\x13ConversationMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -4556,7 +4640,8 @@ const file_wi_core_v1_agents_proto_rawDesc = "" +
 	"\bsubagent\x18\n" +
 	" \x01(\v2\x17.wi.core.v1.SubagentRefR\bsubagent\x12\x14\n" +
 	"\x05error\x18\v \x01(\bR\x05error\x12\x18\n" +
-	"\aaborted\x18\f \x01(\bR\aaborted\"]\n" +
+	"\aaborted\x18\f \x01(\bR\aaborted\x12*\n" +
+	"\x11client_message_id\x18\r \x01(\tR\x0fclientMessageId\"]\n" +
 	"\x11GetHistoryRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x17\n" +
 	"\aleaf_id\x18\x02 \x01(\tR\x06leafId\x12\x16\n" +
@@ -4577,7 +4662,7 @@ const file_wi_core_v1_agents_proto_rawDesc = "" +
 	"\bmessages\x18\x01 \x03(\v2\x1f.wi.core.v1.ConversationMessageR\bmessages\x12\x1f\n" +
 	"\vnext_before\x18\x02 \x01(\tR\n" +
 	"nextBefore\x12\x1c\n" +
-	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"\xf5\x02\n" +
+	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"\xa1\x03\n" +
 	"\vLiveContent\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x01 \x01(\rR\n" +
@@ -4593,7 +4678,12 @@ const file_wi_core_v1_agents_proto_rawDesc = "" +
 	"\x05error\x18\t \x01(\tR\x05error\x12\x1c\n" +
 	"\ttruncated\x18\n" +
 	" \x01(\bR\ttruncated\x120\n" +
-	"\bquestion\x18\v \x01(\v2\x14.wi.core.v1.ToolCallR\bquestion\"W\n" +
+	"\bquestion\x18\v \x01(\v2\x14.wi.core.v1.ToolCallR\bquestion\x12*\n" +
+	"\x05parts\x18\f \x03(\v2\x14.wi.core.v1.LivePartR\x05parts\"T\n" +
+	"\bLivePart\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12\x17\n" +
+	"\atool_id\x18\x02 \x01(\tR\x06toolId\x12\x1b\n" +
+	"\ttool_name\x18\x03 \x01(\tR\btoolName\"W\n" +
 	"\n" +
 	"PromptLink\x12*\n" +
 	"\x11client_message_id\x18\x01 \x01(\tR\x0fclientMessageId\x12\x1d\n" +
@@ -4768,7 +4858,7 @@ func file_wi_core_v1_agents_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_agents_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_wi_core_v1_agents_proto_msgTypes = make([]protoimpl.MessageInfo, 67)
+var file_wi_core_v1_agents_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
 var file_wi_core_v1_agents_proto_goTypes = []any{
 	(ControlChannel)(0),                 // 0: wi.core.v1.ControlChannel
 	(Delivery)(0),                       // 1: wi.core.v1.Delivery
@@ -4810,152 +4900,154 @@ var file_wi_core_v1_agents_proto_goTypes = []any{
 	(*GetSubagentHistoryRequest)(nil),   // 37: wi.core.v1.GetSubagentHistoryRequest
 	(*GetSubagentHistoryResponse)(nil),  // 38: wi.core.v1.GetSubagentHistoryResponse
 	(*LiveContent)(nil),                 // 39: wi.core.v1.LiveContent
-	(*PromptLink)(nil),                  // 40: wi.core.v1.PromptLink
-	(*WatchLiveContentRequest)(nil),     // 41: wi.core.v1.WatchLiveContentRequest
-	(*MessageStarted)(nil),              // 42: wi.core.v1.MessageStarted
-	(*MessageDelta)(nil),                // 43: wi.core.v1.MessageDelta
-	(*MessageReplaced)(nil),             // 44: wi.core.v1.MessageReplaced
-	(*MessageCompleted)(nil),            // 45: wi.core.v1.MessageCompleted
-	(*MessageSaved)(nil),                // 46: wi.core.v1.MessageSaved
-	(*ThoughtDelta)(nil),                // 47: wi.core.v1.ThoughtDelta
-	(*ToolCallUpdate)(nil),              // 48: wi.core.v1.ToolCallUpdate
-	(*PromptSaved)(nil),                 // 49: wi.core.v1.PromptSaved
-	(*ActivityChanged)(nil),             // 50: wi.core.v1.ActivityChanged
-	(*TurnSettled)(nil),                 // 51: wi.core.v1.TurnSettled
-	(*QuestionChanged)(nil),             // 52: wi.core.v1.QuestionChanged
-	(*WatchLiveContentResponse)(nil),    // 53: wi.core.v1.WatchLiveContentResponse
-	(*ControlLease)(nil),                // 54: wi.core.v1.ControlLease
-	(*ControlPlan)(nil),                 // 55: wi.core.v1.ControlPlan
-	(*ControlStatus)(nil),               // 56: wi.core.v1.ControlStatus
-	(*GetControlRequest)(nil),           // 57: wi.core.v1.GetControlRequest
-	(*GetControlResponse)(nil),          // 58: wi.core.v1.GetControlResponse
-	(*AcquireControlRequest)(nil),       // 59: wi.core.v1.AcquireControlRequest
-	(*AcquireControlResponse)(nil),      // 60: wi.core.v1.AcquireControlResponse
-	(*RenewControlRequest)(nil),         // 61: wi.core.v1.RenewControlRequest
-	(*RenewControlResponse)(nil),        // 62: wi.core.v1.RenewControlResponse
-	(*ReleaseControlRequest)(nil),       // 63: wi.core.v1.ReleaseControlRequest
-	(*ReleaseControlResponse)(nil),      // 64: wi.core.v1.ReleaseControlResponse
-	nil,                                 // 65: wi.core.v1.Agent.RunningSettingsEntry
-	nil,                                 // 66: wi.core.v1.AnswerQuestionRequest.AnswersEntry
-	nil,                                 // 67: wi.core.v1.GetAgentSettingsResponse.ValuesEntry
-	nil,                                 // 68: wi.core.v1.GetAgentSettingsResponse.OverridesEntry
-	nil,                                 // 69: wi.core.v1.GetAgentSettingsResponse.RunningEntry
-	nil,                                 // 70: wi.core.v1.UpdateAgentSettingsRequest.SettingsEntry
-	nil,                                 // 71: wi.core.v1.UpdateAgentSettingsResponse.OverridesEntry
-	(AgentMode)(0),                      // 72: wi.core.v1.AgentMode
-	(AgentStatus)(0),                    // 73: wi.core.v1.AgentStatus
-	(*timestamppb.Timestamp)(nil),       // 74: google.protobuf.Timestamp
-	(*Job)(nil),                         // 75: wi.core.v1.Job
-	(*Image)(nil),                       // 76: wi.core.v1.Image
+	(*LivePart)(nil),                    // 40: wi.core.v1.LivePart
+	(*PromptLink)(nil),                  // 41: wi.core.v1.PromptLink
+	(*WatchLiveContentRequest)(nil),     // 42: wi.core.v1.WatchLiveContentRequest
+	(*MessageStarted)(nil),              // 43: wi.core.v1.MessageStarted
+	(*MessageDelta)(nil),                // 44: wi.core.v1.MessageDelta
+	(*MessageReplaced)(nil),             // 45: wi.core.v1.MessageReplaced
+	(*MessageCompleted)(nil),            // 46: wi.core.v1.MessageCompleted
+	(*MessageSaved)(nil),                // 47: wi.core.v1.MessageSaved
+	(*ThoughtDelta)(nil),                // 48: wi.core.v1.ThoughtDelta
+	(*ToolCallUpdate)(nil),              // 49: wi.core.v1.ToolCallUpdate
+	(*PromptSaved)(nil),                 // 50: wi.core.v1.PromptSaved
+	(*ActivityChanged)(nil),             // 51: wi.core.v1.ActivityChanged
+	(*TurnSettled)(nil),                 // 52: wi.core.v1.TurnSettled
+	(*QuestionChanged)(nil),             // 53: wi.core.v1.QuestionChanged
+	(*WatchLiveContentResponse)(nil),    // 54: wi.core.v1.WatchLiveContentResponse
+	(*ControlLease)(nil),                // 55: wi.core.v1.ControlLease
+	(*ControlPlan)(nil),                 // 56: wi.core.v1.ControlPlan
+	(*ControlStatus)(nil),               // 57: wi.core.v1.ControlStatus
+	(*GetControlRequest)(nil),           // 58: wi.core.v1.GetControlRequest
+	(*GetControlResponse)(nil),          // 59: wi.core.v1.GetControlResponse
+	(*AcquireControlRequest)(nil),       // 60: wi.core.v1.AcquireControlRequest
+	(*AcquireControlResponse)(nil),      // 61: wi.core.v1.AcquireControlResponse
+	(*RenewControlRequest)(nil),         // 62: wi.core.v1.RenewControlRequest
+	(*RenewControlResponse)(nil),        // 63: wi.core.v1.RenewControlResponse
+	(*ReleaseControlRequest)(nil),       // 64: wi.core.v1.ReleaseControlRequest
+	(*ReleaseControlResponse)(nil),      // 65: wi.core.v1.ReleaseControlResponse
+	nil,                                 // 66: wi.core.v1.Agent.RunningSettingsEntry
+	nil,                                 // 67: wi.core.v1.AnswerQuestionRequest.AnswersEntry
+	nil,                                 // 68: wi.core.v1.GetAgentSettingsResponse.ValuesEntry
+	nil,                                 // 69: wi.core.v1.GetAgentSettingsResponse.OverridesEntry
+	nil,                                 // 70: wi.core.v1.GetAgentSettingsResponse.RunningEntry
+	nil,                                 // 71: wi.core.v1.UpdateAgentSettingsRequest.SettingsEntry
+	nil,                                 // 72: wi.core.v1.UpdateAgentSettingsResponse.OverridesEntry
+	(AgentMode)(0),                      // 73: wi.core.v1.AgentMode
+	(AgentStatus)(0),                    // 74: wi.core.v1.AgentStatus
+	(*timestamppb.Timestamp)(nil),       // 75: google.protobuf.Timestamp
+	(*Job)(nil),                         // 76: wi.core.v1.Job
+	(*Image)(nil),                       // 77: wi.core.v1.Image
 }
 var file_wi_core_v1_agents_proto_depIdxs = []int32{
 	0,  // 0: wi.core.v1.AgentCapabilities.control:type_name -> wi.core.v1.ControlChannel
-	72, // 1: wi.core.v1.Agent.mode:type_name -> wi.core.v1.AgentMode
-	73, // 2: wi.core.v1.Agent.status:type_name -> wi.core.v1.AgentStatus
+	73, // 1: wi.core.v1.Agent.mode:type_name -> wi.core.v1.AgentMode
+	74, // 2: wi.core.v1.Agent.status:type_name -> wi.core.v1.AgentStatus
 	5,  // 3: wi.core.v1.Agent.capabilities:type_name -> wi.core.v1.AgentCapabilities
 	6,  // 4: wi.core.v1.Agent.terminal:type_name -> wi.core.v1.Terminal
-	65, // 5: wi.core.v1.Agent.running_settings:type_name -> wi.core.v1.Agent.RunningSettingsEntry
-	74, // 6: wi.core.v1.Agent.started_at:type_name -> google.protobuf.Timestamp
+	66, // 5: wi.core.v1.Agent.running_settings:type_name -> wi.core.v1.Agent.RunningSettingsEntry
+	75, // 6: wi.core.v1.Agent.started_at:type_name -> google.protobuf.Timestamp
 	7,  // 7: wi.core.v1.GetAgentResponse.agent:type_name -> wi.core.v1.Agent
-	56, // 8: wi.core.v1.GetAgentResponse.control:type_name -> wi.core.v1.ControlStatus
-	72, // 9: wi.core.v1.StartAgentRequest.mode:type_name -> wi.core.v1.AgentMode
+	57, // 8: wi.core.v1.GetAgentResponse.control:type_name -> wi.core.v1.ControlStatus
+	73, // 9: wi.core.v1.StartAgentRequest.mode:type_name -> wi.core.v1.AgentMode
 	7,  // 10: wi.core.v1.StartAgentResponse.agent:type_name -> wi.core.v1.Agent
-	75, // 11: wi.core.v1.StartAgentResponse.job:type_name -> wi.core.v1.Job
+	76, // 11: wi.core.v1.StartAgentResponse.job:type_name -> wi.core.v1.Job
 	7,  // 12: wi.core.v1.RestartAgentResponse.agent:type_name -> wi.core.v1.Agent
-	75, // 13: wi.core.v1.RestartAgentResponse.job:type_name -> wi.core.v1.Job
-	76, // 14: wi.core.v1.SendMessageRequest.images:type_name -> wi.core.v1.Image
+	76, // 13: wi.core.v1.RestartAgentResponse.job:type_name -> wi.core.v1.Job
+	77, // 14: wi.core.v1.SendMessageRequest.images:type_name -> wi.core.v1.Image
 	1,  // 15: wi.core.v1.SendMessageRequest.delivery:type_name -> wi.core.v1.Delivery
-	72, // 16: wi.core.v1.SendMessageRequest.start_mode:type_name -> wi.core.v1.AgentMode
-	75, // 17: wi.core.v1.SendMessageResponse.job:type_name -> wi.core.v1.Job
-	66, // 18: wi.core.v1.AnswerQuestionRequest.answers:type_name -> wi.core.v1.AnswerQuestionRequest.AnswersEntry
+	73, // 16: wi.core.v1.SendMessageRequest.start_mode:type_name -> wi.core.v1.AgentMode
+	76, // 17: wi.core.v1.SendMessageResponse.job:type_name -> wi.core.v1.Job
+	67, // 18: wi.core.v1.AnswerQuestionRequest.answers:type_name -> wi.core.v1.AnswerQuestionRequest.AnswersEntry
 	22, // 19: wi.core.v1.ModelCatalog.models:type_name -> wi.core.v1.ModelOption
-	67, // 20: wi.core.v1.GetAgentSettingsResponse.values:type_name -> wi.core.v1.GetAgentSettingsResponse.ValuesEntry
-	68, // 21: wi.core.v1.GetAgentSettingsResponse.overrides:type_name -> wi.core.v1.GetAgentSettingsResponse.OverridesEntry
-	69, // 22: wi.core.v1.GetAgentSettingsResponse.running:type_name -> wi.core.v1.GetAgentSettingsResponse.RunningEntry
+	68, // 20: wi.core.v1.GetAgentSettingsResponse.values:type_name -> wi.core.v1.GetAgentSettingsResponse.ValuesEntry
+	69, // 21: wi.core.v1.GetAgentSettingsResponse.overrides:type_name -> wi.core.v1.GetAgentSettingsResponse.OverridesEntry
+	70, // 22: wi.core.v1.GetAgentSettingsResponse.running:type_name -> wi.core.v1.GetAgentSettingsResponse.RunningEntry
 	23, // 23: wi.core.v1.GetAgentSettingsResponse.catalog:type_name -> wi.core.v1.ModelCatalog
-	70, // 24: wi.core.v1.UpdateAgentSettingsRequest.settings:type_name -> wi.core.v1.UpdateAgentSettingsRequest.SettingsEntry
-	71, // 25: wi.core.v1.UpdateAgentSettingsResponse.overrides:type_name -> wi.core.v1.UpdateAgentSettingsResponse.OverridesEntry
+	71, // 24: wi.core.v1.UpdateAgentSettingsRequest.settings:type_name -> wi.core.v1.UpdateAgentSettingsRequest.SettingsEntry
+	72, // 25: wi.core.v1.UpdateAgentSettingsResponse.overrides:type_name -> wi.core.v1.UpdateAgentSettingsResponse.OverridesEntry
 	2,  // 26: wi.core.v1.ToolCall.status:type_name -> wi.core.v1.ToolCallStatus
-	76, // 27: wi.core.v1.ToolCall.images:type_name -> wi.core.v1.Image
+	77, // 27: wi.core.v1.ToolCall.images:type_name -> wi.core.v1.Image
 	30, // 28: wi.core.v1.ToolCall.subagent:type_name -> wi.core.v1.SubagentRef
 	3,  // 29: wi.core.v1.ConversationMessage.role:type_name -> wi.core.v1.MessageRole
-	74, // 30: wi.core.v1.ConversationMessage.time:type_name -> google.protobuf.Timestamp
+	75, // 30: wi.core.v1.ConversationMessage.time:type_name -> google.protobuf.Timestamp
 	31, // 31: wi.core.v1.ConversationMessage.tools:type_name -> wi.core.v1.ToolCall
-	76, // 32: wi.core.v1.ConversationMessage.images:type_name -> wi.core.v1.Image
+	77, // 32: wi.core.v1.ConversationMessage.images:type_name -> wi.core.v1.Image
 	32, // 33: wi.core.v1.ConversationMessage.reasoning:type_name -> wi.core.v1.Reasoning
 	33, // 34: wi.core.v1.ConversationMessage.summary:type_name -> wi.core.v1.Summary
 	30, // 35: wi.core.v1.ConversationMessage.subagent:type_name -> wi.core.v1.SubagentRef
 	34, // 36: wi.core.v1.GetHistoryResponse.messages:type_name -> wi.core.v1.ConversationMessage
 	34, // 37: wi.core.v1.GetSubagentHistoryResponse.messages:type_name -> wi.core.v1.ConversationMessage
 	31, // 38: wi.core.v1.LiveContent.tools:type_name -> wi.core.v1.ToolCall
-	40, // 39: wi.core.v1.LiveContent.prompts:type_name -> wi.core.v1.PromptLink
+	41, // 39: wi.core.v1.LiveContent.prompts:type_name -> wi.core.v1.PromptLink
 	31, // 40: wi.core.v1.LiveContent.question:type_name -> wi.core.v1.ToolCall
-	4,  // 41: wi.core.v1.ToolCallUpdate.phase:type_name -> wi.core.v1.ToolCallPhase
-	31, // 42: wi.core.v1.ToolCallUpdate.tool:type_name -> wi.core.v1.ToolCall
-	40, // 43: wi.core.v1.PromptSaved.link:type_name -> wi.core.v1.PromptLink
-	31, // 44: wi.core.v1.QuestionChanged.question:type_name -> wi.core.v1.ToolCall
-	39, // 45: wi.core.v1.WatchLiveContentResponse.snapshot:type_name -> wi.core.v1.LiveContent
-	42, // 46: wi.core.v1.WatchLiveContentResponse.message_started:type_name -> wi.core.v1.MessageStarted
-	43, // 47: wi.core.v1.WatchLiveContentResponse.message_delta:type_name -> wi.core.v1.MessageDelta
-	44, // 48: wi.core.v1.WatchLiveContentResponse.message_replaced:type_name -> wi.core.v1.MessageReplaced
-	45, // 49: wi.core.v1.WatchLiveContentResponse.message_completed:type_name -> wi.core.v1.MessageCompleted
-	46, // 50: wi.core.v1.WatchLiveContentResponse.message_saved:type_name -> wi.core.v1.MessageSaved
-	47, // 51: wi.core.v1.WatchLiveContentResponse.thought_delta:type_name -> wi.core.v1.ThoughtDelta
-	48, // 52: wi.core.v1.WatchLiveContentResponse.tool:type_name -> wi.core.v1.ToolCallUpdate
-	49, // 53: wi.core.v1.WatchLiveContentResponse.prompt_saved:type_name -> wi.core.v1.PromptSaved
-	50, // 54: wi.core.v1.WatchLiveContentResponse.activity:type_name -> wi.core.v1.ActivityChanged
-	51, // 55: wi.core.v1.WatchLiveContentResponse.turn_settled:type_name -> wi.core.v1.TurnSettled
-	52, // 56: wi.core.v1.WatchLiveContentResponse.question:type_name -> wi.core.v1.QuestionChanged
-	74, // 57: wi.core.v1.ControlLease.acquired_at:type_name -> google.protobuf.Timestamp
-	74, // 58: wi.core.v1.ControlLease.expires_at:type_name -> google.protobuf.Timestamp
-	54, // 59: wi.core.v1.ControlPlan.displaces:type_name -> wi.core.v1.ControlLease
-	72, // 60: wi.core.v1.ControlPlan.restarts_in:type_name -> wi.core.v1.AgentMode
-	72, // 61: wi.core.v1.ControlPlan.starts_in:type_name -> wi.core.v1.AgentMode
-	54, // 62: wi.core.v1.ControlStatus.lease:type_name -> wi.core.v1.ControlLease
-	55, // 63: wi.core.v1.ControlStatus.plan:type_name -> wi.core.v1.ControlPlan
-	56, // 64: wi.core.v1.GetControlResponse.control:type_name -> wi.core.v1.ControlStatus
-	56, // 65: wi.core.v1.AcquireControlResponse.control:type_name -> wi.core.v1.ControlStatus
-	75, // 66: wi.core.v1.AcquireControlResponse.job:type_name -> wi.core.v1.Job
-	54, // 67: wi.core.v1.RenewControlResponse.lease:type_name -> wi.core.v1.ControlLease
-	8,  // 68: wi.core.v1.AgentService.GetAgent:input_type -> wi.core.v1.GetAgentRequest
-	10, // 69: wi.core.v1.AgentService.StartAgent:input_type -> wi.core.v1.StartAgentRequest
-	12, // 70: wi.core.v1.AgentService.StopAgent:input_type -> wi.core.v1.StopAgentRequest
-	14, // 71: wi.core.v1.AgentService.RestartAgent:input_type -> wi.core.v1.RestartAgentRequest
-	16, // 72: wi.core.v1.AgentService.SendMessage:input_type -> wi.core.v1.SendMessageRequest
-	18, // 73: wi.core.v1.AgentService.AbortTurn:input_type -> wi.core.v1.AbortTurnRequest
-	20, // 74: wi.core.v1.AgentService.AnswerQuestion:input_type -> wi.core.v1.AnswerQuestionRequest
-	24, // 75: wi.core.v1.AgentService.GetAgentSettings:input_type -> wi.core.v1.GetAgentSettingsRequest
-	26, // 76: wi.core.v1.AgentService.UpdateAgentSettings:input_type -> wi.core.v1.UpdateAgentSettingsRequest
-	28, // 77: wi.core.v1.AgentService.SuggestTitle:input_type -> wi.core.v1.SuggestTitleRequest
-	35, // 78: wi.core.v1.AgentService.GetHistory:input_type -> wi.core.v1.GetHistoryRequest
-	37, // 79: wi.core.v1.AgentService.GetSubagentHistory:input_type -> wi.core.v1.GetSubagentHistoryRequest
-	41, // 80: wi.core.v1.AgentService.WatchLiveContent:input_type -> wi.core.v1.WatchLiveContentRequest
-	57, // 81: wi.core.v1.ControlService.GetControl:input_type -> wi.core.v1.GetControlRequest
-	59, // 82: wi.core.v1.ControlService.AcquireControl:input_type -> wi.core.v1.AcquireControlRequest
-	61, // 83: wi.core.v1.ControlService.RenewControl:input_type -> wi.core.v1.RenewControlRequest
-	63, // 84: wi.core.v1.ControlService.ReleaseControl:input_type -> wi.core.v1.ReleaseControlRequest
-	9,  // 85: wi.core.v1.AgentService.GetAgent:output_type -> wi.core.v1.GetAgentResponse
-	11, // 86: wi.core.v1.AgentService.StartAgent:output_type -> wi.core.v1.StartAgentResponse
-	13, // 87: wi.core.v1.AgentService.StopAgent:output_type -> wi.core.v1.StopAgentResponse
-	15, // 88: wi.core.v1.AgentService.RestartAgent:output_type -> wi.core.v1.RestartAgentResponse
-	17, // 89: wi.core.v1.AgentService.SendMessage:output_type -> wi.core.v1.SendMessageResponse
-	19, // 90: wi.core.v1.AgentService.AbortTurn:output_type -> wi.core.v1.AbortTurnResponse
-	21, // 91: wi.core.v1.AgentService.AnswerQuestion:output_type -> wi.core.v1.AnswerQuestionResponse
-	25, // 92: wi.core.v1.AgentService.GetAgentSettings:output_type -> wi.core.v1.GetAgentSettingsResponse
-	27, // 93: wi.core.v1.AgentService.UpdateAgentSettings:output_type -> wi.core.v1.UpdateAgentSettingsResponse
-	29, // 94: wi.core.v1.AgentService.SuggestTitle:output_type -> wi.core.v1.SuggestTitleResponse
-	36, // 95: wi.core.v1.AgentService.GetHistory:output_type -> wi.core.v1.GetHistoryResponse
-	38, // 96: wi.core.v1.AgentService.GetSubagentHistory:output_type -> wi.core.v1.GetSubagentHistoryResponse
-	53, // 97: wi.core.v1.AgentService.WatchLiveContent:output_type -> wi.core.v1.WatchLiveContentResponse
-	58, // 98: wi.core.v1.ControlService.GetControl:output_type -> wi.core.v1.GetControlResponse
-	60, // 99: wi.core.v1.ControlService.AcquireControl:output_type -> wi.core.v1.AcquireControlResponse
-	62, // 100: wi.core.v1.ControlService.RenewControl:output_type -> wi.core.v1.RenewControlResponse
-	64, // 101: wi.core.v1.ControlService.ReleaseControl:output_type -> wi.core.v1.ReleaseControlResponse
-	85, // [85:102] is the sub-list for method output_type
-	68, // [68:85] is the sub-list for method input_type
-	68, // [68:68] is the sub-list for extension type_name
-	68, // [68:68] is the sub-list for extension extendee
-	0,  // [0:68] is the sub-list for field type_name
+	40, // 41: wi.core.v1.LiveContent.parts:type_name -> wi.core.v1.LivePart
+	4,  // 42: wi.core.v1.ToolCallUpdate.phase:type_name -> wi.core.v1.ToolCallPhase
+	31, // 43: wi.core.v1.ToolCallUpdate.tool:type_name -> wi.core.v1.ToolCall
+	41, // 44: wi.core.v1.PromptSaved.link:type_name -> wi.core.v1.PromptLink
+	31, // 45: wi.core.v1.QuestionChanged.question:type_name -> wi.core.v1.ToolCall
+	39, // 46: wi.core.v1.WatchLiveContentResponse.snapshot:type_name -> wi.core.v1.LiveContent
+	43, // 47: wi.core.v1.WatchLiveContentResponse.message_started:type_name -> wi.core.v1.MessageStarted
+	44, // 48: wi.core.v1.WatchLiveContentResponse.message_delta:type_name -> wi.core.v1.MessageDelta
+	45, // 49: wi.core.v1.WatchLiveContentResponse.message_replaced:type_name -> wi.core.v1.MessageReplaced
+	46, // 50: wi.core.v1.WatchLiveContentResponse.message_completed:type_name -> wi.core.v1.MessageCompleted
+	47, // 51: wi.core.v1.WatchLiveContentResponse.message_saved:type_name -> wi.core.v1.MessageSaved
+	48, // 52: wi.core.v1.WatchLiveContentResponse.thought_delta:type_name -> wi.core.v1.ThoughtDelta
+	49, // 53: wi.core.v1.WatchLiveContentResponse.tool:type_name -> wi.core.v1.ToolCallUpdate
+	50, // 54: wi.core.v1.WatchLiveContentResponse.prompt_saved:type_name -> wi.core.v1.PromptSaved
+	51, // 55: wi.core.v1.WatchLiveContentResponse.activity:type_name -> wi.core.v1.ActivityChanged
+	52, // 56: wi.core.v1.WatchLiveContentResponse.turn_settled:type_name -> wi.core.v1.TurnSettled
+	53, // 57: wi.core.v1.WatchLiveContentResponse.question:type_name -> wi.core.v1.QuestionChanged
+	75, // 58: wi.core.v1.ControlLease.acquired_at:type_name -> google.protobuf.Timestamp
+	75, // 59: wi.core.v1.ControlLease.expires_at:type_name -> google.protobuf.Timestamp
+	55, // 60: wi.core.v1.ControlPlan.displaces:type_name -> wi.core.v1.ControlLease
+	73, // 61: wi.core.v1.ControlPlan.restarts_in:type_name -> wi.core.v1.AgentMode
+	73, // 62: wi.core.v1.ControlPlan.starts_in:type_name -> wi.core.v1.AgentMode
+	55, // 63: wi.core.v1.ControlStatus.lease:type_name -> wi.core.v1.ControlLease
+	56, // 64: wi.core.v1.ControlStatus.plan:type_name -> wi.core.v1.ControlPlan
+	57, // 65: wi.core.v1.GetControlResponse.control:type_name -> wi.core.v1.ControlStatus
+	57, // 66: wi.core.v1.AcquireControlResponse.control:type_name -> wi.core.v1.ControlStatus
+	76, // 67: wi.core.v1.AcquireControlResponse.job:type_name -> wi.core.v1.Job
+	55, // 68: wi.core.v1.RenewControlResponse.lease:type_name -> wi.core.v1.ControlLease
+	8,  // 69: wi.core.v1.AgentService.GetAgent:input_type -> wi.core.v1.GetAgentRequest
+	10, // 70: wi.core.v1.AgentService.StartAgent:input_type -> wi.core.v1.StartAgentRequest
+	12, // 71: wi.core.v1.AgentService.StopAgent:input_type -> wi.core.v1.StopAgentRequest
+	14, // 72: wi.core.v1.AgentService.RestartAgent:input_type -> wi.core.v1.RestartAgentRequest
+	16, // 73: wi.core.v1.AgentService.SendMessage:input_type -> wi.core.v1.SendMessageRequest
+	18, // 74: wi.core.v1.AgentService.AbortTurn:input_type -> wi.core.v1.AbortTurnRequest
+	20, // 75: wi.core.v1.AgentService.AnswerQuestion:input_type -> wi.core.v1.AnswerQuestionRequest
+	24, // 76: wi.core.v1.AgentService.GetAgentSettings:input_type -> wi.core.v1.GetAgentSettingsRequest
+	26, // 77: wi.core.v1.AgentService.UpdateAgentSettings:input_type -> wi.core.v1.UpdateAgentSettingsRequest
+	28, // 78: wi.core.v1.AgentService.SuggestTitle:input_type -> wi.core.v1.SuggestTitleRequest
+	35, // 79: wi.core.v1.AgentService.GetHistory:input_type -> wi.core.v1.GetHistoryRequest
+	37, // 80: wi.core.v1.AgentService.GetSubagentHistory:input_type -> wi.core.v1.GetSubagentHistoryRequest
+	42, // 81: wi.core.v1.AgentService.WatchLiveContent:input_type -> wi.core.v1.WatchLiveContentRequest
+	58, // 82: wi.core.v1.ControlService.GetControl:input_type -> wi.core.v1.GetControlRequest
+	60, // 83: wi.core.v1.ControlService.AcquireControl:input_type -> wi.core.v1.AcquireControlRequest
+	62, // 84: wi.core.v1.ControlService.RenewControl:input_type -> wi.core.v1.RenewControlRequest
+	64, // 85: wi.core.v1.ControlService.ReleaseControl:input_type -> wi.core.v1.ReleaseControlRequest
+	9,  // 86: wi.core.v1.AgentService.GetAgent:output_type -> wi.core.v1.GetAgentResponse
+	11, // 87: wi.core.v1.AgentService.StartAgent:output_type -> wi.core.v1.StartAgentResponse
+	13, // 88: wi.core.v1.AgentService.StopAgent:output_type -> wi.core.v1.StopAgentResponse
+	15, // 89: wi.core.v1.AgentService.RestartAgent:output_type -> wi.core.v1.RestartAgentResponse
+	17, // 90: wi.core.v1.AgentService.SendMessage:output_type -> wi.core.v1.SendMessageResponse
+	19, // 91: wi.core.v1.AgentService.AbortTurn:output_type -> wi.core.v1.AbortTurnResponse
+	21, // 92: wi.core.v1.AgentService.AnswerQuestion:output_type -> wi.core.v1.AnswerQuestionResponse
+	25, // 93: wi.core.v1.AgentService.GetAgentSettings:output_type -> wi.core.v1.GetAgentSettingsResponse
+	27, // 94: wi.core.v1.AgentService.UpdateAgentSettings:output_type -> wi.core.v1.UpdateAgentSettingsResponse
+	29, // 95: wi.core.v1.AgentService.SuggestTitle:output_type -> wi.core.v1.SuggestTitleResponse
+	36, // 96: wi.core.v1.AgentService.GetHistory:output_type -> wi.core.v1.GetHistoryResponse
+	38, // 97: wi.core.v1.AgentService.GetSubagentHistory:output_type -> wi.core.v1.GetSubagentHistoryResponse
+	54, // 98: wi.core.v1.AgentService.WatchLiveContent:output_type -> wi.core.v1.WatchLiveContentResponse
+	59, // 99: wi.core.v1.ControlService.GetControl:output_type -> wi.core.v1.GetControlResponse
+	61, // 100: wi.core.v1.ControlService.AcquireControl:output_type -> wi.core.v1.AcquireControlResponse
+	63, // 101: wi.core.v1.ControlService.RenewControl:output_type -> wi.core.v1.RenewControlResponse
+	65, // 102: wi.core.v1.ControlService.ReleaseControl:output_type -> wi.core.v1.ReleaseControlResponse
+	86, // [86:103] is the sub-list for method output_type
+	69, // [69:86] is the sub-list for method input_type
+	69, // [69:69] is the sub-list for extension type_name
+	69, // [69:69] is the sub-list for extension extendee
+	0,  // [0:69] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_agents_proto_init() }
@@ -4965,7 +5057,7 @@ func file_wi_core_v1_agents_proto_init() {
 	}
 	file_wi_core_v1_common_proto_init()
 	file_wi_core_v1_jobs_proto_init()
-	file_wi_core_v1_agents_proto_msgTypes[48].OneofWrappers = []any{
+	file_wi_core_v1_agents_proto_msgTypes[49].OneofWrappers = []any{
 		(*WatchLiveContentResponse_Snapshot)(nil),
 		(*WatchLiveContentResponse_MessageStarted)(nil),
 		(*WatchLiveContentResponse_MessageDelta)(nil),
@@ -4985,7 +5077,7 @@ func file_wi_core_v1_agents_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_agents_proto_rawDesc), len(file_wi_core_v1_agents_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   67,
+			NumMessages:   68,
 			NumExtensions: 0,
 			NumServices:   2,
 		},

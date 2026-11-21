@@ -101,3 +101,29 @@ func TestFailureHookAndCompactInterruptionFacts(t *testing.T) {
 		t.Fatalf("%+v", fact)
 	}
 }
+
+// A prompt wi typed into the terminal is linked to its transcript record,
+// found by Claude's prompt ID, as headless Claude links its prompts.
+func TestTypedPromptsAreLinkedToTheirRecord(t *testing.T) {
+	dir := testutil.ShortTempDir(t)
+	path := filepath.Join(dir, "native.jsonl")
+	if err := os.WriteFile(path, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	links := map[string][]string{}
+	feed := &transcriptFeed{linked: func(request string, ids []string) { links[request] = ids }}
+	feed.awaitPrompt("prompt-1", "page-1")
+	records := `{"type":"user","uuid":"typed-elsewhere","promptId":"prompt-0","message":{"role":"user","content":"from the terminal"}}
+{"type":"user","uuid":"user-1","promptId":"prompt-1","message":{"role":"user","content":"from the page"}}
+{"type":"assistant","uuid":"reply-1","promptId":"prompt-1","message":{"role":"assistant","content":[{"type":"text","text":"ok"}]}}
+`
+	if err := os.WriteFile(path, []byte(records), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := feed.refresh(path, ignoredTranscript{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(links) != 1 || strings.Join(links["page-1"], ",") != "user-1" || len(feed.awaiting) != 0 {
+		t.Fatalf("links %v awaiting %v", links, feed.awaiting)
+	}
+}

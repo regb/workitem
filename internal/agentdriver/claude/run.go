@@ -217,7 +217,10 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 	turnReason := ""
 	turns := &turnTracker{}
 	stream := &displayStream{server: contentServer, turns: turns}
-	feed := &transcriptFeed{factAfter: readiness.started}
+	feed := &transcriptFeed{factAfter: readiness.started, linked: contentServer.PromptSaved}
+	contentServer.Linked = func(requestID string, nativeIDs []string) {
+		_ = emitFact(protocol.RuntimeEvent{Type: protocol.EventPromptSaved, RequestID: requestID, NativeIDs: nativeIDs})
+	}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	var stopTimer *time.Timer
@@ -380,6 +383,9 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 				if h.Event == "UserPromptSubmit" && pending != nil && pending.phase == "confirmed" {
 					turns.commandID = pending.command.ID
 					turns.requestID = pending.command.RequestID
+					// The prompt's record, once written, is what its sender
+					// sent: link them, as headless Claude does.
+					feed.awaitPrompt(h.PromptID, pending.command.RequestID)
 				}
 				switch h.Event {
 				case "UserPromptSubmit":

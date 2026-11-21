@@ -78,6 +78,9 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 	}
 	defer os.RemoveAll(tmp)
 	rt.emitFn = eventEmitter(ctx, r)
+	rt.content.Linked = func(requestID string, nativeIDs []string) {
+		rt.emit(protocol.RuntimeEvent{Type: protocol.EventPromptSaved, RequestID: requestID, NativeIDs: nativeIDs})
+	}
 	rt.emit(protocol.RuntimeEvent{Type: protocol.EventRuntimeStatus, Readiness: "starting", ReasonCode: "headless_initializing"})
 
 	cmd := exec.CommandContext(ctx, executable, "acp")

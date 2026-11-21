@@ -25,6 +25,32 @@ type transcriptFeed struct {
 	// model and effort are those of the latest reply made since factAfter.
 	model, effort string
 	tool          *protocol.ContentTool
+	// awaiting are prompts wi typed that Claude accepted, by native prompt
+	// ID, awaiting their transcript record; linked is told each one's
+	// request ID and record. They outlive a reset of the feed.
+	awaiting map[string]string
+	linked   func(requestID string, nativeIDs []string)
+}
+
+// maxAwaitingPrompts bounds prompts awaiting their transcript record.
+const maxAwaitingPrompts = 16
+
+// awaitPrompt links the next transcript record of a native prompt to the
+// request that typed it.
+func (f *transcriptFeed) awaitPrompt(promptID, requestID string) {
+	if promptID == "" || requestID == "" {
+		return
+	}
+	if f.awaiting == nil {
+		f.awaiting = map[string]string{}
+	}
+	if len(f.awaiting) >= maxAwaitingPrompts {
+		for id := range f.awaiting {
+			delete(f.awaiting, id)
+			break
+		}
+	}
+	f.awaiting[promptID] = requestID
 }
 
 type transcriptPublisher interface {
@@ -51,7 +77,7 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 	}
 	initial := f.info == nil
 	if initial || !os.SameFile(f.info, info) || info.Size() < f.offset {
-		*f = transcriptFeed{info: info, activity: "Transcript available", factAfter: f.factAfter, model: f.model, effort: f.effort}
+		*f = transcriptFeed{info: info, activity: "Transcript available", factAfter: f.factAfter, model: f.model, effort: f.effort, awaiting: f.awaiting, linked: f.linked}
 		if info.Size() > 4<<20 {
 			f.offset = info.Size() - (4 << 20)
 			if _, err = file.Seek(f.offset, io.SeekStart); err != nil {
@@ -128,6 +154,12 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 				f.text = ""
 				if len(record.PromptID) <= 128 {
 					f.promptID = record.PromptID
+				}
+				if request, ok := f.awaiting[record.PromptID]; ok && record.ID != "" {
+					delete(f.awaiting, record.PromptID)
+					if f.linked != nil {
+						f.linked(request, []string{record.ID})
+					}
 				}
 				f.textPromptID = ""
 				f.textAt = time.Time{}

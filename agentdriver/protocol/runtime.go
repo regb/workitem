@@ -77,6 +77,10 @@ const (
 	// is running with: once the driver learns them, then on every change,
 	// whoever made it.
 	EventSettingsChanged = "settings.changed"
+	// EventPromptSaved links a prompt, by its sender's request ID, to the
+	// native history entries holding it (NativeIDs), so history can say
+	// which message a client sent became which entry, durably.
+	EventPromptSaved = "prompt.saved"
 )
 
 // ValidAgentObservation validates the optional compact native-state snapshot.
@@ -128,4 +132,6 @@ type RuntimeEvent struct {
 	// Settings are the agent's current setting values (settings.changed),
 	// keyed by setting name. A key left out is unchanged or unknown.
 	Settings map[string]string `json:"settings,omitempty"`
+	// NativeIDs are the history entries a prompt became (prompt.saved).
+	NativeIDs []string `json:"native_ids,omitempty"`
 }

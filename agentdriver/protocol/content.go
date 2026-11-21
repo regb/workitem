@@ -50,6 +50,10 @@ type Content struct {
 	Tool    *ContentTool `json:"tool,omitempty"`
 	// Tools are the current message's tool calls in order, Tool the latest.
 	Tools []ContentTool `json:"tools,omitempty"`
+	// Parts is the current message in the order it was written: its text
+	// split where tool calls came between. Readers show it in this order;
+	// Text and Tools hold the same content, merged.
+	Parts []ContentPart `json:"parts,omitempty"`
 	// Prompts link recently submitted prompts, by the request ID their sender
 	// gave, to the native history entries holding them; newest last.
 	Prompts []PromptLink `json:"prompts,omitempty"`
@@ -134,6 +138,7 @@ func ApplyContent(value Content, event ContentEvent) Content {
 		value.Tool = cloneTool(value.Tool)
 		value.SavedAs = append([]string(nil), value.SavedAs...)
 		value.Tools = append([]ContentTool(nil), value.Tools...)
+		value.Parts = append([]ContentPart(nil), value.Parts...)
 		value.Prompts = append([]PromptLink(nil), value.Prompts...)
 		value.Question = cloneTool(value.Question)
 		return value
@@ -147,16 +152,32 @@ func ApplyContent(value Content, event ContentEvent) Content {
 	value.Tool = cloneTool(value.Tool)
 	switch event.Type {
 	case ContentMessageStarted:
-		value.MessageID, value.Text, value.Truncated, value.Tool, value.SavedAs, value.Thought, value.Tools = event.MessageID, "", false, nil, nil, "", nil
+		value.MessageID, value.Text, value.Truncated, value.Tool, value.SavedAs, value.Thought, value.Tools, value.Parts = event.MessageID, "", false, nil, nil, "", nil, nil
 	case ContentMessageDelta:
 		if !value.Truncated {
+			before := len(value.Text)
 			value.Text, value.Truncated = boundedContentText(value.Text + event.Text)
+			if added := value.Text[before:]; added != "" {
+				value.Parts = appendTextPart(value.Parts, added)
+			}
 			value.SavedAs = nil
 		}
 	case ContentMessageReplaced:
 		value.Text, value.Truncated = boundedContentText(event.Text)
 		value.Truncated = value.Truncated || event.Truncated
 		value.SavedAs = nil
+		// A replacement, such as a transcript record, comes whole: its
+		// text, then the calls it made, as history shows a message.
+		parts := []ContentPart{}
+		if value.Text != "" {
+			parts = append(parts, ContentPart{Text: value.Text})
+		}
+		for _, part := range value.Parts {
+			if part.ToolID != "" || part.ToolName != "" {
+				parts = append(parts, part)
+			}
+		}
+		value.Parts = parts
 		if event.MessageID != "" {
 			value.MessageID = event.MessageID
 		}
@@ -166,9 +187,17 @@ func ApplyContent(value Content, event ContentEvent) Content {
 		value.Tool = cloneTool(event.Tool)
 		if event.Tool != nil {
 			value.Tools = upsertTool(value.Tools, *event.Tool)
+			value.Parts = appendToolPart(value.Parts, *event.Tool)
 		}
 	case ContentToolCleared:
 		value.Tool, value.Tools = nil, nil
+		parts := []ContentPart{}
+		for _, part := range value.Parts {
+			if part.ToolID == "" && part.ToolName == "" {
+				parts = append(parts, part)
+			}
+		}
+		value.Parts = parts
 	case ContentThoughtDelta:
 		value.Thought = boundedThought(value.Thought + event.Text)
 	case ContentPromptSaved:
@@ -181,6 +210,49 @@ func ApplyContent(value Content, event ContentEvent) Content {
 		value.Activity = event.Activity
 	}
 	return value
+}
+
+// ContentPart is a stretch of a message: text, or a tool call named by its
+// ID (or, without one, its name) in the message's Tools.
+type ContentPart struct {
+	Text     string `json:"text,omitempty"`
+	ToolID   string `json:"tool_id,omitempty"`
+	ToolName string `json:"tool_name,omitempty"`
+}
+
+// maxContentParts bounds a message's parts; the oldest go.
+const maxContentParts = 64
+
+// appendTextPart extends the last part with text, or starts a text part
+// after a tool call.
+func appendTextPart(parts []ContentPart, text string) []ContentPart {
+	next := append([]ContentPart(nil), parts...)
+	if n := len(next); n > 0 && next[n-1].ToolID == "" && next[n-1].ToolName == "" {
+		next[n-1].Text += text
+		return next
+	}
+	return boundParts(append(next, ContentPart{Text: text}))
+}
+
+// appendToolPart adds a part for a tool call the message has no part for.
+func appendToolPart(parts []ContentPart, tool ContentTool) []ContentPart {
+	for _, part := range parts {
+		if tool.ID != "" && part.ToolID == tool.ID || tool.ID == "" && part.ToolID == "" && part.ToolName == tool.Name {
+			return parts
+		}
+	}
+	part := ContentPart{ToolID: tool.ID}
+	if tool.ID == "" {
+		part.ToolName = tool.Name
+	}
+	return boundParts(append(append([]ContentPart(nil), parts...), part))
+}
+
+func boundParts(parts []ContentPart) []ContentPart {
+	if len(parts) > maxContentParts {
+		return parts[len(parts)-maxContentParts:]
+	}
+	return parts
 }
 
 // maxContentTools bounds the tool calls kept for one message; the oldest go.
@@ -388,6 +460,10 @@ func contentEventSize(event ContentEvent) int64 {
 }
 
 type ContentServer struct {
+	// Linked, when set, is told each prompt PromptSaved links, outside the
+	// server's lock. Drivers report it as a prompt.saved runtime event, so
+	// the link outlives live content.
+	Linked      func(requestID string, nativeIDs []string)
 	listener    net.Listener
 	mu          sync.Mutex
 	value       Content
@@ -658,13 +734,18 @@ func (s *ContentServer) PromptSaved(requestID string, nativeIDs []string) {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for _, link := range s.value.Prompts {
 		if link.RequestID == requestID && reflect.DeepEqual(link.NativeIDs, nativeIDs) {
+			s.mu.Unlock()
 			return
 		}
 	}
 	s.publish(ContentEvent{Type: ContentPromptSaved, RequestID: requestID, NativeIDs: nativeIDs})
+	linked := s.Linked
+	s.mu.Unlock()
+	if linked != nil {
+		linked(requestID, append([]string(nil), nativeIDs...))
+	}
 }
 
 // Thought appends shared reasoning to the current message.

@@ -131,6 +131,9 @@ func runNativeRPC(ctx context.Context, path string, args, env []string, spec Exe
 		return fmt.Errorf("listen for Pi content: %w", err)
 	}
 	defer content.Close()
+	content.Linked = func(requestID string, nativeIDs []string) {
+		_ = transport.emit(agent.RuntimeEvent{Type: agent.EventPromptSaved, RequestID: requestID, NativeIDs: nativeIDs})
+	}
 	transport.content = content
 	transport.liveQueue = make(chan queuedLiveEvent, 256)
 	transport.liveContext = ctx
@@ -498,7 +501,7 @@ func (t *nativeRPCTransport) queueLiveEvent(event agent.RuntimeEvent, ack chan s
 		return false
 	}
 	t.ensureRuntimeEventID(&event)
-	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, Settings: event.Settings, Failed: event.Failed || event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
+	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, Settings: event.Settings, NativeIDs: event.NativeIDs, Failed: event.Failed || event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
 	select {
 	case t.liveQueue <- queuedLiveEvent{event: semantic, ack: ack}:
 		return true
@@ -556,7 +559,7 @@ func (t *nativeRPCTransport) ensureRuntimeEventID(event *agent.RuntimeEvent) {
 func retainedLiveEvent(eventType string) bool {
 	switch eventType {
 	case agent.EventRuntimeReady, agent.EventRuntimeStatus, agent.EventRuntimeStopping, agent.EventRuntimeFailed, agent.EventCommandAccepted, agent.EventCommandRejected,
-		agent.EventAgentStarted, agent.EventAgentSettled, agent.EventTurnStarted, agent.EventTurnEnded, agent.EventMessageCompleted, agent.EventToolStarted, agent.EventToolCompleted, agent.EventSettingsChanged:
+		agent.EventAgentStarted, agent.EventAgentSettled, agent.EventTurnStarted, agent.EventTurnEnded, agent.EventMessageCompleted, agent.EventToolStarted, agent.EventToolCompleted, agent.EventSettingsChanged, agent.EventPromptSaved:
 		return true
 	default:
 		return false

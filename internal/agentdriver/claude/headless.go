@@ -116,6 +116,9 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 		state.close()
 	}()
 	display := &headlessContent{server: contentServer, emit: emit}
+	contentServer.Linked = func(requestID string, nativeIDs []string) {
+		emit(protocol.RuntimeEvent{Type: protocol.EventPromptSaved, RequestID: requestID, NativeIDs: nativeIDs})
+	}
 	// confirm records Claude's receipt of a prompt and links it, for its
 	// sender, to the transcript record: wi chose that record's uuid.
 	confirm := func(id string) {

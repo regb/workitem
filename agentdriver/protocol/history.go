@@ -38,6 +38,10 @@ type HistoryMessage struct {
 	// Reasoning marks a message the model reasoned before; it is best
 	// effort, holding the text and duration the agent saved, if any.
 	Reasoning *HistoryReasoning `json:"reasoning,omitempty"`
+	// ClientMessageID is the request ID of the prompt this message is, set
+	// by the host from the links drivers report (prompt.saved), never by a
+	// driver.
+	ClientMessageID string `json:"client_message_id,omitempty"`
 }
 
 // HistoryReasoning is the model's reasoning for a message: Text when the

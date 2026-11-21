@@ -378,6 +378,10 @@ message ConversationMessage {
   bool error = 11;
   // aborted marks where the operator stopped a reply.
   bool aborted = 12;
+  // client_message_id is the ID the message was sent with (SendMessage's
+  // client_message_id, or a start's), when the agent linked it to this
+  // entry. Clients confirm what they sent by it.
+  string client_message_id = 13;
 }
 
 message GetHistoryRequest {
@@ -430,6 +434,18 @@ message LiveContent {
   // AskUserQuestion call, whose input holds the questions and their
   // options. AnswerQuestion answers it.
   ToolCall question = 11;
+  // parts is the message in the order it was written: its text split where
+  // tool calls came between. Clients show it in this order; text and tools
+  // hold the same content, merged.
+  repeated LivePart parts = 12;
+}
+
+// LivePart is a stretch of a live message: text, or a tool call named by its
+// ID (or, without one, its name) in the message's tools.
+message LivePart {
+  string text = 1;
+  string tool_id = 2;
+  string tool_name = 3;
 }
 
 // PromptLink matches a client's message to the history entries it became.

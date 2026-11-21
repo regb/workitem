@@ -590,7 +590,31 @@ func history(value driver.History) *v1.GetHistoryResponse {
 }
 func (s *Server) GetHistory(ctx context.Context, req *connect.Request[v1.GetHistoryRequest]) (*connect.Response[v1.GetHistoryResponse], error) {
 	value, err := s.App.ConversationHistoryPage(ctx, resolve(req.Msg.ItemId), req.Msg.LeafId, req.Msg.Before)
-	return response(history(value), err)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	out := history(value)
+	if current, err := s.canonical(ctx, req.Msg.ItemId, 0); err == nil {
+		s.linkPrompts(current.Manifest.ID, out.Messages)
+	}
+	return response(out, nil)
+}
+
+// linkPrompts marks each message a client sent with the ID it was sent
+// with, from the links the agent reported: exact, unlike matching text.
+func (s *Server) linkPrompts(itemID string, messages []*v1.ConversationMessage) {
+	requests, err := s.Core.Database().PromptRequests(itemID)
+	if err != nil || len(requests) == 0 {
+		return
+	}
+	for _, m := range messages {
+		for _, id := range append([]string{m.Id}, m.NativeIds...) {
+			if request, ok := requests[id]; ok {
+				m.ClientMessageId = request
+				break
+			}
+		}
+	}
 }
 func (s *Server) GetSubagentHistory(ctx context.Context, req *connect.Request[v1.GetSubagentHistoryRequest]) (*connect.Response[v1.GetSubagentHistoryResponse], error) {
 	value, err := s.App.SubagentHistoryPage(ctx, resolve(req.Msg.ItemId), req.Msg.SubagentId, req.Msg.Before)
@@ -604,6 +628,9 @@ func live(value driver.Content, generation uint32) *v1.LiveContent {
 	}
 	for _, p := range value.Prompts {
 		out.Prompts = append(out.Prompts, &v1.PromptLink{ClientMessageId: p.RequestID, NativeIds: p.NativeIDs})
+	}
+	for _, p := range value.Parts {
+		out.Parts = append(out.Parts, &v1.LivePart{Text: p.Text, ToolId: p.ToolID, ToolName: p.ToolName})
 	}
 	if q := value.Question; q != nil {
 		out.Question = tool(driver.HistoryTool{ID: q.ID, Name: q.Name, Status: q.Status, Input: q.Input})

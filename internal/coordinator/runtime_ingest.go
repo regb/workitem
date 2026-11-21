@@ -36,6 +36,8 @@ type RuntimeSemanticEvent struct {
 	LeafID     string `json:"leaf_id,omitempty"`
 	// Settings are the reported setting values of settings.changed.
 	Settings map[string]string `json:"settings,omitempty"`
+	// NativeIDs are the history entries a prompt became (prompt.saved).
+	NativeIDs []string `json:"native_ids,omitempty"`
 }
 
 // RuntimeEventRejection is a definitive validation or workspace-fence error,
@@ -92,6 +94,9 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if (event.Type == agent.EventSettingsChanged) != (len(event.Settings) > 0) {
 		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "settings are reported only by settings.changed, which requires them"}
 	}
+	if (event.Type == agent.EventPromptSaved) != (len(event.NativeIDs) > 0) || (event.Type == agent.EventPromptSaved && !validPromptLink(event.RequestID, event.NativeIDs)) {
+		return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "native IDs are reported only by prompt.saved, which requires a request ID and up to 16 of them"}
+	}
 	if len(event.Settings) > 0 {
 		if err := driverprotocol.ValidSettingValues(event.Settings); err != nil {
 			return RuntimeIngestResult{}, &RuntimeEventRejection{Reason: "invalid reported settings: " + err.Error()}
@@ -128,6 +133,14 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if err != nil {
 		return RuntimeIngestResult{}, err
 	}
+	if event.Type == agent.EventPromptSaved {
+		// A link is not agent activity: the prompt's delivery already was.
+		linkUpdates, err := promptLinkUpdate(database, event)
+		if err != nil {
+			return RuntimeIngestResult{}, err
+		}
+		updates = append(updates, linkUpdates...)
+	}
 	if event.Type == agent.EventSettingsChanged {
 		// Setting values are not agent activity; the runtime record keeps
 		// the latest, and the event history every change.
@@ -140,7 +153,7 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 		value, _ := json.Marshal(owner)
 		updates = append(updates, ProjectionUpdate{Projection: RuntimeOwnershipProjection, Key: event.WorkItemID, Value: value})
 	}
-	applied := event.Type != agent.EventSettingsChanged && !driverprotocol.QuietOutcome(event.ReasonCode) && applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
+	applied := event.Type != agent.EventSettingsChanged && event.Type != agent.EventPromptSaved && !driverprotocol.QuietOutcome(event.ReasonCode) && applyRuntimeActivity(&activity, header, event.WorkItemID, event.RuntimeID)
 	readiness := event.Readiness
 	if event.Type == agent.EventRuntimeReady && readiness == "" {
 		readiness = "ready"
@@ -179,6 +192,9 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if len(event.Settings) > 0 {
 		fields["settings"] = event.Settings
 	}
+	if len(event.NativeIDs) > 0 {
+		fields["native_ids"] = event.NativeIDs
+	}
 	payload, _ := json.Marshal(fields)
 	commandID := "runtime-event:" + event.ID
 	committed, err := database.Commit(Command{ID: commandID, ProtocolVersion: ProtocolVersion, Type: "runtime.event.ingest", Actor: "runtime", ItemID: event.WorkItemID, ReceivedAt: time.Now().UTC()}, []PendingEvent{{ID: event.ID, ItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), Actor: "runtime", Payload: payload}}, updates)
@@ -200,7 +216,7 @@ func allowedLiveRuntimeEvent(eventType string) bool {
 		agent.EventMessageCompleted,
 		agent.EventToolStarted, agent.EventToolCompleted,
 		agent.EventCommandAccepted, agent.EventCommandRejected,
-		agent.EventSettingsChanged:
+		agent.EventSettingsChanged, agent.EventPromptSaved:
 		return true
 	default:
 		return false

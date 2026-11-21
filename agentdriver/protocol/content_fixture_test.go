@@ -42,6 +42,14 @@ func TestContentFixtureMatchesApplyContent(t *testing.T) {
 		{Sequence: 20, Type: ContentMessageDelta, Text: "partial"},
 		{Sequence: 21, Type: ContentMessageSaved, NativeIDs: []string{"entry-3"}},
 		{Sequence: 22, Type: ContentMessageDelta, Text: " more"},
+		// Text, a tool call, then more text: parts keep the order.
+		{Sequence: 23, Type: ContentMessageStarted, MessageID: "live-23"},
+		{Sequence: 24, Type: ContentMessageDelta, Text: "Let me look."},
+		{Sequence: 25, Type: ContentToolStarted, Tool: &ContentTool{ID: "t2", Name: "read", Status: "running"}},
+		{Sequence: 26, Type: ContentToolCompleted, Tool: &ContentTool{ID: "t2", Name: "read", Status: "completed", Output: "x"}},
+		{Sequence: 27, Type: ContentToolStarted, Tool: &ContentTool{Name: "grep", Status: "running"}},
+		{Sequence: 28, Type: ContentMessageDelta, Text: "Found it"},
+		{Sequence: 29, Type: ContentMessageDelta, Text: "."},
 	}
 	fixture := contentFixture{Events: events}
 	var value Content

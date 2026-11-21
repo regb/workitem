@@ -42,6 +42,7 @@ const (
 	EventRuntimeStopping  = driverprotocol.EventRuntimeStopping
 	EventRuntimeFailed    = driverprotocol.EventRuntimeFailed
 	EventSettingsChanged  = driverprotocol.EventSettingsChanged
+	EventPromptSaved      = driverprotocol.EventPromptSaved
 
 	ReasonSettingApplied  = driverprotocol.ReasonSettingApplied
 	ReasonSettingRejected = driverprotocol.ReasonSettingRejected
@@ -71,6 +72,7 @@ type RuntimeEvent struct {
 	ReasonCode       string            `json:"reason_code,omitempty"`
 	DeliveryState    string            `json:"delivery_state,omitempty"`
 	Settings         map[string]string `json:"settings,omitempty"`
+	NativeIDs        []string          `json:"native_ids,omitempty"`
 	Data             map[string]any    `json:"data,omitempty"`
 	Backend          string            `json:"backend,omitempty"`
 	BackendEventType string            `json:"backend_event_type,omitempty"`
