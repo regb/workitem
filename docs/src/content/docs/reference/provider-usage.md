@@ -18,7 +18,7 @@ It is a bundled plugin, installed with wi as `wi-usage`. Enable it in Wi's confi
 enabled = true
 ```
 
-`wi usage` then runs it; `wi usage show` is the same. The web Settings → Usage page shows the same results, with a Refresh button. Usage is not part of the [daemon API](../api/): it reads the native clients installed for your user, so `wi usage` runs the plugin itself; the daemon does not run it.
+`wi usage` then runs it; `wi usage show` is the same. The web Settings → Usage page shows the same results, with a Refresh button. `wi usage` runs the plugin itself. The daemon runs it too, as the same user: it checks every five minutes while its [API](../api/) is in use, answers `SystemService.GetUsage` from the last check, which the web page shows, and uses it for [usage blockers](../../concepts/lifecycle/#usage-limits).
 
 ## Text summary
 

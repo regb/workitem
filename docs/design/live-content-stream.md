@@ -1,6 +1,6 @@
 # Live content stream
 
-Status: implemented (phases 1–4).
+Status: implemented (phases 1–4). Since then, `wi web` no longer fans content out to tabs: each browser view follows one `EventService.Watch` stream, which carries the item's live content with its changes and jobs (see [Web API boundary](web-api-boundary.md)). What follows describes the design as built then.
 
 ## Problem
 

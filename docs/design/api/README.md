@@ -164,7 +164,7 @@ Plugins run outside the daemon. The daemon keeps the registry and the options pl
 
 - **Hooks** take part in core operations (checkout setup, agent environment). They are executables the daemon calls, through a declared contract.
 - **Automation** (GitHub sync, auto-defer) is a client of this API: it watches events, calls the API, and keeps its own credentials. The daemon may supervise it, as scheduled jobs work today.
-- **Commands** (`wi github`) run client-side. Subscription usage is read by a plugin the daemon runs (`SystemService.GetUsage`), so every client sees the same answer.
+- **Commands** (`wi github`) run client-side. Subscription usage is a plugin both `wi usage` and the daemon run: the daemon checks every five minutes while its API is in use, serves the result through `SystemService.GetUsage`, and sets usage blockers from it.
 
 ## Web exposure
 
