@@ -534,6 +534,134 @@ func (x *CloseItemRequest) GetConfirmAttachedTerminal() bool {
 	return false
 }
 
+type PlanCloseRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PlanCloseRequest) Reset() {
+	*x = PlanCloseRequest{}
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlanCloseRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlanCloseRequest) ProtoMessage() {}
+
+func (x *PlanCloseRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlanCloseRequest.ProtoReflect.Descriptor instead.
+func (*PlanCloseRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_lifecycle_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *PlanCloseRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+type PlanCloseResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// aborts_turn means the agent is working: closing aborts its turn.
+	AbortsTurn bool `protobuf:"varint,1,opt,name=aborts_turn,json=abortsTurn,proto3" json:"aborts_turn,omitempty"`
+	// commits are the uncommitted files closing commits to the item's branch.
+	Commits []string `protobuf:"bytes,2,rep,name=commits,proto3" json:"commits,omitempty"`
+	// removes_attached_copies are files unchanged since they were attached,
+	// which closing removes from the checkout: the item keeps them.
+	RemovesAttachedCopies []string `protobuf:"bytes,3,rep,name=removes_attached_copies,json=removesAttachedCopies,proto3" json:"removes_attached_copies,omitempty"`
+	// attached_terminal_clients watch the agent's terminal, which closing
+	// closes.
+	AttachedTerminalClients uint32 `protobuf:"varint,4,opt,name=attached_terminal_clients,json=attachedTerminalClients,proto3" json:"attached_terminal_clients,omitempty"`
+	// checkout_problem is why releasing the checkout may be refused, such as
+	// a checkout on another branch.
+	CheckoutProblem string `protobuf:"bytes,5,opt,name=checkout_problem,json=checkoutProblem,proto3" json:"checkout_problem,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *PlanCloseResponse) Reset() {
+	*x = PlanCloseResponse{}
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PlanCloseResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PlanCloseResponse) ProtoMessage() {}
+
+func (x *PlanCloseResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PlanCloseResponse.ProtoReflect.Descriptor instead.
+func (*PlanCloseResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_lifecycle_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *PlanCloseResponse) GetAbortsTurn() bool {
+	if x != nil {
+		return x.AbortsTurn
+	}
+	return false
+}
+
+func (x *PlanCloseResponse) GetCommits() []string {
+	if x != nil {
+		return x.Commits
+	}
+	return nil
+}
+
+func (x *PlanCloseResponse) GetRemovesAttachedCopies() []string {
+	if x != nil {
+		return x.RemovesAttachedCopies
+	}
+	return nil
+}
+
+func (x *PlanCloseResponse) GetAttachedTerminalClients() uint32 {
+	if x != nil {
+		return x.AttachedTerminalClients
+	}
+	return 0
+}
+
+func (x *PlanCloseResponse) GetCheckoutProblem() string {
+	if x != nil {
+		return x.CheckoutProblem
+	}
+	return ""
+}
+
 type CloseItemResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Item  *Item                  `protobuf:"bytes,1,opt,name=item,proto3" json:"item,omitempty"`
@@ -548,7 +676,7 @@ type CloseItemResponse struct {
 
 func (x *CloseItemResponse) Reset() {
 	*x = CloseItemResponse{}
-	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[8]
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -560,7 +688,7 @@ func (x *CloseItemResponse) String() string {
 func (*CloseItemResponse) ProtoMessage() {}
 
 func (x *CloseItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[8]
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -573,7 +701,7 @@ func (x *CloseItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseItemResponse.ProtoReflect.Descriptor instead.
 func (*CloseItemResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_lifecycle_proto_rawDescGZIP(), []int{8}
+	return file_wi_core_v1_lifecycle_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CloseItemResponse) GetItem() *Item {
@@ -616,7 +744,7 @@ type ReopenItemRequest struct {
 
 func (x *ReopenItemRequest) Reset() {
 	*x = ReopenItemRequest{}
-	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[9]
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -628,7 +756,7 @@ func (x *ReopenItemRequest) String() string {
 func (*ReopenItemRequest) ProtoMessage() {}
 
 func (x *ReopenItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[9]
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -641,7 +769,7 @@ func (x *ReopenItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReopenItemRequest.ProtoReflect.Descriptor instead.
 func (*ReopenItemRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_lifecycle_proto_rawDescGZIP(), []int{9}
+	return file_wi_core_v1_lifecycle_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ReopenItemRequest) GetItemId() string {
@@ -676,7 +804,7 @@ type ReopenItemResponse struct {
 
 func (x *ReopenItemResponse) Reset() {
 	*x = ReopenItemResponse{}
-	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[10]
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -688,7 +816,7 @@ func (x *ReopenItemResponse) String() string {
 func (*ReopenItemResponse) ProtoMessage() {}
 
 func (x *ReopenItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[10]
+	mi := &file_wi_core_v1_lifecycle_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -701,7 +829,7 @@ func (x *ReopenItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReopenItemResponse.ProtoReflect.Descriptor instead.
 func (*ReopenItemResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_lifecycle_proto_rawDescGZIP(), []int{10}
+	return file_wi_core_v1_lifecycle_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ReopenItemResponse) GetItem() *Item {
@@ -760,7 +888,16 @@ const file_wi_core_v1_lifecycle_proto_rawDesc = "" +
 	"resolution\x12\x14\n" +
 	"\x05force\x18\x03 \x01(\bR\x05force\x12%\n" +
 	"\x0ecommit_changes\x18\x04 \x01(\bR\rcommitChanges\x12:\n" +
-	"\x19confirm_attached_terminal\x18\x05 \x01(\bR\x17confirmAttachedTerminal\"\x90\x01\n" +
+	"\x19confirm_attached_terminal\x18\x05 \x01(\bR\x17confirmAttachedTerminal\"+\n" +
+	"\x10PlanCloseRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"\xed\x01\n" +
+	"\x11PlanCloseResponse\x12\x1f\n" +
+	"\vaborts_turn\x18\x01 \x01(\bR\n" +
+	"abortsTurn\x12\x18\n" +
+	"\acommits\x18\x02 \x03(\tR\acommits\x126\n" +
+	"\x17removes_attached_copies\x18\x03 \x03(\tR\x15removesAttachedCopies\x12:\n" +
+	"\x19attached_terminal_clients\x18\x04 \x01(\rR\x17attachedTerminalClients\x12)\n" +
+	"\x10checkout_problem\x18\x05 \x01(\tR\x0fcheckoutProblem\"\x90\x01\n" +
 	"\x11CloseItemResponse\x12$\n" +
 	"\x04item\x18\x01 \x01(\v2\x10.wi.core.v1.ItemR\x04item\x12\x16\n" +
 	"\x06commit\x18\x02 \x01(\tR\x06commit\x12\x1a\n" +
@@ -772,13 +909,14 @@ const file_wi_core_v1_lifecycle_proto_rawDesc = "" +
 	"\x04mode\x18\x03 \x01(\x0e2\x15.wi.core.v1.AgentModeR\x04mode\"]\n" +
 	"\x12ReopenItemResponse\x12$\n" +
 	"\x04item\x18\x01 \x01(\v2\x10.wi.core.v1.ItemR\x04item\x12!\n" +
-	"\x03job\x18\x02 \x01(\v2\x0f.wi.core.v1.JobR\x03job2\xa5\x03\n" +
+	"\x03job\x18\x02 \x01(\v2\x0f.wi.core.v1.JobR\x03job2\xf4\x03\n" +
 	"\x10LifecycleService\x12c\n" +
 	"\x12CreateAndStartItem\x12%.wi.core.v1.CreateAndStartItemRequest\x1a&.wi.core.v1.CreateAndStartItemResponse\x12H\n" +
 	"\tStartItem\x12\x1c.wi.core.v1.StartItemRequest\x1a\x1d.wi.core.v1.StartItemResponse\x12K\n" +
 	"\n" +
 	"ShelveItem\x12\x1d.wi.core.v1.ShelveItemRequest\x1a\x1e.wi.core.v1.ShelveItemResponse\x12H\n" +
-	"\tCloseItem\x12\x1c.wi.core.v1.CloseItemRequest\x1a\x1d.wi.core.v1.CloseItemResponse\x12K\n" +
+	"\tCloseItem\x12\x1c.wi.core.v1.CloseItemRequest\x1a\x1d.wi.core.v1.CloseItemResponse\x12M\n" +
+	"\tPlanClose\x12\x1c.wi.core.v1.PlanCloseRequest\x1a\x1d.wi.core.v1.PlanCloseResponse\"\x03\x90\x02\x01\x12K\n" +
 	"\n" +
 	"ReopenItem\x12\x1d.wi.core.v1.ReopenItemRequest\x1a\x1e.wi.core.v1.ReopenItemResponseB0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
@@ -794,7 +932,7 @@ func file_wi_core_v1_lifecycle_proto_rawDescGZIP() []byte {
 	return file_wi_core_v1_lifecycle_proto_rawDescData
 }
 
-var file_wi_core_v1_lifecycle_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_wi_core_v1_lifecycle_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_wi_core_v1_lifecycle_proto_goTypes = []any{
 	(*StartOptions)(nil),               // 0: wi.core.v1.StartOptions
 	(*CreateAndStartItemRequest)(nil),  // 1: wi.core.v1.CreateAndStartItemRequest
@@ -804,46 +942,50 @@ var file_wi_core_v1_lifecycle_proto_goTypes = []any{
 	(*ShelveItemRequest)(nil),          // 5: wi.core.v1.ShelveItemRequest
 	(*ShelveItemResponse)(nil),         // 6: wi.core.v1.ShelveItemResponse
 	(*CloseItemRequest)(nil),           // 7: wi.core.v1.CloseItemRequest
-	(*CloseItemResponse)(nil),          // 8: wi.core.v1.CloseItemResponse
-	(*ReopenItemRequest)(nil),          // 9: wi.core.v1.ReopenItemRequest
-	(*ReopenItemResponse)(nil),         // 10: wi.core.v1.ReopenItemResponse
-	(AgentMode)(0),                     // 11: wi.core.v1.AgentMode
-	(*Image)(nil),                      // 12: wi.core.v1.Image
-	(*CreateItemRequest)(nil),          // 13: wi.core.v1.CreateItemRequest
-	(*Item)(nil),                       // 14: wi.core.v1.Item
-	(*Job)(nil),                        // 15: wi.core.v1.Job
-	(Resolution)(0),                    // 16: wi.core.v1.Resolution
+	(*PlanCloseRequest)(nil),           // 8: wi.core.v1.PlanCloseRequest
+	(*PlanCloseResponse)(nil),          // 9: wi.core.v1.PlanCloseResponse
+	(*CloseItemResponse)(nil),          // 10: wi.core.v1.CloseItemResponse
+	(*ReopenItemRequest)(nil),          // 11: wi.core.v1.ReopenItemRequest
+	(*ReopenItemResponse)(nil),         // 12: wi.core.v1.ReopenItemResponse
+	(AgentMode)(0),                     // 13: wi.core.v1.AgentMode
+	(*Image)(nil),                      // 14: wi.core.v1.Image
+	(*CreateItemRequest)(nil),          // 15: wi.core.v1.CreateItemRequest
+	(*Item)(nil),                       // 16: wi.core.v1.Item
+	(*Job)(nil),                        // 17: wi.core.v1.Job
+	(Resolution)(0),                    // 18: wi.core.v1.Resolution
 }
 var file_wi_core_v1_lifecycle_proto_depIdxs = []int32{
-	11, // 0: wi.core.v1.StartOptions.mode:type_name -> wi.core.v1.AgentMode
-	12, // 1: wi.core.v1.StartOptions.images:type_name -> wi.core.v1.Image
-	13, // 2: wi.core.v1.CreateAndStartItemRequest.item:type_name -> wi.core.v1.CreateItemRequest
+	13, // 0: wi.core.v1.StartOptions.mode:type_name -> wi.core.v1.AgentMode
+	14, // 1: wi.core.v1.StartOptions.images:type_name -> wi.core.v1.Image
+	15, // 2: wi.core.v1.CreateAndStartItemRequest.item:type_name -> wi.core.v1.CreateItemRequest
 	0,  // 3: wi.core.v1.CreateAndStartItemRequest.start:type_name -> wi.core.v1.StartOptions
-	14, // 4: wi.core.v1.CreateAndStartItemResponse.item:type_name -> wi.core.v1.Item
-	15, // 5: wi.core.v1.CreateAndStartItemResponse.job:type_name -> wi.core.v1.Job
+	16, // 4: wi.core.v1.CreateAndStartItemResponse.item:type_name -> wi.core.v1.Item
+	17, // 5: wi.core.v1.CreateAndStartItemResponse.job:type_name -> wi.core.v1.Job
 	0,  // 6: wi.core.v1.StartItemRequest.start:type_name -> wi.core.v1.StartOptions
-	14, // 7: wi.core.v1.StartItemResponse.item:type_name -> wi.core.v1.Item
-	15, // 8: wi.core.v1.StartItemResponse.job:type_name -> wi.core.v1.Job
-	14, // 9: wi.core.v1.ShelveItemResponse.item:type_name -> wi.core.v1.Item
-	15, // 10: wi.core.v1.ShelveItemResponse.job:type_name -> wi.core.v1.Job
-	16, // 11: wi.core.v1.CloseItemRequest.resolution:type_name -> wi.core.v1.Resolution
-	14, // 12: wi.core.v1.CloseItemResponse.item:type_name -> wi.core.v1.Item
-	15, // 13: wi.core.v1.CloseItemResponse.job:type_name -> wi.core.v1.Job
-	11, // 14: wi.core.v1.ReopenItemRequest.mode:type_name -> wi.core.v1.AgentMode
-	14, // 15: wi.core.v1.ReopenItemResponse.item:type_name -> wi.core.v1.Item
-	15, // 16: wi.core.v1.ReopenItemResponse.job:type_name -> wi.core.v1.Job
+	16, // 7: wi.core.v1.StartItemResponse.item:type_name -> wi.core.v1.Item
+	17, // 8: wi.core.v1.StartItemResponse.job:type_name -> wi.core.v1.Job
+	16, // 9: wi.core.v1.ShelveItemResponse.item:type_name -> wi.core.v1.Item
+	17, // 10: wi.core.v1.ShelveItemResponse.job:type_name -> wi.core.v1.Job
+	18, // 11: wi.core.v1.CloseItemRequest.resolution:type_name -> wi.core.v1.Resolution
+	16, // 12: wi.core.v1.CloseItemResponse.item:type_name -> wi.core.v1.Item
+	17, // 13: wi.core.v1.CloseItemResponse.job:type_name -> wi.core.v1.Job
+	13, // 14: wi.core.v1.ReopenItemRequest.mode:type_name -> wi.core.v1.AgentMode
+	16, // 15: wi.core.v1.ReopenItemResponse.item:type_name -> wi.core.v1.Item
+	17, // 16: wi.core.v1.ReopenItemResponse.job:type_name -> wi.core.v1.Job
 	1,  // 17: wi.core.v1.LifecycleService.CreateAndStartItem:input_type -> wi.core.v1.CreateAndStartItemRequest
 	3,  // 18: wi.core.v1.LifecycleService.StartItem:input_type -> wi.core.v1.StartItemRequest
 	5,  // 19: wi.core.v1.LifecycleService.ShelveItem:input_type -> wi.core.v1.ShelveItemRequest
 	7,  // 20: wi.core.v1.LifecycleService.CloseItem:input_type -> wi.core.v1.CloseItemRequest
-	9,  // 21: wi.core.v1.LifecycleService.ReopenItem:input_type -> wi.core.v1.ReopenItemRequest
-	2,  // 22: wi.core.v1.LifecycleService.CreateAndStartItem:output_type -> wi.core.v1.CreateAndStartItemResponse
-	4,  // 23: wi.core.v1.LifecycleService.StartItem:output_type -> wi.core.v1.StartItemResponse
-	6,  // 24: wi.core.v1.LifecycleService.ShelveItem:output_type -> wi.core.v1.ShelveItemResponse
-	8,  // 25: wi.core.v1.LifecycleService.CloseItem:output_type -> wi.core.v1.CloseItemResponse
-	10, // 26: wi.core.v1.LifecycleService.ReopenItem:output_type -> wi.core.v1.ReopenItemResponse
-	22, // [22:27] is the sub-list for method output_type
-	17, // [17:22] is the sub-list for method input_type
+	8,  // 21: wi.core.v1.LifecycleService.PlanClose:input_type -> wi.core.v1.PlanCloseRequest
+	11, // 22: wi.core.v1.LifecycleService.ReopenItem:input_type -> wi.core.v1.ReopenItemRequest
+	2,  // 23: wi.core.v1.LifecycleService.CreateAndStartItem:output_type -> wi.core.v1.CreateAndStartItemResponse
+	4,  // 24: wi.core.v1.LifecycleService.StartItem:output_type -> wi.core.v1.StartItemResponse
+	6,  // 25: wi.core.v1.LifecycleService.ShelveItem:output_type -> wi.core.v1.ShelveItemResponse
+	10, // 26: wi.core.v1.LifecycleService.CloseItem:output_type -> wi.core.v1.CloseItemResponse
+	9,  // 27: wi.core.v1.LifecycleService.PlanClose:output_type -> wi.core.v1.PlanCloseResponse
+	12, // 28: wi.core.v1.LifecycleService.ReopenItem:output_type -> wi.core.v1.ReopenItemResponse
+	23, // [23:29] is the sub-list for method output_type
+	17, // [17:23] is the sub-list for method input_type
 	17, // [17:17] is the sub-list for extension type_name
 	17, // [17:17] is the sub-list for extension extendee
 	0,  // [0:17] is the sub-list for field type_name
@@ -863,7 +1005,7 @@ func file_wi_core_v1_lifecycle_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_lifecycle_proto_rawDesc), len(file_wi_core_v1_lifecycle_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

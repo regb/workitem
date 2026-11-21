@@ -3,6 +3,8 @@ package daemonapi
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -191,5 +193,37 @@ func TestAFailedStartIsAnAgentProblem(t *testing.T) {
 	finish("start_agent", nil)
 	if o := get(); o.AgentStatus == v1.AgentStatus_AGENT_STATUS_PROBLEM {
 		t.Fatalf("problem after a successful start: %v", o)
+	}
+}
+
+// A close plan says what closing would do now, changing nothing.
+func TestPlanCloseReportsWhatClosingWouldDo(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.repo(t), Title: "plan close"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created.Msg.Item.Id
+	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := f.clients.Workspaces.EnsureWorkspace(ctx, connect.NewRequest(&v1.EnsureWorkspaceRequest{ItemId: id, SkipSetup: true}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workspace.Msg.Checkout.Claim.Path, "notes.txt"), []byte("work\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plan, err := f.clients.Lifecycle.PlanClose(ctx, connect.NewRequest(&v1.PlanCloseRequest{ItemId: id}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := plan.Msg; p.AbortsTurn || p.AttachedTerminalClients != 0 || p.CheckoutProblem != "" || len(p.Commits) != 1 || p.Commits[0] != "notes.txt" {
+		t.Fatalf("plan: %v", p)
+	}
+	item, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+	if err != nil || item.Msg.Item.State != v1.ItemState_ITEM_STATE_ACTIVE {
+		t.Fatalf("planning changed the item: %v %v", item, err)
 	}
 }

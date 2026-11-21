@@ -54,6 +54,7 @@ var webProcedures = map[string]bool{
 	corev1connect.JobServiceListJobsProcedure:                        true,
 	corev1connect.JobServiceWatchJobProcedure:                        true,
 	corev1connect.LifecycleServiceCloseItemProcedure:                 true,
+	corev1connect.LifecycleServicePlanCloseProcedure:                 true,
 	corev1connect.LifecycleServiceCreateAndStartItemProcedure:        true,
 	corev1connect.LifecycleServiceReopenItemProcedure:                true,
 	corev1connect.LifecycleServiceShelveItemProcedure:                true,

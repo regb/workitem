@@ -45,6 +45,9 @@ const (
 	// LifecycleServiceCloseItemProcedure is the fully-qualified name of the LifecycleService's
 	// CloseItem RPC.
 	LifecycleServiceCloseItemProcedure = "/wi.core.v1.LifecycleService/CloseItem"
+	// LifecycleServicePlanCloseProcedure is the fully-qualified name of the LifecycleService's
+	// PlanClose RPC.
+	LifecycleServicePlanCloseProcedure = "/wi.core.v1.LifecycleService/PlanClose"
 	// LifecycleServiceReopenItemProcedure is the fully-qualified name of the LifecycleService's
 	// ReopenItem RPC.
 	LifecycleServiceReopenItemProcedure = "/wi.core.v1.LifecycleService/ReopenItem"
@@ -71,6 +74,12 @@ type LifecycleServiceClient interface {
 	// WorkspaceService.ReleaseWorkspace, then ItemService.SetItemState(CLOSED)
 	// with the resolution.
 	CloseItem(context.Context, *connect.Request[v1.CloseItemRequest]) (*connect.Response[v1.CloseItemResponse], error)
+	// PlanClose says what closing an item would do now, changing nothing, so
+	// a client can ask the operator once and send the flags that consent:
+	// force when it aborts a turn, commit_changes when it commits files,
+	// confirm_attached_terminal when it closes a watched terminal. CloseItem
+	// checks again; the plan is advice, not a reservation.
+	PlanClose(context.Context, *connect.Request[v1.PlanCloseRequest]) (*connect.Response[v1.PlanCloseResponse], error)
 	// ReopenItem returns a closed item to work:
 	// ItemService.SetItemState(BACKLOG), then with start StartItem without a
 	// message, resuming the conversation on the same branch.
@@ -112,6 +121,13 @@ func NewLifecycleServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(lifecycleServiceMethods.ByName("CloseItem")),
 			connect.WithClientOptions(opts...),
 		),
+		planClose: connect.NewClient[v1.PlanCloseRequest, v1.PlanCloseResponse](
+			httpClient,
+			baseURL+LifecycleServicePlanCloseProcedure,
+			connect.WithSchema(lifecycleServiceMethods.ByName("PlanClose")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		reopenItem: connect.NewClient[v1.ReopenItemRequest, v1.ReopenItemResponse](
 			httpClient,
 			baseURL+LifecycleServiceReopenItemProcedure,
@@ -127,6 +143,7 @@ type lifecycleServiceClient struct {
 	startItem          *connect.Client[v1.StartItemRequest, v1.StartItemResponse]
 	shelveItem         *connect.Client[v1.ShelveItemRequest, v1.ShelveItemResponse]
 	closeItem          *connect.Client[v1.CloseItemRequest, v1.CloseItemResponse]
+	planClose          *connect.Client[v1.PlanCloseRequest, v1.PlanCloseResponse]
 	reopenItem         *connect.Client[v1.ReopenItemRequest, v1.ReopenItemResponse]
 }
 
@@ -148,6 +165,11 @@ func (c *lifecycleServiceClient) ShelveItem(ctx context.Context, req *connect.Re
 // CloseItem calls wi.core.v1.LifecycleService.CloseItem.
 func (c *lifecycleServiceClient) CloseItem(ctx context.Context, req *connect.Request[v1.CloseItemRequest]) (*connect.Response[v1.CloseItemResponse], error) {
 	return c.closeItem.CallUnary(ctx, req)
+}
+
+// PlanClose calls wi.core.v1.LifecycleService.PlanClose.
+func (c *lifecycleServiceClient) PlanClose(ctx context.Context, req *connect.Request[v1.PlanCloseRequest]) (*connect.Response[v1.PlanCloseResponse], error) {
+	return c.planClose.CallUnary(ctx, req)
 }
 
 // ReopenItem calls wi.core.v1.LifecycleService.ReopenItem.
@@ -176,6 +198,12 @@ type LifecycleServiceHandler interface {
 	// WorkspaceService.ReleaseWorkspace, then ItemService.SetItemState(CLOSED)
 	// with the resolution.
 	CloseItem(context.Context, *connect.Request[v1.CloseItemRequest]) (*connect.Response[v1.CloseItemResponse], error)
+	// PlanClose says what closing an item would do now, changing nothing, so
+	// a client can ask the operator once and send the flags that consent:
+	// force when it aborts a turn, commit_changes when it commits files,
+	// confirm_attached_terminal when it closes a watched terminal. CloseItem
+	// checks again; the plan is advice, not a reservation.
+	PlanClose(context.Context, *connect.Request[v1.PlanCloseRequest]) (*connect.Response[v1.PlanCloseResponse], error)
 	// ReopenItem returns a closed item to work:
 	// ItemService.SetItemState(BACKLOG), then with start StartItem without a
 	// message, resuming the conversation on the same branch.
@@ -213,6 +241,13 @@ func NewLifecycleServiceHandler(svc LifecycleServiceHandler, opts ...connect.Han
 		connect.WithSchema(lifecycleServiceMethods.ByName("CloseItem")),
 		connect.WithHandlerOptions(opts...),
 	)
+	lifecycleServicePlanCloseHandler := connect.NewUnaryHandler(
+		LifecycleServicePlanCloseProcedure,
+		svc.PlanClose,
+		connect.WithSchema(lifecycleServiceMethods.ByName("PlanClose")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	lifecycleServiceReopenItemHandler := connect.NewUnaryHandler(
 		LifecycleServiceReopenItemProcedure,
 		svc.ReopenItem,
@@ -229,6 +264,8 @@ func NewLifecycleServiceHandler(svc LifecycleServiceHandler, opts ...connect.Han
 			lifecycleServiceShelveItemHandler.ServeHTTP(w, r)
 		case LifecycleServiceCloseItemProcedure:
 			lifecycleServiceCloseItemHandler.ServeHTTP(w, r)
+		case LifecycleServicePlanCloseProcedure:
+			lifecycleServicePlanCloseHandler.ServeHTTP(w, r)
 		case LifecycleServiceReopenItemProcedure:
 			lifecycleServiceReopenItemHandler.ServeHTTP(w, r)
 		default:
@@ -254,6 +291,10 @@ func (UnimplementedLifecycleServiceHandler) ShelveItem(context.Context, *connect
 
 func (UnimplementedLifecycleServiceHandler) CloseItem(context.Context, *connect.Request[v1.CloseItemRequest]) (*connect.Response[v1.CloseItemResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.LifecycleService.CloseItem is not implemented"))
+}
+
+func (UnimplementedLifecycleServiceHandler) PlanClose(context.Context, *connect.Request[v1.PlanCloseRequest]) (*connect.Response[v1.PlanCloseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.LifecycleService.PlanClose is not implemented"))
 }
 
 func (UnimplementedLifecycleServiceHandler) ReopenItem(context.Context, *connect.Request[v1.ReopenItemRequest]) (*connect.Response[v1.ReopenItemResponse], error) {

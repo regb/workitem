@@ -4,6 +4,7 @@ import (
 	"connectrpc.com/connect"
 	"context"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/model"
 )
 
 func (s *Server) ShelveItem(ctx context.Context, req *connect.Request[v1.ShelveItemRequest]) (*connect.Response[v1.ShelveItemResponse], error) {
@@ -68,4 +69,39 @@ func (s *Server) CloseItem(ctx context.Context, req *connect.Request[v1.CloseIte
 		return err
 	})
 	return response(&v1.CloseItemResponse{Item: value, Job: job}, nil)
+}
+
+func (s *Server) PlanClose(ctx context.Context, req *connect.Request[v1.PlanCloseRequest]) (*connect.Response[v1.PlanCloseResponse], error) {
+	m, err := s.App.Store.LoadManifest(req.Msg.ItemId)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	out := &v1.PlanCloseResponse{}
+	if m.State == model.StateClosed {
+		return response(out, nil)
+	}
+	runtime, err := s.App.AgentRuntimeStatus(ctx, resolve(m.ID))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	out.AbortsTurn = runtime.Online && s.App.AgentBusy(ctx, m.ID)
+	changes, err := s.App.ItemUncommittedChanges(ctx, resolve(m.ID))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	out.Commits, out.RemovesAttachedCopies = changes.Files, changes.Attached
+	status, err := s.App.ControlStatus(ctx, resolve(m.ID))
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	out.AttachedTerminalClients = uint32(status.TerminalClients)
+	if o := s.observation(ctx, m); o.BranchMismatch {
+		out.CheckoutProblem = "the checkout is on another branch"
+	} else if o.WorktreeStatus == v1.WorktreeStatus_WORKTREE_STATUS_PROBLEM {
+		out.CheckoutProblem = o.WorktreeReason
+		if out.CheckoutProblem == "" {
+			out.CheckoutProblem = "the checkout has a problem"
+		}
+	}
+	return response(out, nil)
 }

@@ -34,6 +34,14 @@ service LifecycleService {
   // WorkspaceService.ReleaseWorkspace, then ItemService.SetItemState(CLOSED)
   // with the resolution.
   rpc CloseItem(CloseItemRequest) returns (CloseItemResponse);
+  // PlanClose says what closing an item would do now, changing nothing, so
+  // a client can ask the operator once and send the flags that consent:
+  // force when it aborts a turn, commit_changes when it commits files,
+  // confirm_attached_terminal when it closes a watched terminal. CloseItem
+  // checks again; the plan is advice, not a reservation.
+  rpc PlanClose(PlanCloseRequest) returns (PlanCloseResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // ReopenItem returns a closed item to work:
   // ItemService.SetItemState(BACKLOG), then with start StartItem without a
   // message, resuming the conversation on the same branch.
@@ -105,6 +113,26 @@ message CloseItemRequest {
   // instead.
   bool commit_changes = 4;
   bool confirm_attached_terminal = 5;
+}
+
+message PlanCloseRequest {
+  string item_id = 1;
+}
+
+message PlanCloseResponse {
+  // aborts_turn means the agent is working: closing aborts its turn.
+  bool aborts_turn = 1;
+  // commits are the uncommitted files closing commits to the item's branch.
+  repeated string commits = 2;
+  // removes_attached_copies are files unchanged since they were attached,
+  // which closing removes from the checkout: the item keeps them.
+  repeated string removes_attached_copies = 3;
+  // attached_terminal_clients watch the agent's terminal, which closing
+  // closes.
+  uint32 attached_terminal_clients = 4;
+  // checkout_problem is why releasing the checkout may be refused, such as
+  // a checkout on another branch.
+  string checkout_problem = 5;
 }
 
 message CloseItemResponse {

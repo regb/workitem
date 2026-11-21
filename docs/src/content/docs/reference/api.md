@@ -84,6 +84,8 @@ Like Git, the API has two levels. Plumbing is the domain services' small operati
 | `CloseItem` | `StopAgent` (with `force`), `CommitWorkspace` (with `commit_changes`), `ReleaseWorkspace`, `SetItemState(CLOSED)` |
 | `ReopenItem` | `SetItemState(BACKLOG)`, then `StartItem` with `send_nothing` when `start` is set |
 
+`PlanClose` reads what `CloseItem` would do now, changing nothing: whether it aborts a turn, the files it commits, the attachment copies it removes, the terminal clients it disconnects, and a checkout problem that may refuse it. A client asks the operator once from it and sends the flags that consent; `CloseItem` checks again.
+
 The daemon enforces lifecycle invariants in the plumbing itself, so no order of calls leaves an unsafe state, even interleaved with another client's: a backlog or closed item holds no checkout claim and no running agent, so `SetItemState` refuses to leave `ACTIVE` while either is held; releasing refuses a checkout with uncommitted changes; stopping refuses a busy agent without `force`; a closed item returns to work through the backlog. A client that wants different behavior composes the plumbing itself.
 
 ## Conventions
