@@ -585,6 +585,8 @@ func rpcProfiles(ctx context.Context, args []string, cfg Config, jsonOut bool) e
 			return err
 		}
 		return rpcEmit(cfg, jsonOut, value.Msg)
+	case "title-model":
+		return rpcTitleModel(ctx, args, cfg, jsonOut)
 	}
 	fs := newFlagSet("agent profile "+action, cfg.Stderr)
 	driver := fs.String("driver", "pi", "driver")
@@ -648,4 +650,76 @@ func rpcProfiles(ctx context.Context, args []string, cfg Config, jsonOut bool) e
 		return rpcEmit(cfg, jsonOut, value.Msg)
 	}
 	return usageErr{fmt.Errorf("unknown profile action %q", action)}
+}
+
+// rpcTitleModel shows, sets or clears the model that writes item titles.
+func rpcTitleModel(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
+	fs := newFlagSet("agent profile title-model", cfg.Stderr)
+	clear := fs.Bool("clear", false, "clear the title model")
+	if err := rpcParse(fs, args); err != nil {
+		return err
+	}
+	current, err := cfg.API.Profiles.ListAgentProfiles(ctx, rpcRequest(cfg, &v1.ListAgentProfilesRequest{}))
+	if err != nil {
+		return err
+	}
+	if fs.NArg() == 0 && !*clear {
+		choice := current.Msg.TitleModel
+		if jsonOut {
+			if choice == nil {
+				choice = &v1.ModelChoice{}
+			}
+			return rpcEmit(cfg, true, choice)
+		}
+		if choice == nil {
+			fmt.Fprintf(cfg.Stdout, "No title model: titles use the default profile's model (%s).\n", current.Msg.DefaultProfile)
+			return nil
+		}
+		fmt.Fprintf(cfg.Stdout, "%s\n", titleModelText(choice))
+		return nil
+	}
+	request := &v1.SetTitleModelRequest{ExpectedRevision: current.Msg.Revision}
+	if !*clear {
+		choice := &v1.ModelChoice{Driver: fs.Arg(0)}
+		for _, entry := range fs.Args()[1:] {
+			key, value, ok := strings.Cut(entry, "=")
+			switch {
+			case ok && key == "model":
+				choice.Model = value
+			case ok && key == "reasoning":
+				choice.Reasoning = value
+			default:
+				return usageErr{fmt.Errorf("expected model=MODEL or reasoning=LEVEL, got %q", entry)}
+			}
+		}
+		request.Model = choice
+	} else if fs.NArg() > 0 {
+		return usageErr{errors.New("--clear takes no driver")}
+	}
+	value, err := cfg.API.Profiles.SetTitleModel(ctx, rpcRequest(cfg, request))
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		return rpcEmit(cfg, true, value.Msg)
+	}
+	if request.Model == nil {
+		fmt.Fprintln(cfg.Stdout, "Cleared the title model: titles use the default profile's model.")
+	} else {
+		fmt.Fprintf(cfg.Stdout, "Titles now come from %s.\n", titleModelText(request.Model))
+	}
+	return nil
+}
+
+func titleModelText(choice *v1.ModelChoice) string {
+	text := choice.Driver
+	if choice.Model != "" {
+		text += " " + choice.Model
+	} else {
+		text += " (its default model)"
+	}
+	if choice.Reasoning != "" {
+		text += ", reasoning " + choice.Reasoning
+	}
+	return text
 }

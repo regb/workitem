@@ -21,6 +21,10 @@ service AgentProfileService {
   // using it keep its name and ask to move when they next start.
   rpc DeleteAgentProfile(DeleteAgentProfileRequest) returns (DeleteAgentProfileResponse);
   rpc SetDefaultAgentProfile(SetDefaultAgentProfileRequest) returns (SetDefaultAgentProfileResponse);
+  // SetTitleModel sets the model that writes item titles, or clears it so
+  // the default profile's model does. It is a bare model, called without
+  // tools, workspace or conversation, whatever agent an item uses.
+  rpc SetTitleModel(SetTitleModelRequest) returns (SetTitleModelResponse);
   // GetProfileModels lists the models and reasoning levels a profile's agent
   // offers, with the profile's own model and reasoning, so a client can
   // choose them for a new item, which takes them as agent_settings.
@@ -58,6 +62,27 @@ message ListAgentProfilesResponse {
   repeated AgentProfile profiles = 1;
   string default_profile = 2;
   uint32 revision = 3;
+  // title_model is the model that writes item titles; unset, the default
+  // profile's model does.
+  ModelChoice title_model = 4;
+}
+
+// ModelChoice names a model by the driver that runs it. An empty model or
+// reasoning takes the driver's default.
+message ModelChoice {
+  string driver = 1;
+  string model = 2;
+  string reasoning = 3;
+}
+
+message SetTitleModelRequest {
+  // model is the title model; unset clears it.
+  ModelChoice model = 1;
+  uint32 expected_revision = 2;
+}
+
+message SetTitleModelResponse {
+  uint32 revision = 1;
 }
 
 message PutAgentProfileRequest {

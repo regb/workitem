@@ -82,7 +82,6 @@ type catalogCache struct {
 
 type catalogEntry struct {
 	catalog driverprotocol.ModelCatalog
-	err     error
 	at      time.Time
 }
 
@@ -98,9 +97,6 @@ func (a *App) agentModelCatalog(ctx context.Context, name string) (driverprotoco
 	if a.modelCatalogs.entries == nil {
 		a.modelCatalogs.entries = map[string]catalogEntry{}
 	}
-	if entry, ok := a.modelCatalogs.entries[name]; ok && time.Since(entry.at) < 10*time.Minute {
-		return entry.catalog, entry.err
-	}
 	definition := a.Agents()[name]
 	reporter, ok := a.ConversationBackends[definition.Driver].(ModelCatalogReporter)
 	if !ok {
@@ -110,8 +106,16 @@ func (a *App) agentModelCatalog(ctx context.Context, name string) (driverprotoco
 	if err != nil {
 		return driverprotocol.ModelCatalog{}, err
 	}
+	// Keyed by the config too, so an edited profile is asked again. Only a
+	// catalog is kept: after a failure, the next request asks again.
+	key := name + "\x00" + definition.Driver + "\x00" + string(raw)
+	if entry, ok := a.modelCatalogs.entries[key]; ok && time.Since(entry.at) < 10*time.Minute {
+		return entry.catalog, nil
+	}
 	catalog, err := reporter.ModelCatalog(ctx, name, raw)
-	a.modelCatalogs.entries[name] = catalogEntry{catalog: catalog, err: err, at: time.Now()}
+	if err == nil {
+		a.modelCatalogs.entries[key] = catalogEntry{catalog: catalog, at: time.Now()}
+	}
 	return catalog, err
 }
 

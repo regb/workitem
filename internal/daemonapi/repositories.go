@@ -441,7 +441,6 @@ func (s *Server) UpdateEnvironment(ctx context.Context, req *connect.Request[v1.
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	s.Core.Database().NotifyAll()
 	return response(&v1.UpdateEnvironmentResponse{Variables: environmentVars(value.Environment.Vars), Revision: uint32(value.Environment.Revision), StaleAgents: s.staleAgents(ctx, req.Msg.RepositoryId, value.Environment.ChangedAt)}, nil)
 }
 func (s *Server) SearchRepositoryFiles(ctx context.Context, req *connect.Request[v1.SearchRepositoryFilesRequest]) (*connect.Response[v1.SearchRepositoryFilesResponse], error) {

@@ -55,8 +55,8 @@ type JobServiceClient interface {
 	// first message is the current state, so a late watcher misses nothing
 	// that matters.
 	WatchJob(context.Context, *connect.Request[v1.WatchJobRequest]) (*connect.ServerStreamForClient[v1.WatchJobResponse], error)
-	// AnswerApproval answers the question a waiting job asked; the job then
-	// continues or stops.
+	// AnswerApproval is kept for compatibility. No job waits for an approval
+	// any more, so it always fails with FAILED_PRECONDITION.
 	AnswerApproval(context.Context, *connect.Request[v1.AnswerApprovalRequest]) (*connect.Response[v1.AnswerApprovalResponse], error)
 	// CancelJob asks a running job to stop. Steps already done are kept and
 	// reported as its partial outcome.
@@ -152,8 +152,8 @@ type JobServiceHandler interface {
 	// first message is the current state, so a late watcher misses nothing
 	// that matters.
 	WatchJob(context.Context, *connect.Request[v1.WatchJobRequest], *connect.ServerStream[v1.WatchJobResponse]) error
-	// AnswerApproval answers the question a waiting job asked; the job then
-	// continues or stops.
+	// AnswerApproval is kept for compatibility. No job waits for an approval
+	// any more, so it always fails with FAILED_PRECONDITION.
 	AnswerApproval(context.Context, *connect.Request[v1.AnswerApprovalRequest]) (*connect.Response[v1.AnswerApprovalResponse], error)
 	// CancelJob asks a running job to stop. Steps already done are kept and
 	// reported as its partial outcome.

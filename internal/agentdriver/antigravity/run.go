@@ -103,6 +103,15 @@ func Run(ctx context.Context) error {
 			return fail(err)
 		}
 		return reply(protocol.Response{ProtocolVersion: protocol.Version, ModelCatalog: &catalog})
+	case protocol.OperationModelInvoke:
+		if request.Invoke == nil {
+			return fail(fmt.Errorf("model.invoke needs a request"))
+		}
+		text, err := Invoke(ctx, config, *request.Invoke)
+		if err != nil {
+			return fail(err)
+		}
+		return reply(protocol.Response{ProtocolVersion: protocol.Version, Invoke: &protocol.ModelInvokeResult{Text: text}})
 	case protocol.OperationRuntimeModes:
 		modes := RuntimeModes()
 		return reply(protocol.Response{ProtocolVersion: protocol.Version, RuntimeModes: &modes})
@@ -136,7 +145,7 @@ func conversationOperation(ctx context.Context, r protocol.Request) (protocol.Co
 	c := r.Conversation
 	switch r.Operation {
 	case protocol.OperationConversationCapabilities:
-		result.Capabilities = &protocol.ConversationCapabilities{History: true, HistoryPaging: true, Title: true}
+		result.Capabilities = &protocol.ConversationCapabilities{History: true, HistoryPaging: true}
 	case protocol.OperationConversationCreate:
 		if c.ID == "" || strings.ContainsAny(c.ID, "/\\\x00\r\n") {
 			return result, fmt.Errorf("invalid conversation identity")
@@ -177,16 +186,6 @@ func conversationOperation(ctx context.Context, r protocol.Request) (protocol.Co
 			return result, err
 		}
 		result.History = &history
-	case protocol.OperationConversationTitle:
-		config, err := parseConfig(r.Config)
-		if err != nil {
-			return result, err
-		}
-		title, err := GenerateTitle(ctx, config, c.Prompt)
-		if err != nil {
-			return result, err
-		}
-		result.Title = title
 	default:
 		return result, fmt.Errorf("unsupported Antigravity operation %q", r.Operation)
 	}

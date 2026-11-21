@@ -152,6 +152,7 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi agent profile add NAME --driver DRIVER [--label LABEL] [KEY=VALUE...]` | Add an agent profile; the driver validates its settings |
 | `wi agent profile edit NAME [--label LABEL] [KEY=VALUE...]` | Change a profile's label or settings; `KEY=` removes one |
 | `wi agent profile remove NAME` / `wi agent profile default NAME` | Remove a profile, or make one the default |
+| `wi agent profile title-model [DRIVER [model=MODEL] [reasoning=LEVEL] \| --clear]` | Show or set the model that writes item titles, whatever agent an item uses; cleared, the default profile's model does |
 | `wi agent profile set PROFILE [NAME=VALUE...]` | Move a stopped item to another profile of its conversation's driver |
 | `wi agent control send` | Send steering or follow-up text and optional repeatable `--image` attachments |
 | `wi agent control abort` | Abort the current agent run |

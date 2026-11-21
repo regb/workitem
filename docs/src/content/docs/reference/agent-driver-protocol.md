@@ -91,6 +91,19 @@ The request may check the installed backend version, but must not start an agent
 
 `value` is what the `model` setting takes. `resolved`, when `value` is an alias, is the model it currently names. `default` and `default_reasoning`, when the driver knows them, are the model and reasoning level the agent uses when none is set. A model's `levels` narrows the reasoning levels; `reasoning: false` means it has none. The driver may run its backend's own catalog command but must not start an agent session or make model requests: bundled Pi parses `pi --list-models`, and bundled Claude reads the `initialize` response of its headless control protocol in an empty directory without saving a session. Wi caches the answer for ten minutes.
 
+### Model invocation
+
+`model.invoke` sends one prompt to a model and returns its answer. It carries the merged `config`, whose `model` and `reasoning` choose the model, and an `invoke` object with the `prompt` and optional `instructions`:
+
+```json
+{"operation": "model.invoke", "config": {"model": "haiku", "reasoning": "low"},
+ "invoke": {"instructions": "Write a short title…", "prompt": "Title this task: …"}}
+```
+
+The answer is `{"invoke": {"text": "…"}}`. It is a bare model call, not an agent turn: no tools, no workspace, no saved session or conversation, and `instructions` in place of the agent's own system prompt (a neutral one when empty). The prompt and instructions are at most 64 KiB together, the answer at most 16 KiB. Every driver implements it. The daemon uses it to write item titles with the title model (`wi agent profile title-model`), falling back to the description's first line when the model fails.
+
+The bundled drivers run their tool's print mode once through a shared runner: in an empty temporary directory, without Wi's runtime identity, direnv state or tmux variables in the environment, in their own process group, killed after 90 seconds. Claude runs `claude --print` with tools, MCP servers, hooks, slash commands and session persistence off, and the instructions as `--system-prompt`. Pi runs `pi --print --no-session --no-tools` without extensions, skills, prompt templates or context files, thinking off unless `reasoning` is set. Antigravity comes less close: `agy --print` cannot turn off its tools or its own system prompt and lists the call among its conversations, so the instructions lead the prompt, the empty directory leaves the tools nothing to work on, and no permission is granted.
+
 ## Bundled skills
 
 The host embeds `skills/wi/` in the Wi executable at build time and includes trusted resources in the optional `launch.skills` array. Each skill has a `name` and `files`; each file has a portable relative `path`, base64-encoded `data`, and optional `executable` flag. No backend destination paths are supplied by the host. Payloads are limited to 16 skills, 64 files per skill, and 4 MiB of content in total. Absolute, hidden, escaping, duplicate, and file/directory-colliding paths are rejected.
@@ -105,10 +118,9 @@ These are rebuildable runtime resources, not work-item state. Descriptions, nati
 
 Drivers also handle these short-lived conversation requests:
 
-- `conversation.capabilities` returns optional `history`, `history_paging`, `subagents`, and `title` support without starting a backend or creating a conversation.
+- `conversation.capabilities` returns optional `history`, `history_paging`, and `subagents` support without starting a backend or creating a conversation.
 - `conversation.history` returns a bounded chronological branch view with stable native entry IDs, roles, text, timestamps, leaf identity, and a truncation flag. The host resolves the canonical locator; access clients must not choose native paths. An optional `leaf_id` selects an existing branch. Drivers advertising `history_paging` accept an exclusive native `before_id` cursor on that branch. Responses include `has_more` and the next `before_id`, empty at the beginning. Pin `leaf_id` when requesting older pages. Folded tool results expose `native_ids` aliases on their call message. `native_entry_ids` lists the page's raw entry IDs chronologically so clients can distinguish messages before and after a folded result. A `user` message may carry `tools`: shell commands the operator ran in the agent's own prompt, such as Pi's `!ls`. A `summary` message carries `summary.kind`: `compaction` for a summary that replaced the earlier conversation in the agent's context, with `tokens_before` when known, or `branch` for a summary of a branch the conversation left. Claude records a compaction as a boundary without text followed by the summary; clients show the two as one. A message the model reasoned before carries `reasoning`, best effort: `text` when the agent saves its reasoning (Pi does), and `duration_ms` when the transcript tells how long it took (Claude saves its thinking without text, but each block's timestamp, so its duration is measured from the record before it).
 - Drivers advertising `subagents` link a tool call that delegated to a subagent with its `subagent`: `id`, `tool_id`, `type`, `description`, and `status` (`running`, `completed`, or `failed`). A `conversation.history` request with that `subagent` ID reads the subagent's own conversation as a history page, pageable with `before_id`; IDs are letters, digits, `-`, and `_`, at most 64. A message with role `subagent` reports a subagent's result to the agent: its `subagent` names it, and its text is the result. Other drivers must refuse a `subagent` request rather than return the main conversation.
-- `conversation.title` suggests a title from a bounded `prompt`. It never acquires, edits, or creates a primary conversation. Persisting a title is a separate daemon command and does not rename the slug or implementation branch.
 - `conversation.create` returns the driver's locator and native format for a new conversation ID.
 - `conversation.cwd` reads the checkout recorded by a native conversation.
 - `conversation.fork` copies or rewrites a conversation for a reassigned checkout.

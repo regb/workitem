@@ -14,7 +14,7 @@ import (
 
 func TestOptionalConversationCapabilitiesDoNotLaunchBackend(t *testing.T) {
 	response, err := handleConversationOperation(context.Background(), driverprotocol.Request{Operation: driverprotocol.OperationConversationCapabilities, Config: json.RawMessage(`{"executable":"/must-not-execute"}`), Conversation: &driverprotocol.ConversationRequest{}})
-	if err != nil || response.Capabilities == nil || !response.Capabilities.History || !response.Capabilities.Title {
+	if err != nil || response.Capabilities == nil || !response.Capabilities.History {
 		t.Fatalf("capabilities %+v %v", response, err)
 	}
 }

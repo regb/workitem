@@ -127,10 +127,27 @@ func (c Client) ConversationCapabilities(ctx context.Context) (driverprotocol.Co
 	return *response.Capabilities, nil
 }
 
-// GenerateTitle is optional and never writes or acquires a native conversation.
-func (c Client) GenerateTitle(ctx context.Context, prompt, agent string, config json.RawMessage) (string, error) {
-	response, err := c.request(ctx, driverprotocol.OperationConversationTitle, agent, config, driverprotocol.ConversationRequest{Prompt: prompt})
-	return response.Title, err
+// InvokeModel sends one prompt to the model the config names and returns its
+// answer: a bare model call that never touches a conversation or workspace.
+func (c Client) InvokeModel(ctx context.Context, agent string, config json.RawMessage, request driverprotocol.ModelInvokeRequest) (string, error) {
+	if err := request.Validate(); err != nil {
+		return "", err
+	}
+	// The driver bounds the model's own process; this covers its startup.
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+	defer cancel()
+	env := c.Env
+	if env == nil {
+		env = os.Environ()
+	}
+	response, err := RunOperation(ctx, c.Path, c.Args, driverprotocol.Request{ProtocolVersion: driverprotocol.Version, Driver: c.Driver, Operation: driverprotocol.OperationModelInvoke, Agent: agent, Config: config, Invoke: &request}, env)
+	if err != nil {
+		return "", err
+	}
+	if response.Invoke == nil {
+		return "", fmt.Errorf("driver %q omitted its model answer", c.Driver)
+	}
+	return response.Invoke.Text, nil
 }
 
 func (c Client) NewConversation(ctx context.Context, id, agent string, config json.RawMessage) (model.Conversation, error) {

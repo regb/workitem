@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/model"
@@ -268,5 +269,59 @@ func TestAdoptReportedSettingsKeepsChosenValues(t *testing.T) {
 	saved, _ = a.Store.LoadManifest(m.ID)
 	if want := map[string]string{"model": "other/model", "reasoning": "low"}; !reflect.DeepEqual(saved.AgentSettings, want) {
 		t.Fatalf("after a change: %v, want %v", saved.AgentSettings, want)
+	}
+}
+
+// flakyCatalog fails its first catalog and runtime modes requests.
+type flakyCatalog struct {
+	ConversationBackend
+	catalogCalls, modesCalls int
+}
+
+func (b *flakyCatalog) ModelCatalog(context.Context, string, json.RawMessage) (driverprotocol.ModelCatalog, error) {
+	b.catalogCalls++
+	if b.catalogCalls == 1 {
+		return driverprotocol.ModelCatalog{}, errors.New("backend busy")
+	}
+	return driverprotocol.ModelCatalog{Models: []driverprotocol.ModelOption{{Value: "m"}}}, nil
+}
+
+func (b *flakyCatalog) RuntimeModes(context.Context, string, json.RawMessage) (driverprotocol.RuntimeModes, error) {
+	b.modesCalls++
+	if b.modesCalls == 1 {
+		return driverprotocol.RuntimeModes{}, errors.New("backend busy")
+	}
+	return driverprotocol.RuntimeModes{Modes: map[driverprotocol.Mode]driverprotocol.ModeCapabilities{driverprotocol.ModeHeadless: {Control: driverprotocol.ControlStructured}}}, nil
+}
+
+func TestDriverAnswersAreCachedButFailuresAreNot(t *testing.T) {
+	a, _, _ := settingsApp(t)
+	backend := &flakyCatalog{}
+	a.ConversationBackends = map[string]ConversationBackend{"pi": backend}
+	ctx := context.Background()
+	if _, err := a.agentModelCatalog(ctx, "pi"); err == nil {
+		t.Fatal("first catalog request should fail")
+	}
+	for range 2 {
+		if catalog, err := a.agentModelCatalog(ctx, "pi"); err != nil || len(catalog.Models) != 1 {
+			t.Fatalf("catalog after a failure: %v %v", catalog, err)
+		}
+	}
+	if backend.catalogCalls != 2 {
+		t.Fatalf("catalog asked %d times, want 2", backend.catalogCalls)
+	}
+	if modes := a.AgentRuntimeModes(ctx, "pi"); len(modes.Modes) == 1 {
+		t.Fatalf("failed modes request answered %v", modes)
+	}
+	for range 2 {
+		if modes := a.AgentRuntimeModes(ctx, "pi"); len(modes.Modes) != 1 {
+			t.Fatalf("modes after a failure: %v", modes)
+		}
+	}
+	// An edited profile is asked again.
+	a.StaticAgentProfiles.Profiles[0].Config["model"] = "edited/model"
+	a.AgentRuntimeModes(ctx, "pi")
+	if backend.modesCalls != 3 {
+		t.Fatalf("modes asked %d times, want 3", backend.modesCalls)
 	}
 }

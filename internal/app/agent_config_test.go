@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/config"
@@ -177,4 +178,8 @@ func TestExistingOwnerDoesNotValidateNewProfileSettings(t *testing.T) {
 	if backend.calls != 0 {
 		t.Fatal("existing owner was blocked by new config")
 	}
+}
+
+func (b *configCheckingBackend) InvokeModel(context.Context, string, json.RawMessage, driverprotocol.ModelInvokeRequest) (string, error) {
+	return "", nil
 }

@@ -49,6 +49,12 @@ func run(ctx context.Context) error {
 		response.RuntimeModes = &modes
 	case p.OperationConfigModels:
 		response.ModelCatalog = &p.ModelCatalog{Models: []p.ModelOption{{Value: "test/model", Label: "Test model", Reasoning: true, Levels: p.ReasoningLevels, ImageInput: true}}, ReasoningLevels: p.ReasoningLevels, Default: "test/model", DefaultReasoning: "medium"}
+	case p.OperationModelInvoke:
+		// The fake model answers with a title, or fails on request.
+		if request.Invoke == nil || strings.Contains(request.Invoke.Prompt, "fail the model") {
+			return fail(fmt.Errorf("fake model failure"))
+		}
+		response.Invoke = &p.ModelInvokeResult{Text: "Test suggested title"}
 	case p.OperationLaunch:
 		if request.Launch == nil {
 			return fail(fmt.Errorf("missing launch"))
@@ -66,9 +72,7 @@ func run(ctx context.Context) error {
 			c := pi.New("pi").NewConversation(r.ID)
 			out.Conversation = p.Conversation{ID: c.ID, Locator: c.NativeLocator(), Format: c.Format}
 		case p.OperationConversationCapabilities:
-			out.Capabilities = &p.ConversationCapabilities{History: true, HistoryPaging: true, Title: true}
-		case p.OperationConversationTitle:
-			out.Title = "Test suggested title"
+			out.Capabilities = &p.ConversationCapabilities{History: true, HistoryPaging: true}
 		case p.OperationConversationCWD:
 			out.CWD, err = pi.New("pi").ConversationCWD(r.Path)
 		case p.OperationConversationFork:

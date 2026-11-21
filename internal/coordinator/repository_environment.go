@@ -103,7 +103,7 @@ func (d *Database) SetRepositoryEnvironment(command SetRepositoryEnvironmentComm
 	}
 	id := settings.Repository.ID
 	result := RepositoryEnvironmentResult{Repository: settings.Repository}
-	err = d.db.Update(func(tx *bolt.Tx) error {
+	err = d.updateNotify(func(tx *bolt.Tx) error {
 		environment, err := readEnvironmentTx(tx, id)
 		if err != nil {
 			return err

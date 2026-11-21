@@ -204,8 +204,11 @@ type ListAgentProfilesResponse struct {
 	Profiles       []*AgentProfile        `protobuf:"bytes,1,rep,name=profiles,proto3" json:"profiles,omitempty"`
 	DefaultProfile string                 `protobuf:"bytes,2,opt,name=default_profile,json=defaultProfile,proto3" json:"default_profile,omitempty"`
 	Revision       uint32                 `protobuf:"varint,3,opt,name=revision,proto3" json:"revision,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// title_model is the model that writes item titles; unset, the default
+	// profile's model does.
+	TitleModel    *ModelChoice `protobuf:"bytes,4,opt,name=title_model,json=titleModel,proto3" json:"title_model,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListAgentProfilesResponse) Reset() {
@@ -259,6 +262,172 @@ func (x *ListAgentProfilesResponse) GetRevision() uint32 {
 	return 0
 }
 
+func (x *ListAgentProfilesResponse) GetTitleModel() *ModelChoice {
+	if x != nil {
+		return x.TitleModel
+	}
+	return nil
+}
+
+// ModelChoice names a model by the driver that runs it. An empty model or
+// reasoning takes the driver's default.
+type ModelChoice struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Driver        string                 `protobuf:"bytes,1,opt,name=driver,proto3" json:"driver,omitempty"`
+	Model         string                 `protobuf:"bytes,2,opt,name=model,proto3" json:"model,omitempty"`
+	Reasoning     string                 `protobuf:"bytes,3,opt,name=reasoning,proto3" json:"reasoning,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ModelChoice) Reset() {
+	*x = ModelChoice{}
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ModelChoice) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ModelChoice) ProtoMessage() {}
+
+func (x *ModelChoice) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ModelChoice.ProtoReflect.Descriptor instead.
+func (*ModelChoice) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ModelChoice) GetDriver() string {
+	if x != nil {
+		return x.Driver
+	}
+	return ""
+}
+
+func (x *ModelChoice) GetModel() string {
+	if x != nil {
+		return x.Model
+	}
+	return ""
+}
+
+func (x *ModelChoice) GetReasoning() string {
+	if x != nil {
+		return x.Reasoning
+	}
+	return ""
+}
+
+type SetTitleModelRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// model is the title model; unset clears it.
+	Model            *ModelChoice `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	ExpectedRevision uint32       `protobuf:"varint,2,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *SetTitleModelRequest) Reset() {
+	*x = SetTitleModelRequest{}
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetTitleModelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetTitleModelRequest) ProtoMessage() {}
+
+func (x *SetTitleModelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetTitleModelRequest.ProtoReflect.Descriptor instead.
+func (*SetTitleModelRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *SetTitleModelRequest) GetModel() *ModelChoice {
+	if x != nil {
+		return x.Model
+	}
+	return nil
+}
+
+func (x *SetTitleModelRequest) GetExpectedRevision() uint32 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
+}
+
+type SetTitleModelResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Revision      uint32                 `protobuf:"varint,1,opt,name=revision,proto3" json:"revision,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetTitleModelResponse) Reset() {
+	*x = SetTitleModelResponse{}
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetTitleModelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetTitleModelResponse) ProtoMessage() {}
+
+func (x *SetTitleModelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetTitleModelResponse.ProtoReflect.Descriptor instead.
+func (*SetTitleModelResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *SetTitleModelResponse) GetRevision() uint32 {
+	if x != nil {
+		return x.Revision
+	}
+	return 0
+}
+
 type PutAgentProfileRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Profile          *AgentProfile          `protobuf:"bytes,1,opt,name=profile,proto3" json:"profile,omitempty"`
@@ -269,7 +438,7 @@ type PutAgentProfileRequest struct {
 
 func (x *PutAgentProfileRequest) Reset() {
 	*x = PutAgentProfileRequest{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[4]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -281,7 +450,7 @@ func (x *PutAgentProfileRequest) String() string {
 func (*PutAgentProfileRequest) ProtoMessage() {}
 
 func (x *PutAgentProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[4]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -294,7 +463,7 @@ func (x *PutAgentProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutAgentProfileRequest.ProtoReflect.Descriptor instead.
 func (*PutAgentProfileRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{4}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *PutAgentProfileRequest) GetProfile() *AgentProfile {
@@ -321,7 +490,7 @@ type PutAgentProfileResponse struct {
 
 func (x *PutAgentProfileResponse) Reset() {
 	*x = PutAgentProfileResponse{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[5]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -333,7 +502,7 @@ func (x *PutAgentProfileResponse) String() string {
 func (*PutAgentProfileResponse) ProtoMessage() {}
 
 func (x *PutAgentProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[5]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -346,7 +515,7 @@ func (x *PutAgentProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PutAgentProfileResponse.ProtoReflect.Descriptor instead.
 func (*PutAgentProfileResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{5}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *PutAgentProfileResponse) GetProfile() *AgentProfile {
@@ -373,7 +542,7 @@ type DeleteAgentProfileRequest struct {
 
 func (x *DeleteAgentProfileRequest) Reset() {
 	*x = DeleteAgentProfileRequest{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[6]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -385,7 +554,7 @@ func (x *DeleteAgentProfileRequest) String() string {
 func (*DeleteAgentProfileRequest) ProtoMessage() {}
 
 func (x *DeleteAgentProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[6]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -398,7 +567,7 @@ func (x *DeleteAgentProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAgentProfileRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAgentProfileRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{6}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeleteAgentProfileRequest) GetName() string {
@@ -424,7 +593,7 @@ type DeleteAgentProfileResponse struct {
 
 func (x *DeleteAgentProfileResponse) Reset() {
 	*x = DeleteAgentProfileResponse{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[7]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -436,7 +605,7 @@ func (x *DeleteAgentProfileResponse) String() string {
 func (*DeleteAgentProfileResponse) ProtoMessage() {}
 
 func (x *DeleteAgentProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[7]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -449,7 +618,7 @@ func (x *DeleteAgentProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAgentProfileResponse.ProtoReflect.Descriptor instead.
 func (*DeleteAgentProfileResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{7}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DeleteAgentProfileResponse) GetRevision() uint32 {
@@ -469,7 +638,7 @@ type SetDefaultAgentProfileRequest struct {
 
 func (x *SetDefaultAgentProfileRequest) Reset() {
 	*x = SetDefaultAgentProfileRequest{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[8]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -481,7 +650,7 @@ func (x *SetDefaultAgentProfileRequest) String() string {
 func (*SetDefaultAgentProfileRequest) ProtoMessage() {}
 
 func (x *SetDefaultAgentProfileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[8]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -494,7 +663,7 @@ func (x *SetDefaultAgentProfileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultAgentProfileRequest.ProtoReflect.Descriptor instead.
 func (*SetDefaultAgentProfileRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{8}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SetDefaultAgentProfileRequest) GetName() string {
@@ -520,7 +689,7 @@ type SetDefaultAgentProfileResponse struct {
 
 func (x *SetDefaultAgentProfileResponse) Reset() {
 	*x = SetDefaultAgentProfileResponse{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[9]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -532,7 +701,7 @@ func (x *SetDefaultAgentProfileResponse) String() string {
 func (*SetDefaultAgentProfileResponse) ProtoMessage() {}
 
 func (x *SetDefaultAgentProfileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[9]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -545,7 +714,7 @@ func (x *SetDefaultAgentProfileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDefaultAgentProfileResponse.ProtoReflect.Descriptor instead.
 func (*SetDefaultAgentProfileResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{9}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SetDefaultAgentProfileResponse) GetRevision() uint32 {
@@ -563,7 +732,7 @@ type ListDriversRequest struct {
 
 func (x *ListDriversRequest) Reset() {
 	*x = ListDriversRequest{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[10]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -575,7 +744,7 @@ func (x *ListDriversRequest) String() string {
 func (*ListDriversRequest) ProtoMessage() {}
 
 func (x *ListDriversRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[10]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -588,7 +757,7 @@ func (x *ListDriversRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDriversRequest.ProtoReflect.Descriptor instead.
 func (*ListDriversRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{10}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{13}
 }
 
 type ListDriversResponse struct {
@@ -600,7 +769,7 @@ type ListDriversResponse struct {
 
 func (x *ListDriversResponse) Reset() {
 	*x = ListDriversResponse{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[11]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -612,7 +781,7 @@ func (x *ListDriversResponse) String() string {
 func (*ListDriversResponse) ProtoMessage() {}
 
 func (x *ListDriversResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[11]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -625,7 +794,7 @@ func (x *ListDriversResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDriversResponse.ProtoReflect.Descriptor instead.
 func (*ListDriversResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{11}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ListDriversResponse) GetDrivers() []*Driver {
@@ -644,7 +813,7 @@ type GetProfileModelsRequest struct {
 
 func (x *GetProfileModelsRequest) Reset() {
 	*x = GetProfileModelsRequest{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[12]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -656,7 +825,7 @@ func (x *GetProfileModelsRequest) String() string {
 func (*GetProfileModelsRequest) ProtoMessage() {}
 
 func (x *GetProfileModelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[12]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -669,7 +838,7 @@ func (x *GetProfileModelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfileModelsRequest.ProtoReflect.Descriptor instead.
 func (*GetProfileModelsRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{12}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetProfileModelsRequest) GetName() string {
@@ -694,7 +863,7 @@ type GetProfileModelsResponse struct {
 
 func (x *GetProfileModelsResponse) Reset() {
 	*x = GetProfileModelsResponse{}
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[13]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -706,7 +875,7 @@ func (x *GetProfileModelsResponse) String() string {
 func (*GetProfileModelsResponse) ProtoMessage() {}
 
 func (x *GetProfileModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_profiles_proto_msgTypes[13]
+	mi := &file_wi_core_v1_profiles_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -719,7 +888,7 @@ func (x *GetProfileModelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetProfileModelsResponse.ProtoReflect.Descriptor instead.
 func (*GetProfileModelsResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{13}
+	return file_wi_core_v1_profiles_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *GetProfileModelsResponse) GetDriver() string {
@@ -766,11 +935,22 @@ const file_wi_core_v1_profiles_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x123\n" +
 	"\bdefaults\x18\x03 \x01(\v2\x17.google.protobuf.StructR\bdefaults\"\x1a\n" +
-	"\x18ListAgentProfilesRequest\"\x96\x01\n" +
+	"\x18ListAgentProfilesRequest\"\xd0\x01\n" +
 	"\x19ListAgentProfilesResponse\x124\n" +
 	"\bprofiles\x18\x01 \x03(\v2\x18.wi.core.v1.AgentProfileR\bprofiles\x12'\n" +
 	"\x0fdefault_profile\x18\x02 \x01(\tR\x0edefaultProfile\x12\x1a\n" +
-	"\brevision\x18\x03 \x01(\rR\brevision\"y\n" +
+	"\brevision\x18\x03 \x01(\rR\brevision\x128\n" +
+	"\vtitle_model\x18\x04 \x01(\v2\x17.wi.core.v1.ModelChoiceR\n" +
+	"titleModel\"Y\n" +
+	"\vModelChoice\x12\x16\n" +
+	"\x06driver\x18\x01 \x01(\tR\x06driver\x12\x14\n" +
+	"\x05model\x18\x02 \x01(\tR\x05model\x12\x1c\n" +
+	"\treasoning\x18\x03 \x01(\tR\treasoning\"r\n" +
+	"\x14SetTitleModelRequest\x12-\n" +
+	"\x05model\x18\x01 \x01(\v2\x17.wi.core.v1.ModelChoiceR\x05model\x12+\n" +
+	"\x11expected_revision\x18\x02 \x01(\rR\x10expectedRevision\"3\n" +
+	"\x15SetTitleModelResponse\x12\x1a\n" +
+	"\brevision\x18\x01 \x01(\rR\brevision\"y\n" +
 	"\x16PutAgentProfileRequest\x122\n" +
 	"\aprofile\x18\x01 \x01(\v2\x18.wi.core.v1.AgentProfileR\aprofile\x12+\n" +
 	"\x11expected_revision\x18\x02 \x01(\rR\x10expectedRevision\"i\n" +
@@ -799,12 +979,13 @@ const file_wi_core_v1_profiles_proto_rawDesc = "" +
 	"\rcatalog_error\x18\x04 \x01(\tR\fcatalogError\x1a9\n" +
 	"\vValuesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xe7\x04\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x012\xbd\x05\n" +
 	"\x13AgentProfileService\x12e\n" +
 	"\x11ListAgentProfiles\x12$.wi.core.v1.ListAgentProfilesRequest\x1a%.wi.core.v1.ListAgentProfilesResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\x0fPutAgentProfile\x12\".wi.core.v1.PutAgentProfileRequest\x1a#.wi.core.v1.PutAgentProfileResponse\x12c\n" +
 	"\x12DeleteAgentProfile\x12%.wi.core.v1.DeleteAgentProfileRequest\x1a&.wi.core.v1.DeleteAgentProfileResponse\x12o\n" +
-	"\x16SetDefaultAgentProfile\x12).wi.core.v1.SetDefaultAgentProfileRequest\x1a*.wi.core.v1.SetDefaultAgentProfileResponse\x12b\n" +
+	"\x16SetDefaultAgentProfile\x12).wi.core.v1.SetDefaultAgentProfileRequest\x1a*.wi.core.v1.SetDefaultAgentProfileResponse\x12T\n" +
+	"\rSetTitleModel\x12 .wi.core.v1.SetTitleModelRequest\x1a!.wi.core.v1.SetTitleModelResponse\x12b\n" +
 	"\x10GetProfileModels\x12#.wi.core.v1.GetProfileModelsRequest\x1a$.wi.core.v1.GetProfileModelsResponse\"\x03\x90\x02\x01\x12S\n" +
 	"\vListDrivers\x12\x1e.wi.core.v1.ListDriversRequest\x1a\x1f.wi.core.v1.ListDriversResponse\"\x03\x90\x02\x01B0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
@@ -820,52 +1001,59 @@ func file_wi_core_v1_profiles_proto_rawDescGZIP() []byte {
 	return file_wi_core_v1_profiles_proto_rawDescData
 }
 
-var file_wi_core_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_wi_core_v1_profiles_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_wi_core_v1_profiles_proto_goTypes = []any{
 	(*AgentProfile)(nil),                   // 0: wi.core.v1.AgentProfile
 	(*Driver)(nil),                         // 1: wi.core.v1.Driver
 	(*ListAgentProfilesRequest)(nil),       // 2: wi.core.v1.ListAgentProfilesRequest
 	(*ListAgentProfilesResponse)(nil),      // 3: wi.core.v1.ListAgentProfilesResponse
-	(*PutAgentProfileRequest)(nil),         // 4: wi.core.v1.PutAgentProfileRequest
-	(*PutAgentProfileResponse)(nil),        // 5: wi.core.v1.PutAgentProfileResponse
-	(*DeleteAgentProfileRequest)(nil),      // 6: wi.core.v1.DeleteAgentProfileRequest
-	(*DeleteAgentProfileResponse)(nil),     // 7: wi.core.v1.DeleteAgentProfileResponse
-	(*SetDefaultAgentProfileRequest)(nil),  // 8: wi.core.v1.SetDefaultAgentProfileRequest
-	(*SetDefaultAgentProfileResponse)(nil), // 9: wi.core.v1.SetDefaultAgentProfileResponse
-	(*ListDriversRequest)(nil),             // 10: wi.core.v1.ListDriversRequest
-	(*ListDriversResponse)(nil),            // 11: wi.core.v1.ListDriversResponse
-	(*GetProfileModelsRequest)(nil),        // 12: wi.core.v1.GetProfileModelsRequest
-	(*GetProfileModelsResponse)(nil),       // 13: wi.core.v1.GetProfileModelsResponse
-	nil,                                    // 14: wi.core.v1.GetProfileModelsResponse.ValuesEntry
-	(*structpb.Struct)(nil),                // 15: google.protobuf.Struct
-	(*ModelCatalog)(nil),                   // 16: wi.core.v1.ModelCatalog
+	(*ModelChoice)(nil),                    // 4: wi.core.v1.ModelChoice
+	(*SetTitleModelRequest)(nil),           // 5: wi.core.v1.SetTitleModelRequest
+	(*SetTitleModelResponse)(nil),          // 6: wi.core.v1.SetTitleModelResponse
+	(*PutAgentProfileRequest)(nil),         // 7: wi.core.v1.PutAgentProfileRequest
+	(*PutAgentProfileResponse)(nil),        // 8: wi.core.v1.PutAgentProfileResponse
+	(*DeleteAgentProfileRequest)(nil),      // 9: wi.core.v1.DeleteAgentProfileRequest
+	(*DeleteAgentProfileResponse)(nil),     // 10: wi.core.v1.DeleteAgentProfileResponse
+	(*SetDefaultAgentProfileRequest)(nil),  // 11: wi.core.v1.SetDefaultAgentProfileRequest
+	(*SetDefaultAgentProfileResponse)(nil), // 12: wi.core.v1.SetDefaultAgentProfileResponse
+	(*ListDriversRequest)(nil),             // 13: wi.core.v1.ListDriversRequest
+	(*ListDriversResponse)(nil),            // 14: wi.core.v1.ListDriversResponse
+	(*GetProfileModelsRequest)(nil),        // 15: wi.core.v1.GetProfileModelsRequest
+	(*GetProfileModelsResponse)(nil),       // 16: wi.core.v1.GetProfileModelsResponse
+	nil,                                    // 17: wi.core.v1.GetProfileModelsResponse.ValuesEntry
+	(*structpb.Struct)(nil),                // 18: google.protobuf.Struct
+	(*ModelCatalog)(nil),                   // 19: wi.core.v1.ModelCatalog
 }
 var file_wi_core_v1_profiles_proto_depIdxs = []int32{
-	15, // 0: wi.core.v1.AgentProfile.config:type_name -> google.protobuf.Struct
-	15, // 1: wi.core.v1.Driver.defaults:type_name -> google.protobuf.Struct
+	18, // 0: wi.core.v1.AgentProfile.config:type_name -> google.protobuf.Struct
+	18, // 1: wi.core.v1.Driver.defaults:type_name -> google.protobuf.Struct
 	0,  // 2: wi.core.v1.ListAgentProfilesResponse.profiles:type_name -> wi.core.v1.AgentProfile
-	0,  // 3: wi.core.v1.PutAgentProfileRequest.profile:type_name -> wi.core.v1.AgentProfile
-	0,  // 4: wi.core.v1.PutAgentProfileResponse.profile:type_name -> wi.core.v1.AgentProfile
-	1,  // 5: wi.core.v1.ListDriversResponse.drivers:type_name -> wi.core.v1.Driver
-	14, // 6: wi.core.v1.GetProfileModelsResponse.values:type_name -> wi.core.v1.GetProfileModelsResponse.ValuesEntry
-	16, // 7: wi.core.v1.GetProfileModelsResponse.catalog:type_name -> wi.core.v1.ModelCatalog
-	2,  // 8: wi.core.v1.AgentProfileService.ListAgentProfiles:input_type -> wi.core.v1.ListAgentProfilesRequest
-	4,  // 9: wi.core.v1.AgentProfileService.PutAgentProfile:input_type -> wi.core.v1.PutAgentProfileRequest
-	6,  // 10: wi.core.v1.AgentProfileService.DeleteAgentProfile:input_type -> wi.core.v1.DeleteAgentProfileRequest
-	8,  // 11: wi.core.v1.AgentProfileService.SetDefaultAgentProfile:input_type -> wi.core.v1.SetDefaultAgentProfileRequest
-	12, // 12: wi.core.v1.AgentProfileService.GetProfileModels:input_type -> wi.core.v1.GetProfileModelsRequest
-	10, // 13: wi.core.v1.AgentProfileService.ListDrivers:input_type -> wi.core.v1.ListDriversRequest
-	3,  // 14: wi.core.v1.AgentProfileService.ListAgentProfiles:output_type -> wi.core.v1.ListAgentProfilesResponse
-	5,  // 15: wi.core.v1.AgentProfileService.PutAgentProfile:output_type -> wi.core.v1.PutAgentProfileResponse
-	7,  // 16: wi.core.v1.AgentProfileService.DeleteAgentProfile:output_type -> wi.core.v1.DeleteAgentProfileResponse
-	9,  // 17: wi.core.v1.AgentProfileService.SetDefaultAgentProfile:output_type -> wi.core.v1.SetDefaultAgentProfileResponse
-	13, // 18: wi.core.v1.AgentProfileService.GetProfileModels:output_type -> wi.core.v1.GetProfileModelsResponse
-	11, // 19: wi.core.v1.AgentProfileService.ListDrivers:output_type -> wi.core.v1.ListDriversResponse
-	14, // [14:20] is the sub-list for method output_type
-	8,  // [8:14] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	4,  // 3: wi.core.v1.ListAgentProfilesResponse.title_model:type_name -> wi.core.v1.ModelChoice
+	4,  // 4: wi.core.v1.SetTitleModelRequest.model:type_name -> wi.core.v1.ModelChoice
+	0,  // 5: wi.core.v1.PutAgentProfileRequest.profile:type_name -> wi.core.v1.AgentProfile
+	0,  // 6: wi.core.v1.PutAgentProfileResponse.profile:type_name -> wi.core.v1.AgentProfile
+	1,  // 7: wi.core.v1.ListDriversResponse.drivers:type_name -> wi.core.v1.Driver
+	17, // 8: wi.core.v1.GetProfileModelsResponse.values:type_name -> wi.core.v1.GetProfileModelsResponse.ValuesEntry
+	19, // 9: wi.core.v1.GetProfileModelsResponse.catalog:type_name -> wi.core.v1.ModelCatalog
+	2,  // 10: wi.core.v1.AgentProfileService.ListAgentProfiles:input_type -> wi.core.v1.ListAgentProfilesRequest
+	7,  // 11: wi.core.v1.AgentProfileService.PutAgentProfile:input_type -> wi.core.v1.PutAgentProfileRequest
+	9,  // 12: wi.core.v1.AgentProfileService.DeleteAgentProfile:input_type -> wi.core.v1.DeleteAgentProfileRequest
+	11, // 13: wi.core.v1.AgentProfileService.SetDefaultAgentProfile:input_type -> wi.core.v1.SetDefaultAgentProfileRequest
+	5,  // 14: wi.core.v1.AgentProfileService.SetTitleModel:input_type -> wi.core.v1.SetTitleModelRequest
+	15, // 15: wi.core.v1.AgentProfileService.GetProfileModels:input_type -> wi.core.v1.GetProfileModelsRequest
+	13, // 16: wi.core.v1.AgentProfileService.ListDrivers:input_type -> wi.core.v1.ListDriversRequest
+	3,  // 17: wi.core.v1.AgentProfileService.ListAgentProfiles:output_type -> wi.core.v1.ListAgentProfilesResponse
+	8,  // 18: wi.core.v1.AgentProfileService.PutAgentProfile:output_type -> wi.core.v1.PutAgentProfileResponse
+	10, // 19: wi.core.v1.AgentProfileService.DeleteAgentProfile:output_type -> wi.core.v1.DeleteAgentProfileResponse
+	12, // 20: wi.core.v1.AgentProfileService.SetDefaultAgentProfile:output_type -> wi.core.v1.SetDefaultAgentProfileResponse
+	6,  // 21: wi.core.v1.AgentProfileService.SetTitleModel:output_type -> wi.core.v1.SetTitleModelResponse
+	16, // 22: wi.core.v1.AgentProfileService.GetProfileModels:output_type -> wi.core.v1.GetProfileModelsResponse
+	14, // 23: wi.core.v1.AgentProfileService.ListDrivers:output_type -> wi.core.v1.ListDriversResponse
+	17, // [17:24] is the sub-list for method output_type
+	10, // [10:17] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_profiles_proto_init() }
@@ -880,7 +1068,7 @@ func file_wi_core_v1_profiles_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_profiles_proto_rawDesc), len(file_wi_core_v1_profiles_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

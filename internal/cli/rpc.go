@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"flag"
@@ -153,23 +152,6 @@ func rpcWaitJob(ctx context.Context, cfg Config, job *v1.Job, jsonOut bool) (*v1
 	for stream.Receive() {
 		latest = stream.Msg().Job
 		switch latest.State {
-		case v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL:
-			if jsonOut {
-				return latest, nil
-			}
-			fmt.Fprintf(cfg.Stderr, "%s\nPath: %s [y/N] ", latest.Approval.Question, latest.Approval.Path)
-			line, err := bufio.NewReader(cfg.Stdin).ReadString('\n')
-			if err != nil && !errors.Is(err, io.EOF) {
-				return latest, err
-			}
-			decision := v1.ApprovalDecision_APPROVAL_DECISION_DENY
-			if strings.EqualFold(strings.TrimSpace(line), "y") || strings.EqualFold(strings.TrimSpace(line), "yes") {
-				decision = v1.ApprovalDecision_APPROVAL_DECISION_ALLOW
-			}
-			_, err = cfg.API.Jobs.AnswerApproval(ctx, rpcRequest(cfg, &v1.AnswerApprovalRequest{JobId: latest.Id, ChallengeId: latest.Approval.ChallengeId, Decision: decision}))
-			if err != nil {
-				return latest, err
-			}
 		case v1.JobState_JOB_STATE_SUCCEEDED:
 			return latest, nil
 		case v1.JobState_JOB_STATE_FAILED, v1.JobState_JOB_STATE_CANCELLED:

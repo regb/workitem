@@ -43,7 +43,7 @@ func conversationOperationContext(ctx context.Context, r protocol.Request) (prot
 	c := r.Conversation
 	switch r.Operation {
 	case protocol.OperationConversationCapabilities:
-		result.Capabilities = &protocol.ConversationCapabilities{History: true, HistoryPaging: true, Title: true, Subagents: true}
+		result.Capabilities = &protocol.ConversationCapabilities{History: true, HistoryPaging: true, Subagents: true}
 	case protocol.OperationConversationHistory:
 		read := func() (protocol.History, error) { return ReadHistoryPage(ctx, c.Path, c.LeafID, c.BeforeID) }
 		if c.Subagent != "" {
@@ -54,16 +54,6 @@ func conversationOperationContext(ctx context.Context, r protocol.Request) (prot
 			return result, err
 		}
 		result.History = &history
-	case protocol.OperationConversationTitle:
-		config, err := parseConfig(r.Config)
-		if err != nil {
-			return result, err
-		}
-		title, err := GenerateTitle(ctx, config, c.Prompt)
-		if err != nil {
-			return result, err
-		}
-		result.Title = title
 	case protocol.OperationConversationCreate:
 		if c.ID == "" || strings.ContainsAny(c.ID, "/\\\x00\r\n") {
 			return result, fmt.Errorf("invalid conversation identity")

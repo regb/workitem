@@ -30,8 +30,8 @@ service JobService {
   // first message is the current state, so a late watcher misses nothing
   // that matters.
   rpc WatchJob(WatchJobRequest) returns (stream WatchJobResponse);
-  // AnswerApproval answers the question a waiting job asked; the job then
-  // continues or stops.
+  // AnswerApproval is kept for compatibility. No job waits for an approval
+  // any more, so it always fails with FAILED_PRECONDITION.
   rpc AnswerApproval(AnswerApprovalRequest) returns (AnswerApprovalResponse);
   // CancelJob asks a running job to stop. Steps already done are kept and
   // reported as its partial outcome.
@@ -43,7 +43,7 @@ enum JobState {
   JOB_STATE_UNSPECIFIED = 0;
   JOB_STATE_QUEUED = 1;
   JOB_STATE_RUNNING = 2;
-  // WAITING_FOR_APPROVAL pauses until AnswerApproval or the approval expires.
+  // WAITING_FOR_APPROVAL is no longer used: no job waits for an approval.
   JOB_STATE_WAITING_FOR_APPROVAL = 3;
   JOB_STATE_SUCCEEDED = 4;
   JOB_STATE_FAILED = 5;
@@ -66,6 +66,7 @@ message Job {
   string phase = 6;
   // log_tail is the end of the job's log, such as setup command output.
   string log_tail = 7;
+  // approval is no longer set: no job waits for an approval.
   Approval approval = 8;
   // error explains a failure; partial says what was kept.
   string error = 9;

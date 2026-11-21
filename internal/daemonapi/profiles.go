@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"reflect"
 	"sort"
 
 	"connectrpc.com/connect"
@@ -21,6 +23,9 @@ func profile(p model.AgentProfile) *v1.AgentProfile {
 func (s *Server) ListAgentProfiles(ctx context.Context, req *connect.Request[v1.ListAgentProfilesRequest]) (*connect.Response[v1.ListAgentProfilesResponse], error) {
 	value, err := s.Local.AgentProfiles(ctx)
 	out := &v1.ListAgentProfilesResponse{DefaultProfile: value.Default, Revision: uint32(value.Revision), Profiles: []*v1.AgentProfile{}}
+	if choice := value.TitleModel; choice != nil {
+		out.TitleModel = &v1.ModelChoice{Driver: choice.Driver, Model: choice.Model, Reasoning: choice.Reasoning}
+	}
 	for _, p := range value.Profiles {
 		row := profile(p)
 		row.Users = uint32(s.App.AgentProfileUsers(p.Name))
@@ -69,9 +74,6 @@ func (s *Server) PutAgentProfile(ctx context.Context, req *connect.Request[v1.Pu
 		}
 	}
 	result, err := s.Local.ChangeAgentProfile(ctx, coordinator.ChangeAgentProfileCommand{ExpectedRevision: expectedRevision(req.Msg.ExpectedRevision), Put: &value})
-	if err == nil {
-		s.Core.Database().NotifyAll()
-	}
 	return response(&v1.PutAgentProfileResponse{Profile: profile(value), Revision: uint32(result.Revision)}, err)
 }
 func (s *Server) DeleteAgentProfile(ctx context.Context, req *connect.Request[v1.DeleteAgentProfileRequest]) (*connect.Response[v1.DeleteAgentProfileResponse], error) {
@@ -89,9 +91,6 @@ func (s *Server) DeleteAgentProfile(ctx context.Context, req *connect.Request[v1
 		return response(&v1.DeleteAgentProfileResponse{Revision: uint32(current.Revision)}, nil)
 	}
 	value, err := s.Local.ChangeAgentProfile(ctx, coordinator.ChangeAgentProfileCommand{ExpectedRevision: expectedRevision(req.Msg.ExpectedRevision), Remove: req.Msg.Name})
-	if err == nil {
-		s.Core.Database().NotifyAll()
-	}
 	return response(&v1.DeleteAgentProfileResponse{Revision: uint32(value.Revision)}, err)
 }
 func (s *Server) SetDefaultAgentProfile(ctx context.Context, req *connect.Request[v1.SetDefaultAgentProfileRequest]) (*connect.Response[v1.SetDefaultAgentProfileResponse], error) {
@@ -106,10 +105,28 @@ func (s *Server) SetDefaultAgentProfile(ctx context.Context, req *connect.Reques
 		return response(&v1.SetDefaultAgentProfileResponse{Revision: uint32(current.Revision)}, nil)
 	}
 	value, err := s.Local.ChangeAgentProfile(ctx, coordinator.ChangeAgentProfileCommand{ExpectedRevision: expectedRevision(req.Msg.ExpectedRevision), Default: req.Msg.Name})
-	if err == nil {
-		s.Core.Database().NotifyAll()
-	}
 	return response(&v1.SetDefaultAgentProfileResponse{Revision: uint32(value.Revision)}, err)
+}
+func (s *Server) SetTitleModel(ctx context.Context, req *connect.Request[v1.SetTitleModelRequest]) (*connect.Response[v1.SetTitleModelResponse], error) {
+	current, err := s.profilesAt(ctx, req.Msg.ExpectedRevision)
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	var choice *model.ModelChoice
+	if m := req.Msg.Model; m != nil {
+		choice = &model.ModelChoice{Driver: m.Driver, Model: m.Model, Reasoning: m.Reasoning}
+		if err := choice.Validate(); err != nil {
+			return nil, invalid(err.Error())
+		}
+		if _, known := s.Config.Drivers[choice.Driver]; !known {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("driver %q not found", choice.Driver))
+		}
+	}
+	if reflect.DeepEqual(current.TitleModel, choice) {
+		return response(&v1.SetTitleModelResponse{Revision: uint32(current.Revision)}, nil)
+	}
+	value, err := s.Local.ChangeAgentProfile(ctx, coordinator.ChangeAgentProfileCommand{ExpectedRevision: expectedRevision(req.Msg.ExpectedRevision), SetTitleModel: true, TitleModel: choice})
+	return response(&v1.SetTitleModelResponse{Revision: uint32(value.Revision)}, err)
 }
 func (s *Server) ListDrivers(ctx context.Context, req *connect.Request[v1.ListDriversRequest]) (*connect.Response[v1.ListDriversResponse], error) {
 	out := &v1.ListDriversResponse{Drivers: []*v1.Driver{}}

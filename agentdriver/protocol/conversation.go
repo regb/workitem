@@ -16,7 +16,6 @@ const (
 	OperationConversationDecode       = "conversation.decode"
 	OperationConversationHistory      = "conversation.history"
 	OperationConversationCapabilities = "conversation.capabilities"
-	OperationConversationTitle        = "conversation.title"
 )
 
 type Request struct {
@@ -27,6 +26,7 @@ type Request struct {
 	Config          json.RawMessage      `json:"config,omitempty"`
 	Launch          *LaunchRequest       `json:"launch,omitempty"`
 	Conversation    *ConversationRequest `json:"conversation,omitempty"`
+	Invoke          *ModelInvokeRequest  `json:"invoke,omitempty"`
 }
 
 type Response struct {
@@ -37,6 +37,7 @@ type Response struct {
 	ConfigDiscovery  *ConfigDiscoveryResult  `json:"config_discovery,omitempty"`
 	RuntimeModes     *RuntimeModes           `json:"runtime_modes,omitempty"`
 	ModelCatalog     *ModelCatalog           `json:"model_catalog,omitempty"`
+	Invoke           *ModelInvokeResult      `json:"invoke,omitempty"`
 	Error            string                  `json:"error,omitempty"`
 }
 
@@ -86,14 +87,12 @@ type ConversationRequest struct {
 type ConversationCapabilities struct {
 	HistoryPaging bool `json:"history_paging,omitempty"`
 	History       bool `json:"history"`
-	Title         bool `json:"title"`
 	// Subagents means history can read a subagent's conversation.
 	Subagents bool `json:"subagents,omitempty"`
 }
 
 type ConversationResponse struct {
 	Capabilities *ConversationCapabilities `json:"capabilities,omitempty"`
-	Title        string                    `json:"title,omitempty"`
 	History      *History                  `json:"history,omitempty"`
 	Conversation Conversation              `json:"conversation,omitempty"`
 	CWD          string                    `json:"cwd,omitempty"`

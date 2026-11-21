@@ -135,27 +135,33 @@ func TestQuotaAndFailuresAreFacts(t *testing.T) {
 	}
 }
 
-func TestTitleIsAOneShotPrintRequest(t *testing.T) {
+func TestInvokeIsAOneShotPrintRequest(t *testing.T) {
 	dir := t.TempDir()
 	args := filepath.Join(dir, "args")
 	agy := filepath.Join(dir, "agy")
-	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > " + args + "\nenv | grep -c '^WI_' >> " + args + "\necho 'Title: \"Summarize the README\"'\n"
+	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > " + args + "\nenv | grep -c '^WI_' >> " + args + "\necho '  The answer  '\n"
 	if err := os.WriteFile(agy, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("WI_ITEM_ID", "secret-item")
-	title, err := GenerateTitle(context.Background(), Config{Executable: agy, Model: "gemini-4-neon", Reasoning: "high"}, "-what does the readme say")
-	if err != nil || title != "Summarize the README" {
-		t.Fatalf("title %q %v", title, err)
+	answer, err := Invoke(context.Background(), Config{Executable: agy, Model: "gemini-4-neon", Reasoning: "minimal"}, protocol.ModelInvokeRequest{Instructions: "Be brief.", Prompt: "-what does the readme say"})
+	if err != nil || answer != "The answer" {
+		t.Fatalf("answer %q %v", answer, err)
 	}
 	got, _ := os.ReadFile(args)
-	if !strings.Contains(string(got), "--model\ngemini-4-neon\n") || strings.Contains(string(got), "--effort") || !strings.Contains(string(got), "--print="+protocol.TitleSystemPrompt) || !strings.Contains(string(got), "<task>\n-what does the readme say\n</task>") || !strings.HasSuffix(string(got), "\n0\n") {
+	if !strings.Contains(string(got), "--model\ngemini-4-neon\n") || strings.Contains(string(got), "--effort") || !strings.Contains(string(got), "--print=Be brief.\n\n-what does the readme say\n") || !strings.HasSuffix(string(got), "\n0\n") {
+		t.Fatalf("agy arguments:\n%s", got)
+	}
+	if _, err := Invoke(context.Background(), Config{Executable: agy, Reasoning: "high"}, protocol.ModelInvokeRequest{Prompt: "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(args); !strings.Contains(string(got), "--effort\nhigh\n") {
 		t.Fatalf("agy arguments:\n%s", got)
 	}
 
 	failing := filepath.Join(dir, "failing")
 	os.WriteFile(failing, []byte("#!/bin/sh\necho 'error: not signed in' >&2\nexit 1\n"), 0700)
-	if _, err := GenerateTitle(context.Background(), Config{Executable: failing}, "task"); err == nil || !strings.Contains(err.Error(), "not signed in") {
+	if _, err := Invoke(context.Background(), Config{Executable: failing}, protocol.ModelInvokeRequest{Prompt: "task"}); err == nil || !strings.Contains(err.Error(), "not signed in") {
 		t.Fatalf("failure: %v", err)
 	}
 }

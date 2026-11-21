@@ -2443,3 +2443,11 @@ func repoInfo(t *testing.T) model.RepositoryInfo {
 		Commit: commit,
 	}
 }
+
+func (fakeConversationBackend) InvokeModel(context.Context, string, json.RawMessage, driverprotocol.ModelInvokeRequest) (string, error) {
+	return "Generated title", nil
+}
+
+func (*fakePi) InvokeModel(context.Context, string, json.RawMessage, driverprotocol.ModelInvokeRequest) (string, error) {
+	return "Generated title", nil
+}

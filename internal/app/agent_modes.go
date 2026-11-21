@@ -25,9 +25,10 @@ func legacyRuntimeModes() driverprotocol.RuntimeModes {
 	}}
 }
 
-// runtimeModesCache keeps each profile's answer for the life of the process.
-// Profile configuration only changes on restart, and control is planned on
-// every conversation refresh, so asking the driver each time would be costly.
+// runtimeModesCache keeps each profile's answer, keyed by the profile and the
+// config it was asked with, so an edited profile is asked again. Control is
+// planned on every conversation refresh, so asking the driver each time would
+// be costly. A failed request is not kept: the next one asks again.
 type runtimeModesCache struct {
 	mu    sync.Mutex
 	modes map[string]driverprotocol.RuntimeModes
@@ -46,20 +47,25 @@ func (a *App) AgentRuntimeModes(ctx context.Context, name string) driverprotocol
 	if cache.modes == nil {
 		cache.modes = map[string]driverprotocol.RuntimeModes{}
 	}
-	if modes, ok := cache.modes[name]; ok {
+	definition := a.Agents()[name]
+	raw, err := a.driverConfigJSON(definition)
+	if err != nil {
+		return legacyRuntimeModes()
+	}
+	key := name + "\x00" + definition.Driver + "\x00" + string(raw)
+	if modes, ok := cache.modes[key]; ok {
 		return modes
 	}
-	modes := legacyRuntimeModes()
-	definition := a.Agents()[name]
-	if reporter, ok := a.ConversationBackends[definition.Driver].(RuntimeModesReporter); ok {
-		if raw, err := a.driverConfigJSON(definition); err == nil {
-			if reported, err := reporter.RuntimeModes(ctx, name, raw); err == nil {
-				modes = reported
-			}
-		}
+	reporter, ok := a.ConversationBackends[definition.Driver].(RuntimeModesReporter)
+	if !ok {
+		return legacyRuntimeModes()
 	}
-	cache.modes[name] = modes
-	return modes
+	reported, err := reporter.RuntimeModes(ctx, name, raw)
+	if err != nil {
+		return legacyRuntimeModes()
+	}
+	cache.modes[key] = reported
+	return reported
 }
 
 // controlMode chooses the runtime mode that gives a holder its channel: a

@@ -29,7 +29,7 @@ const (
 	JobState_JOB_STATE_UNSPECIFIED JobState = 0
 	JobState_JOB_STATE_QUEUED      JobState = 1
 	JobState_JOB_STATE_RUNNING     JobState = 2
-	// WAITING_FOR_APPROVAL pauses until AnswerApproval or the approval expires.
+	// WAITING_FOR_APPROVAL is no longer used: no job waits for an approval.
 	JobState_JOB_STATE_WAITING_FOR_APPROVAL JobState = 3
 	JobState_JOB_STATE_SUCCEEDED            JobState = 4
 	JobState_JOB_STATE_FAILED               JobState = 5
@@ -101,7 +101,8 @@ type Job struct {
 	// checkout" or "starting the agent".
 	Phase string `protobuf:"bytes,6,opt,name=phase,proto3" json:"phase,omitempty"`
 	// log_tail is the end of the job's log, such as setup command output.
-	LogTail  string    `protobuf:"bytes,7,opt,name=log_tail,json=logTail,proto3" json:"log_tail,omitempty"`
+	LogTail string `protobuf:"bytes,7,opt,name=log_tail,json=logTail,proto3" json:"log_tail,omitempty"`
+	// approval is no longer set: no job waits for an approval.
 	Approval *Approval `protobuf:"bytes,8,opt,name=approval,proto3" json:"approval,omitempty"`
 	// error explains a failure; partial says what was kept.
 	Error         string                 `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`

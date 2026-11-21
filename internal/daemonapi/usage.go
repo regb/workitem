@@ -28,6 +28,11 @@ const (
 	usageTick = 30 * time.Second
 	// usageTimeout bounds one run of the usage plugin.
 	usageTimeout = 2 * time.Minute
+	// usageFresh is how long a read reuses the daemon's last result before
+	// reading the plugin again. The plugin keeps the one cache, on disk, and
+	// serves a read from it without asking the providers, so the daemon is
+	// never further behind than `wi usage`.
+	usageFresh = 20 * time.Second
 )
 
 // usageState is the daemon's last usage result and the check in progress.
@@ -52,13 +57,13 @@ func (s *Server) noteActivity() { s.usage.lastActivity.Store(time.Now().Unix()) 
 func (s *Server) GetUsage(ctx context.Context, req *connect.Request[v1.GetUsageRequest]) (*connect.Response[v1.GetUsageResponse], error) {
 	u := &s.usage
 	u.mu.Lock()
-	first := u.result == nil
+	stale := u.result == nil || time.Since(u.checkedAt) > usageFresh
 	var done chan struct{}
-	if req.Msg.Refresh || first {
+	if req.Msg.Refresh || stale {
 		done = s.startUsageCheck(req.Msg.Refresh)
 	}
 	u.mu.Unlock()
-	if done != nil && (req.Msg.Wait || first) {
+	if done != nil && (req.Msg.Wait || stale) {
 		select {
 		case <-done:
 		case <-ctx.Done():

@@ -53,3 +53,34 @@ func TestSchedulesAreStoredEditedAndAdvancedOnce(t *testing.T) {
 		t.Fatal("deleted twice")
 	}
 }
+
+func TestScheduleAndProfileWritesWakeChangeReaders(t *testing.T) {
+	db, err := OpenDatabase(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	before, _ := db.ChangesSnapshot("", 0)
+	revision := before.Revision
+	advanced := func(what string) {
+		t.Helper()
+		now, _ := db.ChangesSnapshot(before.Epoch, revision)
+		if now.Revision <= revision || !now.All {
+			t.Fatalf("%s did not wake change readers: %+v", what, now)
+		}
+		revision = now.Revision
+	}
+	created, err := db.PutSchedule(model.Schedule{RepositoryID: "r", Cron: "0 9 * * *", Prompt: "p", AgentProfile: "a", Enabled: true}, 0, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	advanced("adding a schedule")
+	if err := db.DeleteSchedule(created.ID); err != nil {
+		t.Fatal(err)
+	}
+	advanced("deleting a schedule")
+	if _, err := db.ChangeAgentProfile(ChangeAgentProfileCommand{SetTitleModel: true, TitleModel: &model.ModelChoice{Driver: "claude", Model: "haiku"}}); err != nil {
+		t.Fatal(err)
+	}
+	advanced("setting the title model")
+}

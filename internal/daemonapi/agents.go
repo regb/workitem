@@ -546,7 +546,12 @@ func (s *Server) SuggestTitle(ctx context.Context, req *connect.Request[v1.Sugge
 		}
 		description = shown.Msg.Description
 	}
-	title, err := s.App.GenerateItemTitle(ctx, resolve(req.Msg.ItemId), description)
+	// A suggestion falls back to the description's first line when the
+	// model fails; only no title at all is an error.
+	title, err := s.App.GenerateTitle(ctx, description)
+	if title != "" {
+		err = nil
+	}
 	return response(&v1.SuggestTitleResponse{Title: title}, err)
 }
 func subagent(s *driver.HistorySubagent) *v1.SubagentRef {

@@ -92,7 +92,7 @@ func (d *Database) PutSchedule(value model.Schedule, expectedRevision uint32, no
 	labels, _ := model.NormalizeLabels(value.Labels)
 	value.Labels = labels
 	var result model.Schedule
-	err := d.db.Update(func(tx *bolt.Tx) error {
+	err := d.updateNotify(func(tx *bolt.Tx) error {
 		bucket, err := scheduleBucket(tx)
 		if err != nil {
 			return err
@@ -132,7 +132,7 @@ func (d *Database) PutSchedule(value model.Schedule, expectedRevision uint32, no
 
 // DeleteSchedule removes a schedule. Items it started are unaffected.
 func (d *Database) DeleteSchedule(id string) error {
-	return d.db.Update(func(tx *bolt.Tx) error {
+	return d.updateNotify(func(tx *bolt.Tx) error {
 		bucket, err := scheduleBucket(tx)
 		if err != nil {
 			return err
@@ -153,7 +153,7 @@ func (d *Database) DeleteSchedule(id string) error {
 func (d *Database) AdvanceSchedule(id string, due, now time.Time) (model.Schedule, bool, error) {
 	var result model.Schedule
 	taken := false
-	err := d.db.Update(func(tx *bolt.Tx) error {
+	err := d.updateNotify(func(tx *bolt.Tx) error {
 		bucket, err := scheduleBucket(tx)
 		if err != nil {
 			return err
@@ -172,7 +172,7 @@ func (d *Database) AdvanceSchedule(id string, due, now time.Time) (model.Schedul
 
 // RecordScheduleRun records the outcome of a firing.
 func (d *Database) RecordScheduleRun(id string, at time.Time, itemID, failure string) error {
-	return d.db.Update(func(tx *bolt.Tx) error {
+	return d.updateNotify(func(tx *bolt.Tx) error {
 		bucket, err := scheduleBucket(tx)
 		if err != nil {
 			return err

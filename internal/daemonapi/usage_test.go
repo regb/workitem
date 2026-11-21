@@ -144,3 +144,27 @@ func TestBackgroundUsageChecksRunOnlyWhileTheAPIIsInUse(t *testing.T) {
 		t.Fatalf("stale result not renewed: %d", fake.count())
 	}
 }
+
+func TestAnOldUsageResultIsReadAgain(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	fake := &fakeUsage{}
+	f.api.usage.run = fake.run
+	get := func() *v1.GetUsageResponse {
+		t.Helper()
+		value, err := f.clients.System.GetUsage(ctx, connect.NewRequest(&v1.GetUsageRequest{}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value.Msg
+	}
+	get()
+	// A result older than usageFresh is read again from the plugin, whose
+	// own cache answers, so the page shows what `wi usage` shows.
+	f.api.usage.mu.Lock()
+	f.api.usage.checkedAt = time.Now().Add(-usageFresh - time.Second)
+	f.api.usage.mu.Unlock()
+	if again := get(); again.Quotas[0].Account != "2" || fake.count() != 2 || fake.refresh[1] {
+		t.Fatalf("old result reused: %v runs=%d refresh=%v", again, fake.count(), fake.refresh)
+	}
+}

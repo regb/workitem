@@ -86,6 +86,16 @@ func Run(ctx context.Context) error {
 		}
 		return reply(protocol.Response{ProtocolVersion: protocol.Version, ModelCatalog: &catalog})
 	}
+	if request.Operation == protocol.OperationModelInvoke {
+		if request.Invoke == nil {
+			return fail(fmt.Errorf("model.invoke needs a request"))
+		}
+		text, err := Invoke(ctx, config, *request.Invoke)
+		if err != nil {
+			return fail(err)
+		}
+		return reply(protocol.Response{ProtocolVersion: protocol.Version, Invoke: &protocol.ModelInvokeResult{Text: text}})
+	}
 	if request.Operation == protocol.OperationRuntimeModes {
 		modes := RuntimeModes()
 		return reply(protocol.Response{ProtocolVersion: protocol.Version, RuntimeModes: &modes})

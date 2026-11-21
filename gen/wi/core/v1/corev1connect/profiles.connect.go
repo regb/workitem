@@ -45,6 +45,9 @@ const (
 	// AgentProfileServiceSetDefaultAgentProfileProcedure is the fully-qualified name of the
 	// AgentProfileService's SetDefaultAgentProfile RPC.
 	AgentProfileServiceSetDefaultAgentProfileProcedure = "/wi.core.v1.AgentProfileService/SetDefaultAgentProfile"
+	// AgentProfileServiceSetTitleModelProcedure is the fully-qualified name of the
+	// AgentProfileService's SetTitleModel RPC.
+	AgentProfileServiceSetTitleModelProcedure = "/wi.core.v1.AgentProfileService/SetTitleModel"
 	// AgentProfileServiceGetProfileModelsProcedure is the fully-qualified name of the
 	// AgentProfileService's GetProfileModels RPC.
 	AgentProfileServiceGetProfileModelsProcedure = "/wi.core.v1.AgentProfileService/GetProfileModels"
@@ -63,6 +66,10 @@ type AgentProfileServiceClient interface {
 	// using it keep its name and ask to move when they next start.
 	DeleteAgentProfile(context.Context, *connect.Request[v1.DeleteAgentProfileRequest]) (*connect.Response[v1.DeleteAgentProfileResponse], error)
 	SetDefaultAgentProfile(context.Context, *connect.Request[v1.SetDefaultAgentProfileRequest]) (*connect.Response[v1.SetDefaultAgentProfileResponse], error)
+	// SetTitleModel sets the model that writes item titles, or clears it so
+	// the default profile's model does. It is a bare model, called without
+	// tools, workspace or conversation, whatever agent an item uses.
+	SetTitleModel(context.Context, *connect.Request[v1.SetTitleModelRequest]) (*connect.Response[v1.SetTitleModelResponse], error)
 	// GetProfileModels lists the models and reasoning levels a profile's agent
 	// offers, with the profile's own model and reasoning, so a client can
 	// choose them for a new item, which takes them as agent_settings.
@@ -107,6 +114,12 @@ func NewAgentProfileServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(agentProfileServiceMethods.ByName("SetDefaultAgentProfile")),
 			connect.WithClientOptions(opts...),
 		),
+		setTitleModel: connect.NewClient[v1.SetTitleModelRequest, v1.SetTitleModelResponse](
+			httpClient,
+			baseURL+AgentProfileServiceSetTitleModelProcedure,
+			connect.WithSchema(agentProfileServiceMethods.ByName("SetTitleModel")),
+			connect.WithClientOptions(opts...),
+		),
 		getProfileModels: connect.NewClient[v1.GetProfileModelsRequest, v1.GetProfileModelsResponse](
 			httpClient,
 			baseURL+AgentProfileServiceGetProfileModelsProcedure,
@@ -130,6 +143,7 @@ type agentProfileServiceClient struct {
 	putAgentProfile        *connect.Client[v1.PutAgentProfileRequest, v1.PutAgentProfileResponse]
 	deleteAgentProfile     *connect.Client[v1.DeleteAgentProfileRequest, v1.DeleteAgentProfileResponse]
 	setDefaultAgentProfile *connect.Client[v1.SetDefaultAgentProfileRequest, v1.SetDefaultAgentProfileResponse]
+	setTitleModel          *connect.Client[v1.SetTitleModelRequest, v1.SetTitleModelResponse]
 	getProfileModels       *connect.Client[v1.GetProfileModelsRequest, v1.GetProfileModelsResponse]
 	listDrivers            *connect.Client[v1.ListDriversRequest, v1.ListDriversResponse]
 }
@@ -154,6 +168,11 @@ func (c *agentProfileServiceClient) SetDefaultAgentProfile(ctx context.Context, 
 	return c.setDefaultAgentProfile.CallUnary(ctx, req)
 }
 
+// SetTitleModel calls wi.core.v1.AgentProfileService.SetTitleModel.
+func (c *agentProfileServiceClient) SetTitleModel(ctx context.Context, req *connect.Request[v1.SetTitleModelRequest]) (*connect.Response[v1.SetTitleModelResponse], error) {
+	return c.setTitleModel.CallUnary(ctx, req)
+}
+
 // GetProfileModels calls wi.core.v1.AgentProfileService.GetProfileModels.
 func (c *agentProfileServiceClient) GetProfileModels(ctx context.Context, req *connect.Request[v1.GetProfileModelsRequest]) (*connect.Response[v1.GetProfileModelsResponse], error) {
 	return c.getProfileModels.CallUnary(ctx, req)
@@ -174,6 +193,10 @@ type AgentProfileServiceHandler interface {
 	// using it keep its name and ask to move when they next start.
 	DeleteAgentProfile(context.Context, *connect.Request[v1.DeleteAgentProfileRequest]) (*connect.Response[v1.DeleteAgentProfileResponse], error)
 	SetDefaultAgentProfile(context.Context, *connect.Request[v1.SetDefaultAgentProfileRequest]) (*connect.Response[v1.SetDefaultAgentProfileResponse], error)
+	// SetTitleModel sets the model that writes item titles, or clears it so
+	// the default profile's model does. It is a bare model, called without
+	// tools, workspace or conversation, whatever agent an item uses.
+	SetTitleModel(context.Context, *connect.Request[v1.SetTitleModelRequest]) (*connect.Response[v1.SetTitleModelResponse], error)
 	// GetProfileModels lists the models and reasoning levels a profile's agent
 	// offers, with the profile's own model and reasoning, so a client can
 	// choose them for a new item, which takes them as agent_settings.
@@ -214,6 +237,12 @@ func NewAgentProfileServiceHandler(svc AgentProfileServiceHandler, opts ...conne
 		connect.WithSchema(agentProfileServiceMethods.ByName("SetDefaultAgentProfile")),
 		connect.WithHandlerOptions(opts...),
 	)
+	agentProfileServiceSetTitleModelHandler := connect.NewUnaryHandler(
+		AgentProfileServiceSetTitleModelProcedure,
+		svc.SetTitleModel,
+		connect.WithSchema(agentProfileServiceMethods.ByName("SetTitleModel")),
+		connect.WithHandlerOptions(opts...),
+	)
 	agentProfileServiceGetProfileModelsHandler := connect.NewUnaryHandler(
 		AgentProfileServiceGetProfileModelsProcedure,
 		svc.GetProfileModels,
@@ -238,6 +267,8 @@ func NewAgentProfileServiceHandler(svc AgentProfileServiceHandler, opts ...conne
 			agentProfileServiceDeleteAgentProfileHandler.ServeHTTP(w, r)
 		case AgentProfileServiceSetDefaultAgentProfileProcedure:
 			agentProfileServiceSetDefaultAgentProfileHandler.ServeHTTP(w, r)
+		case AgentProfileServiceSetTitleModelProcedure:
+			agentProfileServiceSetTitleModelHandler.ServeHTTP(w, r)
 		case AgentProfileServiceGetProfileModelsProcedure:
 			agentProfileServiceGetProfileModelsHandler.ServeHTTP(w, r)
 		case AgentProfileServiceListDriversProcedure:
@@ -265,6 +296,10 @@ func (UnimplementedAgentProfileServiceHandler) DeleteAgentProfile(context.Contex
 
 func (UnimplementedAgentProfileServiceHandler) SetDefaultAgentProfile(context.Context, *connect.Request[v1.SetDefaultAgentProfileRequest]) (*connect.Response[v1.SetDefaultAgentProfileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.AgentProfileService.SetDefaultAgentProfile is not implemented"))
+}
+
+func (UnimplementedAgentProfileServiceHandler) SetTitleModel(context.Context, *connect.Request[v1.SetTitleModelRequest]) (*connect.Response[v1.SetTitleModelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.AgentProfileService.SetTitleModel is not implemented"))
 }
 
 func (UnimplementedAgentProfileServiceHandler) GetProfileModels(context.Context, *connect.Request[v1.GetProfileModelsRequest]) (*connect.Response[v1.GetProfileModelsResponse], error) {

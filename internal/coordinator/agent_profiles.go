@@ -28,6 +28,10 @@ type ChangeAgentProfileCommand struct {
 	Put              *model.AgentProfile `json:"put,omitempty"`
 	Remove           string              `json:"remove,omitempty"`
 	Default          string              `json:"default,omitempty"`
+	// SetTitleModel sets the title model to TitleModel, or clears it when
+	// TitleModel is nil.
+	SetTitleModel bool               `json:"set_title_model,omitempty"`
+	TitleModel    *model.ModelChoice `json:"title_model,omitempty"`
 }
 
 func (c *Client) AgentProfiles(ctx context.Context) (model.AgentProfiles, error) {
@@ -74,13 +78,18 @@ func (d *Database) AgentProfiles() (model.AgentProfiles, error) {
 // The first profile added becomes the default.
 func (d *Database) ChangeAgentProfile(command ChangeAgentProfileCommand) (model.AgentProfiles, error) {
 	changes := 0
-	for _, set := range []bool{command.Put != nil, command.Remove != "", command.Default != ""} {
+	for _, set := range []bool{command.Put != nil, command.Remove != "", command.Default != "", command.SetTitleModel} {
 		if set {
 			changes++
 		}
 	}
 	if changes != 1 {
-		return model.AgentProfiles{}, fmt.Errorf("an agent profile change adds or replaces, removes, or sets the default profile")
+		return model.AgentProfiles{}, fmt.Errorf("an agent profile change adds or replaces, removes, sets the default profile, or sets the title model")
+	}
+	if command.TitleModel != nil {
+		if err := command.TitleModel.Validate(); err != nil {
+			return model.AgentProfiles{}, err
+		}
 	}
 	if command.Put != nil {
 		if err := command.Put.Validate(); err != nil {
@@ -88,7 +97,7 @@ func (d *Database) ChangeAgentProfile(command ChangeAgentProfileCommand) (model.
 		}
 	}
 	var result model.AgentProfiles
-	err := d.db.Update(func(tx *bolt.Tx) error {
+	err := d.updateNotify(func(tx *bolt.Tx) error {
 		profiles, err := readAgentProfilesTx(tx)
 		if err != nil {
 			return err
@@ -124,6 +133,9 @@ func (d *Database) ChangeAgentProfile(command ChangeAgentProfileCommand) (model.
 			if profiles.Default == name {
 				profiles.Default = ""
 			}
+		case command.SetTitleModel:
+			name, action = "", "title_model"
+			profiles.TitleModel = command.TitleModel
 		default:
 			name, action = command.Default, "default"
 			if _, ok := profiles.Find(name); !ok {

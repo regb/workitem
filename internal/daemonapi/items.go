@@ -91,9 +91,11 @@ func (s *Server) CreateItem(ctx context.Context, req *connect.Request[v1.CreateI
 	}
 	if r.GenerateTitle {
 		s.startJob("suggest_title", created.Manifest.ID, r.RepositoryId, func(ctx context.Context, _ *jobRun) error {
-			title, err := s.App.GenerateItemTitle(ctx, resolve(created.Manifest.ID), r.Description)
-			if err != nil {
-				return err
+			// A model failure still yields the description's first line;
+			// the job then records why the model did not title the item.
+			title, generated := s.App.GenerateTitle(ctx, r.Description)
+			if title == "" {
+				return generated
 			}
 			unlock := s.lock(created.Manifest.ID)
 			defer unlock()
@@ -108,8 +110,10 @@ func (s *Server) CreateItem(ctx context.Context, req *connect.Request[v1.CreateI
 			if current.Manifest.Title != prepared.Manifest.Title || description != r.Description {
 				return nil
 			}
-			_, err = s.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: created.Manifest.ID, ExpectedRevision: uint32(current.Revision), Title: &title}))
-			return err
+			if _, err = s.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: created.Manifest.ID, ExpectedRevision: uint32(current.Revision), Title: &title})); err != nil {
+				return err
+			}
+			return generated
 		})
 	}
 	value, err := s.item(ctx, created.Manifest.ID)

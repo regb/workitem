@@ -12,17 +12,13 @@ func handleConversationOperation(ctx context.Context, envelope driverprotocol.Re
 	if request == nil {
 		return driverprotocol.ConversationResponse{}, fmt.Errorf("conversation request is required")
 	}
-	config, err := parseConfig(envelope.Config)
-	if err != nil {
+	if _, err := parseConfig(envelope.Config); err != nil {
 		return driverprotocol.ConversationResponse{}, fmt.Errorf("invalid Pi configuration: %w", err)
 	}
 	client := New("pi")
 	switch envelope.Operation {
 	case driverprotocol.OperationConversationCapabilities:
-		return driverprotocol.ConversationResponse{Capabilities: &driverprotocol.ConversationCapabilities{History: true, HistoryPaging: true, Title: true}}, nil
-	case driverprotocol.OperationConversationTitle:
-		title, err := GenerateTitle(ctx, config, request.Prompt)
-		return driverprotocol.ConversationResponse{Title: title}, err
+		return driverprotocol.ConversationResponse{Capabilities: &driverprotocol.ConversationCapabilities{History: true, HistoryPaging: true}}, nil
 	case driverprotocol.OperationConversationCreate:
 		conversation := client.NewConversation(request.ID)
 		return driverprotocol.ConversationResponse{Conversation: driverprotocol.Conversation{ID: conversation.ID, Locator: conversation.NativeLocator(), Format: conversation.Format}}, nil

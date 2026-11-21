@@ -62,6 +62,20 @@ func Run(ctx context.Context) error {
 		}
 		return reply(driverprotocol.Response{ProtocolVersion: driverprotocol.Version, ModelCatalog: &catalog})
 	}
+	if request.Operation == driverprotocol.OperationModelInvoke {
+		config, err := parseConfig(request.Config)
+		if err != nil {
+			return respondError(fmt.Errorf("invalid Pi configuration: %w", err))
+		}
+		if request.Invoke == nil {
+			return respondError(fmt.Errorf("model.invoke needs a request"))
+		}
+		text, err := Invoke(ctx, config, *request.Invoke)
+		if err != nil {
+			return respondError(err)
+		}
+		return reply(driverprotocol.Response{ProtocolVersion: driverprotocol.Version, Invoke: &driverprotocol.ModelInvokeResult{Text: text}})
+	}
 	if request.Operation == driverprotocol.OperationRuntimeModes {
 		if _, err := parseConfig(request.Config); err != nil {
 			return respondError(fmt.Errorf("invalid Pi configuration: %w", err))

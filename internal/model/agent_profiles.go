@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strings"
 )
 
 // AgentProfile names a coding agent setup: a driver and the settings it
@@ -24,6 +25,31 @@ type AgentProfiles struct {
 	Revision uint64         `json:"revision"`
 	Default  string         `json:"default"`
 	Profiles []AgentProfile `json:"profiles"`
+	// TitleModel is the model that writes item titles; without it the
+	// default profile's model does.
+	TitleModel *ModelChoice `json:"title_model,omitempty"`
+}
+
+// ModelChoice names a model by the driver that runs it, with a reasoning
+// level; empty fields take the driver's defaults. It is a bare model, not an
+// agent setup: wi calls it without tools, workspace or conversation.
+type ModelChoice struct {
+	Driver    string `json:"driver"`
+	Model     string `json:"model,omitempty"`
+	Reasoning string `json:"reasoning,omitempty"`
+}
+
+// Validate checks a choice has a driver and short single-line values.
+func (c ModelChoice) Validate() error {
+	if c.Driver == "" || len(c.Driver) > 64 {
+		return fmt.Errorf("a model choice needs a driver")
+	}
+	for _, value := range []string{c.Driver, c.Model, c.Reasoning} {
+		if len(value) > 200 || strings.ContainsAny(value, "\r\n\x00") {
+			return fmt.Errorf("invalid model choice")
+		}
+	}
+	return nil
 }
 
 var agentProfileName = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)

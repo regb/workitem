@@ -28,7 +28,6 @@ type jobRun struct {
 	key        string
 	value      *v1.Job
 	notify     chan struct{}
-	answer     chan v1.ApprovalDecision
 	cancel     context.CancelFunc
 	save       func(*v1.Job) error
 	persistErr error
@@ -288,27 +287,11 @@ func (s *Server) WatchJob(ctx context.Context, req *connect.Request[v1.WatchJobR
 		}
 	}
 }
-func (s *Server) AnswerApproval(ctx context.Context, req *connect.Request[v1.AnswerApprovalRequest]) (*connect.Response[v1.AnswerApprovalResponse], error) {
-	if req.Msg.Decision != v1.ApprovalDecision_APPROVAL_DECISION_ALLOW && req.Msg.Decision != v1.ApprovalDecision_APPROVAL_DECISION_DENY {
-		return nil, invalid("approval decision is required")
-	}
-	job, err := s.jobs.get(req.Msg.JobId)
-	if err != nil {
-		return nil, err
-	}
-	job.mu.Lock()
-	defer job.mu.Unlock()
-	approval := job.value.Approval
-	if approval == nil || job.answer == nil || approval.ChallengeId != req.Msg.ChallengeId || !approval.ExpiresAt.AsTime().After(time.Now()) {
-		return nil, aborted("approval challenge is stale or expired")
-	}
-	select {
-	case job.answer <- req.Msg.Decision:
-		job.answer = nil
-	default:
-		return nil, aborted("approval challenge was already answered")
-	}
-	return response(&v1.AnswerApprovalResponse{Job: proto.Clone(job.value).(*v1.Job)}, nil)
+
+// AnswerApproval remains in the API for compatibility: no job pauses for an
+// approval any more, so there is never a challenge to answer.
+func (s *Server) AnswerApproval(context.Context, *connect.Request[v1.AnswerApprovalRequest]) (*connect.Response[v1.AnswerApprovalResponse], error) {
+	return nil, precondition("no job is waiting for an approval")
 }
 func (s *Server) CancelJob(ctx context.Context, req *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {
 	job, err := s.jobs.get(req.Msg.JobId)

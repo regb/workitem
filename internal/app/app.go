@@ -69,6 +69,9 @@ type ConversationBackend interface {
 	ConversationCWD(ctx context.Context, path string) (string, error)
 	ForkConversation(ctx context.Context, sourcePath, targetPath, targetCWD string) error
 	ObserveConversation(ctx context.Context, conversation model.Conversation, path string, now time.Time) (driverprotocol.ConversationObservation, []string, error)
+	// InvokeModel sends one prompt to the model the config names: a bare
+	// model call, without tools, workspace or conversation.
+	InvokeModel(ctx context.Context, agent string, config json.RawMessage, request driverprotocol.ModelInvokeRequest) (string, error)
 }
 
 type Store interface {

@@ -184,6 +184,8 @@ func (Backend) ObserveConversation(_ context.Context, _ model.Conversation, path
 	status, warnings := pi.ObserveConversationPath(path, now)
 	return status, warnings, nil
 }
-func (Backend) GenerateTitle(context.Context, string, string, json.RawMessage) (string, error) {
+
+// InvokeModel answers like a model asked for a title.
+func (Backend) InvokeModel(context.Context, string, json.RawMessage, driver.ModelInvokeRequest) (string, error) {
 	return "Suggested title", nil
 }
