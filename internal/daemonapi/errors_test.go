@@ -30,3 +30,19 @@ func TestErrorCodesComeFromKinds(t *testing.T) {
 		}
 	}
 }
+
+// A partial outcome lists only steps that completed: an operation that did
+// nothing reports a plain error, and warnings never count as steps.
+func TestPartialOutcomesListOnlyCompletedSteps(t *testing.T) {
+	var ce *connect.Error
+	if errors.As(partial(apperr.Stalef("revision moved"), "item"), &ce) && len(ce.Details()) != 0 {
+		t.Fatalf("nothing completed, yet a partial outcome: %v", ce.Details())
+	}
+	if !errors.As(partial(errors.New("setup failed"), "item", "claimed workspace"), &ce) || len(ce.Details()) != 1 {
+		t.Fatal("completed step not reported")
+	}
+	err := withWarnings(apperr.Stalef("agent busy"), []string{"terminal attached"})
+	if !errors.Is(err, apperr.Stale) || err.Error() != "agent busy (terminal attached)" || withWarnings(err, nil) != err {
+		t.Fatalf("%v", err)
+	}
+}

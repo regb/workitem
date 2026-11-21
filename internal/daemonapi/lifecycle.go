@@ -2,6 +2,8 @@ package daemonapi
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -24,7 +26,10 @@ func (s *Server) startItem(ctx context.Context, itemID string, options *v1.Start
 	if current.Manifest.State == model.StateClosed {
 		return nil, precondition("closed item must be reopened first")
 	}
+	// Only a start that activated the item reports doing so.
+	activated := []string{}
 	if current.Manifest.State == model.StateBacklog {
+		activated = append(activated, "activated item")
 		if _, err := s.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: itemID, State: v1.ItemState_ITEM_STATE_ACTIVE, ExpectedRevision: expected, OverrideCapacity: options.OverrideCapacity})); err != nil {
 			return nil, err
 		}
@@ -43,7 +48,7 @@ func (s *Server) startItem(ctx context.Context, itemID string, options *v1.Start
 		unlock := s.lock(itemID)
 		defer unlock()
 		j.phase("claiming workspace")
-		completed := []string{"activated item"}
+		completed := append([]string(nil), activated...)
 		if _, err := s.requireActive(ctx, itemID); err != nil {
 			return partial(err, itemID, completed...)
 		}
@@ -89,7 +94,7 @@ func (s *Server) startItem(ctx context.Context, itemID string, options *v1.Start
 	})
 	value, err := s.item(ctx, itemID)
 	if err != nil {
-		return nil, partial(err, itemID, "activated item")
+		return nil, partial(err, itemID, activated...)
 	}
 	return &v1.StartItemResponse{Item: value, Job: job}, nil
 }
@@ -122,7 +127,8 @@ func (s *Server) shelveItem(ctx context.Context, req *connect.Request[v1.ShelveI
 	}
 	result, err := s.App.Shelve(ctx, resolve(req.Msg.ItemId), false)
 	if err != nil {
-		return nil, partial(err, req.Msg.ItemId, result.Warnings...)
+		// Shelving keeps nothing it did when it fails; its warnings explain.
+		return nil, rpcError(withWarnings(err, result.Warnings))
 	}
 	value, err := s.item(ctx, req.Msg.ItemId)
 	return response(&v1.ShelveItemResponse{Item: value, Warnings: result.Warnings}, err)
@@ -165,7 +171,7 @@ func (s *Server) closeItem(ctx context.Context, req *connect.Request[v1.CloseIte
 	}
 	result, err := s.App.Close(ctx, resolve(r.ItemId), app.CloseOptions{Resolution: resolutionName(r.Resolution), Force: r.Force})
 	if err != nil {
-		return nil, partial(err, r.ItemId, append(completed, result.Warnings...)...)
+		return nil, partial(withWarnings(err, result.Warnings), r.ItemId, completed...)
 	}
 	value, err := s.item(ctx, r.ItemId)
 	return response(&v1.CloseItemResponse{Item: value, Commit: commit, Warnings: result.Warnings}, err)
@@ -207,4 +213,13 @@ func (s *Server) waitAgentIdle(ctx context.Context, itemID string, timeout time.
 		case <-time.After(250 * time.Millisecond):
 		}
 	}
+}
+
+// withWarnings adds what an operation warned about to its error, keeping the
+// error's kind: warnings are not steps it completed.
+func withWarnings(err error, warnings []string) error {
+	if len(warnings) == 0 {
+		return err
+	}
+	return fmt.Errorf("%w (%s)", err, strings.Join(warnings, "; "))
 }

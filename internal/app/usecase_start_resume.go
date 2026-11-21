@@ -66,12 +66,6 @@ func (a *App) ResumeWorkItemInMode(ctx context.Context, opts ResolveOptions, att
 	return a.materializeTransitionAgent(ctx, opts, transition, attach, mode)
 }
 
-// MaterializeTransitionAgent performs the external workspace/runtime phase
-// after a durable lifecycle transition has committed.
-func (a *App) MaterializeTransitionAgent(ctx context.Context, opts ResolveOptions, transition StateTransitionResult, attach bool, mode agent.Mode) (StartResult, error) {
-	return a.materializeTransitionAgent(ctx, opts, transition, attach, mode)
-}
-
 func (a *App) materializeTransitionAgent(ctx context.Context, opts ResolveOptions, transition StateTransitionResult, attach bool, mode agent.Mode) (StartResult, error) {
 	if mode == "" {
 		mode = agent.ModeTUI

@@ -315,9 +315,15 @@ func (s *Server) CancelJob(ctx context.Context, req *connect.Request[v1.CancelJo
 	value, _ := job.snapshot()
 	return response(&v1.CancelJobResponse{Job: value}, nil)
 }
+// partial reports err, with the steps already completed as a partial
+// outcome when there are any: an operation that completed nothing reports
+// a plain error.
 func partial(err error, item string, completed ...string) error {
 	if err == nil {
 		return nil
+	}
+	if len(completed) == 0 {
+		return rpcError(err)
 	}
 	ce := rpcError(err)
 	var value *connect.Error
