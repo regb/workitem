@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/regb/workitem/internal/agent"
 	viewapp "github.com/regb/workitem/internal/app/view"
@@ -190,4 +191,47 @@ func (undyingProcess) Info(pid int) (model.ProcessInfo, error) {
 func (undyingProcess) TerminateGroup(int) error { return nil }
 func (undyingProcess) FindDescendant(int, []string) (process.Info, bool, error) {
 	return process.Info{}, false, nil
+}
+
+// An agent that starts a turn after the takeover was planned, such as on a
+// background task finishing, is not aborted unasked: the switch gives back
+// the control it took from a vacant lease and asks to confirm, as a plan made
+// a moment later would have.
+func TestTakeoverAsksWhenTheAgentStartsATurnMidway(t *testing.T) {
+	a, st, m := newCoreTestApp(t, time.Now(), model.StateActive, false)
+	a.Process = undyingProcess{}
+	info, _ := a.Process.Info(4242)
+	a.AgentRuntimeSocketRoot = testutil.ShortTempDir(t)
+	a.StaticAgentProfiles.Default = "pi"
+	a.StaticAgentProfiles.Profiles = []model.AgentProfile{{Name: "pi", Driver: "pi"}}
+	a.ConversationBackends["pi"] = validConfigBackend{}
+	reads := 0
+	a.WorkListObserver = func(context.Context, string) (viewapp.Observation, error) {
+		reads++
+		if reads == 1 {
+			return viewapp.Observation{Status: "idle"}, nil
+		}
+		return viewapp.Observation{Status: "busy"}, nil
+	}
+	leases := &controllerTestLeases{}
+	a.Leases = leases
+	runtime := model.AgentRuntime{ID: "headless-1", WorkItemID: m.ID, HostPID: info.PID, HostProcessGroup: info.PGRP, HostStartTime: info.StartTime, Mode: string(agent.ModeHeadless), Capabilities: model.RuntimeCapabilities{Prompt: true, Cancel: true}}
+	if err := st.SaveAgentRuntime(context.Background(), m.ID, runtime); err != nil {
+		t.Fatal(err)
+	}
+	result, err := a.AcquireControl(context.Background(), ControlRequest{ResolveOptions: ResolveOptions{Selector: m.ID}, Holder: model.LeaseHolderTerminal, ClientID: "terminal"})
+	var confirmation *ControlConfirmationError
+	if !errors.As(err, &confirmation) || !confirmation.Plan.Abort || !confirmation.Plan.NeedsConfirmation || confirmation.Plan.Replace != string(agent.ModeTUI) {
+		t.Fatalf("err = %v, want a confirmation to abort the new turn", err)
+	}
+	if !strings.Contains(err.Error(), "the current agent turn will be aborted") {
+		t.Fatalf("err = %v, want it to say the turn would be aborted", err)
+	}
+	// Nothing was taken: the lease is vacant again, the runtime untouched.
+	if result.Granted || leases.current != nil {
+		t.Fatalf("lease kept after asking: granted=%v current=%+v", result.Granted, leases.current)
+	}
+	if current, _ := st.LoadAgentRuntime(m.ID); current == nil || current.ID != "headless-1" {
+		t.Fatalf("runtime changed: %+v", current)
+	}
 }

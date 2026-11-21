@@ -13,7 +13,7 @@ The daemon starts TUI agents in tmux and reports where each one runs: the tmux s
 wi switch auth
 ```
 
-With an explicit item, `switch` validates active work, has the daemon ensure its worktree and TUI agent, then attaches to the session the agent reports, or switches the current tmux client to it. Switching marks the conversation read and takes [control](../../concepts/agents/#controllers-and-observers) when nobody else holds it. If another client, such as a browser, controls the agent, the TUI opens read-only: pane input stays disabled and a status message explains how to take over. `wi switch --take` aborts a turn in flight, replaces a headless agent with a TUI on the same conversation, and re-enables input.
+With an explicit item, `switch` validates active work, has the daemon ensure its worktree and TUI agent, then attaches to the session the agent reports, or switches the current tmux client to it. Switching marks the conversation read and takes [control](../../concepts/agents/#controllers-and-observers) when nobody else holds it. If another client, such as a browser, controls the agent, the TUI opens read-only: pane input stays disabled and a status message explains how to take over. `wi switch --take` aborts a turn in flight, replaces a headless agent with a TUI on the same conversation, and re-enables input. A switch that would abort a turn asks for `--take` instead, saying what taking control would do; that includes a turn the agent starts on its own while the switch runs, such as when a background task finishes: the switch then gives control back and leaves the agent running as it was.
 
 Without an item, `switch` opens an `fzf` picker:
 

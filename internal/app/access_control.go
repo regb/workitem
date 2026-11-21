@@ -346,7 +346,7 @@ func (a *App) AcquireControl(ctx context.Context, request ControlRequest) (Contr
 		// started after the plan was made.
 		if err := a.stopRuntimeForReplacement(ctx, m, status.RuntimeID, status.Busy || request.Confirm); err != nil {
 			if errors.Is(err, agentcore.ErrBusy) {
-				return result, fmt.Errorf("the agent started a turn while control was being taken; take control again to abort it")
+				return a.busySinceThePlan(ctx, m, request, status, granted.Lease, result)
 			}
 			return result, err
 		}
@@ -378,6 +378,23 @@ func (a *App) AcquireControl(ctx context.Context, request ControlRequest) (Contr
 		}
 	}
 	return result, nil
+}
+
+// busySinceThePlan answers a takeover whose agent started a turn after the
+// plan was made, such as on a background task finishing: nobody confirmed
+// aborting it. Control taken from a vacant lease is given back, and the
+// caller is asked to confirm, as a plan made a moment later would have.
+func (a *App) busySinceThePlan(ctx context.Context, m model.Manifest, request ControlRequest, status ControlStatus, taken *model.ControlLease, result ControlResult) (ControlResult, error) {
+	if status.storedLease == nil && taken != nil {
+		expected := taken.ID
+		if released, err := a.Leases.ReleaseLease(ctx, model.LeaseRequest{ItemID: m.ID, Holder: request.Holder, ClientID: request.ClientID, ExpectedLeaseID: &expected}); err == nil && released.Granted {
+			result.Granted, result.Lease = false, nil
+		}
+	}
+	status.Busy = true
+	plan := a.planControl(status, request, a.AgentRuntimeModes(ctx, m.Agent))
+	result.Plan = plan
+	return result, &ControlConfirmationError{Plan: plan}
 }
 
 // syncPaneInput makes the agent pane writable only for a terminal controller

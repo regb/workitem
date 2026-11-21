@@ -48,9 +48,9 @@ func rpcEnterTerminal(ctx context.Context, cfg Config, id string, take bool, jso
 	plan := control.Msg.Control.GetPlan()
 	if plan.GetNeedsConfirmation() && !take {
 		if view.Msg.Agent.Terminal == nil {
-			return errors.New("another client controls this agent without a terminal; use wi switch --take")
+			return takeoverNeeded(plan)
 		}
-		fmt.Fprintln(cfg.Stderr, "read-only: another client controls this agent; use wi switch --take")
+		fmt.Fprintln(cfg.Stderr, "read-only: "+takeoverReasons(plan)+"; use wi switch --take")
 	} else {
 		request := terminalRequest(cfg, &v1.AcquireControlRequest{ItemId: id, ClientId: rpcClientID(cfg), StartAgent: true, Confirm: take, PlanToken: plan.GetPlanToken()})
 		acquired, err := cfg.API.Control.AcquireControl(ctx, request)
@@ -58,6 +58,15 @@ func rpcEnterTerminal(ctx context.Context, cfg Config, id string, take bool, jso
 			return err
 		}
 		if _, err = rpcWaitJob(ctx, cfg, acquired.Msg.Job, false); err != nil {
+			// The agent may have started a turn while control was taken,
+			// such as on a background task finishing: the daemon gave the
+			// control back rather than abort it unasked. Say so as a plan
+			// read now would.
+			if !take {
+				if again, e := cfg.API.Control.GetControl(ctx, terminalRequest(cfg, &v1.GetControlRequest{ItemId: id, ClientId: rpcClientID(cfg)})); e == nil && again.Msg.Control.GetPlan().GetNeedsConfirmation() {
+					return takeoverNeeded(again.Msg.Control.GetPlan())
+				}
+			}
 			return err
 		}
 		// The acquisition may replace a headless runtime with a TUI.
@@ -94,6 +103,20 @@ func rpcEnterTerminal(ctx context.Context, cfg Config, id string, take bool, jso
 	}
 	return runTerminalTarget(ctx, cfg, target)
 }
+
+// takeoverReasons says what taking control would do, as the daemon plans it.
+func takeoverReasons(plan *v1.ControlPlan) string {
+	if reasons := plan.GetReasons(); len(reasons) > 0 {
+		return strings.Join(reasons, "; ")
+	}
+	return "another client controls this agent"
+}
+
+// takeoverNeeded refuses a switch that would need confirming.
+func takeoverNeeded(plan *v1.ControlPlan) error {
+	return fmt.Errorf("%s; use wi switch --take to take control anyway", takeoverReasons(plan))
+}
+
 func runTerminalTarget(ctx context.Context, cfg Config, target *v1.Terminal) error {
 	client := strings.TrimSpace(cfg.Env["WI_TMUX_CLIENT"])
 	if strings.Contains(client, "#{") {
