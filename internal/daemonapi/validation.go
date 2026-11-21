@@ -42,5 +42,8 @@ func validateStart(start *v1.StartOptions) error {
 	if len(start.Prompt) > p.MaxControlMessageBytes || !utf8.ValidString(start.Prompt) {
 		return invalid("prompt must be UTF-8 and at most 64 KiB")
 	}
-	return validateMessage(&v1.SendMessageRequest{ClientMessageId: start.ClientMessageId})
+	if start.SendNothing && len(start.Images) > 0 {
+		return invalid("send_nothing conflicts with images")
+	}
+	return validateMessage(&v1.SendMessageRequest{ClientMessageId: start.ClientMessageId, Text: start.Prompt, Images: start.Images})
 }

@@ -228,12 +228,12 @@ func (s *Server) controlLeaseStarting(ctx context.Context, itemID, leaseID strin
 	who := caller(ctx)
 	if lease != nil {
 		if lease.ClientID != who.client || leaseID != "" && lease.ID != leaseID {
-			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("caller does not hold the control lease"))
+			return nil, s.refuseControl(ctx, itemID, connect.CodePermissionDenied, "caller does not hold the control lease")
 		}
 		return lease, nil
 	}
 	if !takeVacant {
-		return nil, precondition("caller has no control lease")
+		return nil, s.refuseControl(ctx, itemID, connect.CodeFailedPrecondition, "caller has no control lease")
 	}
 	// Taking vacant control may replace the agent with one this caller can
 	// drive (a TUI with a headless one); the replacement must be started.
@@ -242,7 +242,7 @@ func (s *Server) controlLeaseStarting(ctx context.Context, itemID, leaseID strin
 		return nil, err
 	}
 	if result.Lease == nil {
-		return nil, precondition("control lease was not granted")
+		return nil, s.refuseControl(ctx, itemID, connect.CodeFailedPrecondition, "control lease was not granted")
 	}
 	s.rememberLease(result.Lease)
 	return result.Lease, nil
@@ -379,18 +379,29 @@ func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMe
 			}
 		}
 	}
+	if err := validateMessage(r); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(r.Text) == "" && len(r.Images) == 0 {
+		return nil, invalid("message text or images are required")
+	}
+	// Saying something to an item that has no running place yet starts it,
+	// with the message as its first prompt: one call for one intention.
+	if !r.RequireOnline {
+		if current, err := s.canonical(ctx, r.ItemId, 0); err == nil && (current.Manifest.State == model.StateBacklog || current.Manifest.State == model.StateActive && current.Manifest.Checkout.Claim == nil) {
+			started, err := s.startItem(ctx, r.ItemId, &v1.StartOptions{Prompt: r.Text, Images: r.Images, Mode: r.StartMode, ClientMessageId: r.ClientMessageId}, 0)
+			if err != nil {
+				return nil, err
+			}
+			return response(&v1.SendMessageResponse{Job: started.Job}, nil)
+		}
+	}
 	m, err := s.requireActive(ctx, r.ItemId)
 	if err != nil {
 		return nil, rpcError(err)
 	}
 	if m.Checkout.Claim == nil {
 		return nil, precondition("message requires a workspace claim")
-	}
-	if err := validateMessage(r); err != nil {
-		return nil, err
-	}
-	if strings.TrimSpace(r.Text) == "" && len(r.Images) == 0 {
-		return nil, invalid("message text or images are required")
 	}
 	current, err := s.generation(ctx, r.ItemId, r.ExpectedGeneration)
 	if err != nil {
@@ -477,7 +488,8 @@ func (s *Server) AnswerQuestion(ctx context.Context, req *connect.Request[v1.Ans
 	return response(&v1.AnswerQuestionResponse{}, nil)
 }
 func (s *Server) AbortTurn(ctx context.Context, req *connect.Request[v1.AbortTurnRequest]) (*connect.Response[v1.AbortTurnResponse], error) {
-	lease, err := s.controlLease(ctx, req.Msg.ItemId, req.Msg.LeaseId, false)
+	// Vacant control is taken, as for a prompt; the agent is not replaced.
+	lease, err := s.controlLeaseStarting(ctx, req.Msg.ItemId, req.Msg.LeaseId, true, false)
 	if err != nil {
 		return nil, rpcError(err)
 	}
@@ -518,7 +530,7 @@ func (s *Server) UpdateAgentSettings(ctx context.Context, req *connect.Request[v
 		return nil, rpcError(err)
 	}
 	if runtime.Online {
-		lease, err := s.controlLease(ctx, req.Msg.ItemId, req.Msg.LeaseId, false)
+		lease, err := s.controlLeaseStarting(ctx, req.Msg.ItemId, req.Msg.LeaseId, true, false)
 		if err != nil {
 			return nil, rpcError(err)
 		}

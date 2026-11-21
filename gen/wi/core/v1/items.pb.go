@@ -139,6 +139,71 @@ func (AttentionGroup) EnumDescriptor() ([]byte, []int) {
 	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{1}
 }
 
+// ListSection is a section of the built-in work list. A waiting item stays
+// WAITING whatever its agent reports (a usage limit is a problem the item
+// waits out); other active work with an agent or checkout problem NEEDS
+// FIXING.
+type ListSection int32
+
+const (
+	ListSection_LIST_SECTION_UNSPECIFIED     ListSection = 0
+	ListSection_LIST_SECTION_NEEDS_ATTENTION ListSection = 1
+	ListSection_LIST_SECTION_NEEDS_FIXING    ListSection = 2
+	ListSection_LIST_SECTION_IN_PROGRESS     ListSection = 3
+	ListSection_LIST_SECTION_WAITING         ListSection = 4
+	ListSection_LIST_SECTION_BACKLOG         ListSection = 5
+	ListSection_LIST_SECTION_CLOSED          ListSection = 6
+)
+
+// Enum value maps for ListSection.
+var (
+	ListSection_name = map[int32]string{
+		0: "LIST_SECTION_UNSPECIFIED",
+		1: "LIST_SECTION_NEEDS_ATTENTION",
+		2: "LIST_SECTION_NEEDS_FIXING",
+		3: "LIST_SECTION_IN_PROGRESS",
+		4: "LIST_SECTION_WAITING",
+		5: "LIST_SECTION_BACKLOG",
+		6: "LIST_SECTION_CLOSED",
+	}
+	ListSection_value = map[string]int32{
+		"LIST_SECTION_UNSPECIFIED":     0,
+		"LIST_SECTION_NEEDS_ATTENTION": 1,
+		"LIST_SECTION_NEEDS_FIXING":    2,
+		"LIST_SECTION_IN_PROGRESS":     3,
+		"LIST_SECTION_WAITING":         4,
+		"LIST_SECTION_BACKLOG":         5,
+		"LIST_SECTION_CLOSED":          6,
+	}
+)
+
+func (x ListSection) Enum() *ListSection {
+	p := new(ListSection)
+	*p = x
+	return p
+}
+
+func (x ListSection) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ListSection) Descriptor() protoreflect.EnumDescriptor {
+	return file_wi_core_v1_items_proto_enumTypes[2].Descriptor()
+}
+
+func (ListSection) Type() protoreflect.EnumType {
+	return &file_wi_core_v1_items_proto_enumTypes[2]
+}
+
+func (x ListSection) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ListSection.Descriptor instead.
+func (ListSection) EnumDescriptor() ([]byte, []int) {
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{2}
+}
+
 // ListOrder is the order ListItems returns items in.
 type ListOrder int32
 
@@ -175,11 +240,11 @@ func (x ListOrder) String() string {
 }
 
 func (ListOrder) Descriptor() protoreflect.EnumDescriptor {
-	return file_wi_core_v1_items_proto_enumTypes[2].Descriptor()
+	return file_wi_core_v1_items_proto_enumTypes[3].Descriptor()
 }
 
 func (ListOrder) Type() protoreflect.EnumType {
-	return &file_wi_core_v1_items_proto_enumTypes[2]
+	return &file_wi_core_v1_items_proto_enumTypes[3]
 }
 
 func (x ListOrder) Number() protoreflect.EnumNumber {
@@ -188,7 +253,7 @@ func (x ListOrder) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ListOrder.Descriptor instead.
 func (ListOrder) EnumDescriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{2}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{3}
 }
 
 // Item is a work item's durable record.
@@ -1055,8 +1120,11 @@ type ItemSummary struct {
 	UpdatedAt    *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// attention_group is set when the list is in attention order.
 	AttentionGroup AttentionGroup `protobuf:"varint,15,opt,name=attention_group,json=attentionGroup,proto3,enum=wi.core.v1.AttentionGroup" json:"attention_group,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// section is where the built-in work list shows the item, set when the
+	// list is in attention order. Every client shows the same section.
+	Section       ListSection `protobuf:"varint,16,opt,name=section,proto3,enum=wi.core.v1.ListSection" json:"section,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ItemSummary) Reset() {
@@ -1192,6 +1260,13 @@ func (x *ItemSummary) GetAttentionGroup() AttentionGroup {
 		return x.AttentionGroup
 	}
 	return AttentionGroup_ATTENTION_GROUP_UNSPECIFIED
+}
+
+func (x *ItemSummary) GetSection() ListSection {
+	if x != nil {
+		return x.Section
+	}
+	return ListSection_LIST_SECTION_UNSPECIFIED
 }
 
 type CreateItemRequest struct {
@@ -3778,7 +3853,7 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\flast_read_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"lastReadAt\x12@\n" +
 	"\x0elast_unread_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\flastUnreadAt\x12D\n" +
-	"\x10last_deferred_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastDeferredAt\"\xeb\x04\n" +
+	"\x10last_deferred_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastDeferredAt\"\x9e\x05\n" +
 	"\vItemSummary\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x14\n" +
@@ -3798,7 +3873,8 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\rsnoozed_until\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\fsnoozedUntil\x129\n" +
 	"\n" +
 	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12C\n" +
-	"\x0fattention_group\x18\x0f \x01(\x0e2\x1a.wi.core.v1.AttentionGroupR\x0eattentionGroup\"\xd3\x03\n" +
+	"\x0fattention_group\x18\x0f \x01(\x0e2\x1a.wi.core.v1.AttentionGroupR\x0eattentionGroup\x121\n" +
+	"\asection\x18\x10 \x01(\x0e2\x17.wi.core.v1.ListSectionR\asection\"\xd3\x03\n" +
 	"\x11CreateItemRequest\x12#\n" +
 	"\rrepository_id\x18\x01 \x01(\tR\frepositoryId\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12%\n" +
@@ -4001,7 +4077,15 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\x17ATTENTION_GROUP_WORKING\x10\x02\x12\x1b\n" +
 	"\x17ATTENTION_GROUP_WAITING\x10\x03\x12\x1b\n" +
 	"\x17ATTENTION_GROUP_BACKLOG\x10\x04\x12\x1a\n" +
-	"\x16ATTENTION_GROUP_CLOSED\x10\x05*Y\n" +
+	"\x16ATTENTION_GROUP_CLOSED\x10\x05*\xd7\x01\n" +
+	"\vListSection\x12\x1c\n" +
+	"\x18LIST_SECTION_UNSPECIFIED\x10\x00\x12 \n" +
+	"\x1cLIST_SECTION_NEEDS_ATTENTION\x10\x01\x12\x1d\n" +
+	"\x19LIST_SECTION_NEEDS_FIXING\x10\x02\x12\x1c\n" +
+	"\x18LIST_SECTION_IN_PROGRESS\x10\x03\x12\x18\n" +
+	"\x14LIST_SECTION_WAITING\x10\x04\x12\x18\n" +
+	"\x14LIST_SECTION_BACKLOG\x10\x05\x12\x17\n" +
+	"\x13LIST_SECTION_CLOSED\x10\x06*Y\n" +
 	"\tListOrder\x12\x1a\n" +
 	"\x16LIST_ORDER_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12LIST_ORDER_UPDATED\x10\x01\x12\x18\n" +
@@ -4042,180 +4126,182 @@ func file_wi_core_v1_items_proto_rawDescGZIP() []byte {
 	return file_wi_core_v1_items_proto_rawDescData
 }
 
-var file_wi_core_v1_items_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_wi_core_v1_items_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
 var file_wi_core_v1_items_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_wi_core_v1_items_proto_goTypes = []any{
 	(BlockerKind)(0),               // 0: wi.core.v1.BlockerKind
 	(AttentionGroup)(0),            // 1: wi.core.v1.AttentionGroup
-	(ListOrder)(0),                 // 2: wi.core.v1.ListOrder
-	(*Item)(nil),                   // 3: wi.core.v1.Item
-	(*Checkout)(nil),               // 4: wi.core.v1.Checkout
-	(*WorkspaceClaim)(nil),         // 5: wi.core.v1.WorkspaceClaim
-	(*ConversationRef)(nil),        // 6: wi.core.v1.ConversationRef
-	(*Blocker)(nil),                // 7: wi.core.v1.Blocker
-	(*FollowUp)(nil),               // 8: wi.core.v1.FollowUp
-	(*ItemObservation)(nil),        // 9: wi.core.v1.ItemObservation
-	(*AttentionActivity)(nil),      // 10: wi.core.v1.AttentionActivity
-	(*ItemSummary)(nil),            // 11: wi.core.v1.ItemSummary
-	(*CreateItemRequest)(nil),      // 12: wi.core.v1.CreateItemRequest
-	(*CreateItemResponse)(nil),     // 13: wi.core.v1.CreateItemResponse
-	(*GetItemRequest)(nil),         // 14: wi.core.v1.GetItemRequest
-	(*GetItemResponse)(nil),        // 15: wi.core.v1.GetItemResponse
-	(*ResolveItemRequest)(nil),     // 16: wi.core.v1.ResolveItemRequest
-	(*ResolveItemResponse)(nil),    // 17: wi.core.v1.ResolveItemResponse
-	(*LabelRule)(nil),              // 18: wi.core.v1.LabelRule
-	(*ListItemsRequest)(nil),       // 19: wi.core.v1.ListItemsRequest
-	(*ListItemsResponse)(nil),      // 20: wi.core.v1.ListItemsResponse
-	(*SearchItemsRequest)(nil),     // 21: wi.core.v1.SearchItemsRequest
-	(*SearchHit)(nil),              // 22: wi.core.v1.SearchHit
-	(*SearchItemsResponse)(nil),    // 23: wi.core.v1.SearchItemsResponse
-	(*UpdateItemRequest)(nil),      // 24: wi.core.v1.UpdateItemRequest
-	(*UpdateItemResponse)(nil),     // 25: wi.core.v1.UpdateItemResponse
-	(*SetItemStateRequest)(nil),    // 26: wi.core.v1.SetItemStateRequest
-	(*SetItemStateResponse)(nil),   // 27: wi.core.v1.SetItemStateResponse
-	(*DeleteItemRequest)(nil),      // 28: wi.core.v1.DeleteItemRequest
-	(*DeleteItemResponse)(nil),     // 29: wi.core.v1.DeleteItemResponse
-	(*MarkReadRequest)(nil),        // 30: wi.core.v1.MarkReadRequest
-	(*MarkReadResponse)(nil),       // 31: wi.core.v1.MarkReadResponse
-	(*DeferItemRequest)(nil),       // 32: wi.core.v1.DeferItemRequest
-	(*DeferItemResponse)(nil),      // 33: wi.core.v1.DeferItemResponse
-	(*ItemEvent)(nil),              // 34: wi.core.v1.ItemEvent
-	(*ListItemEventsRequest)(nil),  // 35: wi.core.v1.ListItemEventsRequest
-	(*ListItemEventsResponse)(nil), // 36: wi.core.v1.ListItemEventsResponse
-	(*AddBlockerRequest)(nil),      // 37: wi.core.v1.AddBlockerRequest
-	(*AddBlockerResponse)(nil),     // 38: wi.core.v1.AddBlockerResponse
-	(*ClearBlockerRequest)(nil),    // 39: wi.core.v1.ClearBlockerRequest
-	(*ClearBlockerResponse)(nil),   // 40: wi.core.v1.ClearBlockerResponse
-	(*Attachment)(nil),             // 41: wi.core.v1.Attachment
-	(*Note)(nil),                   // 42: wi.core.v1.Note
-	(*AddNoteRequest)(nil),         // 43: wi.core.v1.AddNoteRequest
-	(*AddNoteResponse)(nil),        // 44: wi.core.v1.AddNoteResponse
-	(*AttachRequest)(nil),          // 45: wi.core.v1.AttachRequest
-	(*AttachResponse)(nil),         // 46: wi.core.v1.AttachResponse
-	(*ListNotesRequest)(nil),       // 47: wi.core.v1.ListNotesRequest
-	(*CurrentAttachment)(nil),      // 48: wi.core.v1.CurrentAttachment
-	(*ListNotesResponse)(nil),      // 49: wi.core.v1.ListNotesResponse
-	(*ReadAttachmentRequest)(nil),  // 50: wi.core.v1.ReadAttachmentRequest
-	(*ReadAttachmentResponse)(nil), // 51: wi.core.v1.ReadAttachmentResponse
-	nil,                            // 52: wi.core.v1.Item.AgentSettingsEntry
-	nil,                            // 53: wi.core.v1.Blocker.MetaEntry
-	nil,                            // 54: wi.core.v1.CreateItemRequest.AgentSettingsEntry
-	nil,                            // 55: wi.core.v1.AddBlockerRequest.MetaEntry
-	(ItemState)(0),                 // 56: wi.core.v1.ItemState
-	(Resolution)(0),                // 57: wi.core.v1.Resolution
-	(*RepositoryRef)(nil),          // 58: wi.core.v1.RepositoryRef
-	(*timestamppb.Timestamp)(nil),  // 59: google.protobuf.Timestamp
-	(AgentStatus)(0),               // 60: wi.core.v1.AgentStatus
-	(WorktreeStatus)(0),            // 61: wi.core.v1.WorktreeStatus
+	(ListSection)(0),               // 2: wi.core.v1.ListSection
+	(ListOrder)(0),                 // 3: wi.core.v1.ListOrder
+	(*Item)(nil),                   // 4: wi.core.v1.Item
+	(*Checkout)(nil),               // 5: wi.core.v1.Checkout
+	(*WorkspaceClaim)(nil),         // 6: wi.core.v1.WorkspaceClaim
+	(*ConversationRef)(nil),        // 7: wi.core.v1.ConversationRef
+	(*Blocker)(nil),                // 8: wi.core.v1.Blocker
+	(*FollowUp)(nil),               // 9: wi.core.v1.FollowUp
+	(*ItemObservation)(nil),        // 10: wi.core.v1.ItemObservation
+	(*AttentionActivity)(nil),      // 11: wi.core.v1.AttentionActivity
+	(*ItemSummary)(nil),            // 12: wi.core.v1.ItemSummary
+	(*CreateItemRequest)(nil),      // 13: wi.core.v1.CreateItemRequest
+	(*CreateItemResponse)(nil),     // 14: wi.core.v1.CreateItemResponse
+	(*GetItemRequest)(nil),         // 15: wi.core.v1.GetItemRequest
+	(*GetItemResponse)(nil),        // 16: wi.core.v1.GetItemResponse
+	(*ResolveItemRequest)(nil),     // 17: wi.core.v1.ResolveItemRequest
+	(*ResolveItemResponse)(nil),    // 18: wi.core.v1.ResolveItemResponse
+	(*LabelRule)(nil),              // 19: wi.core.v1.LabelRule
+	(*ListItemsRequest)(nil),       // 20: wi.core.v1.ListItemsRequest
+	(*ListItemsResponse)(nil),      // 21: wi.core.v1.ListItemsResponse
+	(*SearchItemsRequest)(nil),     // 22: wi.core.v1.SearchItemsRequest
+	(*SearchHit)(nil),              // 23: wi.core.v1.SearchHit
+	(*SearchItemsResponse)(nil),    // 24: wi.core.v1.SearchItemsResponse
+	(*UpdateItemRequest)(nil),      // 25: wi.core.v1.UpdateItemRequest
+	(*UpdateItemResponse)(nil),     // 26: wi.core.v1.UpdateItemResponse
+	(*SetItemStateRequest)(nil),    // 27: wi.core.v1.SetItemStateRequest
+	(*SetItemStateResponse)(nil),   // 28: wi.core.v1.SetItemStateResponse
+	(*DeleteItemRequest)(nil),      // 29: wi.core.v1.DeleteItemRequest
+	(*DeleteItemResponse)(nil),     // 30: wi.core.v1.DeleteItemResponse
+	(*MarkReadRequest)(nil),        // 31: wi.core.v1.MarkReadRequest
+	(*MarkReadResponse)(nil),       // 32: wi.core.v1.MarkReadResponse
+	(*DeferItemRequest)(nil),       // 33: wi.core.v1.DeferItemRequest
+	(*DeferItemResponse)(nil),      // 34: wi.core.v1.DeferItemResponse
+	(*ItemEvent)(nil),              // 35: wi.core.v1.ItemEvent
+	(*ListItemEventsRequest)(nil),  // 36: wi.core.v1.ListItemEventsRequest
+	(*ListItemEventsResponse)(nil), // 37: wi.core.v1.ListItemEventsResponse
+	(*AddBlockerRequest)(nil),      // 38: wi.core.v1.AddBlockerRequest
+	(*AddBlockerResponse)(nil),     // 39: wi.core.v1.AddBlockerResponse
+	(*ClearBlockerRequest)(nil),    // 40: wi.core.v1.ClearBlockerRequest
+	(*ClearBlockerResponse)(nil),   // 41: wi.core.v1.ClearBlockerResponse
+	(*Attachment)(nil),             // 42: wi.core.v1.Attachment
+	(*Note)(nil),                   // 43: wi.core.v1.Note
+	(*AddNoteRequest)(nil),         // 44: wi.core.v1.AddNoteRequest
+	(*AddNoteResponse)(nil),        // 45: wi.core.v1.AddNoteResponse
+	(*AttachRequest)(nil),          // 46: wi.core.v1.AttachRequest
+	(*AttachResponse)(nil),         // 47: wi.core.v1.AttachResponse
+	(*ListNotesRequest)(nil),       // 48: wi.core.v1.ListNotesRequest
+	(*CurrentAttachment)(nil),      // 49: wi.core.v1.CurrentAttachment
+	(*ListNotesResponse)(nil),      // 50: wi.core.v1.ListNotesResponse
+	(*ReadAttachmentRequest)(nil),  // 51: wi.core.v1.ReadAttachmentRequest
+	(*ReadAttachmentResponse)(nil), // 52: wi.core.v1.ReadAttachmentResponse
+	nil,                            // 53: wi.core.v1.Item.AgentSettingsEntry
+	nil,                            // 54: wi.core.v1.Blocker.MetaEntry
+	nil,                            // 55: wi.core.v1.CreateItemRequest.AgentSettingsEntry
+	nil,                            // 56: wi.core.v1.AddBlockerRequest.MetaEntry
+	(ItemState)(0),                 // 57: wi.core.v1.ItemState
+	(Resolution)(0),                // 58: wi.core.v1.Resolution
+	(*RepositoryRef)(nil),          // 59: wi.core.v1.RepositoryRef
+	(*timestamppb.Timestamp)(nil),  // 60: google.protobuf.Timestamp
+	(AgentStatus)(0),               // 61: wi.core.v1.AgentStatus
+	(WorktreeStatus)(0),            // 62: wi.core.v1.WorktreeStatus
 }
 var file_wi_core_v1_items_proto_depIdxs = []int32{
-	56, // 0: wi.core.v1.Item.state:type_name -> wi.core.v1.ItemState
-	57, // 1: wi.core.v1.Item.resolution:type_name -> wi.core.v1.Resolution
-	58, // 2: wi.core.v1.Item.repository:type_name -> wi.core.v1.RepositoryRef
-	4,  // 3: wi.core.v1.Item.checkout:type_name -> wi.core.v1.Checkout
-	6,  // 4: wi.core.v1.Item.conversation:type_name -> wi.core.v1.ConversationRef
-	52, // 5: wi.core.v1.Item.agent_settings:type_name -> wi.core.v1.Item.AgentSettingsEntry
-	7,  // 6: wi.core.v1.Item.blockers:type_name -> wi.core.v1.Blocker
-	59, // 7: wi.core.v1.Item.created_at:type_name -> google.protobuf.Timestamp
-	59, // 8: wi.core.v1.Item.updated_at:type_name -> google.protobuf.Timestamp
-	59, // 9: wi.core.v1.Item.state_changed_at:type_name -> google.protobuf.Timestamp
-	59, // 10: wi.core.v1.Item.snoozed_until:type_name -> google.protobuf.Timestamp
-	8,  // 11: wi.core.v1.Item.follow_ups:type_name -> wi.core.v1.FollowUp
-	5,  // 12: wi.core.v1.Checkout.claim:type_name -> wi.core.v1.WorkspaceClaim
+	57, // 0: wi.core.v1.Item.state:type_name -> wi.core.v1.ItemState
+	58, // 1: wi.core.v1.Item.resolution:type_name -> wi.core.v1.Resolution
+	59, // 2: wi.core.v1.Item.repository:type_name -> wi.core.v1.RepositoryRef
+	5,  // 3: wi.core.v1.Item.checkout:type_name -> wi.core.v1.Checkout
+	7,  // 4: wi.core.v1.Item.conversation:type_name -> wi.core.v1.ConversationRef
+	53, // 5: wi.core.v1.Item.agent_settings:type_name -> wi.core.v1.Item.AgentSettingsEntry
+	8,  // 6: wi.core.v1.Item.blockers:type_name -> wi.core.v1.Blocker
+	60, // 7: wi.core.v1.Item.created_at:type_name -> google.protobuf.Timestamp
+	60, // 8: wi.core.v1.Item.updated_at:type_name -> google.protobuf.Timestamp
+	60, // 9: wi.core.v1.Item.state_changed_at:type_name -> google.protobuf.Timestamp
+	60, // 10: wi.core.v1.Item.snoozed_until:type_name -> google.protobuf.Timestamp
+	9,  // 11: wi.core.v1.Item.follow_ups:type_name -> wi.core.v1.FollowUp
+	6,  // 12: wi.core.v1.Checkout.claim:type_name -> wi.core.v1.WorkspaceClaim
 	0,  // 13: wi.core.v1.Blocker.kind:type_name -> wi.core.v1.BlockerKind
-	59, // 14: wi.core.v1.Blocker.until:type_name -> google.protobuf.Timestamp
-	53, // 15: wi.core.v1.Blocker.meta:type_name -> wi.core.v1.Blocker.MetaEntry
-	59, // 16: wi.core.v1.Blocker.created_at:type_name -> google.protobuf.Timestamp
-	59, // 17: wi.core.v1.FollowUp.blocked_at:type_name -> google.protobuf.Timestamp
-	59, // 18: wi.core.v1.FollowUp.cleared_at:type_name -> google.protobuf.Timestamp
-	60, // 19: wi.core.v1.ItemObservation.agent_status:type_name -> wi.core.v1.AgentStatus
-	61, // 20: wi.core.v1.ItemObservation.worktree_status:type_name -> wi.core.v1.WorktreeStatus
-	59, // 21: wi.core.v1.ItemObservation.observed_at:type_name -> google.protobuf.Timestamp
-	10, // 22: wi.core.v1.ItemObservation.activity:type_name -> wi.core.v1.AttentionActivity
-	59, // 23: wi.core.v1.AttentionActivity.last_requested_at:type_name -> google.protobuf.Timestamp
-	59, // 24: wi.core.v1.AttentionActivity.last_completed_at:type_name -> google.protobuf.Timestamp
-	59, // 25: wi.core.v1.AttentionActivity.last_read_at:type_name -> google.protobuf.Timestamp
-	59, // 26: wi.core.v1.AttentionActivity.last_unread_at:type_name -> google.protobuf.Timestamp
-	59, // 27: wi.core.v1.AttentionActivity.last_deferred_at:type_name -> google.protobuf.Timestamp
-	56, // 28: wi.core.v1.ItemSummary.state:type_name -> wi.core.v1.ItemState
-	57, // 29: wi.core.v1.ItemSummary.resolution:type_name -> wi.core.v1.Resolution
-	7,  // 30: wi.core.v1.ItemSummary.blockers:type_name -> wi.core.v1.Blocker
-	9,  // 31: wi.core.v1.ItemSummary.observation:type_name -> wi.core.v1.ItemObservation
-	59, // 32: wi.core.v1.ItemSummary.snoozed_until:type_name -> google.protobuf.Timestamp
-	59, // 33: wi.core.v1.ItemSummary.updated_at:type_name -> google.protobuf.Timestamp
+	60, // 14: wi.core.v1.Blocker.until:type_name -> google.protobuf.Timestamp
+	54, // 15: wi.core.v1.Blocker.meta:type_name -> wi.core.v1.Blocker.MetaEntry
+	60, // 16: wi.core.v1.Blocker.created_at:type_name -> google.protobuf.Timestamp
+	60, // 17: wi.core.v1.FollowUp.blocked_at:type_name -> google.protobuf.Timestamp
+	60, // 18: wi.core.v1.FollowUp.cleared_at:type_name -> google.protobuf.Timestamp
+	61, // 19: wi.core.v1.ItemObservation.agent_status:type_name -> wi.core.v1.AgentStatus
+	62, // 20: wi.core.v1.ItemObservation.worktree_status:type_name -> wi.core.v1.WorktreeStatus
+	60, // 21: wi.core.v1.ItemObservation.observed_at:type_name -> google.protobuf.Timestamp
+	11, // 22: wi.core.v1.ItemObservation.activity:type_name -> wi.core.v1.AttentionActivity
+	60, // 23: wi.core.v1.AttentionActivity.last_requested_at:type_name -> google.protobuf.Timestamp
+	60, // 24: wi.core.v1.AttentionActivity.last_completed_at:type_name -> google.protobuf.Timestamp
+	60, // 25: wi.core.v1.AttentionActivity.last_read_at:type_name -> google.protobuf.Timestamp
+	60, // 26: wi.core.v1.AttentionActivity.last_unread_at:type_name -> google.protobuf.Timestamp
+	60, // 27: wi.core.v1.AttentionActivity.last_deferred_at:type_name -> google.protobuf.Timestamp
+	57, // 28: wi.core.v1.ItemSummary.state:type_name -> wi.core.v1.ItemState
+	58, // 29: wi.core.v1.ItemSummary.resolution:type_name -> wi.core.v1.Resolution
+	8,  // 30: wi.core.v1.ItemSummary.blockers:type_name -> wi.core.v1.Blocker
+	10, // 31: wi.core.v1.ItemSummary.observation:type_name -> wi.core.v1.ItemObservation
+	60, // 32: wi.core.v1.ItemSummary.snoozed_until:type_name -> google.protobuf.Timestamp
+	60, // 33: wi.core.v1.ItemSummary.updated_at:type_name -> google.protobuf.Timestamp
 	1,  // 34: wi.core.v1.ItemSummary.attention_group:type_name -> wi.core.v1.AttentionGroup
-	54, // 35: wi.core.v1.CreateItemRequest.agent_settings:type_name -> wi.core.v1.CreateItemRequest.AgentSettingsEntry
-	3,  // 36: wi.core.v1.CreateItemResponse.item:type_name -> wi.core.v1.Item
-	3,  // 37: wi.core.v1.GetItemResponse.item:type_name -> wi.core.v1.Item
-	9,  // 38: wi.core.v1.GetItemResponse.observation:type_name -> wi.core.v1.ItemObservation
-	56, // 39: wi.core.v1.ListItemsRequest.states:type_name -> wi.core.v1.ItemState
-	18, // 40: wi.core.v1.ListItemsRequest.label_rules:type_name -> wi.core.v1.LabelRule
-	2,  // 41: wi.core.v1.ListItemsRequest.order:type_name -> wi.core.v1.ListOrder
-	11, // 42: wi.core.v1.ListItemsResponse.items:type_name -> wi.core.v1.ItemSummary
-	56, // 43: wi.core.v1.SearchItemsRequest.states:type_name -> wi.core.v1.ItemState
-	11, // 44: wi.core.v1.SearchHit.item:type_name -> wi.core.v1.ItemSummary
-	22, // 45: wi.core.v1.SearchItemsResponse.hits:type_name -> wi.core.v1.SearchHit
-	59, // 46: wi.core.v1.UpdateItemRequest.snoozed_until:type_name -> google.protobuf.Timestamp
-	3,  // 47: wi.core.v1.UpdateItemResponse.item:type_name -> wi.core.v1.Item
-	56, // 48: wi.core.v1.SetItemStateRequest.state:type_name -> wi.core.v1.ItemState
-	57, // 49: wi.core.v1.SetItemStateRequest.resolution:type_name -> wi.core.v1.Resolution
-	3,  // 50: wi.core.v1.SetItemStateResponse.item:type_name -> wi.core.v1.Item
-	59, // 51: wi.core.v1.ItemEvent.time:type_name -> google.protobuf.Timestamp
-	34, // 52: wi.core.v1.ListItemEventsResponse.events:type_name -> wi.core.v1.ItemEvent
-	0,  // 53: wi.core.v1.AddBlockerRequest.kind:type_name -> wi.core.v1.BlockerKind
-	59, // 54: wi.core.v1.AddBlockerRequest.until:type_name -> google.protobuf.Timestamp
-	55, // 55: wi.core.v1.AddBlockerRequest.meta:type_name -> wi.core.v1.AddBlockerRequest.MetaEntry
-	3,  // 56: wi.core.v1.AddBlockerResponse.item:type_name -> wi.core.v1.Item
-	7,  // 57: wi.core.v1.AddBlockerResponse.blocker:type_name -> wi.core.v1.Blocker
-	3,  // 58: wi.core.v1.ClearBlockerResponse.item:type_name -> wi.core.v1.Item
-	59, // 59: wi.core.v1.Note.time:type_name -> google.protobuf.Timestamp
-	41, // 60: wi.core.v1.Note.attachment:type_name -> wi.core.v1.Attachment
-	42, // 61: wi.core.v1.AddNoteResponse.note:type_name -> wi.core.v1.Note
-	42, // 62: wi.core.v1.AttachResponse.note:type_name -> wi.core.v1.Note
-	41, // 63: wi.core.v1.CurrentAttachment.attachment:type_name -> wi.core.v1.Attachment
-	59, // 64: wi.core.v1.CurrentAttachment.time:type_name -> google.protobuf.Timestamp
-	42, // 65: wi.core.v1.ListNotesResponse.notes:type_name -> wi.core.v1.Note
-	48, // 66: wi.core.v1.ListNotesResponse.attachments:type_name -> wi.core.v1.CurrentAttachment
-	41, // 67: wi.core.v1.ReadAttachmentResponse.attachment:type_name -> wi.core.v1.Attachment
-	12, // 68: wi.core.v1.ItemService.CreateItem:input_type -> wi.core.v1.CreateItemRequest
-	14, // 69: wi.core.v1.ItemService.GetItem:input_type -> wi.core.v1.GetItemRequest
-	16, // 70: wi.core.v1.ItemService.ResolveItem:input_type -> wi.core.v1.ResolveItemRequest
-	19, // 71: wi.core.v1.ItemService.ListItems:input_type -> wi.core.v1.ListItemsRequest
-	21, // 72: wi.core.v1.ItemService.SearchItems:input_type -> wi.core.v1.SearchItemsRequest
-	24, // 73: wi.core.v1.ItemService.UpdateItem:input_type -> wi.core.v1.UpdateItemRequest
-	26, // 74: wi.core.v1.ItemService.SetItemState:input_type -> wi.core.v1.SetItemStateRequest
-	28, // 75: wi.core.v1.ItemService.DeleteItem:input_type -> wi.core.v1.DeleteItemRequest
-	30, // 76: wi.core.v1.ItemService.MarkRead:input_type -> wi.core.v1.MarkReadRequest
-	32, // 77: wi.core.v1.ItemService.DeferItem:input_type -> wi.core.v1.DeferItemRequest
-	35, // 78: wi.core.v1.ItemService.ListItemEvents:input_type -> wi.core.v1.ListItemEventsRequest
-	37, // 79: wi.core.v1.ItemService.AddBlocker:input_type -> wi.core.v1.AddBlockerRequest
-	39, // 80: wi.core.v1.ItemService.ClearBlocker:input_type -> wi.core.v1.ClearBlockerRequest
-	43, // 81: wi.core.v1.ItemService.AddNote:input_type -> wi.core.v1.AddNoteRequest
-	45, // 82: wi.core.v1.ItemService.Attach:input_type -> wi.core.v1.AttachRequest
-	47, // 83: wi.core.v1.ItemService.ListNotes:input_type -> wi.core.v1.ListNotesRequest
-	50, // 84: wi.core.v1.ItemService.ReadAttachment:input_type -> wi.core.v1.ReadAttachmentRequest
-	13, // 85: wi.core.v1.ItemService.CreateItem:output_type -> wi.core.v1.CreateItemResponse
-	15, // 86: wi.core.v1.ItemService.GetItem:output_type -> wi.core.v1.GetItemResponse
-	17, // 87: wi.core.v1.ItemService.ResolveItem:output_type -> wi.core.v1.ResolveItemResponse
-	20, // 88: wi.core.v1.ItemService.ListItems:output_type -> wi.core.v1.ListItemsResponse
-	23, // 89: wi.core.v1.ItemService.SearchItems:output_type -> wi.core.v1.SearchItemsResponse
-	25, // 90: wi.core.v1.ItemService.UpdateItem:output_type -> wi.core.v1.UpdateItemResponse
-	27, // 91: wi.core.v1.ItemService.SetItemState:output_type -> wi.core.v1.SetItemStateResponse
-	29, // 92: wi.core.v1.ItemService.DeleteItem:output_type -> wi.core.v1.DeleteItemResponse
-	31, // 93: wi.core.v1.ItemService.MarkRead:output_type -> wi.core.v1.MarkReadResponse
-	33, // 94: wi.core.v1.ItemService.DeferItem:output_type -> wi.core.v1.DeferItemResponse
-	36, // 95: wi.core.v1.ItemService.ListItemEvents:output_type -> wi.core.v1.ListItemEventsResponse
-	38, // 96: wi.core.v1.ItemService.AddBlocker:output_type -> wi.core.v1.AddBlockerResponse
-	40, // 97: wi.core.v1.ItemService.ClearBlocker:output_type -> wi.core.v1.ClearBlockerResponse
-	44, // 98: wi.core.v1.ItemService.AddNote:output_type -> wi.core.v1.AddNoteResponse
-	46, // 99: wi.core.v1.ItemService.Attach:output_type -> wi.core.v1.AttachResponse
-	49, // 100: wi.core.v1.ItemService.ListNotes:output_type -> wi.core.v1.ListNotesResponse
-	51, // 101: wi.core.v1.ItemService.ReadAttachment:output_type -> wi.core.v1.ReadAttachmentResponse
-	85, // [85:102] is the sub-list for method output_type
-	68, // [68:85] is the sub-list for method input_type
-	68, // [68:68] is the sub-list for extension type_name
-	68, // [68:68] is the sub-list for extension extendee
-	0,  // [0:68] is the sub-list for field type_name
+	2,  // 35: wi.core.v1.ItemSummary.section:type_name -> wi.core.v1.ListSection
+	55, // 36: wi.core.v1.CreateItemRequest.agent_settings:type_name -> wi.core.v1.CreateItemRequest.AgentSettingsEntry
+	4,  // 37: wi.core.v1.CreateItemResponse.item:type_name -> wi.core.v1.Item
+	4,  // 38: wi.core.v1.GetItemResponse.item:type_name -> wi.core.v1.Item
+	10, // 39: wi.core.v1.GetItemResponse.observation:type_name -> wi.core.v1.ItemObservation
+	57, // 40: wi.core.v1.ListItemsRequest.states:type_name -> wi.core.v1.ItemState
+	19, // 41: wi.core.v1.ListItemsRequest.label_rules:type_name -> wi.core.v1.LabelRule
+	3,  // 42: wi.core.v1.ListItemsRequest.order:type_name -> wi.core.v1.ListOrder
+	12, // 43: wi.core.v1.ListItemsResponse.items:type_name -> wi.core.v1.ItemSummary
+	57, // 44: wi.core.v1.SearchItemsRequest.states:type_name -> wi.core.v1.ItemState
+	12, // 45: wi.core.v1.SearchHit.item:type_name -> wi.core.v1.ItemSummary
+	23, // 46: wi.core.v1.SearchItemsResponse.hits:type_name -> wi.core.v1.SearchHit
+	60, // 47: wi.core.v1.UpdateItemRequest.snoozed_until:type_name -> google.protobuf.Timestamp
+	4,  // 48: wi.core.v1.UpdateItemResponse.item:type_name -> wi.core.v1.Item
+	57, // 49: wi.core.v1.SetItemStateRequest.state:type_name -> wi.core.v1.ItemState
+	58, // 50: wi.core.v1.SetItemStateRequest.resolution:type_name -> wi.core.v1.Resolution
+	4,  // 51: wi.core.v1.SetItemStateResponse.item:type_name -> wi.core.v1.Item
+	60, // 52: wi.core.v1.ItemEvent.time:type_name -> google.protobuf.Timestamp
+	35, // 53: wi.core.v1.ListItemEventsResponse.events:type_name -> wi.core.v1.ItemEvent
+	0,  // 54: wi.core.v1.AddBlockerRequest.kind:type_name -> wi.core.v1.BlockerKind
+	60, // 55: wi.core.v1.AddBlockerRequest.until:type_name -> google.protobuf.Timestamp
+	56, // 56: wi.core.v1.AddBlockerRequest.meta:type_name -> wi.core.v1.AddBlockerRequest.MetaEntry
+	4,  // 57: wi.core.v1.AddBlockerResponse.item:type_name -> wi.core.v1.Item
+	8,  // 58: wi.core.v1.AddBlockerResponse.blocker:type_name -> wi.core.v1.Blocker
+	4,  // 59: wi.core.v1.ClearBlockerResponse.item:type_name -> wi.core.v1.Item
+	60, // 60: wi.core.v1.Note.time:type_name -> google.protobuf.Timestamp
+	42, // 61: wi.core.v1.Note.attachment:type_name -> wi.core.v1.Attachment
+	43, // 62: wi.core.v1.AddNoteResponse.note:type_name -> wi.core.v1.Note
+	43, // 63: wi.core.v1.AttachResponse.note:type_name -> wi.core.v1.Note
+	42, // 64: wi.core.v1.CurrentAttachment.attachment:type_name -> wi.core.v1.Attachment
+	60, // 65: wi.core.v1.CurrentAttachment.time:type_name -> google.protobuf.Timestamp
+	43, // 66: wi.core.v1.ListNotesResponse.notes:type_name -> wi.core.v1.Note
+	49, // 67: wi.core.v1.ListNotesResponse.attachments:type_name -> wi.core.v1.CurrentAttachment
+	42, // 68: wi.core.v1.ReadAttachmentResponse.attachment:type_name -> wi.core.v1.Attachment
+	13, // 69: wi.core.v1.ItemService.CreateItem:input_type -> wi.core.v1.CreateItemRequest
+	15, // 70: wi.core.v1.ItemService.GetItem:input_type -> wi.core.v1.GetItemRequest
+	17, // 71: wi.core.v1.ItemService.ResolveItem:input_type -> wi.core.v1.ResolveItemRequest
+	20, // 72: wi.core.v1.ItemService.ListItems:input_type -> wi.core.v1.ListItemsRequest
+	22, // 73: wi.core.v1.ItemService.SearchItems:input_type -> wi.core.v1.SearchItemsRequest
+	25, // 74: wi.core.v1.ItemService.UpdateItem:input_type -> wi.core.v1.UpdateItemRequest
+	27, // 75: wi.core.v1.ItemService.SetItemState:input_type -> wi.core.v1.SetItemStateRequest
+	29, // 76: wi.core.v1.ItemService.DeleteItem:input_type -> wi.core.v1.DeleteItemRequest
+	31, // 77: wi.core.v1.ItemService.MarkRead:input_type -> wi.core.v1.MarkReadRequest
+	33, // 78: wi.core.v1.ItemService.DeferItem:input_type -> wi.core.v1.DeferItemRequest
+	36, // 79: wi.core.v1.ItemService.ListItemEvents:input_type -> wi.core.v1.ListItemEventsRequest
+	38, // 80: wi.core.v1.ItemService.AddBlocker:input_type -> wi.core.v1.AddBlockerRequest
+	40, // 81: wi.core.v1.ItemService.ClearBlocker:input_type -> wi.core.v1.ClearBlockerRequest
+	44, // 82: wi.core.v1.ItemService.AddNote:input_type -> wi.core.v1.AddNoteRequest
+	46, // 83: wi.core.v1.ItemService.Attach:input_type -> wi.core.v1.AttachRequest
+	48, // 84: wi.core.v1.ItemService.ListNotes:input_type -> wi.core.v1.ListNotesRequest
+	51, // 85: wi.core.v1.ItemService.ReadAttachment:input_type -> wi.core.v1.ReadAttachmentRequest
+	14, // 86: wi.core.v1.ItemService.CreateItem:output_type -> wi.core.v1.CreateItemResponse
+	16, // 87: wi.core.v1.ItemService.GetItem:output_type -> wi.core.v1.GetItemResponse
+	18, // 88: wi.core.v1.ItemService.ResolveItem:output_type -> wi.core.v1.ResolveItemResponse
+	21, // 89: wi.core.v1.ItemService.ListItems:output_type -> wi.core.v1.ListItemsResponse
+	24, // 90: wi.core.v1.ItemService.SearchItems:output_type -> wi.core.v1.SearchItemsResponse
+	26, // 91: wi.core.v1.ItemService.UpdateItem:output_type -> wi.core.v1.UpdateItemResponse
+	28, // 92: wi.core.v1.ItemService.SetItemState:output_type -> wi.core.v1.SetItemStateResponse
+	30, // 93: wi.core.v1.ItemService.DeleteItem:output_type -> wi.core.v1.DeleteItemResponse
+	32, // 94: wi.core.v1.ItemService.MarkRead:output_type -> wi.core.v1.MarkReadResponse
+	34, // 95: wi.core.v1.ItemService.DeferItem:output_type -> wi.core.v1.DeferItemResponse
+	37, // 96: wi.core.v1.ItemService.ListItemEvents:output_type -> wi.core.v1.ListItemEventsResponse
+	39, // 97: wi.core.v1.ItemService.AddBlocker:output_type -> wi.core.v1.AddBlockerResponse
+	41, // 98: wi.core.v1.ItemService.ClearBlocker:output_type -> wi.core.v1.ClearBlockerResponse
+	45, // 99: wi.core.v1.ItemService.AddNote:output_type -> wi.core.v1.AddNoteResponse
+	47, // 100: wi.core.v1.ItemService.Attach:output_type -> wi.core.v1.AttachResponse
+	50, // 101: wi.core.v1.ItemService.ListNotes:output_type -> wi.core.v1.ListNotesResponse
+	52, // 102: wi.core.v1.ItemService.ReadAttachment:output_type -> wi.core.v1.ReadAttachmentResponse
+	86, // [86:103] is the sub-list for method output_type
+	69, // [69:86] is the sub-list for method input_type
+	69, // [69:69] is the sub-list for extension type_name
+	69, // [69:69] is the sub-list for extension extendee
+	0,  // [0:69] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_items_proto_init() }
@@ -4235,7 +4321,7 @@ func file_wi_core_v1_items_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_items_proto_rawDesc), len(file_wi_core_v1_items_proto_rawDesc)),
-			NumEnums:      3,
+			NumEnums:      4,
 			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   1,

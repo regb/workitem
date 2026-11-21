@@ -1078,6 +1078,9 @@ type SendMessageRequest struct {
 	StartMode AgentMode `protobuf:"varint,8,opt,name=start_mode,json=startMode,proto3,enum=wi.core.v1.AgentMode" json:"start_mode,omitempty"`
 	// require_online refuses instead of starting an offline agent. Low-level
 	// CLI control uses it; ordinary conversation sending may still start one.
+	// Without it, a message to a backlog item, or to an active one without a
+	// checkout, starts the item with the message as its first prompt, as
+	// LifecycleService.StartItem does, and returns the start's job.
 	RequireOnline bool `protobuf:"varint,9,opt,name=require_online,json=requireOnline,proto3" json:"require_online,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1231,9 +1234,11 @@ func (x *SendMessageResponse) GetJob() *Job {
 }
 
 type AbortTurnRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
-	LeaseId       string                 `protobuf:"bytes,2,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ItemId string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	// lease_id is the caller's control lease. Without one, vacant control is
+	// taken; another holder's lease refuses, with a ControlStatus detail.
+	LeaseId       string `protobuf:"bytes,2,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1733,7 +1738,10 @@ type UpdateAgentSettingsRequest struct {
 	// settings to change; an empty value resets one to the profile.
 	Settings map[string]string `protobuf:"bytes,2,rep,name=settings,proto3" json:"settings,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// restart allows restarting an agent that cannot apply them live.
-	Restart       bool   `protobuf:"varint,3,opt,name=restart,proto3" json:"restart,omitempty"`
+	Restart bool `protobuf:"varint,3,opt,name=restart,proto3" json:"restart,omitempty"`
+	// lease_id is the caller's control lease, needed while the agent runs.
+	// Without one, vacant control is taken; another holder's lease refuses,
+	// with a ControlStatus detail.
 	LeaseId       string `protobuf:"bytes,4,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3976,7 +3984,9 @@ func (x *ControlPlan) GetPlanToken() string {
 	return ""
 }
 
-// ControlStatus is who controls an item's agent now.
+// ControlStatus is who controls an item's agent now. Control refusals
+// (another holder's lease, a takeover needing confirmation) carry it as an
+// error detail.
 type ControlStatus struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Lease *ControlLease          `protobuf:"bytes,1,opt,name=lease,proto3" json:"lease,omitempty"`
@@ -4371,8 +4381,12 @@ func (x *RenewControlResponse) GetLease() *ControlLease {
 }
 
 type ReleaseControlRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LeaseId       string                 `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	LeaseId string                 `protobuf:"bytes,1,opt,name=lease_id,json=leaseId,proto3" json:"lease_id,omitempty"`
+	// item_id, when set, releases the caller's lease on that item even if the
+	// daemon no longer knows lease_id (after a restart); lease_id may then be
+	// empty.
+	ItemId        string `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4410,6 +4424,13 @@ func (*ReleaseControlRequest) Descriptor() ([]byte, []int) {
 func (x *ReleaseControlRequest) GetLeaseId() string {
 	if x != nil {
 		return x.LeaseId
+	}
+	return ""
+}
+
+func (x *ReleaseControlRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
 	}
 	return ""
 }
@@ -4791,9 +4812,10 @@ const file_wi_core_v1_agents_proto_rawDesc = "" +
 	"\x13RenewControlRequest\x12\x19\n" +
 	"\blease_id\x18\x01 \x01(\tR\aleaseId\"F\n" +
 	"\x14RenewControlResponse\x12.\n" +
-	"\x05lease\x18\x01 \x01(\v2\x18.wi.core.v1.ControlLeaseR\x05lease\"2\n" +
+	"\x05lease\x18\x01 \x01(\v2\x18.wi.core.v1.ControlLeaseR\x05lease\"K\n" +
 	"\x15ReleaseControlRequest\x12\x19\n" +
-	"\blease_id\x18\x01 \x01(\tR\aleaseId\"\x18\n" +
+	"\blease_id\x18\x01 \x01(\tR\aleaseId\x12\x17\n" +
+	"\aitem_id\x18\x02 \x01(\tR\x06itemId\"\x18\n" +
 	"\x16ReleaseControlResponse*\x89\x01\n" +
 	"\x0eControlChannel\x12\x1f\n" +
 	"\x1bCONTROL_CHANNEL_UNSPECIFIED\x10\x00\x12\x1e\n" +

@@ -198,6 +198,22 @@ func workDisplaySections(res app.WorkListResult, mode string, agents map[string]
 	inProgress := []app.WorkListItem{}
 	waiting := []app.WorkListItem{}
 	for _, item := range append(append([]app.WorkListItem{}, res.Sections.Active...), res.Sections.Waiting...) {
+		// The daemon decides the section, for every client alike.
+		switch item.Section {
+		case "needs_fixing":
+			needsFixing = append(needsFixing, item)
+			continue
+		case "in_progress":
+			inProgress = append(inProgress, item)
+			continue
+		case "waiting":
+			waiting = append(waiting, item)
+			continue
+		case "needs_attention":
+			needsAttention = append(needsAttention, item)
+			continue
+		}
+		// An older daemon names no section.
 		bucket := workItemBucket(item, agents)
 		if bucket == "needs_fixing" {
 			needsFixing = append(needsFixing, item)

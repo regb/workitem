@@ -240,6 +240,23 @@ message ItemSummary {
   google.protobuf.Timestamp updated_at = 14;
   // attention_group is set when the list is in attention order.
   AttentionGroup attention_group = 15;
+  // section is where the built-in work list shows the item, set when the
+  // list is in attention order. Every client shows the same section.
+  ListSection section = 16;
+}
+
+// ListSection is a section of the built-in work list. A waiting item stays
+// WAITING whatever its agent reports (a usage limit is a problem the item
+// waits out); other active work with an agent or checkout problem NEEDS
+// FIXING.
+enum ListSection {
+  LIST_SECTION_UNSPECIFIED = 0;
+  LIST_SECTION_NEEDS_ATTENTION = 1;
+  LIST_SECTION_NEEDS_FIXING = 2;
+  LIST_SECTION_IN_PROGRESS = 3;
+  LIST_SECTION_WAITING = 4;
+  LIST_SECTION_BACKLOG = 5;
+  LIST_SECTION_CLOSED = 6;
 }
 
 message CreateItemRequest {

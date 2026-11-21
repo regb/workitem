@@ -186,7 +186,9 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 					}
 				}
 				field := ref.Descriptor().Fields().ByName("item_id")
-				if field != nil && field.Kind() == protoreflect.StringKind && !strings.Contains(req.Spec().Procedure, "/ListJobs") {
+				// ReleaseControl names its item by lease_id or item_id.
+				optional := field != nil && req.Spec().Procedure == corev1connect.ControlServiceReleaseControlProcedure && ref.Get(field).String() == ""
+				if field != nil && field.Kind() == protoreflect.StringKind && !strings.Contains(req.Spec().Procedure, "/ListJobs") && !optional {
 					id := ref.Get(field).String()
 					if !model.ValidID(id) {
 						return nil, invalid("valid item_id is required")

@@ -128,8 +128,10 @@ func (s *Server) ResolveItem(ctx context.Context, req *connect.Request[v1.Resolv
 }
 func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObservation {
 	out := &v1.ItemObservation{WorktreeStatus: v1.WorktreeStatus_WORKTREE_STATUS_ABSENT, Capturing: s.App.ReviewCaptures.Capturing(m.ID)}
+	online := false
 	if observed, err := s.Local.AgentObservation(ctx, m.ID); err == nil && observed.Found {
 		v := observed.Observation
+		online = v.ProcessOnline
 		out.AgentStatus = agentStatus(v.Status)
 		out.AgentReason = v.Reason
 		out.ObservedAt = stamp(v.ObservedAt)
@@ -152,6 +154,9 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 	if m.State != model.StateClosed {
 		if reason, starting := s.startingAgent(m.ID); starting {
 			out.AgentStatus = v1.AgentStatus_AGENT_STATUS_BUSY
+			out.AgentReason = reason
+		} else if reason, failed := s.failedStart(m.ID); failed && !online && m.State == model.StateActive {
+			out.AgentStatus = v1.AgentStatus_AGENT_STATUS_PROBLEM
 			out.AgentReason = reason
 		}
 	}
@@ -181,6 +186,25 @@ func (s *Server) startingAgent(itemID string) (string, bool) {
 			return "starting the agent: " + job.Phase, true
 		}
 		return "starting the agent", true
+	}
+	return "", false
+}
+
+// failedStart reports that the item's latest job to start its agent failed,
+// with the job's error as the reason. Until the next start, the item has no
+// agent to observe: the failure is what it shows instead.
+func (s *Server) failedStart(itemID string) (string, bool) {
+	for _, job := range s.jobs.list(itemID, false) {
+		if !agentStartingJobs[job.Kind] {
+			continue
+		}
+		if job.State != v1.JobState_JOB_STATE_FAILED {
+			return "", false
+		}
+		if job.Error == "" {
+			return "the agent failed to start", true
+		}
+		return "the agent failed to start: " + job.Error, true
 	}
 	return "", false
 }
@@ -308,6 +332,7 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 			default:
 				row.AttentionGroup = v1.AttentionGroup_ATTENTION_GROUP_WORKING
 			}
+			row.Section = listSection(row)
 		}
 		out.Items = append(out.Items, row)
 	}
@@ -728,4 +753,25 @@ func (s *Server) ReadAttachment(ctx context.Context, req *connect.Request[v1.Rea
 			return err
 		}
 	}
+}
+
+// listSection places a row in the built-in work list, for every client: the
+// attention group, with active work whose agent or checkout has a problem
+// apart under NEEDS FIXING. A waiting item stays WAITING.
+func listSection(row *v1.ItemSummary) v1.ListSection {
+	switch row.AttentionGroup {
+	case v1.AttentionGroup_ATTENTION_GROUP_CLOSED:
+		return v1.ListSection_LIST_SECTION_CLOSED
+	case v1.AttentionGroup_ATTENTION_GROUP_BACKLOG:
+		return v1.ListSection_LIST_SECTION_BACKLOG
+	case v1.AttentionGroup_ATTENTION_GROUP_WAITING:
+		return v1.ListSection_LIST_SECTION_WAITING
+	}
+	if o := row.Observation; o != nil && (o.AgentStatus == v1.AgentStatus_AGENT_STATUS_PROBLEM || o.WorktreeStatus == v1.WorktreeStatus_WORKTREE_STATUS_PROBLEM) {
+		return v1.ListSection_LIST_SECTION_NEEDS_FIXING
+	}
+	if row.AttentionGroup == v1.AttentionGroup_ATTENTION_GROUP_WORKING {
+		return v1.ListSection_LIST_SECTION_IN_PROGRESS
+	}
+	return v1.ListSection_LIST_SECTION_NEEDS_ATTENTION
 }

@@ -50,10 +50,13 @@ type Item struct {
 	Blockers         []model.Blocker `json:"blockers,omitempty"`
 	Waiting          bool            `json:"waiting,omitempty"`
 	Unread           bool            `json:"unread,omitempty"`
-	CreatedAt        time.Time       `json:"created_at"`
-	UpdatedAt        time.Time       `json:"updated_at"`
-	ChangedAt        time.Time       `json:"state_changed_at"`
-	Manifest         model.Manifest  `json:"manifest,omitempty"`
+	// Section is the work-list section the daemon places the item in, such
+	// as needs_fixing; empty when it did not say.
+	Section   string         `json:"section,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	ChangedAt time.Time      `json:"state_changed_at"`
+	Manifest  model.Manifest `json:"manifest,omitempty"`
 }
 type AgentStatus struct {
 	Status                 string `json:"status"`

@@ -56,6 +56,8 @@ message StartOptions {
   string client_message_id = 5;
   // override_capacity bypasses deep-work capacity only for operator callers.
   bool override_capacity = 6;
+  // images go with the prompt.
+  repeated Image images = 7;
 }
 
 message CreateAndStartItemRequest {

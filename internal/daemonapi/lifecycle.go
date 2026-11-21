@@ -81,7 +81,7 @@ func (s *Server) startItem(ctx context.Context, itemID string, options *v1.Start
 			j.phase("waiting for the agent")
 			s.waitAgentIdle(ctx, itemID, time.Until(deadline))
 			j.phase("delivering startup message")
-			err := s.send(ctx, &v1.SendMessageRequest{ItemId: itemID, Text: text, Delivery: v1.Delivery_DELIVERY_PROMPT, ClientMessageId: options.ClientMessageId, StartMode: options.Mode})
+			err := s.send(ctx, &v1.SendMessageRequest{ItemId: itemID, Text: text, Images: options.Images, Delivery: v1.Delivery_DELIVERY_PROMPT, ClientMessageId: options.ClientMessageId, StartMode: options.Mode})
 			if err == nil || !agentBusy(err) || !time.Now().Before(deadline) || ctx.Err() != nil {
 				return partial(err, itemID, append(completed, "started agent")...)
 			}

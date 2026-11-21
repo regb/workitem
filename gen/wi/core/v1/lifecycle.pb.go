@@ -38,8 +38,10 @@ type StartOptions struct {
 	ClientMessageId string `protobuf:"bytes,5,opt,name=client_message_id,json=clientMessageId,proto3" json:"client_message_id,omitempty"`
 	// override_capacity bypasses deep-work capacity only for operator callers.
 	OverrideCapacity bool `protobuf:"varint,6,opt,name=override_capacity,json=overrideCapacity,proto3" json:"override_capacity,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// images go with the prompt.
+	Images        []*Image `protobuf:"bytes,7,rep,name=images,proto3" json:"images,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartOptions) Reset() {
@@ -112,6 +114,13 @@ func (x *StartOptions) GetOverrideCapacity() bool {
 		return x.OverrideCapacity
 	}
 	return false
+}
+
+func (x *StartOptions) GetImages() []*Image {
+	if x != nil {
+		return x.Images
+	}
+	return nil
 }
 
 type CreateAndStartItemRequest struct {
@@ -714,7 +723,7 @@ var File_wi_core_v1_lifecycle_proto protoreflect.FileDescriptor
 const file_wi_core_v1_lifecycle_proto_rawDesc = "" +
 	"\n" +
 	"\x1awi/core/v1/lifecycle.proto\x12\n" +
-	"wi.core.v1\x1a\x17wi/core/v1/common.proto\x1a\x16wi/core/v1/items.proto\x1a\x15wi/core/v1/jobs.proto\"\xec\x01\n" +
+	"wi.core.v1\x1a\x17wi/core/v1/common.proto\x1a\x16wi/core/v1/items.proto\x1a\x15wi/core/v1/jobs.proto\"\x97\x02\n" +
 	"\fStartOptions\x12\x16\n" +
 	"\x06prompt\x18\x01 \x01(\tR\x06prompt\x12!\n" +
 	"\fsend_nothing\x18\x02 \x01(\bR\vsendNothing\x12)\n" +
@@ -722,7 +731,8 @@ const file_wi_core_v1_lifecycle_proto_rawDesc = "" +
 	"\n" +
 	"skip_setup\x18\x04 \x01(\bR\tskipSetup\x12*\n" +
 	"\x11client_message_id\x18\x05 \x01(\tR\x0fclientMessageId\x12+\n" +
-	"\x11override_capacity\x18\x06 \x01(\bR\x10overrideCapacity\"~\n" +
+	"\x11override_capacity\x18\x06 \x01(\bR\x10overrideCapacity\x12)\n" +
+	"\x06images\x18\a \x03(\v2\x11.wi.core.v1.ImageR\x06images\"~\n" +
 	"\x19CreateAndStartItemRequest\x121\n" +
 	"\x04item\x18\x01 \x01(\v2\x1d.wi.core.v1.CreateItemRequestR\x04item\x12.\n" +
 	"\x05start\x18\x02 \x01(\v2\x18.wi.core.v1.StartOptionsR\x05start\"e\n" +
@@ -798,43 +808,45 @@ var file_wi_core_v1_lifecycle_proto_goTypes = []any{
 	(*ReopenItemRequest)(nil),          // 9: wi.core.v1.ReopenItemRequest
 	(*ReopenItemResponse)(nil),         // 10: wi.core.v1.ReopenItemResponse
 	(AgentMode)(0),                     // 11: wi.core.v1.AgentMode
-	(*CreateItemRequest)(nil),          // 12: wi.core.v1.CreateItemRequest
-	(*Item)(nil),                       // 13: wi.core.v1.Item
-	(*Job)(nil),                        // 14: wi.core.v1.Job
-	(Resolution)(0),                    // 15: wi.core.v1.Resolution
+	(*Image)(nil),                      // 12: wi.core.v1.Image
+	(*CreateItemRequest)(nil),          // 13: wi.core.v1.CreateItemRequest
+	(*Item)(nil),                       // 14: wi.core.v1.Item
+	(*Job)(nil),                        // 15: wi.core.v1.Job
+	(Resolution)(0),                    // 16: wi.core.v1.Resolution
 }
 var file_wi_core_v1_lifecycle_proto_depIdxs = []int32{
 	11, // 0: wi.core.v1.StartOptions.mode:type_name -> wi.core.v1.AgentMode
-	12, // 1: wi.core.v1.CreateAndStartItemRequest.item:type_name -> wi.core.v1.CreateItemRequest
-	0,  // 2: wi.core.v1.CreateAndStartItemRequest.start:type_name -> wi.core.v1.StartOptions
-	13, // 3: wi.core.v1.CreateAndStartItemResponse.item:type_name -> wi.core.v1.Item
-	14, // 4: wi.core.v1.CreateAndStartItemResponse.job:type_name -> wi.core.v1.Job
-	0,  // 5: wi.core.v1.StartItemRequest.start:type_name -> wi.core.v1.StartOptions
-	13, // 6: wi.core.v1.StartItemResponse.item:type_name -> wi.core.v1.Item
-	14, // 7: wi.core.v1.StartItemResponse.job:type_name -> wi.core.v1.Job
-	13, // 8: wi.core.v1.ShelveItemResponse.item:type_name -> wi.core.v1.Item
-	14, // 9: wi.core.v1.ShelveItemResponse.job:type_name -> wi.core.v1.Job
-	15, // 10: wi.core.v1.CloseItemRequest.resolution:type_name -> wi.core.v1.Resolution
-	13, // 11: wi.core.v1.CloseItemResponse.item:type_name -> wi.core.v1.Item
-	14, // 12: wi.core.v1.CloseItemResponse.job:type_name -> wi.core.v1.Job
-	11, // 13: wi.core.v1.ReopenItemRequest.mode:type_name -> wi.core.v1.AgentMode
-	13, // 14: wi.core.v1.ReopenItemResponse.item:type_name -> wi.core.v1.Item
-	14, // 15: wi.core.v1.ReopenItemResponse.job:type_name -> wi.core.v1.Job
-	1,  // 16: wi.core.v1.LifecycleService.CreateAndStartItem:input_type -> wi.core.v1.CreateAndStartItemRequest
-	3,  // 17: wi.core.v1.LifecycleService.StartItem:input_type -> wi.core.v1.StartItemRequest
-	5,  // 18: wi.core.v1.LifecycleService.ShelveItem:input_type -> wi.core.v1.ShelveItemRequest
-	7,  // 19: wi.core.v1.LifecycleService.CloseItem:input_type -> wi.core.v1.CloseItemRequest
-	9,  // 20: wi.core.v1.LifecycleService.ReopenItem:input_type -> wi.core.v1.ReopenItemRequest
-	2,  // 21: wi.core.v1.LifecycleService.CreateAndStartItem:output_type -> wi.core.v1.CreateAndStartItemResponse
-	4,  // 22: wi.core.v1.LifecycleService.StartItem:output_type -> wi.core.v1.StartItemResponse
-	6,  // 23: wi.core.v1.LifecycleService.ShelveItem:output_type -> wi.core.v1.ShelveItemResponse
-	8,  // 24: wi.core.v1.LifecycleService.CloseItem:output_type -> wi.core.v1.CloseItemResponse
-	10, // 25: wi.core.v1.LifecycleService.ReopenItem:output_type -> wi.core.v1.ReopenItemResponse
-	21, // [21:26] is the sub-list for method output_type
-	16, // [16:21] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	12, // 1: wi.core.v1.StartOptions.images:type_name -> wi.core.v1.Image
+	13, // 2: wi.core.v1.CreateAndStartItemRequest.item:type_name -> wi.core.v1.CreateItemRequest
+	0,  // 3: wi.core.v1.CreateAndStartItemRequest.start:type_name -> wi.core.v1.StartOptions
+	14, // 4: wi.core.v1.CreateAndStartItemResponse.item:type_name -> wi.core.v1.Item
+	15, // 5: wi.core.v1.CreateAndStartItemResponse.job:type_name -> wi.core.v1.Job
+	0,  // 6: wi.core.v1.StartItemRequest.start:type_name -> wi.core.v1.StartOptions
+	14, // 7: wi.core.v1.StartItemResponse.item:type_name -> wi.core.v1.Item
+	15, // 8: wi.core.v1.StartItemResponse.job:type_name -> wi.core.v1.Job
+	14, // 9: wi.core.v1.ShelveItemResponse.item:type_name -> wi.core.v1.Item
+	15, // 10: wi.core.v1.ShelveItemResponse.job:type_name -> wi.core.v1.Job
+	16, // 11: wi.core.v1.CloseItemRequest.resolution:type_name -> wi.core.v1.Resolution
+	14, // 12: wi.core.v1.CloseItemResponse.item:type_name -> wi.core.v1.Item
+	15, // 13: wi.core.v1.CloseItemResponse.job:type_name -> wi.core.v1.Job
+	11, // 14: wi.core.v1.ReopenItemRequest.mode:type_name -> wi.core.v1.AgentMode
+	14, // 15: wi.core.v1.ReopenItemResponse.item:type_name -> wi.core.v1.Item
+	15, // 16: wi.core.v1.ReopenItemResponse.job:type_name -> wi.core.v1.Job
+	1,  // 17: wi.core.v1.LifecycleService.CreateAndStartItem:input_type -> wi.core.v1.CreateAndStartItemRequest
+	3,  // 18: wi.core.v1.LifecycleService.StartItem:input_type -> wi.core.v1.StartItemRequest
+	5,  // 19: wi.core.v1.LifecycleService.ShelveItem:input_type -> wi.core.v1.ShelveItemRequest
+	7,  // 20: wi.core.v1.LifecycleService.CloseItem:input_type -> wi.core.v1.CloseItemRequest
+	9,  // 21: wi.core.v1.LifecycleService.ReopenItem:input_type -> wi.core.v1.ReopenItemRequest
+	2,  // 22: wi.core.v1.LifecycleService.CreateAndStartItem:output_type -> wi.core.v1.CreateAndStartItemResponse
+	4,  // 23: wi.core.v1.LifecycleService.StartItem:output_type -> wi.core.v1.StartItemResponse
+	6,  // 24: wi.core.v1.LifecycleService.ShelveItem:output_type -> wi.core.v1.ShelveItemResponse
+	8,  // 25: wi.core.v1.LifecycleService.CloseItem:output_type -> wi.core.v1.CloseItemResponse
+	10, // 26: wi.core.v1.LifecycleService.ReopenItem:output_type -> wi.core.v1.ReopenItemResponse
+	22, // [22:27] is the sub-list for method output_type
+	17, // [17:22] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_lifecycle_proto_init() }

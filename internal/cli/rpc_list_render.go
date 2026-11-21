@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
@@ -62,7 +63,7 @@ func rpcWorkList(ctx context.Context, cfg Config, value *v1.ListItemsResponse, m
 				waiting = true
 			}
 		}
-		item := app.WorkListItem{ID: row.Id, Slug: row.Slug, Title: row.Title, State: apiview.State(row.State), Resolution: apiview.Resolution(row.Resolution), DeepWork: row.DeepWork, Labels: row.Labels, RepositoryID: row.RepositoryId, Repository: names[row.RepositoryId], Blockers: blockers, Waiting: waiting, UpdatedAt: apiview.Time(row.UpdatedAt)}
+		item := app.WorkListItem{Section: strings.ToLower(strings.TrimPrefix(row.Section.String(), "LIST_SECTION_")), ID: row.Id, Slug: row.Slug, Title: row.Title, State: apiview.State(row.State), Resolution: apiview.Resolution(row.Resolution), DeepWork: row.DeepWork, Labels: row.Labels, RepositoryID: row.RepositoryId, Repository: names[row.RepositoryId], Blockers: blockers, Waiting: waiting, UpdatedAt: apiview.Time(row.UpdatedAt)}
 		if item.Repository == "" {
 			item.Repository = row.RepositoryId
 		}

@@ -212,6 +212,9 @@ message SendMessageRequest {
   AgentMode start_mode = 8;
   // require_online refuses instead of starting an offline agent. Low-level
   // CLI control uses it; ordinary conversation sending may still start one.
+  // Without it, a message to a backlog item, or to an active one without a
+  // checkout, starts the item with the message as its first prompt, as
+  // LifecycleService.StartItem does, and returns the start's job.
   bool require_online = 9;
 }
 
@@ -224,6 +227,8 @@ message SendMessageResponse {
 
 message AbortTurnRequest {
   string item_id = 1;
+  // lease_id is the caller's control lease. Without one, vacant control is
+  // taken; another holder's lease refuses, with a ControlStatus detail.
   string lease_id = 2;
 }
 
@@ -284,6 +289,9 @@ message UpdateAgentSettingsRequest {
   map<string, string> settings = 2;
   // restart allows restarting an agent that cannot apply them live.
   bool restart = 3;
+  // lease_id is the caller's control lease, needed while the agent runs.
+  // Without one, vacant control is taken; another holder's lease refuses,
+  // with a ControlStatus detail.
   string lease_id = 4;
 }
 
@@ -601,7 +609,9 @@ message ControlPlan {
   string plan_token = 9;
 }
 
-// ControlStatus is who controls an item's agent now.
+// ControlStatus is who controls an item's agent now. Control refusals
+// (another holder's lease, a takeover needing confirmation) carry it as an
+// error detail.
 message ControlStatus {
   ControlLease lease = 1;
   // implicit means a terminal controls the agent without a lease.
@@ -647,6 +657,10 @@ message RenewControlResponse {
 
 message ReleaseControlRequest {
   string lease_id = 1;
+  // item_id, when set, releases the caller's lease on that item even if the
+  // daemon no longer knows lease_id (after a restart); lease_id may then be
+  // empty.
+  string item_id = 2;
 }
 
 message ReleaseControlResponse {}

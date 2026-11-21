@@ -28,6 +28,23 @@ func lease(value *model.ControlLease) *v1.ControlLease {
 func (s *Server) controlStatus(ctx context.Context, status app.ControlStatus, plan app.ControlPlan, client string) *v1.ControlStatus {
 	return &v1.ControlStatus{Lease: lease(status.Lease), Implicit: status.Implicit, Yours: status.Lease != nil && status.Lease.ClientID == client, Plan: &v1.ControlPlan{PlanToken: s.planToken(ctx, status, plan, client), NeedsConfirmation: plan.NeedsConfirmation, Reasons: plan.Reasons, Displaces: lease(plan.Displaces), DisplacesTerminal: plan.DisplacesTerminal, AbortsTurn: plan.Abort, RestartsIn: modeValue(plan.Replace), StartsIn: modeValue(plan.Start), Unavailable: plan.Unavailable}}
 }
+
+// refuseControl is a control refusal carrying the item's current control
+// status as a detail, so a client can show who holds control and offer to
+// take it without another call.
+func (s *Server) refuseControl(ctx context.Context, itemID string, code connect.Code, message string) error {
+	refusal := connect.NewError(code, errors.New(message))
+	request := s.controlRequest(ctx, itemID, caller(ctx).client, false, false)
+	status, plan, err := s.App.PlanControl(ctx, request)
+	if err != nil {
+		return refusal
+	}
+	s.rememberLease(status.Lease)
+	if detail, err := connect.NewErrorDetail(s.controlStatus(ctx, status, plan, request.ClientID)); err == nil {
+		refusal.AddDetail(detail)
+	}
+	return refusal
+}
 func (s *Server) rememberLease(value *model.ControlLease) {
 	if value != nil {
 		copy := *value
@@ -63,10 +80,10 @@ func (s *Server) AcquireControl(ctx context.Context, req *connect.Request[v1.Acq
 		}
 	}
 	if plan.NeedsConfirmation && !request.Confirm {
-		return nil, precondition("taking control requires confirmation")
+		return nil, s.refuseControl(ctx, req.Msg.ItemId, connect.CodeFailedPrecondition, "taking control requires confirmation")
 	}
 	if plan.Unavailable != "" {
-		return nil, precondition(plan.Unavailable)
+		return nil, s.refuseControl(ctx, req.Msg.ItemId, connect.CodeFailedPrecondition, plan.Unavailable)
 	}
 	if request.EnsureRuntime && (!status.RuntimeOnline || plan.Replace != "") {
 		m, err := s.requireActive(ctx, req.Msg.ItemId)
@@ -134,33 +151,42 @@ func (s *Server) RenewControl(ctx context.Context, req *connect.Request[v1.Renew
 	return response(&v1.RenewControlResponse{Lease: lease(result.Lease)}, err)
 }
 func (s *Server) ReleaseControl(ctx context.Context, req *connect.Request[v1.ReleaseControlRequest]) (*connect.Response[v1.ReleaseControlResponse], error) {
-	value, err := s.knownLease(req.Msg.LeaseId)
-	if err != nil {
-		return nil, rpcError(err)
+	who := caller(ctx)
+	itemID := req.Msg.ItemId
+	if itemID == "" {
+		value, err := s.knownLease(req.Msg.LeaseId)
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		if value.ClientID != who.client {
+			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("lease belongs to another client"))
+		}
+		itemID = value.ItemID
+		// A request naming its item was locked on it by the interceptor.
+		unlock := s.lock(itemID)
+		defer unlock()
 	}
-	if value.ClientID != caller(ctx).client {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("lease belongs to another client"))
-	}
-	unlock := s.lock(value.ItemID)
-	defer unlock()
-	current, err := s.Local.Lease(ctx, value.ItemID)
+	current, err := s.Local.Lease(ctx, itemID)
 	if err != nil {
 		return nil, rpcError(err)
 	}
 	if current == nil {
 		return response(&v1.ReleaseControlResponse{}, nil)
 	}
-	if current.ID != value.ID {
+	if req.Msg.LeaseId != "" && current.ID != req.Msg.LeaseId {
 		return nil, aborted("control lease changed")
 	}
-	expected := value.ID
-	result, err := s.Local.ReleaseLease(ctx, model.LeaseRequest{ItemID: value.ItemID, Holder: value.Holder, ClientID: value.ClientID, ExpectedLeaseID: &expected})
+	if current.ClientID != who.client {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("lease belongs to another client"))
+	}
+	expected := current.ID
+	result, err := s.Local.ReleaseLease(ctx, model.LeaseRequest{ItemID: itemID, Holder: current.Holder, ClientID: current.ClientID, ExpectedLeaseID: &expected})
 	if err == nil && !result.Granted {
 		err = aborted("control lease changed")
 	}
 	if err == nil {
-		if _, repair := s.App.ControlStatus(ctx, resolve(value.ItemID)); repair != nil {
-			return nil, partial(repair, value.ItemID, "released control lease")
+		if _, repair := s.App.ControlStatus(ctx, resolve(itemID)); repair != nil {
+			return nil, partial(repair, itemID, "released control lease")
 		}
 	}
 	return response(&v1.ReleaseControlResponse{}, err)
