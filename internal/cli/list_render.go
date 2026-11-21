@@ -27,13 +27,6 @@ func agentListBucket(label string) string {
 	}
 }
 
-func agentDisplayLabel(label, marker string) string {
-	if strings.TrimSpace(marker) != "" {
-		return marker
-	}
-	return label
-}
-
 type workDisplaySection struct {
 	Key   string
 	Name  string

@@ -159,14 +159,6 @@ func Wait(t testing.TB, clients *apitransport.Clients, job *v1.Job) *v1.Job {
 	}
 	return latest
 }
-func (f *Fixture) Item(t testing.TB, repo, title string) *v1.Item {
-	t.Helper()
-	value, err := f.Clients.Items.CreateItem(context.Background(), connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: title}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return value.Msg.Item
-}
 
 type Backend struct{}
 

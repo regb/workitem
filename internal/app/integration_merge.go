@@ -512,10 +512,3 @@ func overlappingPaths(dirty, incoming []string) []string {
 	sort.Strings(result)
 	return result
 }
-
-func shortSHA(sha string) string {
-	if len(sha) > 7 {
-		return sha[:7]
-	}
-	return sha
-}

@@ -80,10 +80,6 @@ func ImportConversations(ctx context.Context, database *Database, dataRoot strin
 	return importConversations(ctx, database, dataRoot, false, firstConversationDecoders(registries), noLock{})
 }
 
-func ImportActiveConversations(ctx context.Context, database *Database, dataRoot string, registries ...ConversationDecoders) (ConversationImportReport, error) {
-	return importConversations(ctx, database, dataRoot, true, firstConversationDecoders(registries), noLock{})
-}
-
 // noLock serves callers that already hold the domain lock or run before the
 // daemon serves anyone.
 type noLock struct{}

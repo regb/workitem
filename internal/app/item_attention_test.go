@@ -2,8 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -218,20 +216,4 @@ func coreManifest(t *testing.T, id, slug, state string, deep bool, now time.Time
 	}
 	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: testutil.ID(t, 40), Locator: filepath.Join("sessions", "pi", "existing.jsonl")}
 	return manifest
-}
-
-func appendCorePiMessage(t *testing.T, path string, timestamp time.Time, role, text string) {
-	t.Helper()
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-	entry := map[string]any{
-		"type": "message", "timestamp": timestamp.Format(time.RFC3339Nano),
-		"message": map[string]any{"role": role, "content": []map[string]any{{"type": "text", "text": text}}},
-	}
-	if err := json.NewEncoder(f).Encode(entry); err != nil {
-		t.Fatal(err)
-	}
 }

@@ -33,35 +33,3 @@ func firstNonEmpty(values ...string) string {
 	}
 	return ""
 }
-
-func containsAny(values []string, needles ...string) bool {
-	for _, value := range values {
-		for _, needle := range needles {
-			if value == needle {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func uniqueStrings(values []string) []string {
-	seen := map[string]bool{}
-	out := []string{}
-	for _, value := range values {
-		if value == "" || seen[value] {
-			continue
-		}
-		seen[value] = true
-		out = append(out, value)
-	}
-	return out
-}
-
-func truncatePreview(s string, max int) string {
-	s = strings.TrimSpace(s)
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + "..."
-}

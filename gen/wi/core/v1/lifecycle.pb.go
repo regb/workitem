@@ -345,8 +345,11 @@ type ShelveItemRequest struct {
 	// confirm_attached_terminal acknowledges disconnecting clients attached
 	// to the agent's terminal.
 	ConfirmAttachedTerminal bool `protobuf:"varint,2,opt,name=confirm_attached_terminal,json=confirmAttachedTerminal,proto3" json:"confirm_attached_terminal,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// expected_revision, when set, refuses the call with ABORTED if the item
+	// changed since the client read it.
+	ExpectedRevision uint32 `protobuf:"varint,3,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ShelveItemRequest) Reset() {
@@ -391,6 +394,13 @@ func (x *ShelveItemRequest) GetConfirmAttachedTerminal() bool {
 		return x.ConfirmAttachedTerminal
 	}
 	return false
+}
+
+func (x *ShelveItemRequest) GetExpectedRevision() uint32 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
 }
 
 type ShelveItemResponse struct {
@@ -465,8 +475,11 @@ type CloseItemRequest struct {
 	// instead.
 	CommitChanges           bool `protobuf:"varint,4,opt,name=commit_changes,json=commitChanges,proto3" json:"commit_changes,omitempty"`
 	ConfirmAttachedTerminal bool `protobuf:"varint,5,opt,name=confirm_attached_terminal,json=confirmAttachedTerminal,proto3" json:"confirm_attached_terminal,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// expected_revision, when set, refuses the call with ABORTED if the item
+	// changed since the client read it.
+	ExpectedRevision uint32 `protobuf:"varint,6,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *CloseItemRequest) Reset() {
@@ -532,6 +545,13 @@ func (x *CloseItemRequest) GetConfirmAttachedTerminal() bool {
 		return x.ConfirmAttachedTerminal
 	}
 	return false
+}
+
+func (x *CloseItemRequest) GetExpectedRevision() uint32 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
 }
 
 type PlanCloseRequest struct {
@@ -736,10 +756,13 @@ type ReopenItemRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	ItemId string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	// start also starts the item; otherwise it stays in the backlog.
-	Start         bool      `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
-	Mode          AgentMode `protobuf:"varint,3,opt,name=mode,proto3,enum=wi.core.v1.AgentMode" json:"mode,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Start bool      `protobuf:"varint,2,opt,name=start,proto3" json:"start,omitempty"`
+	Mode  AgentMode `protobuf:"varint,3,opt,name=mode,proto3,enum=wi.core.v1.AgentMode" json:"mode,omitempty"`
+	// expected_revision, when set, refuses the call with ABORTED if the item
+	// changed since the client read it.
+	ExpectedRevision uint32 `protobuf:"varint,4,opt,name=expected_revision,json=expectedRevision,proto3" json:"expected_revision,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *ReopenItemRequest) Reset() {
@@ -791,6 +814,13 @@ func (x *ReopenItemRequest) GetMode() AgentMode {
 		return x.Mode
 	}
 	return AgentMode_AGENT_MODE_UNSPECIFIED
+}
+
+func (x *ReopenItemRequest) GetExpectedRevision() uint32 {
+	if x != nil {
+		return x.ExpectedRevision
+	}
+	return 0
 }
 
 type ReopenItemResponse struct {
@@ -873,14 +903,15 @@ const file_wi_core_v1_lifecycle_proto_rawDesc = "" +
 	"\x11expected_revision\x18\x03 \x01(\rR\x10expectedRevision\"\\\n" +
 	"\x11StartItemResponse\x12$\n" +
 	"\x04item\x18\x01 \x01(\v2\x10.wi.core.v1.ItemR\x04item\x12!\n" +
-	"\x03job\x18\x02 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"h\n" +
+	"\x03job\x18\x02 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\x95\x01\n" +
 	"\x11ShelveItemRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12:\n" +
-	"\x19confirm_attached_terminal\x18\x02 \x01(\bR\x17confirmAttachedTerminal\"y\n" +
+	"\x19confirm_attached_terminal\x18\x02 \x01(\bR\x17confirmAttachedTerminal\x12+\n" +
+	"\x11expected_revision\x18\x03 \x01(\rR\x10expectedRevision\"y\n" +
 	"\x12ShelveItemResponse\x12$\n" +
 	"\x04item\x18\x01 \x01(\v2\x10.wi.core.v1.ItemR\x04item\x12\x1a\n" +
 	"\bwarnings\x18\x02 \x03(\tR\bwarnings\x12!\n" +
-	"\x03job\x18\x03 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\xdc\x01\n" +
+	"\x03job\x18\x03 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\x89\x02\n" +
 	"\x10CloseItemRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x126\n" +
 	"\n" +
@@ -888,7 +919,8 @@ const file_wi_core_v1_lifecycle_proto_rawDesc = "" +
 	"resolution\x12\x14\n" +
 	"\x05force\x18\x03 \x01(\bR\x05force\x12%\n" +
 	"\x0ecommit_changes\x18\x04 \x01(\bR\rcommitChanges\x12:\n" +
-	"\x19confirm_attached_terminal\x18\x05 \x01(\bR\x17confirmAttachedTerminal\"+\n" +
+	"\x19confirm_attached_terminal\x18\x05 \x01(\bR\x17confirmAttachedTerminal\x12+\n" +
+	"\x11expected_revision\x18\x06 \x01(\rR\x10expectedRevision\"+\n" +
 	"\x10PlanCloseRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"\xed\x01\n" +
 	"\x11PlanCloseResponse\x12\x1f\n" +
@@ -902,11 +934,12 @@ const file_wi_core_v1_lifecycle_proto_rawDesc = "" +
 	"\x04item\x18\x01 \x01(\v2\x10.wi.core.v1.ItemR\x04item\x12\x16\n" +
 	"\x06commit\x18\x02 \x01(\tR\x06commit\x12\x1a\n" +
 	"\bwarnings\x18\x03 \x03(\tR\bwarnings\x12!\n" +
-	"\x03job\x18\x04 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"m\n" +
+	"\x03job\x18\x04 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\x9a\x01\n" +
 	"\x11ReopenItemRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x14\n" +
 	"\x05start\x18\x02 \x01(\bR\x05start\x12)\n" +
-	"\x04mode\x18\x03 \x01(\x0e2\x15.wi.core.v1.AgentModeR\x04mode\"]\n" +
+	"\x04mode\x18\x03 \x01(\x0e2\x15.wi.core.v1.AgentModeR\x04mode\x12+\n" +
+	"\x11expected_revision\x18\x04 \x01(\rR\x10expectedRevision\"]\n" +
 	"\x12ReopenItemResponse\x12$\n" +
 	"\x04item\x18\x01 \x01(\v2\x10.wi.core.v1.ItemR\x04item\x12!\n" +
 	"\x03job\x18\x02 \x01(\v2\x0f.wi.core.v1.JobR\x03job2\xf4\x03\n" +

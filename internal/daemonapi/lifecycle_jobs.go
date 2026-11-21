@@ -8,10 +8,11 @@ import (
 )
 
 func (s *Server) ShelveItem(ctx context.Context, req *connect.Request[v1.ShelveItemRequest]) (*connect.Response[v1.ShelveItemResponse], error) {
-	value, err := s.item(ctx, req.Msg.ItemId)
+	c, err := s.canonical(ctx, req.Msg.ItemId, req.Msg.ExpectedRevision)
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	value := item(c.Manifest, c.Revision)
 	if value.State == v1.ItemState_ITEM_STATE_BACKLOG {
 		return s.shelveItem(ctx, req)
 	}
@@ -41,10 +42,11 @@ func (s *Server) CloseItem(ctx context.Context, req *connect.Request[v1.CloseIte
 	if req.Msg.Resolution < 1 || req.Msg.Resolution > 3 {
 		return nil, invalid("closing requires a resolution")
 	}
-	value, err := s.item(ctx, req.Msg.ItemId)
+	c, err := s.canonical(ctx, req.Msg.ItemId, req.Msg.ExpectedRevision)
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	value := item(c.Manifest, c.Revision)
 	if value.State == v1.ItemState_ITEM_STATE_CLOSED {
 		return s.closeItem(ctx, req)
 	}

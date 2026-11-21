@@ -94,6 +94,9 @@ message ShelveItemRequest {
   // confirm_attached_terminal acknowledges disconnecting clients attached
   // to the agent's terminal.
   bool confirm_attached_terminal = 2;
+  // expected_revision, when set, refuses the call with ABORTED if the item
+  // changed since the client read it.
+  uint32 expected_revision = 3;
 }
 
 message ShelveItemResponse {
@@ -113,6 +116,9 @@ message CloseItemRequest {
   // instead.
   bool commit_changes = 4;
   bool confirm_attached_terminal = 5;
+  // expected_revision, when set, refuses the call with ABORTED if the item
+  // changed since the client read it.
+  uint32 expected_revision = 6;
 }
 
 message PlanCloseRequest {
@@ -149,6 +155,9 @@ message ReopenItemRequest {
   // start also starts the item; otherwise it stays in the backlog.
   bool start = 2;
   AgentMode mode = 3;
+  // expected_revision, when set, refuses the call with ABORTED if the item
+  // changed since the client read it.
+  uint32 expected_revision = 4;
 }
 
 message ReopenItemResponse {

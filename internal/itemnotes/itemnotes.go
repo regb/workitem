@@ -175,16 +175,6 @@ func Attachments(notes []Note) []Current {
 	return current
 }
 
-// Find returns the latest content attached under name.
-func Find(notes []Note, name string) (Current, bool) {
-	for _, attachment := range Attachments(notes) {
-		if attachment.Name == name {
-			return attachment, true
-		}
-	}
-	return Current{}, false
-}
-
 // Append adds a note to the log. Only the coordinator calls it, one at a
 // time.
 func Append(itemDir string, note Note) error {

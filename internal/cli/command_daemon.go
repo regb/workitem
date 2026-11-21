@@ -29,10 +29,6 @@ import (
 	"github.com/regb/workitem/internal/xdg"
 )
 
-func daemonCommandRequested(args []string) bool {
-	filtered, _ := extractGlobals(args)
-	return len(filtered) > 0 && filtered[0] == "daemon"
-}
 func probeDaemon(ctx context.Context, socketPath string) (coordinator.Status, error) {
 	clients, err := apitransport.NewClients(socketPath)
 	if err != nil {

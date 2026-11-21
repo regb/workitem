@@ -54,9 +54,6 @@ func NotFoundf(format string, args ...any) error { return newf(NotFound, format,
 // Invalidf is a malformed or inconsistent request.
 func Invalidf(format string, args ...any) error { return newf(Invalid, format, args...) }
 
-// Existsf is something that already exists.
-func Existsf(format string, args ...any) error { return newf(Exists, format, args...) }
-
 // Exhaustedf is a bounded resource used up.
 func Exhaustedf(format string, args ...any) error { return newf(Exhausted, format, args...) }
 

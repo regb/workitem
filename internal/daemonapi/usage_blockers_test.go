@@ -2,13 +2,13 @@ package daemonapi
 
 import (
 	"context"
+	"github.com/regb/workitem/internal/apiview"
 	"sync"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apiview"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -82,7 +82,10 @@ func TestUsageBlockerClearsAfterACheckPastItsReset(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		m := apiview.Manifest(value.Msg.Item)
+		m, err := f.api.App.Store.LoadManifest(value.Msg.Item.Id)
+		if err != nil {
+			t.Fatal(err)
+		}
 		f.api.clearUsageBlocker(ctx, m, blocker, time.Now())
 		for deadline := time.Now().Add(5 * time.Second); f.api.usageSnapshot().Refreshing && time.Now().Before(deadline); {
 			time.Sleep(10 * time.Millisecond)

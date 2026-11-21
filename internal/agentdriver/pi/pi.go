@@ -120,10 +120,6 @@ func BridgePath() (string, error) {
 	return path, nil
 }
 
-func (c Client) Exec(ctx context.Context, sessionPath, cwd string, env map[string]string) error {
-	return c.ExecMode(ctx, ExecSpec{SessionPath: sessionPath, Mode: agent.ModeTUI, CWD: cwd, Env: env})
-}
-
 func (c Client) ExecMode(ctx context.Context, spec ExecSpec) error {
 	bridgePath := spec.BridgePath
 	if bridgePath == "" {

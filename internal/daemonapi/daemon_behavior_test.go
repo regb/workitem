@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestListSectionFollowsAttentionThenProblems(t *testing.T) {
@@ -225,5 +226,50 @@ func TestPlanCloseReportsWhatClosingWouldDo(t *testing.T) {
 	item, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 	if err != nil || item.Msg.Item.State != v1.ItemState_ITEM_STATE_ACTIVE {
 		t.Fatalf("planning changed the item: %v %v", item, err)
+	}
+}
+
+// Shelving, closing and reopening refuse a request made against an item
+// that changed since the client read it, as starting does.
+func TestLifecyclePorcelainRefusesStaleRevisions(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.repo(t), Title: "stale"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, read := created.Msg.Item.Id, created.Msg.Item.Revision
+	if _, err := f.clients.Items.AddNote(ctx, connect.NewRequest(&v1.AddNoteRequest{ItemId: id, Text: "changed meanwhile"})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.clients.Items.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: id, Title: proto.String("renamed meanwhile")})); err != nil {
+		t.Fatal(err)
+	}
+	current, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+	if err != nil || current.Msg.Item.Revision == read {
+		t.Fatalf("revision did not move: %v %v", current, err)
+	}
+	if _, err := f.clients.Lifecycle.ShelveItem(ctx, connect.NewRequest(&v1.ShelveItemRequest{ItemId: id, ExpectedRevision: read})); connect.CodeOf(err) != connect.CodeAborted {
+		t.Fatalf("stale shelve: %v", err)
+	}
+	if _, err := f.clients.Lifecycle.CloseItem(ctx, connect.NewRequest(&v1.CloseItemRequest{ItemId: id, Resolution: v1.Resolution_RESOLUTION_ABANDONED, ExpectedRevision: read})); connect.CodeOf(err) != connect.CodeAborted {
+		t.Fatalf("stale close: %v", err)
+	}
+	closed, err := f.clients.Lifecycle.CloseItem(ctx, connect.NewRequest(&v1.CloseItemRequest{ItemId: id, Resolution: v1.Resolution_RESOLUTION_ABANDONED, ExpectedRevision: current.Msg.Item.Revision}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if closed.Msg.Job != nil {
+		waitJob(t, f.clients, closed.Msg.Job)
+	}
+	after, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+	if err != nil || after.Msg.Item.State != v1.ItemState_ITEM_STATE_CLOSED {
+		t.Fatalf("not closed: %v %v", after, err)
+	}
+	if _, err := f.clients.Lifecycle.ReopenItem(ctx, connect.NewRequest(&v1.ReopenItemRequest{ItemId: id, ExpectedRevision: read})); connect.CodeOf(err) != connect.CodeAborted {
+		t.Fatalf("stale reopen: %v", err)
+	}
+	if _, err := f.clients.Lifecycle.ReopenItem(ctx, connect.NewRequest(&v1.ReopenItemRequest{ItemId: id, ExpectedRevision: after.Msg.Item.Revision})); err != nil {
+		t.Fatal(err)
 	}
 }

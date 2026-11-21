@@ -177,7 +177,7 @@ func (s *Server) closeItem(ctx context.Context, req *connect.Request[v1.CloseIte
 	return response(&v1.CloseItemResponse{Item: value, Commit: commit, Warnings: result.Warnings}, err)
 }
 func (s *Server) ReopenItem(ctx context.Context, req *connect.Request[v1.ReopenItemRequest]) (*connect.Response[v1.ReopenItemResponse], error) {
-	c, err := s.canonical(ctx, req.Msg.ItemId, 0)
+	c, err := s.canonical(ctx, req.Msg.ItemId, req.Msg.ExpectedRevision)
 	if err != nil {
 		return nil, rpcError(err)
 	}

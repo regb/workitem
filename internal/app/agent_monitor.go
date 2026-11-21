@@ -36,9 +36,3 @@ func (a *App) AgentStatus(ctx context.Context, opts AgentStatusOptions) (AgentSt
 func (a *App) recordPrimaryTerminalRuntime(ctx context.Context, m model.Manifest, window string) []string {
 	return a.primaryAgentService().RecordPrimaryTerminalRuntime(ctx, m, window)
 }
-func (a *App) inspectConversation(ctx context.Context, m model.Manifest, now time.Time) (ConversationStatus, []string) {
-	if a.ConversationProjectionObserver != nil {
-		return a.ConversationProjectionObserver(ctx, m, now)
-	}
-	return a.observeConversation(ctx, m, now)
-}
