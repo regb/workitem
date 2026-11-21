@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/regb/workitem/internal/usage"
+	"github.com/regb/workitem/internal/usage/antigravity"
 )
 
 func TestDiscoveryInstalledSubscriptionClients(t *testing.T) {
@@ -16,7 +17,7 @@ func TestDiscoveryInstalledSubscriptionClients(t *testing.T) {
 	if err != nil || len(found) != 0 {
 		t.Fatal(found, err)
 	}
-	for i, name := range []string{"claude", "codex", "opencode"} {
+	for i, name := range []string{"claude", "codex", "opencode", "agy"} {
 		if err := os.WriteFile(filepath.Join(bin, name), []byte("must never run during discovery"), 0700); err != nil {
 			t.Fatal(err)
 		}
@@ -28,7 +29,7 @@ func TestDiscoveryInstalledSubscriptionClients(t *testing.T) {
 }
 func TestMissingClientsReturnUnknownQuota(t *testing.T) {
 	env := map[string]string{"HOME": t.TempDir(), "PATH": t.TempDir()}
-	for _, name := range []string{"claude", "codex", "opencode-go"} {
+	for _, name := range []string{"claude", "codex", "opencode-go", "antigravity"} {
 		found, err := Discover(env, name)
 		if err != nil || len(found) != 1 {
 			t.Fatal(found, err)
@@ -53,7 +54,7 @@ func TestDiscoveryRootsAndAliases(t *testing.T) {
 	if _, err := Discover(map[string]string{}, "claude"); err == nil {
 		t.Fatal("missing HOME accepted")
 	}
-	for input, want := range map[string]string{"anthropic": "claude", "openai": "codex", "claude": "claude", "codex": "codex", "opencode": "opencode-go", "opencode-go": "opencode-go"} {
+	for input, want := range map[string]string{"anthropic": "claude", "openai": "codex", "claude": "claude", "codex": "codex", "opencode": "opencode-go", "opencode-go": "opencode-go", "agy": "antigravity", "antigravity": "antigravity"} {
 		if CanonicalProvider(input) != want {
 			t.Fatal(input)
 		}
@@ -78,5 +79,23 @@ func TestCacheRootMustBeAbsolute(t *testing.T) {
 	}
 	if root, err := CacheRoot(map[string]string{"HOME": t.TempDir()}); err != nil || !filepath.IsAbs(root) {
 		t.Fatal(root, err)
+	}
+}
+func TestAntigravityReadsAgyDataDirectory(t *testing.T) {
+	home := t.TempDir()
+	found, err := Discover(map[string]string{"HOME": home, "PATH": t.TempDir()}, "antigravity")
+	if err != nil || len(found) != 1 {
+		t.Fatal(found, err)
+	}
+	// agy is missing from PATH, so its sign-in is never read.
+	if q := found[0].Quota(context.Background()); q.State != usage.Unavailable || q.Detail == "" {
+		t.Fatal(q)
+	}
+	p, err := adapter(map[string]string{"HOME": home}, "antigravity", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, ok := p.(*antigravity.Adapter); !ok || a.Root != filepath.Join(home, ".gemini", "antigravity-cli") {
+		t.Fatal(p)
 	}
 }

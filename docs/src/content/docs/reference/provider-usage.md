@@ -1,6 +1,6 @@
 ---
 title: Remaining subscription quota
-description: Show remaining Claude, Codex, and OpenCode Go quota in text or JSON.
+description: Show remaining Claude, Codex, OpenCode Go, and Antigravity quota in text or JSON.
 ---
 
 ```bash
@@ -9,7 +9,7 @@ wi usage --json
 wi usage --provider opencode-go --refresh
 ```
 
-`wi usage` shows how much of each subscription's quota is left: Claude, OpenAI through Codex, and OpenCode Go, which Pi can use. It reports subscriptions, not agent profiles: Pi is a harness without a subscription of its own, and one Pi profile may use several accounts. Each subscription is read through its own native client, which keeps its login. It does not track tokens, sessions, history, or costs, and never sends model prompts. No repository, execution driver, or tmux is involved. Pi credentials are not inspected or reused.
+`wi usage` shows how much of each subscription's quota is left: Claude, OpenAI through Codex, OpenCode Go, which Pi can use, and Antigravity, Google's `agy` CLI. It reports subscriptions, not agent profiles: Pi is a harness without a subscription of its own, and one Pi profile may use several accounts. Each subscription is read through its own native client, which keeps its login; Antigravity, which has no such command, is the one exception (see below). It does not track tokens, sessions, history, or costs, and never sends model prompts. No repository, execution driver, or tmux is involved. Pi credentials are not inspected or reused.
 
 It is a bundled plugin, installed with wi as `wi-usage`. Enable it in Wi's configuration file:
 
@@ -34,6 +34,13 @@ OpenCode Go
   5-hour   [█████████░]   98.37% left  resets in 1h 33m
   Weekly   [█████████░]   96.76% left  resets in 11h 29m
   Monthly  [█████████░]    95.5% left  resets in 12d 23h
+
+Antigravity
+  Weekly · Gemini Models          [█████████░]   99.97% left  resets in 6d 23h
+  5-hour · Gemini Models          [█████████░]   99.88% left  resets in 4h 51m
+  Weekly · Claude and GPT models  [██████████]     100% left  reset unknown
+  5-hour · Claude and GPT models  [██████████]     100% left  reset unknown
+  Weekly · Gemini 4 Argon         [██████████]     100% left  reset unknown
 ```
 
 Filled bars mean **remaining** quota. Segments round down; percentages keep up to two decimal places without rounding small positive values to exhausted or full quota. Unknown values have no bar. Missing resets say `reset unknown`. Countdown values use the current clock and stored reset time.
@@ -45,7 +52,7 @@ Model/surface scopes and distinct native buckets retain their labels. Multiple a
 | Option | Meaning |
 | --- | --- |
 | `--json` | Return the versioned JSON envelope below |
-| `--provider NAME` | Select `anthropic`/`claude`, `openai`/`codex`, or `opencode-go`/`opencode` |
+| `--provider NAME` | Select `anthropic`/`claude`, `openai`/`codex`, `opencode-go`/`opencode`, or `antigravity`/`agy` |
 | `--account ID` | Select an account/configuration ID from JSON output |
 | `--refresh` | Request a native refresh, subject to cache cooldown/backoff |
 
@@ -77,7 +84,7 @@ The schema is the same for every source:
 }
 ```
 
-- `provider` is `claude`, `codex`, or `opencode-go`, regardless of the input alias.
+- `provider` is `claude`, `codex`, `opencode-go`, or `antigravity`, regardless of the input alias.
 - `account` is an opaque selectable binding, not a billing identifier. It is omitted when unknown.
 - `observed_at` is when wi received the observation, not a provider-certified timestamp. Unknown observation time is `null`.
 - `windows` and `results` are always arrays. Missing windows mean unknown data, never unlimited capacity.
@@ -118,14 +125,20 @@ Inside OpenCode, the plugin reads `/console/api/orgs/current` and `/console/api/
 
 This bridge was verified with OpenCode v2.1.4. The Console paths are observed frontend interfaces, not a documented stable quota API. Schema changes fail closed. It reports the selected account's Go subscription, not necessarily the funding of every OpenCode model request.
 
-All native queries run outside the operator's checkout, with bounded subprocess output and lifetime. The native clients own credential renewal; wi never exports OAuth or opens their credential files.
+**Antigravity** has no command that reports quota without a model turn, so wi reads the sign-in `agy` saved in its file store, `~/.gemini/antigravity-cli/antigravity-oauth-token`, and asks Google's Cloud Code quota service (`v1internal:retrieveUserQuotaSummary`) itself. Only the access token, its expiry and the sign-in method are used. The file is opened read-only, without following a symlink, and is never written by wi: wi does not refresh the token itself, store it, cache it, log it, or include it or any response body in errors. The request is a single `POST` to the host that meters the sign-in method: `daily-cloudcode-pa.googleapis.com` for a `consumer` (personal Google account) sign-in, `cloudcode-pa.googleapis.com` for `business`. The other host answers too, but reports untouched quota, so wi never falls back to it. Redirects are not followed. Other sign-in methods, such as an API key, report `unsupported`. When the saved token has expired, wi runs `agy models` once, outside any checkout, so that `agy` renews its own sign-in, then reads the file again; listing models starts no conversation and uses no quota. Verified with `agy` 1.2.16 and 1.5.14.
+
+The service groups models that share quota, each group with a 5-hour and a weekly window (Gemini, Claude and GPT, and Gemini Argon on some plans). The group name is the window's `scope.model`; the window `id` is the native bucket ID, such as `gemini-5h` or `3p-weekly`. A bucket without a remaining fraction is left out as unknown; an explicit zero is an observed exhausted window. A bucket nobody has used reports a reset one full window after the request, which is when it would reset if used now; wi shows that as `reset unknown`.
+
+Limitations: `agy` renews its access token, which lasts an hour, only while it runs, hence the `agy models` run above. When that does not renew it, for example because the sign-in was revoked, wi reports `unavailable` (or the previous observation as `stale`); sign in again with `agy`. A sign-in kept only in the OS keychain is not read and reports no sign-in. The service is an internal interface, not a documented quota API: it hides the Gemini groups from clients it considers too old, so wi identifies itself with an Antigravity hub version that is observed to return every group. A change on Google's side can drop groups or fail the query; schema changes fail closed.
+
+All native queries run outside the operator's checkout, with bounded subprocess output and lifetime. Except for Antigravity's access token above, the native clients own credential renewal; wi never exports OAuth or opens their credential files.
 
 ## Caching and identity
 
 Only the latest normalized quota per account/configuration binding is cached, under `$XDG_CACHE_HOME/wi/quota-v5` or `~/.cache/wi/quota-v5`, with private permissions. No usage history or coordinator events are recorded. Earlier formats are ignored. Concurrent queries share a file lock; malformed or interrupted cache writes are rebuildable.
 
-Normal reads reuse observations for five minutes. `--refresh` has a one-minute minimum interval. Failures back off for at least five minutes, including explicit refresh; native rate-limit hints can extend this. Wi does not retry or fall back to HTTP outside the native client.
+Normal reads reuse observations for five minutes. `--refresh` has a one-minute minimum interval. Failures back off for at least five minutes, including explicit refresh; native rate-limit hints, and Antigravity's `Retry-After`, can extend this. Wi does not retry, and apart from Antigravity's single quota request it does not make HTTP requests outside the native client.
 
-Claude/Codex account IDs identify `$CLAUDE_CONFIG_DIR` or `~/.claude`, and `$CODEX_HOME` or `~/.codex`. These are configuration slots, not verified billing identities. A login change can leave the previous observation visible until cache expiry; observation time does not prove the current login's quota.
+Claude/Codex/Antigravity account IDs identify `$CLAUDE_CONFIG_DIR` or `~/.claude`, `$CODEX_HOME` or `~/.codex`, and `~/.gemini/antigravity-cli`. These are configuration slots, not verified billing identities. A login change can leave the previous observation visible until cache expiry; observation time does not prove the current login's quota.
 
 OpenCode Go's ID also includes the native connection/workspace binding. Native selection is resolved before cache lookup/account filtering and rechecked before returning cached data. Selecting a different account/workspace cannot reuse the previous binding's quota. Only rechecked matching identities may retain stale data after a transient failure.

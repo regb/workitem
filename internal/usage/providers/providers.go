@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/regb/workitem/internal/usage"
+	"github.com/regb/workitem/internal/usage/antigravity"
 	"github.com/regb/workitem/internal/usage/claude"
 	"github.com/regb/workitem/internal/usage/codex"
 	"github.com/regb/workitem/internal/usage/opencode"
@@ -58,13 +59,16 @@ func executable(env map[string]string, name string) string {
 // never validated or loaded.
 func Discover(env map[string]string, requested string) ([]usage.Provider, error) {
 	result := []usage.Provider{}
-	for _, name := range []string{"claude", "codex", "opencode-go"} {
+	for _, name := range []string{"claude", "codex", "opencode-go", "antigravity"} {
 		if requested != "" && requested != name {
 			continue
 		}
 		client := name
-		if client == "opencode-go" {
+		switch client {
+		case "opencode-go":
 			client = "opencode"
+		case "antigravity":
+			client = "agy"
 		}
 		path := executable(env, client)
 		if requested == "" && path == "" {
@@ -96,6 +100,14 @@ func adapter(env map[string]string, name string, command []string) (usage.Provid
 			return nil, err
 		}
 		return &codex.Adapter{Root: path, Command: command, Environment: env}, nil
+	case "antigravity":
+		// agy keeps its data, including its file-store sign-in, here. It has
+		// no setting to move it for a plain agy user.
+		path, err := root(env, "", ".gemini")
+		if err != nil {
+			return nil, err
+		}
+		return &antigravity.Adapter{Root: filepath.Join(path, "antigravity-cli"), Command: command, Environment: env}, nil
 	default:
 		data, err := root(env, "XDG_DATA_HOME", ".local/share")
 		if err != nil {
@@ -135,6 +147,8 @@ func CanonicalProvider(value string) string {
 		return "codex"
 	case "opencode", "opencode-go":
 		return "opencode-go"
+	case "antigravity", "agy":
+		return "antigravity"
 	}
 	return value
 }

@@ -31,9 +31,9 @@ These commands are read-only. They show the daemon's effective configuration, as
 
 | Command | Purpose |
 | --- | --- |
-| `wi usage [show] [--provider anthropic\|openai\|opencode-go] [--account ID] [--refresh] [--json]` | Show remaining subscription quota and reset times without model prompts or credential extraction |
+| `wi usage [show] [--provider anthropic\|openai\|opencode-go\|antigravity] [--account ID] [--refresh] [--json]` | Show remaining subscription quota and reset times without model prompts or credential extraction |
 
-`wi usage` is the bundled usage plugin; enable it with `[plugins.usage] enabled = true`. It runs on the client, not in the daemon, and is not part of the API. Default text shows each subscription's quota periods with remaining-capacity bars and reset countdowns; `--json` gives the machine-readable export. Discovery uses installed Claude Code, Codex, and OpenCode clients, not Pi credentials. The aliases `claude`, `codex`, and `opencode` are also accepted. See [Provider usage](../provider-usage/).
+`wi usage` is the bundled usage plugin; enable it with `[plugins.usage] enabled = true`. It runs on the client, not in the daemon, and is not part of the API. Default text shows each subscription's quota periods with remaining-capacity bars and reset countdowns; `--json` gives the machine-readable export. Discovery uses installed Claude Code, Codex, OpenCode, and Antigravity (`agy`) clients, not Pi credentials. The aliases `claude`, `codex`, `opencode`, and `agy` are also accepted. See [Provider usage](../provider-usage/).
 
 ## Repositories
 

@@ -27,7 +27,7 @@ func writeUsageText(out io.Writer, quotas []usage.Quota, now time.Time) error {
 		if i > 0 {
 			fmt.Fprintln(&b)
 		}
-		name := map[string]string{"claude": "Claude", "codex": "Codex", "opencode-go": "OpenCode Go"}[q.Provider]
+		name := map[string]string{"claude": "Claude", "codex": "Codex", "opencode-go": "OpenCode Go", "antigravity": "Antigravity"}[q.Provider]
 		if name == "" {
 			name = quotaLabel(q.Provider)
 		}
@@ -119,7 +119,9 @@ func quotaWindowLabel(w usage.Window) string {
 			}
 			if period != "" {
 				label = period
-				if w.ID != "codex/primary" && w.ID != "codex/secondary" {
+				// A scope names the window well enough; else keep the ID
+				// to tell same-period buckets apart.
+				if w.ID != "codex/primary" && w.ID != "codex/secondary" && (w.Scope == nil || w.Scope.Model == "" && w.Scope.Surface == "") {
 					label += " · " + w.ID
 				}
 			}

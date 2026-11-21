@@ -38,3 +38,8 @@ func readSmall(path string) ([]byte, error) {
 	}
 	return b, err
 }
+
+// ReadSmallFile reads a bounded regular file without following a final
+// symlink or blocking on a FIFO/device. Adapters that must read a native
+// credential file use it so a replaced path cannot redirect the read.
+func ReadSmallFile(path string) ([]byte, error) { return readSmall(path) }

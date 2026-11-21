@@ -1,6 +1,6 @@
 // Package usage is the bundled usage plugin: it shows how much of each
-// subscription's quota is left (Claude, OpenAI through Codex, OpenCode Go),
-// asking each native client, in text or JSON. wi usage runs it.
+// subscription's quota is left (Claude, OpenAI through Codex, OpenCode Go,
+// Antigravity), asking each native client, in text or JSON. wi usage runs it.
 package usage
 
 import (
@@ -33,7 +33,7 @@ type Options struct {
 	Providers []usage.Provider
 }
 
-var errUsage = errors.New("usage: wi usage [show] [--provider claude|codex|opencode-go] [--account ID] [--refresh] [--json]")
+var errUsage = errors.New("usage: wi usage [show] [--provider claude|codex|opencode-go|antigravity] [--account ID] [--refresh] [--json]")
 
 // Run shows remaining quota. Arguments are what follows wi usage: an
 // optional show, its options, and wi's global --json anywhere.
@@ -68,7 +68,7 @@ type usageError struct{ error }
 func run(ctx context.Context, args []string, opts Options, jsonOut bool) error {
 	fs := flag.NewFlagSet("usage", flag.ContinueOnError)
 	fs.SetOutput(opts.Stderr)
-	provider := fs.String("provider", "", "claude/anthropic, codex/openai, or opencode-go/opencode")
+	provider := fs.String("provider", "", "claude/anthropic, codex/openai, opencode-go/opencode, or antigravity/agy")
 	account := fs.String("account", "", "native account/configuration binding ID")
 	refresh := fs.Bool("refresh", false, "refresh remaining quota, subject to cooldown")
 	if err := fs.Parse(args); err != nil {
@@ -78,8 +78,8 @@ func run(ctx context.Context, args []string, opts Options, jsonOut bool) error {
 		return usageError{errUsage}
 	}
 	*provider = providers.CanonicalProvider(*provider)
-	if *provider != "" && *provider != "claude" && *provider != "codex" && *provider != "opencode-go" {
-		return usageError{fmt.Errorf("--provider must be claude/anthropic, codex/openai, or opencode-go/opencode")}
+	if *provider != "" && *provider != "claude" && *provider != "codex" && *provider != "opencode-go" && *provider != "antigravity" {
+		return usageError{fmt.Errorf("--provider must be claude/anthropic, codex/openai, opencode-go/opencode, or antigravity/agy")}
 	}
 	selected := opts.Providers
 	if selected == nil {

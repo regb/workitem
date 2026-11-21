@@ -4,8 +4,9 @@
 //	enabled = true
 //
 // and wi usage shows how much of each subscription's quota is left
-// (Claude, OpenAI through Codex, OpenCode Go), asking each native client.
-// It never reads their credentials or sends a model prompt.
+// (Claude, OpenAI through Codex, OpenCode Go, Antigravity), asking each
+// native client. It never sends a model prompt. It reads no credentials,
+// except Antigravity's saved access token, read-only, for its quota endpoint.
 package main
 
 import (

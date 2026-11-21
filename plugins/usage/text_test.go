@@ -110,3 +110,27 @@ func TestUsageTextWriterFailure(t *testing.T) {
 		t.Fatal("write error lost")
 	}
 }
+
+func TestUsageTextAntigravityGroups(t *testing.T) {
+	now := time.Date(2026, 11, 20, 23, 12, 0, 0, time.UTC)
+	gemini, shared := 99.88, 100.
+	five, week := int64(18000), int64(604800)
+	reset := now.Add(4 * time.Hour)
+	quotas := []usage.Quota{{Account: usage.Account{Provider: "antigravity", ID: "antigravity:slot"}, State: usage.OK, ObservedAt: &now, Windows: []usage.Window{
+		{ID: "gemini-5h", Scope: &usage.WindowScope{Model: "Gemini Models"}, RemainingPercent: &gemini, DurationSeconds: &five, ResetsAt: &reset},
+		{ID: "3p-weekly", Scope: &usage.WindowScope{Model: "Claude and GPT models"}, RemainingPercent: &shared, DurationSeconds: &week},
+		{ID: "gemini-other", RemainingPercent: &shared, DurationSeconds: &week},
+	}}}
+	var out bytes.Buffer
+	if err := writeUsageText(&out, quotas, now); err != nil {
+		t.Fatal(err)
+	}
+	for _, required := range []string{"Antigravity\n", "5-hour · Gemini Models ", "Weekly · Claude and GPT models ", "Weekly · gemini-other ", "resets in 4h", "reset unknown"} {
+		if !strings.Contains(out.String(), required) {
+			t.Fatalf("missing %q:\n%s", required, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "gemini-5h") {
+		t.Fatalf("scoped window repeats its bucket ID:\n%s", out.String())
+	}
+}
