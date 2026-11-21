@@ -34,11 +34,11 @@ func TestDisplayStreamOrderingAndTranscriptLag(t *testing.T) {
 	}
 	s.PublishTranscript("old-leaf", "old text", "Message saved", nil)
 	chunk("message", 0, false, "First line\n")
-	if snapshot().Text != "First line\n" {
+	if snapshot().Text() != "First line\n" {
 		t.Fatal(snapshot())
 	}
 	s.PublishTranscript("user-leaf", "old text", "Working", nil)
-	if snapshot().Text != "First line\n" {
+	if snapshot().Text() != "First line\n" {
 		t.Fatal("lag overwrote stream")
 	}
 	if ok, _ := s.accept(displayInput{hookInput: hookInput{PromptID: "prompt"}, displayFields: displayFields{TurnID: "turn", MessageID: "message", Index: 0, Delta: "duplicate"}}); ok {
@@ -62,7 +62,7 @@ func TestDisplayStreamOrderingAndTranscriptLag(t *testing.T) {
 		t.Fatal("old native prompt replaced missing stream")
 	}
 	s.PublishPromptTranscript("new-leaf", "Next complete native text", "Message saved", nil, "prompt", time.Now())
-	if s.active || snapshot().Truncated || snapshot().Text != "Next complete native text" {
+	if s.active || snapshot().Truncated || snapshot().Text() != "Next complete native text" {
 		t.Fatal(snapshot())
 	}
 	if ok, _ := s.accept(displayInput{hookInput: hookInput{PromptID: "prompt"}, displayFields: displayFields{TurnID: "turn", MessageID: "message", Index: 2, Final: true, Delta: "old"}}); ok {

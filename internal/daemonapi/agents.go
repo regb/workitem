@@ -582,17 +582,29 @@ func historyImages(images []driver.HistoryImage) []*v1.Image {
 func tool(t driver.HistoryTool) *v1.ToolCall {
 	return &v1.ToolCall{Id: t.ID, Name: t.Name, Input: t.Input, Output: t.Output, Status: v1.ToolCallStatus(v1.ToolCallStatus_value["TOOL_CALL_STATUS_"+strings.ToUpper(t.Status)]), Images: historyImages(t.Images), Subagent: subagent(t.Subagent)}
 }
+
+// parts converts a message's parts, keeping their order.
+func parts(values []driver.Part) []*v1.Part {
+	out := make([]*v1.Part, 0, len(values))
+	for _, p := range values {
+		switch {
+		case p.Thought != nil:
+			out = append(out, &v1.Part{Kind: &v1.Part_Thought{Thought: &v1.Thought{Text: p.Thought.Text, DurationMs: uint32(max(0, min(p.Thought.DurationMS, int64(^uint32(0)))))}}})
+		case p.Tool != nil:
+			out = append(out, &v1.Part{Kind: &v1.Part_Tool{Tool: tool(*p.Tool)}})
+		case p.Image != nil:
+			out = append(out, &v1.Part{Kind: &v1.Part_Image{Image: historyImages([]driver.HistoryImage{*p.Image})[0]}})
+		case p.Text != "":
+			out = append(out, &v1.Part{Kind: &v1.Part_Text{Text: p.Text}})
+		}
+	}
+	return out
+}
 func history(value driver.History) *v1.GetHistoryResponse {
 	out := &v1.GetHistoryResponse{LeafId: value.LeafID, NextBefore: value.BeforeID, Truncated: value.Truncated, Warnings: value.Warnings, Messages: []*v1.ConversationMessage{}}
 	for _, m := range value.Messages {
 		timestamp, _ := time.Parse(time.RFC3339Nano, m.Timestamp)
-		row := &v1.ConversationMessage{Id: m.ID, NativeIds: m.NativeIDs, Role: v1.MessageRole(v1.MessageRole_value["MESSAGE_ROLE_"+strings.ToUpper(m.Role)]), Text: m.Text, Time: stamp(timestamp), Images: historyImages(m.Images), Error: m.Error, Aborted: m.Aborted, Subagent: subagent(m.Subagent)}
-		for _, t := range m.Tools {
-			row.Tools = append(row.Tools, tool(t))
-		}
-		if m.Reasoning != nil {
-			row.Reasoning = &v1.Reasoning{Text: m.Reasoning.Text, DurationMs: uint32(max(0, m.Reasoning.DurationMS))}
-		}
+		row := &v1.ConversationMessage{Id: m.ID, NativeIds: m.NativeIDs, Role: v1.MessageRole(v1.MessageRole_value["MESSAGE_ROLE_"+strings.ToUpper(m.Role)]), Parts: parts(m.Parts), Time: stamp(timestamp), Error: m.Error, UsageProvider: m.UsageProvider, Aborted: m.Aborted, Subagent: subagent(m.Subagent)}
 		if m.Summary != nil {
 			row.Summary = &v1.Summary{Kind: m.Summary.Kind, TokensBefore: uint32(max(0, m.Summary.TokensBefore))}
 		}
@@ -634,18 +646,12 @@ func (s *Server) GetSubagentHistory(ctx context.Context, req *connect.Request[v1
 	return response(&v1.GetSubagentHistoryResponse{Messages: h.Messages, NextBefore: h.NextBefore, Truncated: h.Truncated}, err)
 }
 func live(value driver.Content, generation uint32) *v1.LiveContent {
-	out := &v1.LiveContent{Generation: generation, MessageId: value.MessageID, Text: value.Text, Thought: value.Thought, Activity: value.Activity, SavedAs: value.SavedAs, Error: value.Error, Truncated: value.Truncated}
-	for _, t := range value.Tools {
-		out.Tools = append(out.Tools, tool(driver.HistoryTool{ID: t.ID, Name: t.Name, Status: t.Status, Input: t.Input, Output: t.Output}))
-	}
+	out := &v1.LiveContent{Generation: generation, MessageId: value.MessageID, Parts: parts(value.Parts), Activity: value.Activity, SavedAs: value.SavedAs, Error: value.Error, Truncated: value.Truncated}
 	for _, p := range value.Prompts {
 		out.Prompts = append(out.Prompts, &v1.PromptLink{ClientMessageId: p.RequestID, NativeIds: p.NativeIDs})
 	}
-	for _, p := range value.Parts {
-		out.Parts = append(out.Parts, &v1.LivePart{Text: p.Text, ToolId: p.ToolID, ToolName: p.ToolName})
-	}
 	if q := value.Question; q != nil {
-		out.Question = tool(driver.HistoryTool{ID: q.ID, Name: q.Name, Status: q.Status, Input: q.Input})
+		out.Question = tool(*q)
 	}
 	return out
 }

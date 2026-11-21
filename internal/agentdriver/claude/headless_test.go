@@ -347,7 +347,7 @@ func TestHeadlessRuntimeMultiTurnAndShutdown(t *testing.T) {
 			wait("two")
 			send("two", protocol.CommandPrompt, "second private prompt")
 			content, err := protocol.ReadContent(ctx, protocol.ContentSocketPath(control), runtimeID, itemID)
-			if err != nil || content.Text != "answer 2" {
+			if err != nil || content.Text() != "answer 2" {
 				t.Fatal(content, err)
 			}
 			// Each prompt is linked, for its sender, to the record uuid wi chose.

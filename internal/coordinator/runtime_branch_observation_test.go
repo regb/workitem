@@ -138,7 +138,7 @@ func TestAFailedBranchKeepsAKnownFailureReason(t *testing.T) {
 	seedRuntimeOwner(t, db, importTestID, "owner")
 	ctx := context.Background()
 	now := time.Now().UTC()
-	settled := RuntimeSemanticEvent{ID: "limit", RuntimeID: "owner", WorkItemID: importTestID, Type: agent.EventAgentSettled, Outcome: "failed", Failed: true, ReasonCode: "usage_limit", Timestamp: now}
+	settled := RuntimeSemanticEvent{ID: "limit", RuntimeID: "owner", WorkItemID: importTestID, Type: agent.EventAgentSettled, Outcome: "failed", Failed: true, ReasonCode: "usage_limit", UsageProvider: "claude", Timestamp: now}
 	status := RuntimeSemanticEvent{ID: "tree-limit", RuntimeID: "owner", WorkItemID: importTestID, Type: agent.EventRuntimeStatus, Readiness: "ready", AgentState: "failed", LeafID: "limit", Timestamp: now.Add(time.Second)}
 	for _, event := range []RuntimeSemanticEvent{settled, status} {
 		if _, err := IngestRuntimeEvent(ctx, db, event); err != nil {
@@ -152,7 +152,7 @@ func TestAFailedBranchKeepsAKnownFailureReason(t *testing.T) {
 	if err := NewExternalObserver(db, root).applyActionability(importTestID, &observation); err != nil {
 		t.Fatal(err)
 	}
-	if observation.Status != "problem" || observation.Reason != driverprotocol.RuntimeReasonText("usage_limit") {
+	if observation.Status != "problem" || observation.Reason != driverprotocol.RuntimeReasonText("usage_limit") || observation.FailureProvider != "claude" {
 		t.Fatal("selected failed branch hid the usage limit", observation)
 	}
 }

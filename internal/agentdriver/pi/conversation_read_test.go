@@ -34,7 +34,7 @@ func TestHistoryBoundsPreserveUnicodeAndDoNotModifyNativeContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Truncated || len(result.Messages) != 1 || !utf8.ValidString(result.Messages[0].Text) || strings.ContainsRune(result.Messages[0].Text, utf8.RuneError) {
+	if !result.Truncated || len(result.Messages) != 1 || !utf8.ValidString(result.Messages[0].Text()) || strings.ContainsRune(result.Messages[0].Text(), utf8.RuneError) {
 		t.Fatalf("invalid bounded history %+v", result)
 	}
 	after, err := os.ReadFile(path)

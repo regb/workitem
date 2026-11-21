@@ -41,7 +41,7 @@ func TestUsageLimitWaitsAndContinuesThroughAFollowUp(t *testing.T) {
 		text, at := "", time.Time{}
 		for _, message := range value.Msg.Messages {
 			if message.Role == v1.MessageRole_MESSAGE_ROLE_USER && !message.Time.AsTime().Before(at) {
-				text, at = message.Text, message.Time.AsTime()
+				text, at = messageText(message), message.Time.AsTime()
 			}
 		}
 		return text
@@ -91,6 +91,14 @@ func TestUsageLimitWaitsAndContinuesThroughAFollowUp(t *testing.T) {
 	// No usage plugin reports the fake provider: it is retried in an hour.
 	if usage.FollowUp != "Continue where you left off." || usage.Provider != "test" || usage.Until == nil || time.Until(usage.Until.AsTime()) < 50*time.Minute {
 		t.Fatalf("usage blocker: %v", usage)
+	}
+	// The saved notice names whose quota ran out, as the blocker does.
+	history, err := f.clients.Agents.GetHistory(ctx, connect.NewRequest(&v1.GetHistoryRequest{ItemId: item}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if last := history.Msg.Messages[len(history.Msg.Messages)-1]; !last.Error || last.UsageProvider != "test" {
+		t.Fatalf("usage notice: %v", last)
 	}
 	list := string(f.run("list"))
 	if !strings.Contains(list, "usage, resets") {

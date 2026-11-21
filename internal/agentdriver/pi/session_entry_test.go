@@ -101,7 +101,7 @@ func TestOnlyAssistantMessagesResetLiveContent(t *testing.T) {
 	emit(agent.RuntimeEvent{Type: "message.started", Role: "toolResult"})
 	emit(agent.RuntimeEvent{Type: agent.EventMessageCompleted, Role: "toolResult"})
 	value := content.Snapshot()
-	if value.Text != "Running both" || len(value.Tools) != 2 || value.Activity == "Message saved" {
+	if value.Text() != "Running both" || len(driverprotocol.PartsTools(value.Parts)) != 2 || value.Activity == "Message saved" {
 		t.Fatalf("tool result reset live content: %+v", value)
 	}
 }

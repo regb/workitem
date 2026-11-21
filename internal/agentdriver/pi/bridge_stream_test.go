@@ -46,10 +46,11 @@ await new Promise(resolve=>setTimeout(resolve,60));
 console.log('ready');
 const steps={
   write:()=>{callbacks.get('message_start')({message:{role:'assistant',content:[]}},ctx);
-    for (const delta of ['Hel','lo ','🌍']) callbacks.get('message_update')({assistantMessageEvent:{type:'text_delta',delta,partial:{}}},ctx);
+    for (const delta of ['Hel','lo ']) callbacks.get('message_update')({assistantMessageEvent:{type:'text_delta',delta,partial:{}}},ctx);
     callbacks.get('message_update')({assistantMessageEvent:{type:'thinking_delta',delta:'pondering',partial:{}}},ctx);
     callbacks.get('tool_execution_start')({toolCallId:'t1',toolName:'bash',args:{command:'ls'}},ctx);
     callbacks.get('tool_execution_start')({toolCallId:'t2',toolName:'read',args:{path:'a'}},ctx);
+    callbacks.get('message_update')({assistantMessageEvent:{type:'text_delta',delta:'🌍',partial:{}}},ctx);
     callbacks.get('tool_execution_end')({toolCallId:'t1',toolName:'bash',result:{content:[{type:'text',text:'a'}]},isError:false},ctx);},
   save:async()=>{callbacks.get('message_end')({message:{role:'assistant',content:[{type:'text',text:'Hello 🌍'}],stopReason:'stop',timestamp:123}},ctx);
     leaf='leaf-2';callbacks.get('session_tree')({oldLeafId:'leaf-1',newLeafId:leaf},ctx);
@@ -121,15 +122,20 @@ for await (const line of createInterface({input:process.stdin})) { await steps[l
 		}
 	}
 	got := check("write")
-	if got.Text != "Hello 🌍" || got.Thought != "pondering" || got.Activity != "Tool completed: bash" || got.LeafID != "leaf-1" {
+	if got.Text() != "Hello 🌍" || got.Activity != "Tool completed: bash" || got.LeafID != "leaf-1" {
 		t.Fatalf("while writing: %+v", got)
 	}
-	// Parallel calls are both kept, each with its own state.
-	if len(got.Tools) != 2 || got.Tools[0].Status != "completed" || !strings.Contains(got.Tools[0].Output, `"text": "a"`) || got.Tools[1].Status != "running" {
-		t.Fatalf("tools: %+v", got.Tools)
+	// Parts keep the written order; parallel calls are both kept, each
+	// with its own state, in the place it started.
+	parts := got.Parts
+	if len(parts) != 5 || parts[0].Text != "Hello " || parts[1].Thought == nil || parts[1].Thought.Text != "pondering" || parts[4].Text != "🌍" {
+		t.Fatalf("parts: %+v", parts)
+	}
+	if first, second := parts[2].Tool, parts[3].Tool; first == nil || second == nil || first.ID != "t1" || first.Status != "completed" || !strings.Contains(first.Output, `"text": "a"`) || second.ID != "t2" || second.Status != "running" {
+		t.Fatalf("tools: %+v", driverprotocol.PartsTools(parts))
 	}
 	// The saved message keeps its text, now linked to its session entry.
-	if got := check("save"); got.Text != "Hello 🌍" || got.Activity != "Idle" || got.LeafID != "leaf-2" || !reflect.DeepEqual(got.SavedAs, []string{"entry-9"}) {
+	if got := check("save"); got.Text() != "Hello 🌍" || got.Activity != "Idle" || got.LeafID != "leaf-2" || !reflect.DeepEqual(got.SavedAs, []string{"entry-9"}) {
 		t.Fatalf("after saving: %+v", got)
 	}
 	fmt.Fprintln(stdin, "stop")

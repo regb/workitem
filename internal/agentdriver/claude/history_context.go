@@ -8,23 +8,22 @@ import (
 )
 
 func recoverToolContext(file *os.File, older []historyOffset, messages []protocol.HistoryMessage) {
-	type at struct{ message, tool int }
-	wanted := map[string][]at{}
+	wanted := map[string][]*protocol.HistoryTool{}
 	calls := map[string]bool{}
 	budget := 1 << 20
 	for _, m := range messages {
-		budget -= len(m.Text)
-		for _, t := range m.Tools {
+		budget -= len(m.Text())
+		for _, t := range m.Tools() {
 			budget -= len(t.Input) + len(t.Output)
 			if t.Status == "running" {
 				calls[t.ID] = true
 			}
 		}
 	}
-	for i, m := range messages {
-		for j, t := range m.Tools {
-			if t.Status != "running" && t.ID != "" && !calls[t.ID] {
-				wanted[t.ID] = append(wanted[t.ID], at{i, j})
+	for _, m := range messages {
+		for _, part := range m.Parts {
+			if t := part.Tool; t != nil && t.Status != "running" && t.ID != "" && !calls[t.ID] {
+				wanted[t.ID] = append(wanted[t.ID], t)
 			}
 		}
 	}
@@ -45,13 +44,11 @@ func recoverToolContext(file *os.File, older []historyOffset, messages []protoco
 		var message protocol.HistoryMessage
 		truncated := false
 		content(record.Message.Content, &message, &truncated)
-		for _, tool := range message.Tools {
+		for _, tool := range message.Tools() {
 			if tool.Status != "running" {
 				continue
 			}
-			locations := wanted[tool.ID]
-			for _, where := range locations {
-				result := &messages[where.message].Tools[where.tool]
+			for _, result := range wanted[tool.ID] {
 				result.Name = tool.Name
 				result.Input = historyText(tool.Input, &budget, &truncated)
 			}
@@ -66,9 +63,9 @@ func recoverToolContext(file *os.File, older []historyOffset, messages []protoco
 // sibling of the branch. A result belongs to its call wherever it sits.
 func recoverSiblingResults(file *os.File, index map[string]historyOffset, branch map[string]bool, messages []protocol.HistoryMessage, textBudget, imageBudget *int, truncated *bool) {
 	waiting := map[string]*protocol.HistoryTool{}
-	for i := range messages {
-		for j := range messages[i].Tools {
-			if tool := &messages[i].Tools[j]; tool.ID != "" && tool.Status == "running" {
+	for _, message := range messages {
+		for _, part := range message.Parts {
+			if tool := part.Tool; tool != nil && tool.ID != "" && tool.Status == "running" {
 				waiting[tool.ID] = tool
 			}
 		}
@@ -96,7 +93,7 @@ func recoverSiblingResults(file *os.File, index map[string]historyOffset, branch
 		}
 		var message protocol.HistoryMessage
 		content(record.Message.Content, &message, truncated)
-		for _, result := range message.Tools {
+		for _, result := range message.Tools() {
 			tool, ok := waiting[result.ID]
 			if !ok || result.Status == "running" {
 				continue

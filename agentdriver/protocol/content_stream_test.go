@@ -57,7 +57,7 @@ func TestContentStreamReproducesTheServerSnapshot(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	values, _ := follow(t, ctx, path)
-	if first := settle(t, values, server.snapshot().Sequence); first.Text != "before " {
+	if first := settle(t, values, server.snapshot().Sequence); first.Text() != "before " {
 		t.Fatalf("snapshot = %+v", first)
 	}
 	server.Update(EventMessageDelta, "subscribing", "")
@@ -67,7 +67,7 @@ func TestContentStreamReproducesTheServerSnapshot(t *testing.T) {
 	server.Update(EventMessageCompleted, "", "")
 	// Whole snapshots from transcript-backed drivers become deltas or replacements.
 	server.PublishStreaming("leaf-1", "Hel", "Streaming", nil, false)
-	server.PublishStreaming("leaf-1", "Hello", "Streaming", &ContentTool{ID: "t2", Name: "read", Status: "running"}, false)
+	server.PublishStreaming("leaf-1", "Hello", "Streaming", &HistoryTool{ID: "t2", Name: "read", Status: "running"}, false)
 	server.PublishTranscript("leaf-2", "Goodbye", "Message saved", nil)
 	server.Update(EventAgentSettled, "", "")
 	want := server.snapshot()
@@ -176,7 +176,7 @@ func TestContentStreamDetectsSnapshotOnlyServers(t *testing.T) {
 		defer conn.Close()
 		var request ContentRequest
 		_ = json.NewDecoder(conn).Decode(&request)
-		_ = json.NewEncoder(conn).Encode(Content{ProtocolVersion: ContentVersion, RuntimeID: "runtime", WorkItemID: "item", Text: "old"})
+		_ = json.NewEncoder(conn).Encode(Content{ProtocolVersion: ContentVersion, RuntimeID: "runtime", WorkItemID: "item", Parts: []Part{TextPart("old")}})
 	}()
 	err = SubscribeContent(context.Background(), path, "runtime", "item", func(ContentEvent) error { return nil })
 	if !errors.Is(err, ErrContentStreamUnsupported) {
@@ -220,8 +220,8 @@ func TestMarkSavedOnlyAttachesToTheMatchingText(t *testing.T) {
 	s.Update(EventMessageCompleted, "", "")
 	s.MarkSaved("The answer.", []string{"entry"})
 	value := s.snapshot()
-	if !reflect.DeepEqual(value.SavedAs, []string{"entry"}) || value.Text != "The answer.\n" {
-		t.Fatalf("saved = %v text=%q", value.SavedAs, value.Text)
+	if !reflect.DeepEqual(value.SavedAs, []string{"entry"}) || value.Text() != "The answer.\n" {
+		t.Fatalf("saved = %v text=%q", value.SavedAs, value.Text())
 	}
 	before := value.Sequence
 	s.MarkSaved("The answer.", []string{"entry"})
@@ -231,6 +231,17 @@ func TestMarkSavedOnlyAttachesToTheMatchingText(t *testing.T) {
 	s.Update("message.started", "", "")
 	if s.snapshot().SavedAs != nil {
 		t.Fatal("a new message kept the previous saved ids")
+	}
+	// An empty message is not saved; one of tool calls alone is, by its
+	// lack of text.
+	s.MarkSaved("", []string{"empty"})
+	if s.snapshot().SavedAs != nil {
+		t.Fatal("an empty message was saved")
+	}
+	s.UpdateTool(EventToolStarted, "", "call", "bash", "ls", "", false)
+	s.MarkSaved("", []string{"tools"})
+	if !reflect.DeepEqual(s.snapshot().SavedAs, []string{"tools"}) {
+		t.Fatalf("tool-only message not saved: %v", s.snapshot().SavedAs)
 	}
 }
 
@@ -251,7 +262,7 @@ func TestParallelToolUpdatesKeepEachCallsInput(t *testing.T) {
 	s.UpdateTool(EventToolStarted, "", "a", "bash", "first", "", false)
 	s.UpdateTool(EventToolStarted, "", "b", "read", "second", "", false)
 	s.UpdateTool(EventToolCompleted, "", "a", "bash", "", "done", false)
-	tools := s.Snapshot().Tools
+	tools := PartsTools(s.Snapshot().Parts)
 	if len(tools) != 2 || tools[0].Input != "first" || tools[0].Status != "completed" || tools[1].Status != "running" {
 		t.Fatalf("tools = %+v", tools)
 	}

@@ -263,7 +263,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 				if reason == "prompt_blocked" {
 					stream.reset()
 				}
-				_ = emitFact(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: fact.Failed, ReasonCode: reason, CommandID: turns.commandID, RequestID: turns.requestID})
+				_ = emitFact(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: fact.Failed, ReasonCode: reason, UsageProvider: reasonUsageProvider(reason), CommandID: turns.commandID, RequestID: turns.requestID})
 			}
 			controls.tick(ctx, time.Now())
 			controls.releaseIfAttached(ctx, time.Now())
@@ -448,7 +448,8 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 					if len(h.Tool) > 128 {
 						err = fmt.Errorf("invalid tool name")
 					} else {
-						err = emitFact(protocol.RuntimeEvent{Type: kind, Failed: failed, ToolName: h.Tool, ReasonCode: settledReason(kind, failed, turnReason)})
+						reason := settledReason(kind, failed, turnReason)
+						err = emitFact(protocol.RuntimeEvent{Type: kind, Failed: failed, ToolName: h.Tool, ReasonCode: reason, UsageProvider: reasonUsageProvider(reason)})
 					}
 				}
 				if controls.asking != asking {

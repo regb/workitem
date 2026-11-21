@@ -51,7 +51,7 @@ type headlessQuestion struct {
 
 func (s *headlessControls) busy() bool { return s.nativeBusy || len(s.work) > 0 || s.aborting != nil }
 func (s *headlessControls) fact(kind string, d *headlessDelivery, failed bool, state, reason string) {
-	s.emit(protocol.RuntimeEvent{Type: kind, CommandID: d.command.ID, RequestID: d.command.RequestID, Failed: failed, DeliveryState: state, ReasonCode: reason})
+	s.emit(protocol.RuntimeEvent{Type: kind, CommandID: d.command.ID, RequestID: d.command.RequestID, Failed: failed, DeliveryState: state, ReasonCode: reason, UsageProvider: reasonUsageProvider(reason)})
 }
 func (s *headlessControls) remember(c protocol.ControlCommand) (*headlessDelivery, bool, error) {
 	if c.ID == "" || len(c.ID) > 200 || len(c.RequestID) > 200 {
@@ -278,7 +278,7 @@ func (s *headlessControls) result(f headlessFrame) (bool, bool) {
 	// Background turns have no Wi command identity. A late result for a completed
 	// Wi command must not release a newer reservation or settle its observation.
 	if !matched && len(s.work) == 0 {
-		s.emit(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: failed, ReasonCode: reason})
+		s.emit(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: failed, ReasonCode: reason, UsageProvider: reasonUsageProvider(reason)})
 	}
 	if len(s.work) == 0 {
 		s.nativeBusy = false

@@ -88,7 +88,7 @@ func TestSendingToAStoppedAgentLoadsItsEnvrcWithoutAsking(t *testing.T) {
 	}
 	delivered := false
 	for _, message := range history.Msg.Messages {
-		delivered = delivered || message.Role == v1.MessageRole_MESSAGE_ROLE_USER && message.Text == "after the start"
+		delivered = delivered || message.Role == v1.MessageRole_MESSAGE_ROLE_USER && messageText(message) == "after the start"
 	}
 	if !delivered {
 		t.Fatalf("message not delivered: %v", history.Msg.Messages)

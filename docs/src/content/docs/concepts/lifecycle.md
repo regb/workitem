@@ -63,7 +63,7 @@ A follow-up is about the moment the blocker was set. If you prompt the item afte
 
 ### Usage limits
 
-When an agent stops because its provider's usage limit is reached, the daemon makes the item wait with a **usage blocker** instead of leaving it as a problem. The blocker names the provider: `claude` for Claude Code, or for Pi the provider of its model (`openai-codex/...` is `codex`). `wi list` shows it as `usage, resets 15:00`.
+When an agent stops because its provider's usage limit is reached, the daemon makes the item wait with a **usage blocker** instead of leaving it as a problem. The blocker names the provider, as the agent's driver reports it with the failure: `claude` for Claude Code, `antigravity` for Antigravity, or for Pi the provider of the model that hit the limit (`openai-codex/...` is `codex`). `wi list` shows it as `usage, resets 15:00`.
 
 The daemon clears it once quota is back. With the [usage plugin](../../reference/configuration/#plugins) reporting the provider, the blocker's time is the reset of the provider's exhausted windows (the last one, when several are exhausted); at that time the daemon checks usage again and clears the blocker only if the check shows quota. If quota is still exhausted, it keeps checking every five minutes, and it keeps checking in the background while any item waits on usage, whether or not a client is open. When the usage data shows no exhausted window, the limit is one the plugin does not report, and the blocker is retried after 15 minutes. Without usage data for the provider, it is retried after an hour. Each retry costs at most one refused turn, which sets a new usage blocker.
 

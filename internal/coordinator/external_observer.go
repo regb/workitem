@@ -71,9 +71,12 @@ type AgentObservation struct {
 	BackgroundTasks int `json:"background_tasks,omitempty"`
 	// FailureReason is the reason code of the failure behind a problem
 	// status, such as usage_limit.
-	FailureReason string    `json:"failure_reason,omitempty"`
-	ObservedAt    time.Time `json:"observed_at"`
-	Warnings      []string  `json:"warnings,omitempty"`
+	FailureReason string `json:"failure_reason,omitempty"`
+	// FailureProvider names whose quota ran out when FailureReason is
+	// usage_limit, as the agent's driver reports it.
+	FailureProvider string    `json:"failure_provider,omitempty"`
+	ObservedAt      time.Time `json:"observed_at"`
+	Warnings        []string  `json:"warnings,omitempty"`
 }
 
 type AgentObservationResult struct {
@@ -283,7 +286,7 @@ func (o *ExternalObserver) ReconcileActionability(ctx context.Context) error {
 }
 
 func (o *ExternalObserver) applyActionability(itemID string, observation *AgentObservation) error {
-	observation.FailureReason = ""
+	observation.FailureReason, observation.FailureProvider = "", ""
 	var owner model.AgentRuntime
 	ownerFound, err := o.database.ReadProjection(RuntimeOwnershipProjection, itemID, &owner)
 	if err != nil {
@@ -373,7 +376,7 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 	case liveCurrent && live.AgentState == "failed":
 		observation.Status = "problem"
 		observation.Reason = "live agent loop settled with a failure"
-		observation.FailureReason = live.FailureReason
+		observation.FailureReason, observation.FailureProvider = live.FailureReason, live.FailureProvider
 		if reason := driverprotocol.RuntimeReasonText(live.FailureReason); reason != "" {
 			observation.Reason = reason
 		} else if live.LeafID != "" {
@@ -421,7 +424,7 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 		observation.Reason = "latest terminal assistant message failed"
 		if last := conversation.LastTerminalAssistant; last != nil && last.StopReason == "usage_limit" {
 			observation.Reason = driverprotocol.RuntimeReasonText(last.StopReason)
-			observation.FailureReason = last.StopReason
+			observation.FailureReason, observation.FailureProvider = last.StopReason, last.UsageProvider
 		}
 	case conversation.InferredTurnState == "idle":
 		observation.Status = "idle"

@@ -208,18 +208,19 @@ func TestAnAgentBeforeItsFirstTurnIsOnlyAProblemWhenItsRuntimeIsGone(t *testing.
 func TestAUsageLimitIsReportedAsSuch(t *testing.T) {
 	activity := RuntimeActivity{}
 	at := time.Now()
-	header := runtimeEventHeader{Type: agent.EventAgentSettled, Timestamp: at, Failed: true, Outcome: "failed", ReasonCode: "usage_limit"}
-	if !applyRuntimeActivity(&activity, header, importTestID, "owner") || activity.AgentState != "failed" || activity.FailureReason != "usage_limit" {
+	header := runtimeEventHeader{Type: agent.EventAgentSettled, Timestamp: at, Failed: true, Outcome: "failed", ReasonCode: "usage_limit", UsageProvider: "codex"}
+	if !applyRuntimeActivity(&activity, header, importTestID, "owner") || activity.AgentState != "failed" || activity.FailureReason != "usage_limit" || activity.FailureProvider != "codex" {
 		t.Fatalf("activity=%+v", activity)
 	}
 	observation := AgentObservation{}
-	applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: agent.EventAgentSettled, Failed: true, ReasonCode: "usage_limit", Timestamp: at}, activity)
-	if observation.Status != "problem" || observation.Reason != driverprotocol.RuntimeReasonText("usage_limit") {
+	applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: agent.EventAgentSettled, Failed: true, ReasonCode: "usage_limit", UsageProvider: "codex", Timestamp: at}, activity)
+	// The driver names whose quota ran out; the daemon waits on it.
+	if observation.Status != "problem" || observation.Reason != driverprotocol.RuntimeReasonText("usage_limit") || observation.FailureProvider != "codex" {
 		t.Fatalf("observation=%+v", observation)
 	}
 	// The next turn clears it.
 	applyRuntimeActivity(&activity, runtimeEventHeader{Type: agent.EventAgentStarted, Timestamp: at.Add(time.Second)}, importTestID, "owner")
-	if activity.FailureReason != "" {
+	if activity.FailureReason != "" || activity.FailureProvider != "" {
 		t.Fatalf("stale failure reason: %+v", activity)
 	}
 }

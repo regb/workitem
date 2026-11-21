@@ -28,8 +28,10 @@ type historyRecord struct {
 	Effort         string `json:"effort"`
 	CompactSummary bool   `json:"isCompactSummary"`
 	APIError       bool   `json:"isApiErrorMessage"`
-	Subtype        string `json:"subtype"`
-	CompactInfo    struct {
+	// Error classifies an API error reply, such as rate_limit.
+	Error       string `json:"error"`
+	Subtype     string `json:"subtype"`
+	CompactInfo struct {
 		PreTokens int `json:"preTokens"`
 	} `json:"compactMetadata"`
 	Origin struct {
@@ -174,6 +176,8 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		return result, fmt.Errorf("history cursor is not on the selected Claude branch")
 	}
 	raw := []protocol.HistoryMessage{}
+	// replies are the native reply IDs of raw's assistant records.
+	replies := []string{}
 	textRemaining := 1 << 20
 	imageRemaining := 8 << 20
 	for i, entry := range candidates {
@@ -195,7 +199,11 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		if len(record.Timestamp) > 128 {
 			return result, fmt.Errorf("invalid Claude history timestamp")
 		}
-		message := protocol.HistoryMessage{ID: record.ID, Role: record.Type, Timestamp: record.Timestamp, Error: record.APIError}
+		message := protocol.HistoryMessage{ID: record.ID, Role: record.Type, Timestamp: record.Timestamp, Error: record.APIError, Parts: []protocol.Part{}}
+		// Claude's usage limits are its subscription's, whatever the model.
+		if record.APIError && record.Error == "rate_limit" {
+			message.UsageProvider = usageProvider
+		}
 		if record.steered() {
 			message.Role = "user"
 			content(record.Attachment.Prompt, &message, &result.Truncated)
@@ -208,12 +216,14 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		// Claude writes a reasoning block once it ends; it began when the
 		// last record before its reply, the prompt or tool result, was
 		// written. Earlier blocks of the same reply do not count.
-		if message.Reasoning != nil {
-			before := record.Parent
-			for steps := 0; steps < 64 && record.Message.ID != "" && index[before].reply == record.Message.ID; steps++ {
-				before = index[before].parent
+		for _, part := range message.Parts {
+			if part.Thought != nil {
+				before := record.Parent
+				for steps := 0; steps < 64 && record.Message.ID != "" && index[before].reply == record.Message.ID; steps++ {
+					before = index[before].parent
+				}
+				part.Thought.DurationMS = elapsedMS(index[before].timestamp, record.Timestamp)
 			}
-			message.Reasoning.DurationMS = elapsedMS(index[before].timestamp, record.Timestamp)
 		}
 		if record.CompactSummary {
 			message.Role = "summary"
@@ -222,7 +232,7 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		// Claude records an interrupt as a user line; it marks where the
 		// operator stopped the reply, not something they wrote.
 		if record.Type == "user" && interruptedContent(record.Message.Content) {
-			message.Role, message.Text, message.Aborted = "assistant", "", true
+			message.Role, message.Parts, message.Aborted = "assistant", []protocol.Part{}, true
 		}
 		if record.Type == "system" && record.Subtype == "compact_boundary" {
 			// The boundary marks the compaction; the summary is the
@@ -232,60 +242,103 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		}
 		// Preserve pagination boundaries by deferring a whole message when the
 		// previous messages used this page's budget. Always keep the newest entry.
-		size := len(message.Text)
-		for _, tool := range message.Tools {
-			size += len(tool.Input) + len(tool.Output)
+		size := 0
+		for _, part := range message.Parts {
+			switch {
+			case part.Tool != nil:
+				size += len(part.Tool.Input) + len(part.Tool.Output)
+			case part.Thought != nil:
+				size += len(part.Thought.Text)
+			default:
+				size += len(part.Text)
+			}
 		}
 		if len(raw) > 0 && size > textRemaining {
 			result.HasMore = true
 			break
 		}
-		message.Text = historyText(message.Text, &textRemaining, &result.Truncated)
-		if message.Reasoning != nil {
-			message.Reasoning.Text = historyText(message.Reasoning.Text, &textRemaining, &result.Truncated)
+		parts := message.Parts[:0]
+		for _, part := range message.Parts {
+			switch {
+			case part.Tool != nil:
+				part.Tool.Input = historyText(part.Tool.Input, &textRemaining, &result.Truncated)
+				part.Tool.Output = historyText(part.Tool.Output, &textRemaining, &result.Truncated)
+				part.Tool.Images = historyImages(part.Tool.Images, &imageRemaining, &result.Truncated)
+			case part.Thought != nil:
+				part.Thought.Text = historyText(part.Thought.Text, &textRemaining, &result.Truncated)
+			case part.Image != nil:
+				if len(historyImages([]protocol.HistoryImage{*part.Image}, &imageRemaining, &result.Truncated)) == 0 {
+					continue
+				}
+			default:
+				if part.Text = historyText(part.Text, &textRemaining, &result.Truncated); part.Text == "" {
+					continue
+				}
+			}
+			parts = append(parts, part)
 		}
-		for j := range message.Tools {
-			t := &message.Tools[j]
-			t.Input = historyText(t.Input, &textRemaining, &result.Truncated)
-			t.Output = historyText(t.Output, &textRemaining, &result.Truncated)
-			t.Images = historyImages(t.Images, &imageRemaining, &result.Truncated)
+		message.Parts = parts
+		reply := ""
+		if record.Type == "assistant" {
+			reply = record.Message.ID
 		}
-		message.Images = historyImages(message.Images, &imageRemaining, &result.Truncated)
 		raw = append(raw, message)
+		replies = append(replies, reply)
 		result.BeforeID = record.ID
 	}
 	// A result may be on the newest page while its call is on an earlier page.
 	// Recover bounded call context without adding older entries to this page.
 	recoverToolContext(file, candidates[len(raw):], raw)
-	type location struct{ message, tool int }
-	calls := map[string]location{}
+	type call struct {
+		message int
+		tool    *protocol.HistoryTool
+	}
+	calls := map[string]call{}
+	previous := "" // the reply of the last message kept
 	for i := len(raw) - 1; i >= 0; i-- {
 		message := raw[i]
 		result.NativeEntryIDs = append(result.NativeEntryIDs, message.ID)
-		remaining := []protocol.HistoryTool{}
-		for _, tool := range message.Tools {
-			if at, ok := calls[tool.ID]; ok && tool.ID != "" && tool.Status != "running" {
-				target := &result.Messages[at.message]
-				t := &target.Tools[at.tool]
-				t.Output, t.Status, t.Images = tool.Output, tool.Status, tool.Images
-				target.NativeIDs = append(target.NativeIDs, message.ID)
-			} else {
-				remaining = append(remaining, tool)
+		remaining := []protocol.Part{}
+		for _, part := range message.Parts {
+			if tool := part.Tool; tool != nil && tool.ID != "" && tool.Status != "running" {
+				if at, ok := calls[tool.ID]; ok {
+					at.tool.Output, at.tool.Status, at.tool.Images = tool.Output, tool.Status, tool.Images
+					result.Messages[at.message].NativeIDs = append(result.Messages[at.message].NativeIDs, message.ID)
+					continue
+				}
 			}
+			remaining = append(remaining, part)
 		}
-		folded := len(remaining) != len(message.Tools)
-		message.Tools = remaining
-		if folded && message.Text == "" && len(message.Images) == 0 && len(message.Tools) == 0 {
+		folded := len(remaining) != len(message.Parts)
+		message.Parts = remaining
+		if folded && len(message.Parts) == 0 {
 			continue
 		}
-		if message.Role == "user" && message.Text == "" && len(message.Tools) > 0 {
+		if message.Role == "user" && message.Text() == "" && len(message.Tools()) > 0 {
 			message.Role = "assistant"
 		}
 		at := len(result.Messages)
-		result.Messages = append(result.Messages, message)
-		for j, tool := range message.Tools {
-			if tool.ID != "" && tool.Status == "running" {
-				calls[tool.ID] = location{at, j}
+		// Claude writes each block of a reply as its own record; the records
+		// of one reply, with only their folded results between them, are
+		// one message.
+		if at > 0 && replies[i] != "" && replies[i] == previous {
+			at--
+			target := &result.Messages[at]
+			target.NativeIDs = append(append(target.NativeIDs, message.ID), message.NativeIDs...)
+			target.Error = target.Error || message.Error
+			if target.UsageProvider == "" {
+				target.UsageProvider = message.UsageProvider
+			}
+			for _, part := range message.Parts {
+				target.Parts = appendPart(target.Parts, part)
+			}
+		} else {
+			result.Messages = append(result.Messages, message)
+		}
+		previous = replies[i]
+		for _, part := range message.Parts {
+			if tool := part.Tool; tool != nil && tool.ID != "" && tool.Status == "running" {
+				calls[tool.ID] = call{at, tool}
 			}
 		}
 	}
@@ -313,6 +366,9 @@ func historyLine(r *bufio.Reader) ([]byte, error) {
 func content(raw json.RawMessage, message *protocol.HistoryMessage, truncated *bool) {
 	contentDepth(raw, message, truncated, 0)
 }
+
+// contentDepth reads a record's content blocks into the message's parts, in
+// their order.
 func contentDepth(raw json.RawMessage, message *protocol.HistoryMessage, truncated *bool, depth int) {
 	if depth > 8 {
 		*truncated = true
@@ -320,7 +376,10 @@ func contentDepth(raw json.RawMessage, message *protocol.HistoryMessage, truncat
 	}
 	var text string
 	if json.Unmarshal(raw, &text) == nil {
-		message.Text = text
+		message.Parts = []protocol.Part{}
+		if text != "" {
+			message.Parts = append(message.Parts, protocol.TextPart(text))
+		}
 		return
 	}
 	var blocks []struct {
@@ -342,51 +401,74 @@ func contentDepth(raw json.RawMessage, message *protocol.HistoryMessage, truncat
 	if json.Unmarshal(raw, &blocks) != nil {
 		return
 	}
-	texts := []string{}
+	tools := len(message.Tools())
 	for _, b := range blocks {
 		switch b.Type {
 		case "text":
-			texts = append(texts, b.Text)
+			message.Parts = appendPart(message.Parts, protocol.TextPart(b.Text))
 		case "thinking", "redacted_thinking":
 			// Claude saves reasoning without its text; keep what there is.
-			if message.Reasoning == nil {
-				message.Reasoning = &protocol.HistoryReasoning{}
-			}
-			message.Reasoning.Text += b.Thinking
+			message.Parts = appendPart(message.Parts, protocol.ThoughtPart(protocol.Thought{Text: b.Thinking}))
 		case "image":
 			if b.Source.Type == "base64" {
-				message.Images = append(message.Images, protocol.HistoryImage{MIMEType: b.Source.MIME, Data: b.Source.Data})
+				message.Parts = append(message.Parts, protocol.ImagePart(protocol.HistoryImage{MIMEType: b.Source.MIME, Data: b.Source.Data}))
 			}
 		case "tool_use":
-			if len(message.Tools) >= 200 {
+			if tools >= 200 || len(b.ID) > 128 || len(b.Name) > 128 {
 				*truncated = true
 				continue
 			}
-			if len(b.ID) > 128 || len(b.Name) > 128 {
-				*truncated = true
-				continue
-			}
-			message.Tools = append(message.Tools, protocol.HistoryTool{ID: b.ID, Name: b.Name, Input: string(b.Input), Status: "running"})
+			tools++
+			message.Parts = append(message.Parts, protocol.ToolPart(protocol.HistoryTool{ID: b.ID, Name: b.Name, Input: string(b.Input), Status: "running"}))
 		case "tool_result":
-			if len(message.Tools) >= 200 {
+			if tools >= 200 || len(b.ToolID) > 128 {
 				*truncated = true
 				continue
 			}
 			var result protocol.HistoryMessage
 			contentDepth(b.Content, &result, truncated, depth+1)
-			if len(b.ToolID) > 128 {
-				*truncated = true
-				continue
-			}
 			status := "completed"
 			if b.Error {
 				status = "failed"
 			}
-			message.Tools = append(message.Tools, protocol.HistoryTool{ID: b.ToolID, Output: result.Text, Images: result.Images, Status: status})
+			tools++
+			message.Parts = append(message.Parts, protocol.ToolPart(protocol.HistoryTool{ID: b.ToolID, Output: resultText(result.Parts), Images: result.Images(), Status: status}))
 		}
 	}
-	message.Text = strings.Join(texts, "\n")
 }
+
+// appendPart adds a part, joining text to a text part before it on a new
+// line and reasoning to reasoning before it, as Claude shows adjacent
+// blocks.
+func appendPart(parts []protocol.Part, part protocol.Part) []protocol.Part {
+	n := len(parts)
+	switch {
+	case part.IsText() && part.Text == "":
+		return parts
+	case part.IsText() && n > 0 && parts[n-1].IsText():
+		parts[n-1].Text += "\n" + part.Text
+		return parts
+	case part.Thought != nil && n > 0 && parts[n-1].Thought != nil:
+		thought := parts[n-1].Thought
+		thought.Text += part.Thought.Text
+		// Each block's duration runs from the reply's start to its end.
+		thought.DurationMS = max(thought.DurationMS, part.Thought.DurationMS)
+		return parts
+	}
+	return append(parts, part)
+}
+
+// resultText is a tool result's text, its text blocks on separate lines.
+func resultText(parts []protocol.Part) string {
+	texts := []string{}
+	for _, part := range parts {
+		if part.IsText() {
+			texts = append(texts, part.Text)
+		}
+	}
+	return strings.Join(texts, "\n")
+}
+
 func historyText(text string, budget *int, truncated *bool) string {
 	limit := 64 << 10
 	if *budget < limit {

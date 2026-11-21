@@ -61,7 +61,7 @@ func TestAnsweringTheAgentsQuestion(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if last := history.Msg.Messages[len(history.Msg.Messages)-1]; last.Text == "Chosen: Blue" {
+		if last := history.Msg.Messages[len(history.Msg.Messages)-1]; messageText(last) == "Chosen: Blue" {
 			break
 		}
 		if time.Now().After(deadline) {

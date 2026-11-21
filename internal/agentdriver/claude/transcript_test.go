@@ -52,13 +52,13 @@ func TestLiveTranscriptPartialToolFailureAndReplacement(t *testing.T) {
 	}
 	appendData("\n")
 	first := read()
-	if first.Text != "private response" || first.LeafID != "a" || first.IdleGuard {
+	if first.Text() != "private response" || first.LeafID != "a" || first.IdleGuard {
 		t.Fatalf("%+v", first)
 	}
 	appendData(`{"type":"assistant","uuid":"call","message":{"content":[{"type":"tool_use","id":"tool","name":"Read","input":{"path":"secret-path"}}]}}` + "\n")
 	appendData(`{"type":"user","uuid":"result","message":{"content":[{"type":"tool_result","tool_use_id":"tool","content":"private output"}]}}` + "\n")
 	got := read()
-	if got.Tool == nil || got.Tool.Name != "Read" || got.Tool.Status != "completed" || got.Tool.Output != "private output" {
+	if tool := got.LastTool(); tool == nil || tool.Name != "Read" || tool.Status != "completed" || tool.Output != "private output" {
 		t.Fatalf("%+v", got)
 	}
 	appendData(`{"type":"assistant","uuid":"sub","isSidechain":true,"message":{"content":"subagent text"}}` + "\n")
@@ -81,7 +81,7 @@ func TestLiveTranscriptPartialToolFailureAndReplacement(t *testing.T) {
 	if _, err := feed.refresh(path, server); err != nil {
 		t.Fatal(err)
 	}
-	if read().Text != "rewound" {
+	if read().Text() != "rewound" {
 		t.Fatal("truncation retained stale content")
 	}
 	if _, err := protocol.ReadContent(context.Background(), filepath.Join(dir, "content.sock"), "old-runtime", "item"); err == nil {

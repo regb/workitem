@@ -12,14 +12,18 @@ type headlessBlock struct {
 	tool            bool
 }
 type headlessContent struct {
-	tools          map[string]*protocol.ContentTool
+	tools          map[string]*protocol.HistoryTool
 	toolOrder      []string
 	server         *protocol.ContentServer
 	emit           func(protocol.RuntimeEvent)
 	text, activity string
 	truncated      bool
-	tool           *protocol.ContentTool
+	tool           *protocol.HistoryTool
 	blocks         map[int]*headlessBlock
+	// savedText and savedIDs are the current message's text and the
+	// records holding it: Claude saves each block of a reply as its own.
+	savedText string
+	savedIDs  []string
 }
 
 func (s *headlessContent) publish() {
@@ -53,6 +57,7 @@ func (s *headlessContent) frame(f headlessFrame) error {
 			s.text = ""
 			s.truncated = false
 			s.tool = nil
+			s.savedText, s.savedIDs = "", nil
 			s.blocks = map[int]*headlessBlock{}
 			s.activity = "Assistant responding"
 			s.server.StartMessage()
@@ -66,7 +71,7 @@ func (s *headlessContent) frame(f headlessFrame) error {
 			b := &headlessBlock{id: e.Block.ID, name: e.Block.Name, tool: e.Block.Type == "tool_use"}
 			s.blocks[e.Index] = b
 			if b.tool {
-				s.tool = &protocol.ContentTool{ID: b.id, Name: b.name, Status: "running"}
+				s.tool = &protocol.HistoryTool{ID: b.id, Name: b.name, Status: "running"}
 				s.rememberTool(s.tool)
 				s.activity = "Tool running: " + b.name
 				s.emit(protocol.RuntimeEvent{Type: protocol.EventToolStarted, ToolName: b.name})
@@ -86,7 +91,7 @@ func (s *headlessContent) frame(f headlessFrame) error {
 			case "input_json_delta":
 				if b := s.blocks[e.Index]; b != nil && b.tool {
 					b.input, _ = boundedDisplay(b.input+e.Delta.Partial, 64<<10)
-					s.tool = &protocol.ContentTool{ID: b.id, Name: b.name, Input: b.input, Status: "running"}
+					s.tool = &protocol.HistoryTool{ID: b.id, Name: b.name, Input: b.input, Status: "running"}
 					s.rememberTool(s.tool)
 				}
 			}
@@ -115,15 +120,26 @@ func (s *headlessContent) frame(f headlessFrame) error {
 			raw, _ = json.Marshal(filtered)
 		}
 		content(raw, &message, &truncated)
-		saved := ""
-		if f.Type == "assistant" && message.Text != "" {
-			s.text, s.truncated = boundedDisplay(message.Text, maxDisplayText)
+		saved := false
+		if text := message.Text(); f.Type == "assistant" && text != "" {
+			// A block's record follows its deltas and corrects the live text
+			// only when the deltas showed something else, so text written
+			// after a call stays after it.
+			whole := s.savedText + text
+			if s.text != whole {
+				s.text, s.truncated = boundedDisplay(whole, maxDisplayText)
+			}
 			s.truncated = s.truncated || truncated
 			s.activity = "Assistant message completed"
-			// The assistant frame is the transcript record holding this text.
-			saved = message.Text
+			s.savedText = whole
 		}
-		for _, t := range message.Tools {
+		// Every assistant frame is a transcript record holding a block of
+		// the message, text or not.
+		if f.Type == "assistant" && uuidPattern.MatchString(f.UUID) && len(s.savedIDs) < 64 {
+			s.savedIDs = append(s.savedIDs, f.UUID)
+			saved = true
+		}
+		for _, t := range message.Tools() {
 			if len(t.ID) > 200 || len(t.Name) > 128 {
 				return fmt.Errorf("invalid Claude tool metadata")
 			}
@@ -131,7 +147,7 @@ func (s *headlessContent) frame(f headlessFrame) error {
 				// Partial frames normally already emitted tool.started. The complete
 				// assistant record fills its input preview rather than duplicating it.
 				seen := s.tools[t.ID] != nil && s.tools[t.ID].Status == "running"
-				s.tool = &protocol.ContentTool{ID: t.ID, Name: t.Name, Input: t.Input, Status: "running"}
+				s.tool = &protocol.HistoryTool{ID: t.ID, Name: t.Name, Input: t.Input, Status: "running"}
 				if !seen {
 					s.emit(protocol.RuntimeEvent{Type: protocol.EventToolStarted, ToolName: t.Name})
 				}
@@ -142,22 +158,22 @@ func (s *headlessContent) frame(f headlessFrame) error {
 					name = prior.Name
 					input = prior.Input
 				}
-				s.tool = &protocol.ContentTool{ID: t.ID, Name: name, Input: input, Output: t.Output, Status: t.Status}
+				s.tool = &protocol.HistoryTool{ID: t.ID, Name: name, Input: input, Output: t.Output, Status: t.Status}
 				s.emit(protocol.RuntimeEvent{Type: protocol.EventToolCompleted, ToolName: name, Failed: t.Status == "failed"})
 			}
 			s.rememberTool(s.tool)
 			s.activity = "Tool " + s.tool.Status
 		}
 		s.publish()
-		if saved != "" && uuidPattern.MatchString(f.UUID) {
-			s.server.MarkSaved(saved, []string{f.UUID})
+		if saved {
+			s.server.MarkSaved(s.savedText, append([]string(nil), s.savedIDs...))
 		}
 	}
 	return nil
 }
-func (s *headlessContent) rememberTool(tool *protocol.ContentTool) {
+func (s *headlessContent) rememberTool(tool *protocol.HistoryTool) {
 	if s.tools == nil {
-		s.tools = map[string]*protocol.ContentTool{}
+		s.tools = map[string]*protocol.HistoryTool{}
 	}
 	if s.tools[tool.ID] == nil {
 		s.toolOrder = append(s.toolOrder, tool.ID)

@@ -35,7 +35,7 @@ func TestHeadlessAPIContentAndParallelToolPrivacy(t *testing.T) {
 	}
 	stream(map[string]any{"type": "content_block_delta", "index": 1, "delta": map[string]string{"type": "text_delta", "text": " second"}})
 	content, err := protocol.ReadContent(context.Background(), socket, "runtime", "item")
-	if err != nil || content.Text != "first second" || content.Activity != "Assistant responding" {
+	if err != nil || content.Text() != "first second" || content.Activity != "Assistant responding" {
 		t.Fatal(content, err)
 	}
 	for i, name := range []string{"Bash", "Read"} {
@@ -48,7 +48,9 @@ func TestHeadlessAPIContentAndParallelToolPrivacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	content, err = protocol.ReadContent(context.Background(), socket, "runtime", "item")
-	if err != nil || content.Tool == nil || content.Tool.Name != "Bash" || content.Tool.Input != "private tool input" || content.Tool.Status != "failed" || content.Tool.Output != "private tool result" {
+	// The failed call keeps its place before the one still running.
+	tools := protocol.PartsTools(content.Parts)
+	if err != nil || len(tools) != 2 || tools[0].Name != "Bash" || tools[0].Input != "private tool input" || tools[0].Status != "failed" || tools[0].Output != "private tool result" || tools[1].Name != "Read" {
 		t.Fatal(content, err)
 	}
 	for _, e := range events {
@@ -59,11 +61,11 @@ func TestHeadlessAPIContentAndParallelToolPrivacy(t *testing.T) {
 	}
 	stream(map[string]any{"type": "content_block_delta", "index": 1, "delta": map[string]string{"type": "text_delta", "text": strings.Repeat("é", maxDisplayText)}})
 	content, err = protocol.ReadContent(context.Background(), socket, "runtime", "item")
-	if err != nil || !content.Truncated || len(content.Text) > maxDisplayText {
+	if err != nil || !content.Truncated || len(content.Text()) > maxDisplayText {
 		t.Fatal(err)
 	}
 	for i := 0; i < 129; i++ {
-		s.rememberTool(&protocol.ContentTool{ID: uuid(string(rune(i)))})
+		s.rememberTool(&protocol.HistoryTool{ID: uuid(string(rune(i)))})
 	}
 	if len(s.tools) > 128 {
 		t.Fatal("unbounded tool context")

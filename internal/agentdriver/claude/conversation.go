@@ -17,6 +17,19 @@ import (
 	protocol "github.com/regb/workitem/agentdriver/protocol"
 )
 
+// usageProvider is the provider whose quota a usage limit reports, as the
+// usage plugin names it: Claude's limits are its subscription's, whatever
+// the model.
+const usageProvider = "claude"
+
+// reasonUsageProvider names the provider of a usage_limit reason code.
+func reasonUsageProvider(reason string) string {
+	if reason == "usage_limit" {
+		return usageProvider
+	}
+	return ""
+}
+
 var uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 
 func uuid(id string) string {
@@ -227,7 +240,7 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 	// Claude writes a synthetic reply when the API refuses a turn; a usage
 	// limit waits for its reset rather than for a fix.
 	if record.APIError && record.Error == "rate_limit" {
-		fact.StopReason = "usage_limit"
+		fact.StopReason, fact.UsageProvider = "usage_limit", usageProvider
 	}
 	var content []struct {
 		Type  string `json:"type"`

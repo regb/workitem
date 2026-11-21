@@ -4,12 +4,11 @@
       "sequence": 1,
       "type": "snapshot",
       "snapshot": {
-        "protocol_version": 1,
+        "protocol_version": 2,
         "runtime_id": "runtime",
         "work_item_id": "item",
         "sequence": 1,
         "idle_guard": false,
-        "text": "",
         "activity": "Idle",
         "leaf_id": "leaf-1"
       }
@@ -39,8 +38,8 @@
       "tool": {
         "id": "t1",
         "name": "bash",
-        "status": "running",
-        "input": "{\"command\":\"ls\"}"
+        "input": "{\"command\":\"ls\"}",
+        "status": "running"
       },
       "activity": "Tool running: bash"
     },
@@ -64,9 +63,9 @@
       "tool": {
         "id": "t1",
         "name": "bash",
-        "status": "running",
         "input": "{\"command\":\"ls\"}",
-        "output": "a"
+        "output": "a",
+        "status": "running"
       }
     },
     {
@@ -75,9 +74,9 @@
       "tool": {
         "id": "t1",
         "name": "bash",
-        "status": "failed",
         "input": "{\"command\":\"ls\"}",
-        "output": "a\nb"
+        "output": "a\nb",
+        "status": "failed"
       },
       "activity": "Tool failed: bash"
     },
@@ -185,8 +184,8 @@
       "tool": {
         "id": "t2",
         "name": "read",
-        "status": "completed",
-        "output": "x"
+        "output": "x",
+        "status": "completed"
       }
     },
     {
@@ -206,399 +205,389 @@
       "sequence": 29,
       "type": "message.delta",
       "text": "."
+    },
+    {
+      "sequence": 30,
+      "type": "thought.delta",
+      "text": "Is that "
+    },
+    {
+      "sequence": 31,
+      "type": "thought.delta",
+      "text": "all?"
+    },
+    {
+      "sequence": 32,
+      "type": "message.delta",
+      "text": " Done."
+    },
+    {
+      "sequence": 33,
+      "type": "tool.updated",
+      "tool": {
+        "id": "t2",
+        "name": "read",
+        "output": "y",
+        "status": "completed"
+      }
     }
   ],
   "snapshots": [
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 1,
       "idle_guard": false,
-      "text": "",
       "activity": "Idle",
       "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 2,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "",
       "activity": "Assistant responding",
       "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 3,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Hel",
-      "activity": "Assistant responding",
-      "leaf_id": "leaf-1",
       "parts": [
         {
           "text": "Hel"
         }
-      ]
+      ],
+      "activity": "Assistant responding",
+      "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 4,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Hello 🌍",
-      "activity": "Assistant responding",
-      "leaf_id": "leaf-1",
       "parts": [
         {
           "text": "Hello 🌍"
         }
-      ]
+      ],
+      "activity": "Assistant responding",
+      "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 5,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Hello 🌍",
-      "activity": "Tool running: bash",
-      "leaf_id": "leaf-1",
-      "tool": {
-        "id": "t1",
-        "name": "bash",
-        "status": "running",
-        "input": "{\"command\":\"ls\"}"
-      },
-      "tools": [
-        {
-          "id": "t1",
-          "name": "bash",
-          "status": "running",
-          "input": "{\"command\":\"ls\"}"
-        }
-      ],
       "parts": [
         {
           "text": "Hello 🌍"
         },
         {
-          "tool_id": "t1"
+          "tool": {
+            "id": "t1",
+            "name": "bash",
+            "input": "{\"command\":\"ls\"}",
+            "status": "running"
+          }
         }
-      ]
+      ],
+      "activity": "Tool running: bash",
+      "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 6,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Hello 🌍",
-      "activity": "Tool running: bash",
-      "leaf_id": "leaf-1",
-      "thought": "Checking the files",
-      "tool": {
-        "id": "t1",
-        "name": "bash",
-        "status": "running",
-        "input": "{\"command\":\"ls\"}"
-      },
-      "tools": [
-        {
-          "id": "t1",
-          "name": "bash",
-          "status": "running",
-          "input": "{\"command\":\"ls\"}"
-        }
-      ],
       "parts": [
         {
           "text": "Hello 🌍"
         },
         {
-          "tool_id": "t1"
+          "tool": {
+            "id": "t1",
+            "name": "bash",
+            "input": "{\"command\":\"ls\"}",
+            "status": "running"
+          }
+        },
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
         }
-      ]
+      ],
+      "activity": "Tool running: bash",
+      "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 7,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Hello 🌍",
-      "activity": "Tool running: bash",
-      "leaf_id": "leaf-1",
-      "thought": "Checking the files",
-      "tool": {
-        "id": "t0",
-        "name": "read",
-        "status": "running"
-      },
-      "tools": [
-        {
-          "id": "t1",
-          "name": "bash",
-          "status": "running",
-          "input": "{\"command\":\"ls\"}"
-        },
-        {
-          "id": "t0",
-          "name": "read",
-          "status": "running"
-        }
-      ],
       "parts": [
         {
           "text": "Hello 🌍"
         },
         {
-          "tool_id": "t1"
+          "tool": {
+            "id": "t1",
+            "name": "bash",
+            "input": "{\"command\":\"ls\"}",
+            "status": "running"
+          }
         },
         {
-          "tool_id": "t0"
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
+        {
+          "tool": {
+            "id": "t0",
+            "name": "read",
+            "status": "running"
+          }
         }
-      ]
+      ],
+      "activity": "Tool running: bash",
+      "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 8,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Hello 🌍",
-      "activity": "Tool running: bash",
-      "leaf_id": "leaf-1",
-      "thought": "Checking the files",
-      "tool": {
-        "id": "t1",
-        "name": "bash",
-        "status": "running",
-        "input": "{\"command\":\"ls\"}",
-        "output": "a"
-      },
-      "tools": [
-        {
-          "id": "t1",
-          "name": "bash",
-          "status": "running",
-          "input": "{\"command\":\"ls\"}",
-          "output": "a"
-        },
-        {
-          "id": "t0",
-          "name": "read",
-          "status": "running"
-        }
-      ],
       "parts": [
         {
           "text": "Hello 🌍"
         },
         {
-          "tool_id": "t1"
+          "tool": {
+            "id": "t1",
+            "name": "bash",
+            "input": "{\"command\":\"ls\"}",
+            "output": "a",
+            "status": "running"
+          }
         },
         {
-          "tool_id": "t0"
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
+        {
+          "tool": {
+            "id": "t0",
+            "name": "read",
+            "status": "running"
+          }
         }
-      ]
+      ],
+      "activity": "Tool running: bash",
+      "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 9,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Hello 🌍",
-      "activity": "Tool failed: bash",
-      "leaf_id": "leaf-1",
-      "thought": "Checking the files",
-      "tool": {
-        "id": "t1",
-        "name": "bash",
-        "status": "failed",
-        "input": "{\"command\":\"ls\"}",
-        "output": "a\nb"
-      },
-      "tools": [
-        {
-          "id": "t1",
-          "name": "bash",
-          "status": "failed",
-          "input": "{\"command\":\"ls\"}",
-          "output": "a\nb"
-        },
-        {
-          "id": "t0",
-          "name": "read",
-          "status": "running"
-        }
-      ],
       "parts": [
         {
           "text": "Hello 🌍"
         },
         {
-          "tool_id": "t1"
+          "tool": {
+            "id": "t1",
+            "name": "bash",
+            "input": "{\"command\":\"ls\"}",
+            "output": "a\nb",
+            "status": "failed"
+          }
         },
         {
-          "tool_id": "t0"
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
+        {
+          "tool": {
+            "id": "t0",
+            "name": "read",
+            "status": "running"
+          }
         }
-      ]
+      ],
+      "activity": "Tool failed: bash",
+      "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 10,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Rewritten",
-      "truncated": true,
-      "activity": "Tool failed: bash",
-      "leaf_id": "leaf-1",
-      "thought": "Checking the files",
-      "tool": {
-        "id": "t1",
-        "name": "bash",
-        "status": "failed",
-        "input": "{\"command\":\"ls\"}",
-        "output": "a\nb"
-      },
-      "tools": [
-        {
-          "id": "t1",
-          "name": "bash",
-          "status": "failed",
-          "input": "{\"command\":\"ls\"}",
-          "output": "a\nb"
-        },
-        {
-          "id": "t0",
-          "name": "read",
-          "status": "running"
-        }
-      ],
       "parts": [
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
         {
           "text": "Rewritten"
         },
         {
-          "tool_id": "t1"
+          "tool": {
+            "id": "t1",
+            "name": "bash",
+            "input": "{\"command\":\"ls\"}",
+            "output": "a\nb",
+            "status": "failed"
+          }
         },
         {
-          "tool_id": "t0"
+          "tool": {
+            "id": "t0",
+            "name": "read",
+            "status": "running"
+          }
         }
-      ]
+      ],
+      "truncated": true,
+      "activity": "Tool failed: bash",
+      "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 11,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Rewritten",
-      "truncated": true,
-      "activity": "Tool failed: bash",
-      "leaf_id": "leaf-1",
-      "thought": "Checking the files",
       "parts": [
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
         {
           "text": "Rewritten"
         }
-      ]
+      ],
+      "truncated": true,
+      "activity": "Tool failed: bash",
+      "leaf_id": "leaf-1"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 12,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Rewritten",
-      "truncated": true,
-      "activity": "",
-      "leaf_id": "leaf-2",
-      "thought": "Checking the files",
       "parts": [
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
         {
           "text": "Rewritten"
         }
-      ]
+      ],
+      "truncated": true,
+      "activity": "",
+      "leaf_id": "leaf-2"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 13,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Rewritten",
-      "truncated": true,
-      "activity": "Message saved",
-      "leaf_id": "leaf-2",
-      "thought": "Checking the files",
       "parts": [
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
         {
           "text": "Rewritten"
         }
-      ]
+      ],
+      "truncated": true,
+      "activity": "Message saved",
+      "leaf_id": "leaf-2"
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 14,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Rewritten",
+      "parts": [
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
+        {
+          "text": "Rewritten"
+        }
+      ],
       "truncated": true,
       "activity": "Message saved",
       "leaf_id": "leaf-2",
       "saved_as": [
         "entry-1",
         "entry-2"
-      ],
-      "thought": "Checking the files",
-      "parts": [
-        {
-          "text": "Rewritten"
-        }
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 15,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Rewritten",
+      "parts": [
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
+        {
+          "text": "Rewritten"
+        }
+      ],
       "truncated": true,
       "activity": "Message saved",
       "leaf_id": "leaf-2",
       "saved_as": [
         "entry-1",
         "entry-2"
-      ],
-      "thought": "Checking the files",
-      "parts": [
-        {
-          "text": "Rewritten"
-        }
       ],
       "prompts": [
         {
@@ -610,25 +599,28 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 16,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Rewritten",
+      "parts": [
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
+        {
+          "text": "Rewritten"
+        }
+      ],
       "truncated": true,
       "activity": "Message saved",
       "leaf_id": "leaf-2",
       "saved_as": [
         "entry-1",
         "entry-2"
-      ],
-      "thought": "Checking the files",
-      "parts": [
-        {
-          "text": "Rewritten"
-        }
       ],
       "prompts": [
         {
@@ -646,13 +638,22 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 17,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Rewritten",
+      "parts": [
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
+        {
+          "text": "Rewritten"
+        }
+      ],
       "truncated": true,
       "activity": "Message saved",
       "leaf_id": "leaf-2",
@@ -660,12 +661,6 @@
         "entry-1",
         "entry-2"
       ],
-      "thought": "Checking the files",
-      "parts": [
-        {
-          "text": "Rewritten"
-        }
-      ],
       "prompts": [
         {
           "request_id": "web-2",
@@ -682,13 +677,22 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 18,
       "idle_guard": false,
       "message_id": "live-2",
-      "text": "Rewritten",
+      "parts": [
+        {
+          "thought": {
+            "text": "Checking the files"
+          }
+        },
+        {
+          "text": "Rewritten"
+        }
+      ],
       "truncated": true,
       "activity": "Idle",
       "leaf_id": "leaf-2",
@@ -696,12 +700,6 @@
         "entry-1",
         "entry-2"
       ],
-      "thought": "Checking the files",
-      "parts": [
-        {
-          "text": "Rewritten"
-        }
-      ],
       "prompts": [
         {
           "request_id": "web-2",
@@ -718,13 +716,12 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 19,
       "idle_guard": false,
       "message_id": "live-19",
-      "text": "",
       "activity": "Idle",
       "leaf_id": "leaf-2",
       "prompts": [
@@ -743,20 +740,19 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 20,
       "idle_guard": false,
       "message_id": "live-19",
-      "text": "partial",
-      "activity": "Idle",
-      "leaf_id": "leaf-2",
       "parts": [
         {
           "text": "partial"
         }
       ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
       "prompts": [
         {
           "request_id": "web-2",
@@ -773,23 +769,22 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 21,
       "idle_guard": false,
       "message_id": "live-19",
-      "text": "partial",
-      "activity": "Idle",
-      "leaf_id": "leaf-2",
-      "saved_as": [
-        "entry-3"
-      ],
       "parts": [
         {
           "text": "partial"
         }
       ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "saved_as": [
+        "entry-3"
+      ],
       "prompts": [
         {
           "request_id": "web-2",
@@ -806,20 +801,19 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 22,
       "idle_guard": false,
       "message_id": "live-19",
-      "text": "partial more",
-      "activity": "Idle",
-      "leaf_id": "leaf-2",
       "parts": [
         {
           "text": "partial more"
         }
       ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
       "prompts": [
         {
           "request_id": "web-2",
@@ -836,13 +830,12 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 23,
       "idle_guard": false,
       "message_id": "live-23",
-      "text": "",
       "activity": "Idle",
       "leaf_id": "leaf-2",
       "prompts": [
@@ -861,20 +854,19 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 24,
       "idle_guard": false,
       "message_id": "live-23",
-      "text": "Let me look.",
-      "activity": "Idle",
-      "leaf_id": "leaf-2",
       "parts": [
         {
           "text": "Let me look."
         }
       ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
       "prompts": [
         {
           "request_id": "web-2",
@@ -891,35 +883,26 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 25,
       "idle_guard": false,
       "message_id": "live-23",
-      "text": "Let me look.",
-      "activity": "Idle",
-      "leaf_id": "leaf-2",
-      "tool": {
-        "id": "t2",
-        "name": "read",
-        "status": "running"
-      },
-      "tools": [
-        {
-          "id": "t2",
-          "name": "read",
-          "status": "running"
-        }
-      ],
       "parts": [
         {
           "text": "Let me look."
         },
         {
-          "tool_id": "t2"
+          "tool": {
+            "id": "t2",
+            "name": "read",
+            "status": "running"
+          }
         }
       ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
       "prompts": [
         {
           "request_id": "web-2",
@@ -936,37 +919,27 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 26,
       "idle_guard": false,
       "message_id": "live-23",
-      "text": "Let me look.",
-      "activity": "Idle",
-      "leaf_id": "leaf-2",
-      "tool": {
-        "id": "t2",
-        "name": "read",
-        "status": "completed",
-        "output": "x"
-      },
-      "tools": [
-        {
-          "id": "t2",
-          "name": "read",
-          "status": "completed",
-          "output": "x"
-        }
-      ],
       "parts": [
         {
           "text": "Let me look."
         },
         {
-          "tool_id": "t2"
+          "tool": {
+            "id": "t2",
+            "name": "read",
+            "output": "x",
+            "status": "completed"
+          }
         }
       ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
       "prompts": [
         {
           "request_id": "web-2",
@@ -983,42 +956,33 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 27,
       "idle_guard": false,
       "message_id": "live-23",
-      "text": "Let me look.",
-      "activity": "Idle",
-      "leaf_id": "leaf-2",
-      "tool": {
-        "name": "grep",
-        "status": "running"
-      },
-      "tools": [
-        {
-          "id": "t2",
-          "name": "read",
-          "status": "completed",
-          "output": "x"
-        },
-        {
-          "name": "grep",
-          "status": "running"
-        }
-      ],
       "parts": [
         {
           "text": "Let me look."
         },
         {
-          "tool_id": "t2"
+          "tool": {
+            "id": "t2",
+            "name": "read",
+            "output": "x",
+            "status": "completed"
+          }
         },
         {
-          "tool_name": "grep"
+          "tool": {
+            "name": "grep",
+            "status": "running"
+          }
         }
       ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
       "prompts": [
         {
           "request_id": "web-2",
@@ -1035,45 +999,36 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 28,
       "idle_guard": false,
       "message_id": "live-23",
-      "text": "Let me look.Found it",
-      "activity": "Idle",
-      "leaf_id": "leaf-2",
-      "tool": {
-        "name": "grep",
-        "status": "running"
-      },
-      "tools": [
-        {
-          "id": "t2",
-          "name": "read",
-          "status": "completed",
-          "output": "x"
-        },
-        {
-          "name": "grep",
-          "status": "running"
-        }
-      ],
       "parts": [
         {
           "text": "Let me look."
         },
         {
-          "tool_id": "t2"
+          "tool": {
+            "id": "t2",
+            "name": "read",
+            "output": "x",
+            "status": "completed"
+          }
         },
         {
-          "tool_name": "grep"
+          "tool": {
+            "name": "grep",
+            "status": "running"
+          }
         },
         {
           "text": "Found it"
         }
       ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
       "prompts": [
         {
           "request_id": "web-2",
@@ -1090,45 +1045,246 @@
       ]
     },
     {
-      "protocol_version": 1,
+      "protocol_version": 2,
       "runtime_id": "runtime",
       "work_item_id": "item",
       "sequence": 29,
       "idle_guard": false,
       "message_id": "live-23",
-      "text": "Let me look.Found it.",
-      "activity": "Idle",
-      "leaf_id": "leaf-2",
-      "tool": {
-        "name": "grep",
-        "status": "running"
-      },
-      "tools": [
-        {
-          "id": "t2",
-          "name": "read",
-          "status": "completed",
-          "output": "x"
-        },
-        {
-          "name": "grep",
-          "status": "running"
-        }
-      ],
       "parts": [
         {
           "text": "Let me look."
         },
         {
-          "tool_id": "t2"
+          "tool": {
+            "id": "t2",
+            "name": "read",
+            "output": "x",
+            "status": "completed"
+          }
         },
         {
-          "tool_name": "grep"
+          "tool": {
+            "name": "grep",
+            "status": "running"
+          }
         },
         {
           "text": "Found it."
         }
       ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 2,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 30,
+      "idle_guard": false,
+      "message_id": "live-23",
+      "parts": [
+        {
+          "text": "Let me look."
+        },
+        {
+          "tool": {
+            "id": "t2",
+            "name": "read",
+            "output": "x",
+            "status": "completed"
+          }
+        },
+        {
+          "tool": {
+            "name": "grep",
+            "status": "running"
+          }
+        },
+        {
+          "text": "Found it."
+        },
+        {
+          "thought": {
+            "text": "Is that "
+          }
+        }
+      ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 2,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 31,
+      "idle_guard": false,
+      "message_id": "live-23",
+      "parts": [
+        {
+          "text": "Let me look."
+        },
+        {
+          "tool": {
+            "id": "t2",
+            "name": "read",
+            "output": "x",
+            "status": "completed"
+          }
+        },
+        {
+          "tool": {
+            "name": "grep",
+            "status": "running"
+          }
+        },
+        {
+          "text": "Found it."
+        },
+        {
+          "thought": {
+            "text": "Is that all?"
+          }
+        }
+      ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 2,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 32,
+      "idle_guard": false,
+      "message_id": "live-23",
+      "parts": [
+        {
+          "text": "Let me look."
+        },
+        {
+          "tool": {
+            "id": "t2",
+            "name": "read",
+            "output": "x",
+            "status": "completed"
+          }
+        },
+        {
+          "tool": {
+            "name": "grep",
+            "status": "running"
+          }
+        },
+        {
+          "text": "Found it."
+        },
+        {
+          "thought": {
+            "text": "Is that all?"
+          }
+        },
+        {
+          "text": " Done."
+        }
+      ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
+      "prompts": [
+        {
+          "request_id": "web-2",
+          "native_ids": [
+            "user-2"
+          ]
+        },
+        {
+          "request_id": "web-1",
+          "native_ids": [
+            "user-1b"
+          ]
+        }
+      ]
+    },
+    {
+      "protocol_version": 2,
+      "runtime_id": "runtime",
+      "work_item_id": "item",
+      "sequence": 33,
+      "idle_guard": false,
+      "message_id": "live-23",
+      "parts": [
+        {
+          "text": "Let me look."
+        },
+        {
+          "tool": {
+            "id": "t2",
+            "name": "read",
+            "output": "y",
+            "status": "completed"
+          }
+        },
+        {
+          "tool": {
+            "name": "grep",
+            "status": "running"
+          }
+        },
+        {
+          "text": "Found it."
+        },
+        {
+          "thought": {
+            "text": "Is that all?"
+          }
+        },
+        {
+          "text": " Done."
+        }
+      ],
+      "activity": "Idle",
+      "leaf_id": "leaf-2",
       "prompts": [
         {
           "request_id": "web-2",

@@ -12,11 +12,11 @@ import (
 
 // usageLimitReply is the empty reply Pi records when the provider refuses a
 // turn for a usage limit.
-const usageLimitReply = `{"type":"message","id":"limit","parentId":"root","timestamp":"2026-11-15T09:00:00.000Z","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"Codex error: The usage limit has been reached"}}`
+const usageLimitReply = `{"type":"message","id":"limit","parentId":"root","timestamp":"2026-11-15T09:00:00.000Z","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"Codex error: The usage limit has been reached","provider":"openai-codex","model":"gpt-5.5"}}`
 
 func TestAUsageLimitEndsTheTurnWithItsReason(t *testing.T) {
 	fact, valid := SummarizeConversationFact(3, []byte(usageLimitReply))
-	if !valid || !fact.Terminal || !fact.Failed || fact.StopReason != "usage_limit" {
+	if !valid || !fact.Terminal || !fact.Failed || fact.StopReason != "usage_limit" || fact.UsageProvider != "codex" {
 		t.Fatalf("fact=%+v valid=%v", fact, valid)
 	}
 	if driverprotocol.RuntimeReasonText(fact.StopReason) == "" {
@@ -24,7 +24,7 @@ func TestAUsageLimitEndsTheTurnWithItsReason(t *testing.T) {
 	}
 	// Other provider errors keep failing without the usage limit reason.
 	other, _ := SummarizeConversationFact(4, []byte(`{"type":"message","id":"x","message":{"role":"assistant","content":[],"stopReason":"error","errorMessage":"Codex error: internal server error"}}`))
-	if !other.Failed || !other.Terminal || other.StopReason != "error" {
+	if !other.Failed || !other.Terminal || other.StopReason != "error" || other.UsageProvider != "" {
 		t.Fatalf("server error fact=%+v", other)
 	}
 }
@@ -41,7 +41,7 @@ func TestHistoryShowsAProviderErrorAsANotice(t *testing.T) {
 	if err != nil || len(result.Messages) != 2 {
 		t.Fatalf("%+v %v", result, err)
 	}
-	if notice := result.Messages[1]; !notice.Error || notice.Text != "Codex error: The usage limit has been reached" || result.Messages[0].Error {
+	if notice := result.Messages[1]; !notice.Error || notice.Text() != "Codex error: The usage limit has been reached" || notice.UsageProvider != "codex" || result.Messages[0].Error {
 		t.Fatalf("messages=%+v", result.Messages)
 	}
 }
@@ -64,9 +64,9 @@ func TestALiveUsageLimitSettlesWithItsReason(t *testing.T) {
 			}
 		}
 	}()
-	settle := func(errorMessage string) driverprotocol.RuntimeEvent {
+	settle := func(provider, errorMessage string) driverprotocol.RuntimeEvent {
 		t.Helper()
-		end, _ := json.Marshal(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "content": []any{}, "stopReason": "error", "errorMessage": errorMessage}})
+		end, _ := json.Marshal(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "content": []any{}, "stopReason": "error", "errorMessage": errorMessage, "provider": provider}})
 		for _, raw := range [][]byte{end, []byte(`{"type":"agent_settled"}`)} {
 			if err := transport.handleOutput(raw); err != nil {
 				t.Fatal(err)
@@ -79,10 +79,21 @@ func TestALiveUsageLimitSettlesWithItsReason(t *testing.T) {
 		}
 		return driverprotocol.RuntimeEvent{}
 	}
-	if event := settle("Codex error: The usage limit has been reached"); !event.Failed || event.ReasonCode != "usage_limit" {
+	if event := settle("openai-codex", "Codex error: The usage limit has been reached"); !event.Failed || event.ReasonCode != "usage_limit" || event.UsageProvider != "codex" {
 		t.Fatalf("usage limit settlement: %+v", event)
 	}
-	if event := settle("Codex error: internal server error"); !event.Failed || event.ReasonCode != "" {
+	if event := settle("openai-codex", "Codex error: internal server error"); !event.Failed || event.ReasonCode != "" || event.UsageProvider != "" {
 		t.Fatalf("other failure settlement: %+v", event)
+	}
+}
+
+// A usage limit belongs to the provider of the model that hit it, named as
+// the usage plugin names it.
+func TestAUsageLimitNamesTheModelsProvider(t *testing.T) {
+	for provider, want := range map[string]string{"anthropic": "claude", "openai-codex": "codex", "opencode-go": "opencode-go", "": ""} {
+		line, _ := json.Marshal(map[string]any{"type": "message", "id": "limit", "message": map[string]any{"role": "assistant", "content": []any{}, "stopReason": "error", "errorMessage": "429 rate limit exceeded", "provider": provider}})
+		if fact, _ := SummarizeConversationFact(1, line); fact.StopReason != "usage_limit" || fact.UsageProvider != want {
+			t.Errorf("provider %q: fact=%+v, want %q", provider, fact, want)
+		}
 	}
 }

@@ -29,15 +29,15 @@ func TestHistoryHidesPiImageNotesFromPrompts(t *testing.T) {
 	if err != nil || len(result.Messages) != 3 {
 		t.Fatalf("%+v %v", result, err)
 	}
-	if only := result.Messages[0]; only.Text != "" || len(only.Images) != 1 {
+	if only := result.Messages[0]; only.Text() != "" || len(only.Images()) != 1 {
 		t.Fatalf("image-only prompt: %+v", only)
 	}
-	if both := result.Messages[1]; both.Text != "look at this" {
-		t.Fatalf("prompt with text: %q", both.Text)
+	if both := result.Messages[1]; both.Text() != "look at this" {
+		t.Fatalf("prompt with text: %q", both.Text())
 	}
 	// Only prompts lose the note; an answer quoting it is left as written.
-	if quoted := result.Messages[2]; quoted.Text != "You wrote "+imageNote {
-		t.Fatalf("answer: %q", quoted.Text)
+	if quoted := result.Messages[2]; quoted.Text() != "You wrote "+imageNote {
+		t.Fatalf("answer: %q", quoted.Text())
 	}
 }
 

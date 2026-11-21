@@ -41,6 +41,8 @@ type runtimeEventHeader struct {
 	LeafID     string `json:"leaf_id,omitempty"`
 	// ReasonCode says why a settlement failed, such as usage_limit.
 	ReasonCode string `json:"reason_code,omitempty"`
+	// UsageProvider names whose quota ran out on a usage_limit failure.
+	UsageProvider string `json:"usage_provider,omitempty"`
 }
 
 func fileFingerprint(file *os.File, size int64) (string, error) {
@@ -138,7 +140,7 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 			}
 		}
 	case agent.EventAgentStarted:
-		activity.FailureReason = ""
+		activity.FailureReason, activity.FailureProvider = "", ""
 		activity.AgentState = "active"
 		activity.RuntimeState = model.AgentRuntimeRunning
 		activity.TurnState = "busy"
@@ -172,11 +174,11 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 		if event.Outcome == "completed" {
 			activity.AgentState = "settled"
 		}
-		activity.FailureReason = ""
+		activity.FailureReason, activity.FailureProvider = "", ""
 		if event.Failed || event.Outcome == "failed" {
 			activity.AgentState = "failed"
 			activity.TurnState = "failed"
-			activity.FailureReason = event.ReasonCode
+			activity.FailureReason, activity.FailureProvider = event.ReasonCode, event.UsageProvider
 		}
 		activity.LastCompletedAt = &at
 	case agent.EventMessageCompleted:

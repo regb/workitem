@@ -32,7 +32,7 @@ func TestHeadlessAssistantFrameMarksItsRecord(t *testing.T) {
 		t.Fatal(err)
 	}
 	content, err := protocol.ReadContent(context.Background(), socket, "runtime", "item")
-	if err != nil || content.Text != "Done." || !reflect.DeepEqual(content.SavedAs, []string{f.UUID}) {
+	if err != nil || content.Text() != "Done." || !reflect.DeepEqual(content.SavedAs, []string{f.UUID}) {
 		t.Fatalf("content=%+v err=%v", content, err)
 	}
 }
@@ -53,7 +53,7 @@ func TestTranscriptFeedMarksTheRecordHoldingTheText(t *testing.T) {
 		t.Fatal(err)
 	}
 	content, err := protocol.ReadContent(context.Background(), filepath.Join(dir, "content.sock"), "runtime", "item")
-	if err != nil || content.Text != "Saved answer" || !reflect.DeepEqual(content.SavedAs, []string{"answer-record"}) {
+	if err != nil || content.Text() != "Saved answer" || !reflect.DeepEqual(content.SavedAs, []string{"answer-record"}) {
 		t.Fatalf("content=%+v err=%v", content, err)
 	}
 }

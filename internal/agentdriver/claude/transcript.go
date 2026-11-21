@@ -24,7 +24,7 @@ type transcriptFeed struct {
 	textID                 string
 	// model and effort are those of the latest reply made since factAfter.
 	model, effort string
-	tool          *protocol.ContentTool
+	tool          *protocol.HistoryTool
 	// awaiting are prompts wi typed that Claude accepted, by native prompt
 	// ID, awaiting their transcript record; linked is told each one's
 	// request ID and record. They outlive a reset of the feed.
@@ -54,13 +54,13 @@ func (f *transcriptFeed) awaitPrompt(promptID, requestID string) {
 }
 
 type transcriptPublisher interface {
-	PublishTranscript(string, string, string, *protocol.ContentTool)
+	PublishTranscript(string, string, string, *protocol.HistoryTool)
 }
 
 // ignoredTranscript reads a transcript only for its facts.
 type ignoredTranscript struct{}
 
-func (ignoredTranscript) PublishTranscript(string, string, string, *protocol.ContentTool) {}
+func (ignoredTranscript) PublishTranscript(string, string, string, *protocol.HistoryTool) {}
 
 func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]protocol.ConversationFact, error) {
 	file, err := os.Open(path)
@@ -137,7 +137,7 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 			truncated := false
 			content(record.Message.Content, &message, &truncated)
 			if record.Type == "assistant" {
-				f.text = message.Text
+				f.text = message.Text()
 				f.textID = record.ID
 				f.textPromptID = f.promptID
 				f.textAt, _ = time.Parse(time.RFC3339Nano, record.Timestamp)
@@ -150,7 +150,7 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 						f.effort = record.Effort
 					}
 				}
-			} else if len(message.Tools) == 0 && !record.CompactSummary {
+			} else if len(message.Tools()) == 0 && !record.CompactSummary {
 				f.text = ""
 				if len(record.PromptID) <= 128 {
 					f.promptID = record.PromptID
@@ -166,12 +166,12 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 				f.tool = nil
 				f.activity = "Working"
 			}
-			for _, tool := range message.Tools {
+			for _, tool := range message.Tools() {
 				if tool.Status != "running" && f.tool != nil && f.tool.ID == tool.ID {
 					tool.Name = f.tool.Name
 					tool.Input = f.tool.Input
 				}
-				f.tool = &protocol.ContentTool{ID: tool.ID, Name: tool.Name, Input: tool.Input, Output: tool.Output, Status: tool.Status}
+				f.tool = &protocol.HistoryTool{ID: tool.ID, Name: tool.Name, Input: tool.Input, Output: tool.Output, Status: tool.Status}
 				if tool.Status == "running" {
 					f.activity = "Tool running: " + tool.Name
 				} else {
@@ -202,15 +202,16 @@ func (f *transcriptFeed) refresh(path string, server transcriptPublisher) ([]pro
 			}
 		}
 		if publisher, ok := server.(interface {
-			PublishPromptTranscript(string, string, string, *protocol.ContentTool, string, time.Time)
+			PublishPromptTranscript(string, string, string, *protocol.HistoryTool, string, time.Time)
 		}); ok {
 			publisher.PublishPromptTranscript(f.leaf, f.text, f.activity, f.tool, f.textPromptID, f.textAt)
 		} else {
 			server.PublishTranscript(f.leaf, f.text, f.activity, f.tool)
 		}
-		// Link the shown text to its record; the server ignores it unless that
-		// text is what readers currently see.
-		if saver, ok := server.(interface{ MarkSaved(string, []string) }); ok && f.text != "" && f.textID != "" {
+		// Link the shown message to its record, even one with only calls or
+		// reasoning; the server ignores it unless that text is what readers
+		// currently see.
+		if saver, ok := server.(interface{ MarkSaved(string, []string) }); ok && f.textID != "" && (f.text != "" || record.Type == "assistant") {
 			saver.MarkSaved(f.text, []string{f.textID})
 		}
 	}

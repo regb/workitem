@@ -22,10 +22,10 @@ func subagentDir(path string) string {
 // state, from the metadata Claude writes beside the subagent's transcript.
 func linkSubagents(path string, history *protocol.History) {
 	var index map[string]protocol.HistorySubagent
-	for i := range history.Messages {
-		for j := range history.Messages[i].Tools {
-			tool := &history.Messages[i].Tools[j]
-			if tool.ID == "" || (tool.Name != "Agent" && tool.Name != "Task") {
+	for _, message := range history.Messages {
+		for _, part := range message.Parts {
+			tool := part.Tool
+			if tool == nil || tool.ID == "" || (tool.Name != "Agent" && tool.Name != "Task") {
 				continue
 			}
 			if index == nil {
@@ -85,7 +85,7 @@ func subagentIndex(path string) map[string]protocol.HistorySubagent {
 // taskNotification turns the message Claude's harness sends the agent when a
 // background subagent stops into a report of that subagent's result.
 func taskNotification(message *protocol.HistoryMessage) {
-	text := message.Text
+	text := message.Text()
 	id := tag(text, "task-id", false)
 	if !strings.HasPrefix(strings.TrimSpace(text), "<task-notification>") || !subagentID.MatchString(id) {
 		return
@@ -100,7 +100,10 @@ func taskNotification(message *protocol.HistoryMessage) {
 	}
 	message.Role = "subagent"
 	message.Subagent = &protocol.HistorySubagent{ID: id, ToolID: toolID, Description: bounded(tag(text, "summary", false), 512), Status: status}
-	message.Text = harnessNote.ReplaceAllString(tag(text, "result", true), "")
+	message.Parts = []protocol.Part{}
+	if result := harnessNote.ReplaceAllString(tag(text, "result", true), ""); result != "" {
+		message.Parts = append(message.Parts, protocol.TextPart(result))
+	}
 }
 
 // A note the harness puts before a result it neutralized for the agent.

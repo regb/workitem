@@ -24,11 +24,11 @@ func TestContentFixtureMatchesApplyContent(t *testing.T) {
 		{Sequence: 2, Type: ContentMessageStarted, MessageID: "live-2", Activity: "Assistant responding"},
 		{Sequence: 3, Type: ContentMessageDelta, MessageID: "live-2", Text: "Hel", Activity: "Assistant responding"},
 		{Sequence: 4, Type: ContentMessageDelta, MessageID: "live-2", Text: "lo 🌍"},
-		{Sequence: 5, Type: ContentToolStarted, Tool: &ContentTool{ID: "t1", Name: "bash", Status: "running", Input: `{"command":"ls"}`}, Activity: "Tool running: bash"},
+		{Sequence: 5, Type: ContentToolStarted, Tool: &HistoryTool{ID: "t1", Name: "bash", Status: "running", Input: `{"command":"ls"}`}, Activity: "Tool running: bash"},
 		{Sequence: 6, Type: ContentThoughtDelta, Text: "Checking the files"},
-		{Sequence: 7, Type: ContentToolStarted, Tool: &ContentTool{ID: "t0", Name: "read", Status: "running"}},
-		{Sequence: 8, Type: ContentToolUpdated, Tool: &ContentTool{ID: "t1", Name: "bash", Status: "running", Input: `{"command":"ls"}`, Output: "a"}},
-		{Sequence: 9, Type: ContentToolCompleted, Tool: &ContentTool{ID: "t1", Name: "bash", Status: "failed", Input: `{"command":"ls"}`, Output: "a\nb"}, Activity: "Tool failed: bash"},
+		{Sequence: 7, Type: ContentToolStarted, Tool: &HistoryTool{ID: "t0", Name: "read", Status: "running"}},
+		{Sequence: 8, Type: ContentToolUpdated, Tool: &HistoryTool{ID: "t1", Name: "bash", Status: "running", Input: `{"command":"ls"}`, Output: "a"}},
+		{Sequence: 9, Type: ContentToolCompleted, Tool: &HistoryTool{ID: "t1", Name: "bash", Status: "failed", Input: `{"command":"ls"}`, Output: "a\nb"}, Activity: "Tool failed: bash"},
 		{Sequence: 10, Type: ContentMessageReplaced, Text: "Rewritten", Truncated: true},
 		{Sequence: 11, Type: ContentToolCleared},
 		{Sequence: 12, Type: ContentActivity, Activity: "", LeafID: "leaf-2"},
@@ -45,11 +45,17 @@ func TestContentFixtureMatchesApplyContent(t *testing.T) {
 		// Text, a tool call, then more text: parts keep the order.
 		{Sequence: 23, Type: ContentMessageStarted, MessageID: "live-23"},
 		{Sequence: 24, Type: ContentMessageDelta, Text: "Let me look."},
-		{Sequence: 25, Type: ContentToolStarted, Tool: &ContentTool{ID: "t2", Name: "read", Status: "running"}},
-		{Sequence: 26, Type: ContentToolCompleted, Tool: &ContentTool{ID: "t2", Name: "read", Status: "completed", Output: "x"}},
-		{Sequence: 27, Type: ContentToolStarted, Tool: &ContentTool{Name: "grep", Status: "running"}},
+		{Sequence: 25, Type: ContentToolStarted, Tool: &HistoryTool{ID: "t2", Name: "read", Status: "running"}},
+		{Sequence: 26, Type: ContentToolCompleted, Tool: &HistoryTool{ID: "t2", Name: "read", Status: "completed", Output: "x"}},
+		{Sequence: 27, Type: ContentToolStarted, Tool: &HistoryTool{Name: "grep", Status: "running"}},
 		{Sequence: 28, Type: ContentMessageDelta, Text: "Found it"},
 		{Sequence: 29, Type: ContentMessageDelta, Text: "."},
+		// Reasoning between text keeps its place, and a stretch of it grows
+		// until something else is written.
+		{Sequence: 30, Type: ContentThoughtDelta, Text: "Is that "},
+		{Sequence: 31, Type: ContentThoughtDelta, Text: "all?"},
+		{Sequence: 32, Type: ContentMessageDelta, Text: " Done."},
+		{Sequence: 33, Type: ContentToolUpdated, Tool: &HistoryTool{ID: "t2", Name: "read", Status: "completed", Output: "y"}},
 	}
 	fixture := contentFixture{Events: events}
 	var value Content
@@ -80,10 +86,10 @@ func TestContentFixtureMatchesApplyContent(t *testing.T) {
 // tests it on its own.
 func TestApplyContentTruncatesAtACharacterBoundary(t *testing.T) {
 	value := ApplyContent(Content{}, ContentEvent{Sequence: 1, Type: ContentMessageDelta, Text: strings.Repeat("x", MaxContentTextBytes-2) + "🌍 tail"})
-	if !value.Truncated || len(value.Text) != MaxContentTextBytes-2 {
-		t.Fatalf("truncated=%v bytes=%d", value.Truncated, len(value.Text))
+	if !value.Truncated || len(value.Text()) != MaxContentTextBytes-2 {
+		t.Fatalf("truncated=%v bytes=%d", value.Truncated, len(value.Text()))
 	}
-	if value = ApplyContent(value, ContentEvent{Sequence: 2, Type: ContentMessageDelta, Text: "more"}); len(value.Text) != MaxContentTextBytes-2 {
+	if value = ApplyContent(value, ContentEvent{Sequence: 2, Type: ContentMessageDelta, Text: "more"}); len(value.Text()) != MaxContentTextBytes-2 {
 		t.Fatal("text grew after truncation")
 	}
 }

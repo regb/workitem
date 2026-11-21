@@ -62,7 +62,7 @@ type displayStream struct {
 	retired                              map[string]bool
 	retiredOrder                         []string
 	leaf, savedText, activity            string
-	tool                                 *protocol.ContentTool
+	tool                                 *protocol.HistoryTool
 }
 
 func (s *displayStream) reset() {
@@ -139,12 +139,12 @@ func (s *displayStream) publish() {
 	}
 	s.server.PublishStreaming(s.leaf, s.text, activity, s.tool, s.truncated || s.incomplete)
 }
-func (s *displayStream) PublishPromptTranscript(leaf, text, activity string, tool *protocol.ContentTool, promptID string, at time.Time) {
+func (s *displayStream) PublishPromptTranscript(leaf, text, activity string, tool *protocol.HistoryTool, promptID string, at time.Time) {
 	s.savedPromptID = promptID
 	s.savedAt = at
 	s.PublishTranscript(leaf, text, activity, tool)
 }
-func (s *displayStream) PublishTranscript(leaf, text, activity string, tool *protocol.ContentTool) {
+func (s *displayStream) PublishTranscript(leaf, text, activity string, tool *protocol.HistoryTool) {
 	s.leaf, s.savedText, s.activity, s.tool = leaf, text, activity, tool
 	// Native history remains authoritative. Do not replace an in-flight display
 	// with the previous record while native transcript appends lag behind hooks.

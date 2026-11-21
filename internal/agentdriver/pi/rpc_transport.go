@@ -53,6 +53,8 @@ type nativeRPCTransport struct {
 	// lastFailureReason is the reason code of the last failed reply, such as
 	// usage_limit, reported when the agent settles.
 	lastFailureReason string
+	// lastUsageProvider names whose quota a usage_limit failure ran out.
+	lastUsageProvider string
 	// unsaved are messages whose session entries are not yet known; Pi appends
 	// an entry after dispatching its message_end.
 	unsaved []unsavedMessage
@@ -381,7 +383,7 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 		t.busy = true
 		if output.Type == "agent_start" {
 			t.lastAssistantFailed = false
-			t.lastFailureReason = ""
+			t.lastFailureReason, t.lastUsageProvider = "", ""
 		}
 	case "agent_settled":
 		t.busy = false
@@ -411,11 +413,13 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 		message, _ := event.Data["message"].(map[string]any)
 		reason, _ := message["stopReason"].(string)
 		t.lastAssistantFailed = reason == "error"
-		t.lastFailureReason = ""
+		t.lastFailureReason, t.lastUsageProvider = "", ""
 		if failure, _ := message["errorMessage"].(string); t.lastAssistantFailed && usageLimitError(failure) {
-			t.lastFailureReason = "usage_limit"
+			provider, _ := message["provider"].(string)
+			t.lastFailureReason, t.lastUsageProvider = "usage_limit", usageProvider(provider)
 		}
-		if timestamp, ok := message["timestamp"].(float64); ok && output.Type == "message_end" && event.Text != "" {
+		// A reply with only calls or reasoning is linked to its entry too.
+		if timestamp, ok := message["timestamp"].(float64); ok && output.Type == "message_end" {
 			t.unsaved = append(t.unsaved, unsavedMessage{role: "assistant", text: event.Text, timestamp: int64(timestamp), since: time.Now()})
 		}
 	}
@@ -427,7 +431,7 @@ func (t *nativeRPCTransport) handleOutput(raw []byte) error {
 		event.Outcome = "completed"
 		if event.Failed {
 			event.Outcome = "failed"
-			event.ReasonCode = t.lastFailureReason
+			event.ReasonCode, event.UsageProvider = t.lastFailureReason, t.lastUsageProvider
 		}
 	}
 	if output.Type == "agent_settled" {
@@ -501,7 +505,7 @@ func (t *nativeRPCTransport) queueLiveEvent(event agent.RuntimeEvent, ack chan s
 		return false
 	}
 	t.ensureRuntimeEventID(&event)
-	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, Settings: event.Settings, NativeIDs: event.NativeIDs, Failed: event.Failed || event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
+	semantic := driverprotocol.RuntimeEvent{ProtocolVersion: driverprotocol.RuntimeVersion, EventID: event.EventID, RuntimeID: t.spec.RuntimeID, WorkItemID: t.spec.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, UsageProvider: event.UsageProvider, Settings: event.Settings, NativeIDs: event.NativeIDs, Failed: event.Failed || event.Type == agent.EventRuntimeFailed || event.Type == agent.EventCommandRejected}
 	select {
 	case t.liveQueue <- queuedLiveEvent{event: semantic, ack: ack}:
 		return true

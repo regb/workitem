@@ -144,29 +144,37 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 		if err := json.Unmarshal(line, &entry); err != nil {
 			return result, fmt.Errorf("native history changed while reading: %w", err)
 		}
-		message := driverprotocol.HistoryMessage{ID: entry.ID, Timestamp: entry.Timestamp}
+		message := driverprotocol.HistoryMessage{ID: entry.ID, Timestamp: entry.Timestamp, Parts: []driverprotocol.Part{}}
 		if entry.Type == "message" {
 			message.Role, _ = entry.Message["role"].(string)
-			var reasoning string
-			var reasoned bool
-			message.Text, message.Tools, message.Images, reasoning, reasoned = historyContent(entry.Message["content"])
-			if reasoned {
-				message.Reasoning = &driverprotocol.HistoryReasoning{Text: boundedHistoryText(reasoning, &result.Truncated)}
-			}
+			message.Parts = historyParts(entry.Message["content"])
 			stop, _ := entry.Message["stopReason"].(string)
 			if message.Role == "assistant" && abortedStop(stop) {
 				message.Aborted = true
 			}
 			// Pi records a provider failure, such as a usage limit, as an
 			// empty reply carrying the error: show it as the harness's notice.
-			if failure, _ := entry.Message["errorMessage"].(string); message.Role == "assistant" && stop == "error" && strings.TrimSpace(failure) != "" && strings.TrimSpace(message.Text) == "" {
+			if failure, _ := entry.Message["errorMessage"].(string); message.Role == "assistant" && stop == "error" && strings.TrimSpace(failure) != "" && strings.TrimSpace(message.Text()) == "" {
 				message.Error = true
-				message.Text = strings.TrimSpace(failure)
+				message.Parts = append(message.Parts, driverprotocol.TextPart(strings.TrimSpace(failure)))
+				if usageLimitError(failure) {
+					provider, _ := entry.Message["provider"].(string)
+					message.UsageProvider = usageProvider(provider)
+				}
 			}
 			// Pi notes a resized image in the prompt's text; the operator never
 			// wrote it, so history shows the message as sent.
 			if message.Role == "user" {
-				message.Text = strings.TrimSpace(piImageNote.ReplaceAllString(message.Text, ""))
+				parts := []driverprotocol.Part{}
+				for _, part := range message.Parts {
+					if part.IsText() {
+						if part.Text = strings.TrimSpace(piImageNote.ReplaceAllString(part.Text, "")); part.Text == "" {
+							continue
+						}
+					}
+					parts = append(parts, part)
+				}
+				message.Parts = parts
 			}
 			if message.Role == "toolResult" {
 				id, _ := entry.Message["toolCallId"].(string)
@@ -177,42 +185,58 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 					status = "failed"
 				}
 				message.Role = "assistant"
-				message.Tools = []driverprotocol.HistoryTool{{ID: id, Name: name, Output: message.Text, Status: status, Images: message.Images}}
-				message.Text = ""
-				message.Images = nil
+				message.Parts = []driverprotocol.Part{driverprotocol.ToolPart(driverprotocol.HistoryTool{ID: id, Name: name, Output: message.Text(), Status: status, Images: message.Images()})}
 			}
 			if message.Role == "bashExecution" {
 				message.Role = "user"
-				message.Tools = []driverprotocol.HistoryTool{operatorCommand(entry.Message)}
+				message.Parts = []driverprotocol.Part{driverprotocol.ToolPart(operatorCommand(entry.Message))}
 			}
 		} else {
 			message.Role = "summary"
-			message.Text = summaryMarkdown(entry.Summary)
+			if text := summaryMarkdown(entry.Summary); text != "" {
+				message.Parts = append(message.Parts, driverprotocol.TextPart(text))
+			}
 			message.Summary = &driverprotocol.HistorySummary{Kind: "compaction", TokensBefore: entry.TokensBefore}
 			if entry.Type == "branch_summary" {
 				message.Summary = &driverprotocol.HistorySummary{Kind: "branch"}
 			}
 		}
-		message.Text = boundedHistoryText(message.Text, &result.Truncated)
-		size := len(message.Text)
-		if len(message.Tools) > 200 {
-			message.Tools = message.Tools[:200]
-			result.Truncated = true
+		size, toolCount := 0, 0
+		parts := message.Parts[:0]
+		for _, part := range message.Parts {
+			switch {
+			case part.Tool != nil:
+				// Keep the first calls of a reply that made very many.
+				if toolCount++; toolCount > 200 {
+					result.Truncated = true
+					continue
+				}
+				part.Tool.Input = boundedHistoryText(part.Tool.Input, &result.Truncated)
+				part.Tool.Output = boundedHistoryText(part.Tool.Output, &result.Truncated)
+			case part.Thought != nil:
+				part.Thought.Text = boundedHistoryText(part.Thought.Text, &result.Truncated)
+				size += len(part.Thought.Text)
+			case part.IsText():
+				part.Text = boundedHistoryText(part.Text, &result.Truncated)
+				size += len(part.Text)
+			}
+			parts = append(parts, part)
 		}
-		for i := range message.Tools {
-			tool := &message.Tools[i]
-			tool.Input = boundedHistoryText(tool.Input, &result.Truncated)
-			tool.Output = boundedHistoryText(tool.Output, &result.Truncated)
+		message.Parts = parts
+		textSize := size
+		for _, tool := range message.Tools() {
 			size += len(tool.Input) + len(tool.Output)
 		}
 		// Keep the newest entry even if it has many tools, with explicit truncation.
 		if size > 1<<20 && len(rawMessages) == 0 {
-			remaining := (1 << 20) - len(message.Text)
-			for i := range message.Tools {
-				tool := &message.Tools[i]
-				for _, field := range []*string{&tool.Input, &tool.Output} {
+			remaining := (1 << 20) - textSize
+			for _, part := range message.Parts {
+				if part.Tool == nil {
+					continue
+				}
+				for _, field := range []*string{&part.Tool.Input, &part.Tool.Output} {
 					if len(*field) > remaining {
-						end := remaining
+						end := max(remaining, 0)
 						for end > 0 && !utf8.RuneStart((*field)[end]) {
 							end--
 						}
@@ -228,10 +252,19 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 			result.HasMore = true
 			break
 		}
-		message.Images = boundedHistoryImages(message.Images, &imageTotal, &result.Truncated)
-		for i := range message.Tools {
-			message.Tools[i].Images = boundedHistoryImages(message.Tools[i].Images, &imageTotal, &result.Truncated)
+		parts = message.Parts[:0]
+		for _, part := range message.Parts {
+			switch {
+			case part.Image != nil:
+				if len(boundedHistoryImages([]driverprotocol.HistoryImage{*part.Image}, &imageTotal, &result.Truncated)) == 0 {
+					continue
+				}
+			case part.Tool != nil:
+				part.Tool.Images = boundedHistoryImages(part.Tool.Images, &imageTotal, &result.Truncated)
+			}
+			parts = append(parts, part)
 		}
+		message.Parts = parts
 		textTotal += size
 		rawMessages = append(rawMessages, message)
 		result.BeforeID = e.ID
@@ -241,27 +274,26 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 	}
 	// Normalize the selected page chronologically and fold native tool-result
 	// records into calls. Retain aliases so clients can reconcile native anchors.
-	type toolLocation struct{ message, tool int }
+	type toolLocation struct{ message, part int }
 	locations := map[string]toolLocation{}
 	for i := len(rawMessages) - 1; i >= 0; i-- {
 		message := rawMessages[i]
 		result.NativeEntryIDs = append(result.NativeEntryIDs, message.ID)
-		if message.Text == "" && len(message.Tools) == 1 && message.Tools[0].Status != "running" {
-			tool := message.Tools[0]
+		if len(message.Parts) == 1 && message.Parts[0].Tool != nil && message.Parts[0].Tool.Status != "running" {
+			tool := message.Parts[0].Tool
 			if location, ok := locations[tool.ID]; ok && tool.ID != "" {
 				target := &result.Messages[location.message]
-				target.Tools[location.tool].Output = tool.Output
-				target.Tools[location.tool].Images = tool.Images
-				target.Tools[location.tool].Status = tool.Status
+				call := target.Parts[location.part].Tool
+				call.Output, call.Images, call.Status = tool.Output, tool.Images, tool.Status
 				target.NativeIDs = append(target.NativeIDs, message.ID)
 				continue
 			}
 		}
 		index := len(result.Messages)
 		result.Messages = append(result.Messages, message)
-		for j, tool := range message.Tools {
-			if tool.ID != "" {
-				locations[tool.ID] = toolLocation{index, j}
+		for j, part := range message.Parts {
+			if part.Tool != nil && part.Tool.ID != "" {
+				locations[part.Tool.ID] = toolLocation{index, j}
 			}
 		}
 	}
@@ -273,26 +305,25 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 	return result, nil
 }
 
-// historyContent reads a message's text, tool calls, images, and the
-// reasoning before it, reporting whether there was any.
 // piImageNote is the note Pi adds to a prompt whose image it resized.
 var piImageNote = regexp.MustCompile(`\n*\[Image: original \d+x\d+[^\]\n]*\]`)
 
-func historyContent(content any) (string, []driverprotocol.HistoryTool, []driverprotocol.HistoryImage, string, bool) {
+// historyParts reads a message's content blocks as parts, in their order.
+// Adjacent text blocks join with a line break and adjacent reasoning blocks
+// with a blank line, as one stretch each.
+func historyParts(content any) []driverprotocol.Part {
+	parts := []driverprotocol.Part{}
 	if s, ok := content.(string); ok {
-		return s, nil, nil, "", false
+		return appendBlockText(parts, s)
 	}
 	blocks, _ := content.([]any)
-	parts, thoughts, reasoned := []string{}, []string{}, false
-	tools := []driverprotocol.HistoryTool{}
-	images := []driverprotocol.HistoryImage{}
 	for _, raw := range blocks {
 		b, _ := raw.(map[string]any)
 		typ, _ := b["type"].(string)
 		switch typ {
 		case "text":
 			s, _ := b["text"].(string)
-			parts = append(parts, s)
+			parts = appendBlockText(parts, s)
 		case "toolCall":
 			id, _ := b["id"].(string)
 			name, _ := b["name"].(string)
@@ -300,25 +331,45 @@ func historyContent(content any) (string, []driverprotocol.HistoryTool, []driver
 			if arguments, ok := b["arguments"]; ok {
 				input, _ = json.MarshalIndent(arguments, "", "  ")
 			}
-			tools = append(tools, driverprotocol.HistoryTool{ID: id, Name: name, Input: string(input), Status: "running"})
+			parts = append(parts, driverprotocol.ToolPart(driverprotocol.HistoryTool{ID: id, Name: name, Input: string(input), Status: "running"}))
 		case "image":
 			data, _ := b["data"].(string)
 			mimeType, _ := b["mimeType"].(string)
 			if data != "" && strings.HasPrefix(mimeType, "image/") {
-				images = append(images, driverprotocol.HistoryImage{MIMEType: mimeType, Data: data, Alt: "Attached image"})
+				parts = append(parts, driverprotocol.ImagePart(driverprotocol.HistoryImage{MIMEType: mimeType, Data: data, Alt: "Attached image"}))
 			}
 		case "thinking":
-			reasoned = true
-			if s, _ := b["thinking"].(string); s != "" {
-				thoughts = append(thoughts, s)
+			// Reasoning a model keeps private still shows that it reasoned.
+			s, _ := b["thinking"].(string)
+			if n := len(parts); n > 0 && parts[n-1].Thought != nil {
+				if s != "" {
+					thought := *parts[n-1].Thought
+					thought.Text = strings.TrimPrefix(thought.Text+"\n\n"+s, "\n\n")
+					parts[n-1] = driverprotocol.ThoughtPart(thought)
+				}
+				continue
 			}
+			parts = append(parts, driverprotocol.ThoughtPart(driverprotocol.Thought{Text: s}))
 		default:
 			if typ != "" {
-				parts = append(parts, "["+typ+" content omitted]")
+				parts = appendBlockText(parts, "["+typ+" content omitted]")
 			}
 		}
 	}
-	return strings.Join(parts, "\n"), tools, images, strings.Join(thoughts, "\n\n"), reasoned
+	return parts
+}
+
+// appendBlockText adds a text block, on its own line after a text block
+// before it.
+func appendBlockText(parts []driverprotocol.Part, text string) []driverprotocol.Part {
+	if text == "" {
+		return parts
+	}
+	if n := len(parts); n > 0 && parts[n-1].IsText() {
+		parts[n-1].Text += "\n" + text
+		return parts
+	}
+	return append(parts, driverprotocol.TextPart(text))
 }
 
 func boundedHistoryImages(images []driverprotocol.HistoryImage, total *int, truncated *bool) []driverprotocol.HistoryImage {

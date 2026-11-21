@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -34,10 +35,10 @@ func TestHistoryToolsBranchesAndPartialAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(h.Messages) != 3 || h.Messages[1].Tools[0].Status != "failed" || h.Messages[1].Tools[0].Output != "not found" || len(h.Messages[1].Tools[0].Images) != 1 || len(h.NativeEntryIDs) != 4 {
+	if len(h.Messages) != 3 || h.Messages[1].Tools()[0].Status != "failed" || h.Messages[1].Tools()[0].Output != "not found" || len(h.Messages[1].Tools()[0].Images) != 1 || len(h.NativeEntryIDs) != 4 {
 		t.Fatalf("%+v", h)
 	}
-	if h.Messages[1].NativeIDs[0] != "r" || h.Messages[2].Text != "finished" {
+	if h.Messages[1].NativeIDs[0] != "r" || h.Messages[2].Text() != "finished" {
 		t.Fatalf("%+v", h.Messages)
 	}
 	file, _ := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0600)
@@ -87,7 +88,7 @@ func TestHistoryPagingAndBounds(t *testing.T) {
 	}
 	data, _ := json.Marshal(map[string]any{"type": "assistant", "uuid": "large", "message": map[string]any{"content": strings.Repeat("界", 50000)}})
 	h, err := ReadHistoryPage(context.Background(), historyFixture(t, string(data)), "", "")
-	if err != nil || !h.Truncated || len(h.Messages[0].Text) > 64<<10 {
+	if err != nil || !h.Truncated || len(h.Messages[0].Text()) > 64<<10 {
 		t.Fatalf("%+v %v", h, err)
 	}
 }
@@ -105,16 +106,16 @@ func TestHistoryCompactionAndResultAcrossPageBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tool := h.Messages[len(h.Messages)-1].Tools[0]
+	tool := h.Messages[len(h.Messages)-1].Tools()[0]
 	if tool.Name != "Bash" || tool.Input == "" || tool.Output != "x" || !h.HasMore {
 		t.Fatalf("tool=%+v page=%+v", tool, h)
 	}
 	compact := historyFixture(t, `{"type":"system","subtype":"compact_boundary","uuid":"boundary","content":"Conversation compacted","compactMetadata":{"trigger":"auto","preTokens":288117}}`, `{"type":"user","isMeta":true,"isCompactSummary":true,"uuid":"summary","parentUuid":"boundary","message":{"content":"summary text"}}`)
 	h, err = ReadHistoryPage(context.Background(), compact, "", "")
-	if err != nil || len(h.Messages) != 2 || h.Messages[0].Role != "summary" || h.Messages[1].Role != "summary" || h.Messages[1].Text != "summary text" {
+	if err != nil || len(h.Messages) != 2 || h.Messages[0].Role != "summary" || h.Messages[1].Role != "summary" || h.Messages[1].Text() != "summary text" {
 		t.Fatalf("%+v %v", h, err)
 	}
-	if boundary := h.Messages[0]; boundary.Text != "" || *boundary.Summary != (protocol.HistorySummary{Kind: "compaction", TokensBefore: 288117}) || *h.Messages[1].Summary != (protocol.HistorySummary{Kind: "compaction"}) {
+	if boundary := h.Messages[0]; boundary.Text() != "" || *boundary.Summary != (protocol.HistorySummary{Kind: "compaction", TokensBefore: 288117}) || *h.Messages[1].Summary != (protocol.HistorySummary{Kind: "compaction"}) {
 		t.Fatalf("compaction %+v %+v", h.Messages[0], h.Messages[1].Summary)
 	}
 }
@@ -158,19 +159,19 @@ func TestHistorySubagentsAndTheirNotifications(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tools := h.Messages[1].Tools
+	tools := h.Messages[1].Tools()
 	if len(h.Messages) != 4 || tools[0].Subagent == nil || *tools[0].Subagent != (protocol.HistorySubagent{ID: "abc1", ToolID: "call", Type: "general-purpose", Description: "Look around", Status: "completed"}) || tools[1].Subagent != nil {
 		t.Fatalf("calls %+v", h.Messages)
 	}
 	report := h.Messages[2]
-	if report.Role != "subagent" || report.Subagent == nil || report.Subagent.ID != "abc1" || report.Subagent.ToolID != "call" || report.Subagent.Description != `Agent "Look around" finished` || report.Text != "Found it. A </result> in the text stays." {
+	if report.Role != "subagent" || report.Subagent == nil || report.Subagent.ID != "abc1" || report.Subagent.ToolID != "call" || report.Subagent.Description != `Agent "Look around" finished` || report.Text() != "Found it. A </result> in the text stays." {
 		t.Fatalf("report %+v %+v", report, report.Subagent)
 	}
 	if typed := h.Messages[3]; typed.Role != "user" || typed.Subagent != nil {
 		t.Fatalf("a typed message became a report: %+v", typed)
 	}
 	sub, err := ReadSubagentHistoryPage(context.Background(), path, "abc1", "")
-	if err != nil || len(sub.Messages) != 2 || sub.Messages[0].Text != "look" || sub.Messages[1].Tools[0].Name != "Bash" {
+	if err != nil || len(sub.Messages) != 2 || sub.Messages[0].Text() != "look" || sub.Messages[1].Tools()[0].Name != "Bash" {
 		t.Fatalf("subagent %+v %v", sub, err)
 	}
 	for _, bad := range []string{"../abc1", "missing", ""} {
@@ -197,7 +198,7 @@ func TestHistoryParallelCallResultsOffTheBranch(t *testing.T) {
 	}
 	outputs := map[string]string{}
 	for _, m := range h.Messages {
-		for _, tool := range m.Tools {
+		for _, tool := range m.Tools() {
 			outputs[tool.ID] = tool.Status + ":" + tool.Output
 		}
 	}
@@ -217,7 +218,7 @@ func TestHistoryShowsAnInterruptAsAnAbortedReply(t *testing.T) {
 	if err != nil || len(h.Messages) != 3 {
 		t.Fatalf("%+v %v", h, err)
 	}
-	if mark := h.Messages[2]; mark.Role != "assistant" || !mark.Aborted || mark.Text != "" {
+	if mark := h.Messages[2]; mark.Role != "assistant" || !mark.Aborted || mark.Text() != "" {
 		t.Fatalf("interrupt: %+v", mark)
 	}
 }
@@ -229,16 +230,50 @@ func TestHistoryKeepsThatClaudeReasonedAndForHowLong(t *testing.T) {
 		`{"type":"assistant","uuid":"think","parentUuid":"intro","timestamp":"2026-10-14T15:11:31.776Z","message":{"id":"m","content":[{"type":"thinking","thinking":"","signature":"sig"}]}}`,
 		`{"type":"assistant","uuid":"answer","parentUuid":"think","timestamp":"2026-10-14T15:11:33.195Z","message":{"id":"m","content":[{"type":"text","text":"because"}]}}`)
 	h, err := ReadHistoryPage(context.Background(), path, "", "")
-	if err != nil || len(h.Messages) != 4 {
+	if err != nil || len(h.Messages) != 2 {
 		t.Fatalf("%+v %v", h, err)
 	}
-	// Measured from the question, not the earlier block of the same reply.
-	thought := h.Messages[2]
-	if thought.Text != "" || thought.Reasoning == nil || thought.Reasoning.Text != "" || thought.Reasoning.DurationMS != 1776 {
-		t.Fatalf("reasoning %+v %+v", thought, thought.Reasoning)
+	// The reply's records are one message; its reasoning is where Claude
+	// wrote it, measured from the question, not the earlier block.
+	reply := h.Messages[1]
+	parts := reply.Parts
+	if len(parts) != 3 || parts[0].Text != "Let me see." || parts[1].Thought == nil || *parts[1].Thought != (protocol.Thought{DurationMS: 1776}) || parts[2].Text != "because" {
+		t.Fatalf("reply %+v", parts)
 	}
-	if h.Messages[3].Reasoning != nil || h.Messages[3].Text != "because" {
-		t.Fatalf("answer %+v", h.Messages[3])
+	if reply.ID != "intro" || !reflect.DeepEqual(reply.NativeIDs, []string{"think", "answer"}) {
+		t.Fatalf("reply ids %q %v", reply.ID, reply.NativeIDs)
+	}
+}
+
+// Claude saves each block of a reply as its own record, with the results of
+// its calls among them; history shows the reply as one message, its blocks
+// in the order Claude wrote them.
+func TestHistoryKeepsAnInterleavedReplyInOrder(t *testing.T) {
+	path := historyFixture(t,
+		`{"type":"user","uuid":"ask","timestamp":"2026-10-14T15:11:30.000Z","message":{"content":"go"}}`,
+		`{"type":"assistant","uuid":"intro","parentUuid":"ask","timestamp":"2026-10-14T15:11:30.500Z","message":{"id":"m","content":[{"type":"text","text":"first"}]}}`,
+		`{"type":"assistant","uuid":"call","parentUuid":"intro","timestamp":"2026-10-14T15:11:31.000Z","message":{"id":"m","content":[{"type":"tool_use","id":"toolu_1","name":"Bash","input":{"command":"ls"}}]}}`,
+		`{"type":"user","uuid":"result","parentUuid":"call","timestamp":"2026-10-14T15:11:32.000Z","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_1","content":"a.go"}]}}`,
+		`{"type":"assistant","uuid":"then","parentUuid":"result","timestamp":"2026-10-14T15:11:33.000Z","message":{"id":"m","content":[{"type":"text","text":"then"}]}}`,
+		`{"type":"assistant","uuid":"think","parentUuid":"then","timestamp":"2026-10-14T15:11:34.000Z","message":{"id":"m","content":[{"type":"thinking","thinking":"","signature":"sig"}]}}`,
+		`{"type":"assistant","uuid":"next","parentUuid":"think","timestamp":"2026-10-14T15:11:35.000Z","message":{"id":"n","content":[{"type":"text","text":"another reply"}]}}`)
+	h, err := ReadHistoryPage(context.Background(), path, "", "")
+	if err != nil || len(h.Messages) != 3 {
+		t.Fatalf("%+v %v", h, err)
+	}
+	reply := h.Messages[1]
+	parts := reply.Parts
+	if len(parts) != 4 || parts[0].Text != "first" || parts[1].Tool == nil || parts[2].Text != "then" || parts[3].Thought == nil {
+		t.Fatalf("parts %+v", parts)
+	}
+	if tool := parts[1].Tool; tool.ID != "toolu_1" || tool.Status != "completed" || tool.Output != "a.go" {
+		t.Fatalf("tool %+v", tool)
+	}
+	if !reflect.DeepEqual(reply.NativeIDs, []string{"call", "result", "then", "think"}) {
+		t.Fatalf("native ids %v", reply.NativeIDs)
+	}
+	if h.Messages[2].Text() != "another reply" {
+		t.Fatalf("next reply %+v", h.Messages[2])
 	}
 }
 
@@ -258,9 +293,9 @@ func TestHistoryShowsSteeredMessages(t *testing.T) {
 	}
 	got := []string{}
 	for _, m := range h.Messages {
-		got = append(got, m.Role+":"+m.Text)
+		got = append(got, m.Role+":"+m.Text())
 	}
-	if strings.Join(got, "|") != "user:task|assistant:working|user:also check this|user:plain text|assistant:checked" || len(h.Messages[2].Images) != 1 {
+	if strings.Join(got, "|") != "user:task|assistant:working|user:also check this|user:plain text|assistant:checked" || len(h.Messages[2].Images()) != 1 {
 		t.Fatalf("%v %+v", got, h.Messages[2])
 	}
 }

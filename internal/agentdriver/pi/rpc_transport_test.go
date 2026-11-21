@@ -192,7 +192,7 @@ done
 	deadline = time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
 		value, readErr := driverprotocol.ReadContent(ctx, driverprotocol.ContentSocketPath(controlPath), runtimeID, itemID)
-		if readErr == nil && value.Text == "live private text" {
+		if readErr == nil && value.Text() == "live private text" {
 			contentSeen = true
 			break
 		}

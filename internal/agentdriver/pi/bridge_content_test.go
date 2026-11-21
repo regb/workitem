@@ -43,12 +43,13 @@ await callbacks.get('session_start')({},ctx);
 await new Promise(resolve=>setTimeout(resolve,60));
 async function exchange(path,value){return await new Promise((resolve,reject)=>{const socket=createConnection(path);let data='';socket.on('error',reject);socket.on('connect',()=>socket.write(JSON.stringify(value)+'\n'));socket.on('data',chunk=>{data+=chunk;if(data.includes('\n')){socket.destroy();resolve(JSON.parse(data.split('\n')[0]));}});});}
 const request={protocol_version:1,runtime_id:'tui-test',work_item_id:'item-test'};
+const contentRequest={...request,protocol_version:2};
 callbacks.get('message_start')({message:{role:'assistant',content:[]}},ctx);
 callbacks.get('message_update')({assistantMessageEvent:{type:'text_delta',delta:'hello 🌍',partial:{}}},ctx);
 const path=process.env.WI_CONTENT_TEST_SOCKET;
-let value=await exchange(path,request);assert.equal(value.text,'hello 🌍');assert.equal(value.leaf_id,'branch-leaf');
-value=await exchange(path,request);assert.equal(value.text,'hello 🌍');
-value=await exchange(path,{...request,runtime_id:'superseded'});assert.equal(value.error,'content owner mismatch');
+let value=await exchange(path,contentRequest);assert.deepEqual(value.parts,[{text:'hello 🌍'}]);assert.equal(value.leaf_id,'branch-leaf');
+value=await exchange(path,contentRequest);assert.deepEqual(value.parts,[{text:'hello 🌍'}]);
+value=await exchange(path,{...contentRequest,runtime_id:'superseded'});assert.equal(value.error,'content owner mismatch');
 value=await exchange(process.env.WI_AGENT_CONTROL_SOCKET,{...request,id:'send-first',type:'prompt',message:'work',require_idle:true});assert.equal(value.accepted,true);
 value=await exchange(process.env.WI_AGENT_CONTROL_SOCKET,{...request,id:'shutdown-before-start',type:'shutdown',require_idle:true});assert.equal(value.accepted,false);assert.equal(shutDown,false);
 callbacks.get('agent_start')({},ctx);callbacks.get('agent_settled')({},ctx);
@@ -76,8 +77,8 @@ value=await exchange(process.env.WI_AGENT_CONTROL_SOCKET,{...request,id:'queued-
 assert.deepEqual(sent.at(-1),{content:[{type:'text',text:'inspect this'},{type:'image',mimeType:'image/jpeg',data:'YWJj'}],options:{deliverAs:'followUp'}});
 value=await exchange(process.env.WI_AGENT_CONTROL_SOCKET,{...request,id:'shutdown-test',type:'shutdown',require_idle:true});assert.equal(value.accepted,false);assert.equal(shutDown,false);
 callbacks.get('message_end')({message:{role:'assistant',content:[{type:'text',text:'saved answer'}],stopReason:'stop'}},ctx);
-value=await exchange(path,request);assert.equal(value.activity,'Message saved');
-leaf='other-leaf';callbacks.get('session_tree')({oldLeafId:'branch-leaf',newLeafId:leaf},ctx);value=await exchange(path,request);assert.equal(value.leaf_id,leaf);
+value=await exchange(path,contentRequest);assert.equal(value.activity,'Message saved');
+leaf='other-leaf';callbacks.get('session_tree')({oldLeafId:'branch-leaf',newLeafId:leaf},ctx);value=await exchange(path,contentRequest);assert.equal(value.leaf_id,leaf);
 callbacks.get('session_shutdown')({},ctx);
 await new Promise(resolve=>setTimeout(resolve,60));relay.close();process.exit(0);
 `, (&url.URL{Scheme: "file", Path: bridge}).String())

@@ -21,13 +21,14 @@ import (
 )
 
 // ContentVersion is independent of the process bootstrap and runtime protocols.
-const ContentVersion = 1
+const ContentVersion = 2
 
 const MaxContentTextBytes = 256 << 10
 
 // Content is an ephemeral, read-only snapshot, never a retained runtime event.
-// Text contains the currently streaming assistant message, or the latest
-// persisted assistant message for transcript-backed drivers. History remains
+// Parts hold the currently streaming assistant message, or the latest
+// persisted assistant message for transcript-backed drivers, in the order it
+// was written, as history holds a saved message. History remains
 // authoritative for final messages. Readers replace, rather than append,
 // snapshots, so reconnecting cannot duplicate deltas.
 type Content struct {
@@ -37,42 +38,51 @@ type Content struct {
 	Sequence        uint64 `json:"sequence"`
 	IdleGuard       bool   `json:"idle_guard"`
 	MessageID       string `json:"message_id,omitempty"`
-	Text            string `json:"text"`
-	Truncated       bool   `json:"truncated,omitempty"`
-	Activity        string `json:"activity"`
-	LeafID          string `json:"leaf_id,omitempty"`
-	// SavedAs lists the native history entries that hold Text, once the
-	// driver knows them. Readers stop showing Text once history has one.
+	// Parts are the current message: text, reasoning and tool calls, in
+	// order. A tool call's part holds its current state.
+	Parts []Part `json:"parts,omitempty"`
+	// Truncated means the message's text was cut at MaxContentTextBytes.
+	Truncated bool   `json:"truncated,omitempty"`
+	Activity  string `json:"activity"`
+	LeafID    string `json:"leaf_id,omitempty"`
+	// SavedAs lists the native history entries that hold the message, once
+	// the driver knows them. Readers stop showing it once history has one.
 	SavedAs []string `json:"saved_as,omitempty"`
-	// Thought is the current message's reasoning, when the agent shares it.
-	Thought string       `json:"thought,omitempty"`
-	Error   string       `json:"error,omitempty"`
-	Tool    *ContentTool `json:"tool,omitempty"`
-	// Tools are the current message's tool calls in order, Tool the latest.
-	Tools []ContentTool `json:"tools,omitempty"`
-	// Parts is the current message in the order it was written: its text
-	// split where tool calls came between. Readers show it in this order;
-	// Text and Tools hold the same content, merged.
-	Parts []ContentPart `json:"parts,omitempty"`
+	Error   string   `json:"error,omitempty"`
 	// Prompts link recently submitted prompts, by the request ID their sender
 	// gave, to the native history entries holding them; newest last.
 	Prompts []PromptLink `json:"prompts,omitempty"`
 	// Question is the question tool call the agent waits on, which
 	// CommandAnswer answers. Its input holds the questions.
-	Question *ContentTool `json:"question,omitempty"`
+	Question *HistoryTool `json:"question,omitempty"`
+}
+
+// Text is the current message's text, its parts joined as written.
+func (c Content) Text() string {
+	text := ""
+	for _, part := range c.Parts {
+		if part.IsText() {
+			text += part.Text
+		}
+	}
+	return text
+}
+
+// LastTool is the current message's latest tool call, if any.
+func (c Content) LastTool() *HistoryTool {
+	for i := len(c.Parts) - 1; i >= 0; i-- {
+		if c.Parts[i].Tool != nil {
+			tool := *c.Parts[i].Tool
+			return &tool
+		}
+	}
+	return nil
 }
 
 // PromptLink names the history entries that hold one submitted prompt.
 type PromptLink struct {
 	RequestID string   `json:"request_id"`
 	NativeIDs []string `json:"native_ids"`
-}
-type ContentTool struct {
-	ID     string `json:"id,omitempty"`
-	Name   string `json:"name"`
-	Status string `json:"status"`
-	Input  string `json:"input,omitempty"`
-	Output string `json:"output,omitempty"`
 }
 
 // ContentRequest asks for one snapshot, or with Stream for a snapshot followed
@@ -116,8 +126,8 @@ type ContentEvent struct {
 	MessageID string       `json:"message_id,omitempty"`
 	Text      string       `json:"text,omitempty"`
 	Truncated bool         `json:"truncated,omitempty"`
-	Tool      *ContentTool `json:"tool,omitempty"`
-	// NativeIDs are the history entries holding the current text
+	Tool      *HistoryTool `json:"tool,omitempty"`
+	// NativeIDs are the history entries holding the current message
 	// (message.saved), or a prompt (prompt.saved).
 	NativeIDs []string `json:"native_ids,omitempty"`
 	// RequestID is the sender's identity of a prompt (prompt.saved).
@@ -135,10 +145,8 @@ type ContentEvent struct {
 func ApplyContent(value Content, event ContentEvent) Content {
 	if event.Type == ContentSnapshot && event.Snapshot != nil {
 		value = *event.Snapshot
-		value.Tool = cloneTool(value.Tool)
+		value.Parts = cloneParts(value.Parts)
 		value.SavedAs = append([]string(nil), value.SavedAs...)
-		value.Tools = append([]ContentTool(nil), value.Tools...)
-		value.Parts = append([]ContentPart(nil), value.Parts...)
 		value.Prompts = append([]PromptLink(nil), value.Prompts...)
 		value.Question = cloneTool(value.Question)
 		return value
@@ -149,57 +157,54 @@ func ApplyContent(value Content, event ContentEvent) Content {
 		return value
 	}
 	value.Sequence = event.Sequence
-	value.Tool = cloneTool(value.Tool)
+	value.Parts = cloneParts(value.Parts)
 	switch event.Type {
 	case ContentMessageStarted:
-		value.MessageID, value.Text, value.Truncated, value.Tool, value.SavedAs, value.Thought, value.Tools, value.Parts = event.MessageID, "", false, nil, nil, "", nil, nil
+		value.MessageID, value.Truncated, value.SavedAs, value.Parts = event.MessageID, false, nil, nil
 	case ContentMessageDelta:
 		if !value.Truncated {
-			before := len(value.Text)
-			value.Text, value.Truncated = boundedContentText(value.Text + event.Text)
-			if added := value.Text[before:]; added != "" {
-				value.Parts = appendTextPart(value.Parts, added)
-			}
+			added, cut := boundedContentText(value.Text() + event.Text)
+			added = added[len(value.Text()):]
+			value.Parts = boundParts(AppendText(value.Parts, added))
+			value.Truncated = cut
 			value.SavedAs = nil
 		}
 	case ContentMessageReplaced:
-		value.Text, value.Truncated = boundedContentText(event.Text)
-		value.Truncated = value.Truncated || event.Truncated
-		value.SavedAs = nil
-		// A replacement, such as a transcript record, comes whole: its
-		// text, then the calls it made, as history shows a message.
-		parts := []ContentPart{}
-		if value.Text != "" {
-			parts = append(parts, ContentPart{Text: value.Text})
-		}
+		// A replacement, such as a transcript record, comes whole: the
+		// message's reasoning, its text, then the calls it made.
+		text, cut := boundedContentText(event.Text)
+		parts := []Part{}
 		for _, part := range value.Parts {
-			if part.ToolID != "" || part.ToolName != "" {
+			if part.Thought != nil {
 				parts = append(parts, part)
 			}
 		}
-		value.Parts = parts
+		parts = AppendText(parts, text)
+		for _, part := range value.Parts {
+			if part.Tool != nil || part.Image != nil {
+				parts = append(parts, part)
+			}
+		}
+		value.Parts, value.Truncated, value.SavedAs = parts, cut || event.Truncated, nil
 		if event.MessageID != "" {
 			value.MessageID = event.MessageID
 		}
 	case ContentMessageSaved:
 		value.SavedAs = append([]string(nil), event.NativeIDs...)
 	case ContentToolStarted, ContentToolUpdated, ContentToolCompleted:
-		value.Tool = cloneTool(event.Tool)
 		if event.Tool != nil {
-			value.Tools = upsertTool(value.Tools, *event.Tool)
-			value.Parts = appendToolPart(value.Parts, *event.Tool)
+			value.Parts = boundParts(UpsertTool(value.Parts, *event.Tool))
 		}
 	case ContentToolCleared:
-		value.Tool, value.Tools = nil, nil
-		parts := []ContentPart{}
+		parts := []Part{}
 		for _, part := range value.Parts {
-			if part.ToolID == "" && part.ToolName == "" {
+			if part.Tool == nil {
 				parts = append(parts, part)
 			}
 		}
 		value.Parts = parts
 	case ContentThoughtDelta:
-		value.Thought = boundedThought(value.Thought + event.Text)
+		value.Parts = boundParts(appendThought(value.Parts, event.Text))
 	case ContentPromptSaved:
 		value.Prompts = linkPrompt(value.Prompts, PromptLink{RequestID: event.RequestID, NativeIDs: append([]string(nil), event.NativeIDs...)})
 	case ContentActivity:
@@ -212,67 +217,53 @@ func ApplyContent(value Content, event ContentEvent) Content {
 	return value
 }
 
-// ContentPart is a stretch of a message: text, or a tool call named by its
-// ID (or, without one, its name) in the message's Tools.
-type ContentPart struct {
-	Text     string `json:"text,omitempty"`
-	ToolID   string `json:"tool_id,omitempty"`
-	ToolName string `json:"tool_name,omitempty"`
+// appendThought extends the reasoning the message ends with, or starts a
+// new stretch of it.
+func appendThought(parts []Part, text string) []Part {
+	if text == "" {
+		return parts
+	}
+	if n := len(parts); n > 0 && parts[n-1].Thought != nil {
+		thought := *parts[n-1].Thought
+		thought.Text = boundedThought(thought.Text + text)
+		parts[n-1] = ThoughtPart(thought)
+		return parts
+	}
+	return append(parts, ThoughtPart(Thought{Text: boundedThought(text)}))
 }
 
-// maxContentParts bounds a message's parts; the oldest go.
-const maxContentParts = 64
+// maxContentParts bounds a live message's parts; the oldest go.
+const maxContentParts = 96
 
-// appendTextPart extends the last part with text, or starts a text part
-// after a tool call.
-func appendTextPart(parts []ContentPart, text string) []ContentPart {
-	next := append([]ContentPart(nil), parts...)
-	if n := len(next); n > 0 && next[n-1].ToolID == "" && next[n-1].ToolName == "" {
-		next[n-1].Text += text
-		return next
-	}
-	return boundParts(append(next, ContentPart{Text: text}))
-}
-
-// appendToolPart adds a part for a tool call the message has no part for.
-func appendToolPart(parts []ContentPart, tool ContentTool) []ContentPart {
-	for _, part := range parts {
-		if tool.ID != "" && part.ToolID == tool.ID || tool.ID == "" && part.ToolID == "" && part.ToolName == tool.Name {
-			return parts
-		}
-	}
-	part := ContentPart{ToolID: tool.ID}
-	if tool.ID == "" {
-		part.ToolName = tool.Name
-	}
-	return boundParts(append(append([]ContentPart(nil), parts...), part))
-}
-
-func boundParts(parts []ContentPart) []ContentPart {
+func boundParts(parts []Part) []Part {
 	if len(parts) > maxContentParts {
 		return parts[len(parts)-maxContentParts:]
 	}
 	return parts
 }
 
-// maxContentTools bounds the tool calls kept for one message; the oldest go.
-const maxContentTools = 32
-
-// upsertTool replaces the call with the same id, or appends a new one. Calls
-// without an id replace the last call of the same name.
-func upsertTool(tools []ContentTool, tool ContentTool) []ContentTool {
-	next := append([]ContentTool(nil), tools...)
-	for i := len(next) - 1; i >= 0; i-- {
-		if tool.ID != "" && next[i].ID == tool.ID || tool.ID == "" && next[i].ID == "" && next[i].Name == tool.Name {
-			next[i] = tool
-			return next
+// cloneParts copies parts so a snapshot shares no mutable state with the
+// next one.
+func cloneParts(parts []Part) []Part {
+	if parts == nil {
+		return nil
+	}
+	out := make([]Part, len(parts))
+	for i, part := range parts {
+		out[i] = part
+		if part.Thought != nil {
+			thought := *part.Thought
+			out[i].Thought = &thought
+		}
+		if part.Tool != nil {
+			out[i].Tool = cloneTool(part.Tool)
+		}
+		if part.Image != nil {
+			image := *part.Image
+			out[i].Image = &image
 		}
 	}
-	next = append(next, tool)
-	if len(next) > maxContentTools {
-		next = next[len(next)-maxContentTools:]
-	}
-	return next
+	return out
 }
 
 // maxPromptLinks bounds the prompt links a snapshot keeps; senders need only
@@ -308,11 +299,16 @@ func boundedThought(text string) string {
 	return text[start:]
 }
 
-func cloneTool(tool *ContentTool) *ContentTool {
+func cloneTool(tool *HistoryTool) *HistoryTool {
 	if tool == nil {
 		return nil
 	}
 	copy := *tool
+	copy.Images = append([]HistoryImage(nil), tool.Images...)
+	if tool.Subagent != nil {
+		subagent := *tool.Subagent
+		copy.Subagent = &subagent
+	}
 	return &copy
 }
 
@@ -566,7 +562,7 @@ func (s *ContentServer) subscribe() (*contentSubscriber, Content, error) {
 	reader := &contentSubscriber{events: make(chan ContentEvent, contentSubscriberBuffer)}
 	s.subscribers[reader] = struct{}{}
 	value := s.value
-	value.Tool = cloneTool(value.Tool)
+	value.Parts = cloneParts(value.Parts)
 	return reader, value, nil
 }
 
@@ -592,7 +588,7 @@ func (s *ContentServer) snapshot() Content {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	value := s.value
-	value.Tool = cloneTool(value.Tool)
+	value.Parts = cloneParts(value.Parts)
 	return value
 }
 
@@ -629,9 +625,9 @@ func (s *ContentServer) UpdateTool(eventType, text, toolID, toolName, input, out
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Updates build on the same call's state; calls can run side by side.
-	var prior *ContentTool
-	for i := range s.value.Tools {
-		if tool := &s.value.Tools[i]; tool.ID == toolID && (toolID != "" || tool.Name == toolName) {
+	var prior *HistoryTool
+	for _, part := range s.value.Parts {
+		if tool := part.Tool; tool != nil && tool.ID == toolID && (toolID != "" || tool.Name == toolName) {
 			prior = tool
 		}
 	}
@@ -645,9 +641,9 @@ func (s *ContentServer) UpdateTool(eventType, text, toolID, toolName, input, out
 	case EventMessageCompleted:
 		s.publish(ContentEvent{Type: ContentMessageCompleted, MessageID: s.value.MessageID, Activity: "Message saved"})
 	case EventToolStarted:
-		s.publish(ContentEvent{Type: ContentToolStarted, Tool: &ContentTool{ID: toolID, Name: toolName, Status: "running", Input: boundedContentField(input)}, Activity: "Tool running: " + toolName})
+		s.publish(ContentEvent{Type: ContentToolStarted, Tool: &HistoryTool{ID: toolID, Name: toolName, Status: "running", Input: boundedContentField(input)}, Activity: "Tool running: " + toolName})
 	case EventToolUpdated:
-		tool := &ContentTool{ID: toolID, Name: toolName, Status: "running"}
+		tool := &HistoryTool{ID: toolID, Name: toolName, Status: "running"}
 		if prior != nil {
 			tool = cloneTool(prior)
 		}
@@ -658,7 +654,7 @@ func (s *ContentServer) UpdateTool(eventType, text, toolID, toolName, input, out
 		if failed {
 			status = "failed"
 		}
-		tool := &ContentTool{ID: toolID, Name: toolName}
+		tool := &HistoryTool{ID: toolID, Name: toolName}
 		if prior != nil {
 			tool = cloneTool(prior)
 		}
@@ -683,7 +679,7 @@ func (s *ContentServer) SetQuestion(id, name, input string) {
 		}
 		return
 	}
-	s.publish(ContentEvent{Type: ContentQuestion, Tool: &ContentTool{ID: id, Name: name, Status: "running", Input: boundedContentField(input)}})
+	s.publish(ContentEvent{Type: ContentQuestion, Tool: &HistoryTool{ID: id, Name: name, Status: "running", Input: boundedContentField(input)}})
 }
 
 // StartMessage begins a new message for drivers that otherwise publish whole
@@ -769,9 +765,10 @@ func (s *ContentServer) MarkSaved(text string, nativeIDs []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// Whitespace may differ: drivers join a message's text blocks with line
-	// breaks that the streamed text did not have.
-	live := strings.Join(strings.Fields(s.value.Text), " ")
-	if live == "" || live != strings.Join(strings.Fields(text), " ") || reflect.DeepEqual(s.value.SavedAs, nativeIDs) {
+	// breaks that the streamed text did not have. A message of reasoning
+	// and tool calls alone has no text, and is saved by matching that.
+	live := strings.Join(strings.Fields(s.value.Text()), " ")
+	if len(s.value.Parts) == 0 || live != strings.Join(strings.Fields(text), " ") || reflect.DeepEqual(s.value.SavedAs, nativeIDs) {
 		return
 	}
 	s.publish(ContentEvent{Type: ContentMessageSaved, MessageID: s.value.MessageID, NativeIDs: nativeIDs})
@@ -792,20 +789,20 @@ func validNativeIDs(ids []string) bool {
 
 // PublishTranscript replaces a transcript-backed snapshot. It cannot affect
 // runtime events, durable status, or control acceptance.
-func (s *ContentServer) PublishTranscript(leaf, text, activity string, tool *ContentTool) {
+func (s *ContentServer) PublishTranscript(leaf, text, activity string, tool *HistoryTool) {
 	s.publishSnapshot(leaf, text, activity, tool, false)
 }
 
 // PublishStreaming replaces private incremental content without emitting runtime
 // events. Truncation may have occurred upstream before text reached this socket.
-func (s *ContentServer) PublishStreaming(leaf, text, activity string, tool *ContentTool, truncated bool) {
+func (s *ContentServer) PublishStreaming(leaf, text, activity string, tool *HistoryTool, truncated bool) {
 	s.publishSnapshot(leaf, text, activity, tool, truncated)
 }
 
 // publishSnapshot turns a whole-snapshot update into the events that change
 // the current snapshot into it: text that extends the current message is a
 // delta, any other text a replacement.
-func (s *ContentServer) publishSnapshot(leaf, text, activity string, tool *ContentTool, truncated bool) {
+func (s *ContentServer) publishSnapshot(leaf, text, activity string, tool *HistoryTool, truncated bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	activity = boundedContentField(activity)
@@ -819,22 +816,33 @@ func (s *ContentServer) publishSnapshot(leaf, text, activity string, tool *Conte
 		tool = &copy
 	}
 	current := s.value
+	currentText, currentTool := current.Text(), current.LastTool()
+	// A call compares with its own part: another call may have changed
+	// since, as calls run side by side.
+	var sameTool *HistoryTool
+	if tool != nil {
+		for _, part := range current.Parts {
+			if part.Tool != nil && part.Tool.ID == tool.ID && (tool.ID != "" || part.Tool.Name == tool.Name) {
+				sameTool = part.Tool
+			}
+		}
+	}
 	if leaf != current.LeafID || activity != current.Activity {
 		s.publish(ContentEvent{Type: ContentActivity, Activity: activity, LeafID: leaf})
 	}
-	if text != current.Text || truncated != current.Truncated {
-		if !truncated && !current.Truncated && strings.HasPrefix(text, current.Text) {
-			s.publish(ContentEvent{Type: ContentMessageDelta, MessageID: current.MessageID, Text: text[len(current.Text):]})
+	if text != currentText || truncated != current.Truncated {
+		if !truncated && !current.Truncated && strings.HasPrefix(text, currentText) {
+			s.publish(ContentEvent{Type: ContentMessageDelta, MessageID: current.MessageID, Text: text[len(currentText):]})
 		} else {
 			s.publish(ContentEvent{Type: ContentMessageReplaced, MessageID: current.MessageID, Text: text, Truncated: truncated})
 		}
 	}
 	switch {
-	case tool == nil && current.Tool != nil:
+	case tool == nil && currentTool != nil:
 		s.publish(ContentEvent{Type: ContentToolCleared})
-	case tool != nil && (current.Tool == nil || *tool != *current.Tool):
+	case tool != nil && (sameTool == nil || !reflect.DeepEqual(*tool, *sameTool)):
 		kind := ContentToolUpdated
-		if current.Tool == nil || current.Tool.ID != tool.ID {
+		if sameTool == nil {
 			kind = ContentToolStarted
 		}
 		if tool.Status == "completed" || tool.Status == "failed" {

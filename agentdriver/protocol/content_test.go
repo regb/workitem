@@ -30,7 +30,7 @@ func TestContentSnapshotsAreBoundedReadOnlyAndOwnerScoped(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if value.Text != "hello 🌍" {
+		if value.Text() != "hello 🌍" {
 			t.Fatalf("snapshot=%+v", value)
 		}
 	}
@@ -42,24 +42,24 @@ func TestContentSnapshotsAreBoundedReadOnlyAndOwnerScoped(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(value.Text) > 256<<10 {
+	if len(value.Text()) > 256<<10 {
 		t.Fatal("unbounded snapshot")
 	}
 	// A completed message keeps its text until the next one starts; readers
 	// hide it once history has it (Content.SavedAs).
 	server.Update(EventMessageCompleted, "private final", "")
 	value, err = ReadContent(context.Background(), path, "runtime", "item")
-	if err != nil || value.Activity != "Message saved" || !strings.HasPrefix(value.Text, "hello") {
-		t.Fatalf("completed message: activity=%q text bytes=%d err=%v", value.Activity, len(value.Text), err)
+	if err != nil || value.Activity != "Message saved" || !strings.HasPrefix(value.Text(), "hello") {
+		t.Fatalf("completed message: activity=%q text bytes=%d err=%v", value.Activity, len(value.Text()), err)
 	}
 	server.UpdateTool(EventToolStarted, "", "tool-1", "bash", `{"command":"pwd"}`, "", false)
 	value, err = ReadContent(context.Background(), path, "runtime", "item")
-	if err != nil || value.Tool == nil || value.Tool.Status != "running" || !strings.Contains(value.Tool.Input, "pwd") {
+	if err != nil || value.LastTool() == nil || value.LastTool().Status != "running" || !strings.Contains(value.LastTool().Input, "pwd") {
 		t.Fatalf("running tool snapshot %+v %v", value, err)
 	}
 	server.UpdateTool(EventToolCompleted, "", "tool-1", "bash", "", "/tmp", false)
 	value, err = ReadContent(context.Background(), path, "runtime", "item")
-	if err != nil || value.Tool == nil || value.Tool.Status != "completed" || value.Tool.Output != "/tmp" {
+	if err != nil || value.LastTool() == nil || value.LastTool().Status != "completed" || value.LastTool().Output != "/tmp" {
 		t.Fatalf("completed tool snapshot %+v %v", value, err)
 	}
 }

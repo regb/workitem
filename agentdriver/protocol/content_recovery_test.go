@@ -83,13 +83,13 @@ func TestContentTruncationPreservesUnicodeAndResets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !value.Truncated || !utf8.ValidString(value.Text) || strings.ContainsRune(value.Text, utf8.RuneError) {
-		t.Fatalf("bad truncation, bytes=%d", len(value.Text))
+	if !value.Truncated || !utf8.ValidString(value.Text()) || strings.ContainsRune(value.Text(), utf8.RuneError) {
+		t.Fatalf("bad truncation, bytes=%d", len(value.Text()))
 	}
 	server.Update("message.started", "", "")
 	server.Update(EventMessageDelta, "hello 🌍", "")
 	value, err = ReadContent(context.Background(), path, "runtime", "item")
-	if err != nil || value.Truncated || value.Text != "hello 🌍" {
+	if err != nil || value.Truncated || value.Text() != "hello 🌍" {
 		t.Fatalf("new message %+v %v", value, err)
 	}
 }

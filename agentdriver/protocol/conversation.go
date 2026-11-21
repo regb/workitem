@@ -121,14 +121,17 @@ type ConversationObservation struct {
 }
 
 type ConversationFact struct {
-	Line         uint64    `json:"line"`
-	Type         string    `json:"type,omitempty"`
-	Role         string    `json:"role,omitempty"`
-	Timestamp    time.Time `json:"timestamp,omitempty"`
-	StopReason   string    `json:"stop_reason,omitempty"`
-	ContentTypes []string  `json:"content_types,omitempty"`
-	Terminal     bool      `json:"terminal,omitempty"`
-	Failed       bool      `json:"failed,omitempty"`
+	Line       uint64    `json:"line"`
+	Type       string    `json:"type,omitempty"`
+	Role       string    `json:"role,omitempty"`
+	Timestamp  time.Time `json:"timestamp,omitempty"`
+	StopReason string    `json:"stop_reason,omitempty"`
+	// UsageProvider names whose quota ran out when StopReason is
+	// usage_limit, as RuntimeEvent.UsageProvider does.
+	UsageProvider string   `json:"usage_provider,omitempty"`
+	ContentTypes  []string `json:"content_types,omitempty"`
+	Terminal      bool     `json:"terminal,omitempty"`
+	Failed        bool     `json:"failed,omitempty"`
 	// BackgroundStarted and BackgroundEnded name background work the agent
 	// started or saw end on this line: work that re-activates the agent when
 	// it completes, such as a background command or subagent.

@@ -146,7 +146,7 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 				}
 				converted := make([]coordinator.ConversationEventFact, len(facts))
 				for i, f := range facts {
-					converted[i] = coordinator.ConversationEventFact{Line: f.Line, Type: f.Type, Role: f.Role, Timestamp: f.Timestamp, StopReason: f.StopReason, ContentTypes: f.ContentTypes, Terminal: f.Terminal, Failed: f.Failed, BackgroundStarted: f.BackgroundStarted, BackgroundEnded: f.BackgroundEnded}
+					converted[i] = coordinator.ConversationEventFact{Line: f.Line, Type: f.Type, Role: f.Role, Timestamp: f.Timestamp, StopReason: f.StopReason, UsageProvider: f.UsageProvider, ContentTypes: f.ContentTypes, Terminal: f.Terminal, Failed: f.Failed, BackgroundStarted: f.BackgroundStarted, BackgroundEnded: f.BackgroundEnded}
 				}
 				return converted, decoded, nil
 			}

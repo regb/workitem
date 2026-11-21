@@ -17,20 +17,22 @@ func safeRuntimeID(value string) bool {
 }
 
 type RuntimeSemanticEvent struct {
-	ID            string    `json:"id"`
-	RuntimeID     string    `json:"runtime_id"`
-	WorkItemID    string    `json:"work_item_id"`
-	Type          string    `json:"type"`
-	Timestamp     time.Time `json:"timestamp"`
-	CommandID     string    `json:"command_id,omitempty"`
-	RequestID     string    `json:"request_id,omitempty"`
-	Role          string    `json:"role,omitempty"`
-	ToolName      string    `json:"tool_name,omitempty"`
-	Failed        bool      `json:"failed,omitempty"`
-	Readiness     string    `json:"readiness,omitempty"`
-	ReasonCode    string    `json:"reason_code,omitempty"`
-	DeliveryState string    `json:"delivery_state,omitempty"`
-	Outcome       string    `json:"outcome,omitempty"`
+	ID         string    `json:"id"`
+	RuntimeID  string    `json:"runtime_id"`
+	WorkItemID string    `json:"work_item_id"`
+	Type       string    `json:"type"`
+	Timestamp  time.Time `json:"timestamp"`
+	CommandID  string    `json:"command_id,omitempty"`
+	RequestID  string    `json:"request_id,omitempty"`
+	Role       string    `json:"role,omitempty"`
+	ToolName   string    `json:"tool_name,omitempty"`
+	Failed     bool      `json:"failed,omitempty"`
+	Readiness  string    `json:"readiness,omitempty"`
+	ReasonCode string    `json:"reason_code,omitempty"`
+	// UsageProvider names whose quota ran out on a usage_limit failure.
+	UsageProvider string `json:"usage_provider,omitempty"`
+	DeliveryState string `json:"delivery_state,omitempty"`
+	Outcome       string `json:"outcome,omitempty"`
 	// AgentState is a native current-state observation, not inferred settlement.
 	AgentState string `json:"agent_state,omitempty"`
 	LeafID     string `json:"leaf_id,omitempty"`
@@ -126,7 +128,7 @@ func IngestRuntimeEvent(ctx context.Context, database *Database, event RuntimeSe
 	if err != nil {
 		return RuntimeIngestResult{}, err
 	}
-	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, AgentState: event.AgentState, LeafID: event.LeafID, ReasonCode: compactIdentifier(event.ReasonCode, 64)}
+	header := runtimeEventHeader{ProtocolVersion: ProtocolVersion, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp.UTC(), RequestID: compactIdentifier(event.RequestID, 200), Role: compactIdentifier(event.Role, 32), ToolName: compactIdentifier(event.ToolName, 128), Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, AgentState: event.AgentState, LeafID: event.LeafID, ReasonCode: compactIdentifier(event.ReasonCode, 64), UsageProvider: compactIdentifier(event.UsageProvider, 64)}
 	// A setting change or an accepted abort is recorded for its requester but
 	// is not agent activity.
 	updates, err := commandDeliveryUpdate(database, event)
@@ -227,7 +229,7 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 	defer func() {
 		// Only a problem keeps the reason code of the failure behind it.
 		if observation.Status != "problem" {
-			observation.FailureReason = ""
+			observation.FailureReason, observation.FailureProvider = "", ""
 		}
 	}()
 	at := event.Timestamp.UTC()
@@ -255,7 +257,7 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 		if activity.AgentState == "failed" {
 			observation.Status = "problem"
 			observation.Reason = "live agent loop settled with a failure"
-			observation.FailureReason = activity.FailureReason
+			observation.FailureReason, observation.FailureProvider = activity.FailureReason, activity.FailureProvider
 			if reason := driverprotocol.RuntimeReasonText(activity.FailureReason); reason != "" {
 				observation.Reason = reason
 			}
@@ -269,7 +271,7 @@ func applyLiveRuntimeObservation(observation *AgentObservation, event RuntimeSem
 		if event.Failed {
 			observation.Status = "problem"
 			observation.Reason = "live runtime event reports failed or interrupted work"
-			observation.FailureReason = event.ReasonCode
+			observation.FailureReason, observation.FailureProvider = event.ReasonCode, event.UsageProvider
 			if reason := driverprotocol.RuntimeReasonText(event.ReasonCode); reason != "" {
 				observation.Reason = reason
 			}

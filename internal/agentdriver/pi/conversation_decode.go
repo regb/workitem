@@ -18,6 +18,7 @@ type conversationLine struct {
 		Content      json.RawMessage `json:"content"`
 		StopReason   string          `json:"stopReason"`
 		ErrorMessage string          `json:"errorMessage"`
+		Provider     string          `json:"provider"`
 	} `json:"message"`
 }
 
@@ -66,6 +67,7 @@ func SummarizeConversationFact(line uint64, raw []byte) (driverprotocol.Conversa
 		fact.Terminal = fact.Failed || abortedStop(stop) || !hasTool && hasText && (stop == "" || stop == "stop" || stop == "end_turn" || stop == "complete" || stop == "completed")
 		if fact.Failed && usageLimitError(value.Message.ErrorMessage) {
 			fact.StopReason = "usage_limit"
+			fact.UsageProvider = usageProvider(value.Message.Provider)
 		}
 	}
 	return fact, true
@@ -82,6 +84,21 @@ func usageLimitError(message string) bool {
 		}
 	}
 	return false
+}
+
+// usageProvider names the provider of a Pi model as the usage plugin names
+// it, since a usage limit belongs to the provider whose quota ran out.
+func usageProvider(provider string) string {
+	switch provider {
+	case "anthropic":
+		return "claude"
+	case "openai-codex":
+		return "codex"
+	}
+	if provider = compactMetadata(provider, 64); provider == "other" {
+		return ""
+	}
+	return provider
 }
 
 func compactStopReason(value string) string {

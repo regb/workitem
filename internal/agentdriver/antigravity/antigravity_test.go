@@ -102,7 +102,8 @@ func TestJournalHistoryObservationAndFork(t *testing.T) {
 	if err != nil || len(page.Messages) != 2 || !page.HasMore || page.BeforeID != "a1" || page.LeafID != "u2" {
 		t.Fatalf("page: %+v %v", page, err)
 	}
-	if page.Messages[0].Reasoning == nil || page.Messages[0].Reasoning.Text != "hmm" || len(page.Messages[0].Tools) != 1 {
+	// An older journal's reply keeps its reasoning before its text.
+	if parts := page.Messages[0].Parts; len(parts) != 3 || parts[0].Thought == nil || parts[0].Thought.Text != "hmm" || parts[1].Text != "reply" || parts[2].Tool == nil {
 		t.Fatalf("reply: %+v", page.Messages[0])
 	}
 	older, err := historyPage(path, page.BeforeID, 2)
@@ -126,9 +127,17 @@ func TestJournalHistoryObservationAndFork(t *testing.T) {
 }
 
 func TestQuotaAndFailuresAreFacts(t *testing.T) {
-	f, ok := fact(3, Record{Type: recordAssistant, StopReason: acp.StopRefusal, Failed: true, Reason: "usage_limit"})
-	if !ok || !f.Failed || !f.Terminal || f.StopReason != "usage_limit" {
+	quota := Record{Type: recordAssistant, ID: "a1", StopReason: acp.StopRefusal, Failed: true, Reason: "usage_limit"}
+	f, ok := fact(3, quota)
+	if !ok || !f.Failed || !f.Terminal || f.StopReason != "usage_limit" || f.UsageProvider != "antigravity" {
 		t.Fatalf("quota fact: %+v", f)
+	}
+	// History shows the refusal as the notice it is, naming whose quota ran out.
+	if m := assistantMessage(quota); !m.Error || m.Text() == "" || m.UsageProvider != "antigravity" {
+		t.Fatalf("quota message: %+v", m)
+	}
+	if m := assistantMessage(Record{Type: recordAssistant, ID: "a2", Failed: true, Error: "boom"}); !m.Error || m.Text() != "boom" || m.UsageProvider != "" {
+		t.Fatalf("failure message: %+v", m)
 	}
 	if _, ok := fact(1, Record{Type: recordSession}); ok {
 		t.Fatal("a session record is no message")
@@ -166,21 +175,69 @@ func TestInvokeIsAOneShotPrintRequest(t *testing.T) {
 	}
 }
 
-func TestRepliesKeepTextAndToolsInOrder(t *testing.T) {
-	tr := &turn{toolIndex: map[string]int{}}
-	tr.step().text.WriteString("Let me read it.")
-	tr.tools = append(tr.tools, protocol.HistoryTool{ID: "t1", Name: "read_file", Status: "completed"})
-	tr.steps[0].tools = append(tr.steps[0].tools, 0)
-	tr.step().text.WriteString("\n\nIt says hello.")
-	steps := tr.journalSteps()
-	if len(steps) != 2 || steps[0].Text != "Let me read it." || len(steps[0].Tools) != 1 || steps[1].Text != "It says hello." || len(steps[1].Tools) != 0 {
-		t.Fatalf("steps: %+v", steps)
+func TestRepliesKeepTheirPartsInOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "conversation.jsonl")
+	j, err := openJournal(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	messages := assistantMessages(Record{Type: recordAssistant, ID: "a1", Text: "Let me read it.\n\nIt says hello.", Tools: tr.tools, Steps: steps, StopReason: acp.StopCancelled})
-	if len(messages) != 2 || messages[0].ID != "a1.0" || messages[0].Aborted || len(messages[0].Tools) != 1 || messages[1].ID != "a1" || !messages[1].Aborted || messages[1].Text != "It says hello." {
-		t.Fatalf("messages: %+v", messages)
+	defer j.close()
+	events := []protocol.RuntimeEvent{}
+	rt := &runtime{journal: j, content: &protocol.ContentServer{}, emitFn: func(e protocol.RuntimeEvent) { events = append(events, e) }}
+	rt.request.Runtime.ID = "r"
+	rt.begin("c", "")
+	chunk := func(kind, text string) acp.SessionUpdate {
+		content, _ := json.Marshal(map[string]string{"type": "text", "text": text})
+		return acp.SessionUpdate{Kind: kind, Content: content}
 	}
-	if single := (&turn{steps: []turnStep{{}}}).journalSteps(); single != nil {
-		t.Fatalf("a single step is the record itself: %+v", single)
+	name, completed := "read_file", acp.ToolCompleted
+	rt.update(chunk(acp.UpdateAgentMessage, "Let me read it."))
+	rt.update(acp.SessionUpdate{Kind: acp.UpdateToolCall, ToolCallID: "t1", Name: &name})
+	rt.update(chunk(acp.UpdateAgentMessage, "It says hello."))
+	rt.update(chunk(acp.UpdateAgentThought, "done?"))
+	rt.update(acp.SessionUpdate{Kind: acp.UpdateToolCallPatch, ToolCallID: "t1", Status: &completed})
+	// Live content shows the reply as it is written.
+	if parts := rt.content.Snapshot().Parts; len(parts) != 4 || parts[1].Tool == nil || parts[1].Tool.Status != "completed" || parts[2].Text != "It says hello." || parts[3].Thought == nil {
+		t.Fatalf("live parts: %+v", parts)
+	}
+	rt.turn.stop = acp.StopCancelled
+	rt.settle()
+	page, err := historyPage(path, "", 10)
+	if err != nil || len(page.Messages) != 1 {
+		t.Fatalf("page: %+v %v", page, err)
+	}
+	reply := page.Messages[0]
+	parts := reply.Parts
+	if len(parts) != 4 || parts[0].Text != "Let me read it." || parts[1].Tool == nil || parts[1].Tool.ID != "t1" || parts[1].Tool.Status != "completed" || parts[2].Text != "It says hello." || parts[3].Thought == nil || parts[3].Thought.Text != "done?" {
+		t.Fatalf("parts: %+v", parts)
+	}
+	if !reply.Aborted || reply.ID != "a-r-1" {
+		t.Fatalf("reply: %+v", reply)
+	}
+	// An older journal's steps read as parts in their order.
+	older := assistantMessage(Record{Type: recordAssistant, ID: "a1", Steps: []Step{{Text: "Let me read it.", Tools: []protocol.HistoryTool{{ID: "t1", Name: "read_file", Status: "completed"}}}, {Text: "It says hello."}}})
+	if parts := older.Parts; len(parts) != 3 || parts[0].Text != "Let me read it." || parts[1].Tool == nil || parts[2].Text != "It says hello." {
+		t.Fatalf("older parts: %+v", parts)
+	}
+}
+
+func TestAUsageLimitSettlesNamingAntigravity(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "conversation.jsonl")
+	j, err := openJournal(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer j.close()
+	var settled protocol.RuntimeEvent
+	rt := &runtime{journal: j, content: &protocol.ContentServer{}, emitFn: func(e protocol.RuntimeEvent) {
+		if e.Type == protocol.EventAgentSettled {
+			settled = e
+		}
+	}}
+	rt.begin("c", "")
+	rt.turn.failed, rt.turn.reason = true, "usage_limit"
+	rt.settle()
+	if !settled.Failed || settled.ReasonCode != "usage_limit" || settled.UsageProvider != "antigravity" {
+		t.Fatalf("settled: %+v", settled)
 	}
 }

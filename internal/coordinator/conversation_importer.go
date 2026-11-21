@@ -20,14 +20,17 @@ import (
 const ConversationProjection = "conversations"
 
 type ConversationEventFact struct {
-	Line         uint64    `json:"line"`
-	Type         string    `json:"type,omitempty"`
-	Role         string    `json:"role,omitempty"`
-	Timestamp    time.Time `json:"timestamp,omitempty"`
-	StopReason   string    `json:"stop_reason,omitempty"`
-	ContentTypes []string  `json:"content_types,omitempty"`
-	Terminal     bool      `json:"terminal,omitempty"`
-	Failed       bool      `json:"failed,omitempty"`
+	Line       uint64    `json:"line"`
+	Type       string    `json:"type,omitempty"`
+	Role       string    `json:"role,omitempty"`
+	Timestamp  time.Time `json:"timestamp,omitempty"`
+	StopReason string    `json:"stop_reason,omitempty"`
+	// UsageProvider names whose quota ran out when StopReason is
+	// usage_limit.
+	UsageProvider string   `json:"usage_provider,omitempty"`
+	ContentTypes  []string `json:"content_types,omitempty"`
+	Terminal      bool     `json:"terminal,omitempty"`
+	Failed        bool     `json:"failed,omitempty"`
 	// BackgroundStarted and BackgroundEnded are the driver's background work
 	// facts; see driverprotocol.ConversationFact.
 	BackgroundStarted []string `json:"background_started,omitempty"`

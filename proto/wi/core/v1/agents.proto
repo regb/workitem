@@ -343,11 +343,22 @@ message ToolCall {
   SubagentRef subagent = 7;
 }
 
-// Reasoning is what the model thought, when the driver saved it, and how
-// long it thought, when known.
-message Reasoning {
+// Thought is what the model reasoned, when the agent shares it, and how
+// long it reasoned, when known.
+message Thought {
   string text = 1;
   uint32 duration_ms = 2;
+}
+
+// Part is one stretch of a message, saved or live, in the order it was
+// written. Clients show a message as its parts, in order.
+message Part {
+  oneof kind {
+    string text = 1;
+    Thought thought = 2;
+    ToolCall tool = 3;
+    Image image = 4;
+  }
 }
 
 // MessageRole is who a conversation entry comes from.
@@ -374,16 +385,20 @@ message ConversationMessage {
   string id = 1;
   // native_ids are the driver's entries folded into this one.
   repeated string native_ids = 2;
+  reserved 4, 6, 7, 8;
+  reserved "text", "tools", "images", "reasoning";
   MessageRole role = 3;
-  string text = 4;
   google.protobuf.Timestamp time = 5;
-  repeated ToolCall tools = 6;
-  repeated Image images = 7;
-  Reasoning reasoning = 8;
+  // parts are the message in the order it was written: text, reasoning,
+  // tool calls and images. A subagent's report and a summary are text.
+  repeated Part parts = 14;
   Summary summary = 9;
   SubagentRef subagent = 10;
   // error means the harness answered instead of the model.
   bool error = 11;
+  // usage_provider names whose quota ran out, when the error reports a
+  // usage limit, as GetUsage names providers.
+  string usage_provider = 15;
   // aborted marks where the operator stopped a reply.
   bool aborted = 12;
   // client_message_id is the ID the message was sent with (SendMessage's
@@ -428,32 +443,23 @@ message LiveContent {
   uint32 generation = 1;
   // message_id is the message being written.
   string message_id = 2;
-  string text = 3;
-  string thought = 4;
+  reserved 3, 4, 6, 12;
+  reserved "text", "thought", "tools";
+  // parts are the message being written, in order, as history will hold
+  // it; a tool call's part holds its current state.
+  repeated Part parts = 13;
   string activity = 5;
-  repeated ToolCall tools = 6;
-  // saved_as names the history entries the text became, once saved.
+  // saved_as names the history entries the message became, once saved.
   repeated string saved_as = 7;
   // prompts link client message IDs to history entries.
   repeated PromptLink prompts = 8;
   string error = 9;
+  // truncated means the message's text was cut.
   bool truncated = 10;
   // question is the question the agent waits on, such as Claude's
   // AskUserQuestion call, whose input holds the questions and their
   // options. AnswerQuestion answers it.
   ToolCall question = 11;
-  // parts is the message in the order it was written: its text split where
-  // tool calls came between. Clients show it in this order; text and tools
-  // hold the same content, merged.
-  repeated LivePart parts = 12;
-}
-
-// LivePart is a stretch of a live message: text, or a tool call named by its
-// ID (or, without one, its name) in the message's tools.
-message LivePart {
-  string text = 1;
-  string tool_id = 2;
-  string tool_name = 3;
 }
 
 // PromptLink matches a client's message to the history entries it became.

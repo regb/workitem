@@ -13,20 +13,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestUsageProviderFollowsTheDriverAndModel(t *testing.T) {
-	for _, c := range []struct{ driver, model, want string }{
-		{"claude", "claude-opus-5-5", "claude"},
-		{"pi", "openai-codex/gpt-6.1", "codex"},
-		{"pi", "anthropic/claude-sonnet-5-5", "claude"},
-		{"pi", "opencode-go/glm-5", "opencode-go"},
-		{"pi", "unqualified", ""},
-	} {
-		if got := usageProvider(c.driver, c.model); got != c.want {
-			t.Errorf("usageProvider(%q, %q) = %q, want %q", c.driver, c.model, got, c.want)
-		}
-	}
-}
-
 func TestQuotaAvailabilityWaitsForEveryExhaustedWindow(t *testing.T) {
 	soon, later := time.Now().Add(time.Hour), time.Now().Add(24*time.Hour)
 	window := func(remaining float64, reset time.Time) *v1.UsageWindow {

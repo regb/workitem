@@ -110,7 +110,9 @@ func (s *Server) blockOnUsage(ctx context.Context, m model.Manifest, observation
 	} else if at := observation.LastActivityAt; at != nil {
 		failedAt = *at
 	}
-	provider := s.itemUsageProvider(ctx, m)
+	// The driver names whose quota ran out; without it, the blocker waits
+	// on no provider and is retried after an hour.
+	provider := observation.FailureProvider
 	blocker := model.Blocker{Kind: model.BlockerUsage, Provider: provider, FollowUp: s.Config.Agent.UsageLimitMessage}
 	retry := now.Add(usageUnknownRetry)
 	if quota := s.cachedQuota(provider); quota != nil {
@@ -230,43 +232,6 @@ func (s *Server) sendFollowUp(ctx context.Context, itemID string, followUp model
 	ctx = context.WithValue(ctx, identityKey{}, who)
 	_, err := s.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: itemID, Text: followUp.Message, ClientMessageId: "follow-up-" + followUp.ID}))
 	return err
-}
-
-// itemUsageProvider is the usage provider an item's agent draws on: Claude
-// Code's own, or for Pi the provider of its model, such as codex for
-// openai-codex/gpt-6. Empty when it cannot tell.
-func (s *Server) itemUsageProvider(ctx context.Context, m model.Manifest) string {
-	settings, err := s.App.AgentSettings(ctx, resolve(m.ID))
-	if err != nil {
-		return ""
-	}
-	modelName := settings.Running["model"]
-	if modelName == "" {
-		modelName = settings.Values["model"]
-	}
-	return usageProvider(settings.Driver, modelName)
-}
-
-func usageProvider(driver, modelName string) string {
-	switch driver {
-	case "claude":
-		return "claude"
-	case "antigravity":
-		// Antigravity's quota belongs to the Google account, whatever model
-		// it runs.
-		return "antigravity"
-	}
-	prefix, _, ok := strings.Cut(modelName, "/")
-	if !ok || prefix == "" {
-		return ""
-	}
-	switch prefix {
-	case "anthropic":
-		return "claude"
-	case "openai-codex":
-		return "codex"
-	}
-	return prefix
 }
 
 // cachedQuota is the last usage result for a provider, if usage checks

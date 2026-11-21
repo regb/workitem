@@ -91,8 +91,8 @@ func TestHeadlessSanitizedNativeFrames(t *testing.T) {
 		t.Fatal(settled, initialized, interrupts)
 	}
 	answer, err := protocol.ReadContent(ctx, socket, "runtime", "item")
-	if err != nil || answer.Text != "Fixture answer." {
-		t.Fatal(answer.Text, err)
+	if err != nil || answer.Text() != "Fixture answer." {
+		t.Fatal(answer.Text(), err)
 	}
 	for _, event := range events {
 		data, _ := json.Marshal(event)
@@ -126,6 +126,7 @@ func TestHeadlessFailureResultsAndBackgroundContinuation(t *testing.T) {
 	}{
 		{name: "expired authentication", status: 401, reason: "native_auth_failed", failed: true},
 		{name: "forbidden account", status: 403, reason: "native_auth_failed", failed: true},
+		{name: "usage limit", status: 429, reason: "usage_limit", failed: true},
 		{name: "API failure", status: 500, terminal: "api_error", reason: "native_api_failed", failed: true},
 		{name: "stream interruption", terminal: "aborted_streaming"},
 		{name: "tool interruption", terminal: "aborted_tools"},
@@ -142,6 +143,10 @@ func TestHeadlessFailureResultsAndBackgroundContinuation(t *testing.T) {
 			matched, failed := s.result(headlessFrame{Subtype: "success", UserIDs: []string{"native"}, TerminalReason: tc.terminal, APIErrorStatus: tc.status, Result: tc.result, NumTurns: tc.turns})
 			if !matched || failed != tc.failed || len(events) != 1 || events[0].ReasonCode != tc.reason || events[0].CommandID != "command" || s.busy() {
 				t.Fatal(matched, failed, events)
+			}
+			// Only a usage limit names whose quota ran out.
+			if want := map[bool]string{true: "claude"}[tc.reason == "usage_limit"]; events[0].UsageProvider != want {
+				t.Fatalf("usage provider %q", events[0].UsageProvider)
 			}
 			data, _ := json.Marshal(events)
 			if strings.Contains(string(data), "private") || strings.Contains(string(data), "future_private_error") {

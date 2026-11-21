@@ -5,7 +5,7 @@ import { createConnection, createServer, type Server, type Socket } from "node:n
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const protocolVersion = 1;
-const contentVersion = 1;
+const contentVersion = 2;
 const maxContentBytes = 256 * 1024;
 const maxControlCommandBytes = 12 * 1024 * 1024;
 const maxControlImageBytes = 8 * 1024 * 1024;
@@ -43,6 +43,9 @@ function validateControlContent(command: ControlCommand) {
 }
 
 type ContentTool = { id?: string; name: string; status: string; input?: string; output?: string };
+// ContentPart is driverprotocol.Part: exactly one of text, thought or tool.
+type ContentPart = { text?: string; thought?: { text?: string }; tool?: ContentTool };
+const maxContentParts = 96;
 const maxFieldBytes = 64 * 1024;
 
 // dataText renders tool input or output as Go's eventDataText does: strings as
@@ -215,18 +218,16 @@ export default function wiBridge(pi: ExtensionAPI) {
   const contentPath = join(dirname(controlSocketPath), createHash("sha256").update(`content:${basename(controlSocketPath)}`).digest("hex").slice(0, 16) + ".sock");
   let contentSequence = 0;
   let contentMessageId = "";
-  let contentText = "";
+  // contentParts are the current message in written order, as
+  // driverprotocol's Content.Parts.
+  let contentParts: ContentPart[] = [];
   let contentTruncated = false;
   let contentActivity = "";
   let contentLeaf = "";
   let contentSavedAs: string[] = [];
-  let contentThought = "";
   // Prompts submitted with a request ID, oldest first, waiting for the user
   // message that carries them.
   let submittedPrompts: Array<{ requestId: string; text: string }> = [];
-  let contentTools: ContentTool[] = [];
-  // The most recently changed call, as driverprotocol's Content.Tool.
-  let contentTool: ContentTool | undefined;
   let contentPrompts: Array<{ request_id: string; native_ids: string[] }> = [];
   // Content stream subscribers; see agentdriver/protocol/content.go.
   const contentSubscribers = new Set<Socket>();
@@ -373,7 +374,7 @@ export default function wiBridge(pi: ExtensionAPI) {
   const publishTool = (type: string, fields: Record<string, unknown>) => {
     const data = (fields.data ?? {}) as { args?: unknown; partial_result?: unknown; result?: unknown; is_error?: boolean };
     const id = String(fields.tool_call_id ?? ""), name = String(fields.tool_name ?? "");
-    const prior = contentTools.findLast((tool) => (id ? tool.id === id : !tool.id && tool.name === name));
+    const prior = contentParts.findLast((part) => part.tool && (id ? part.tool.id === id : !part.tool.id && part.tool.name === name))?.tool;
     if (type === "tool.started") {
       publishContent({ type, tool: { id: id || undefined, name, status: "running", input: boundedField(dataText(data.args)) || undefined }, activity: `Tool running: ${name}` });
       return;
@@ -390,16 +391,22 @@ export default function wiBridge(pi: ExtensionAPI) {
     const activity = typeof event.activity === "string" ? event.activity : "";
     switch (event.type) {
       case "message.started":
-        contentMessageId = String(event.message_id ?? ""); contentText = ""; contentTruncated = false; contentSavedAs = []; contentThought = ""; contentTools = []; contentTool = undefined; break;
+        contentMessageId = String(event.message_id ?? ""); contentParts = []; contentTruncated = false; contentSavedAs = []; break;
       case "tool.started": case "tool.updated": case "tool.completed": {
+        // A call's part changes in place; a new call adds a part.
         const tool = event.tool as ContentTool;
-        const at = contentTools.findLastIndex((other) => tool.id ? other.id === tool.id : !other.id && other.name === tool.name);
-        contentTools = at >= 0 ? contentTools.map((other, index) => (index === at ? { ...tool } : other)) : [...contentTools, { ...tool }].slice(-32);
-        contentTool = { ...tool };
+        const at = contentParts.findLastIndex((part) => part.tool && (tool.id ? part.tool.id === tool.id : !part.tool.id && part.tool.name === tool.name));
+        contentParts = at >= 0 ? contentParts.map((part, index) => (index === at ? { tool: { ...tool } } : part)) : [...contentParts, { tool: { ...tool } }].slice(-maxContentParts);
         break;
       }
-      case "thought.delta":
-        contentThought = boundedThought(contentThought + String(event.text ?? "")); break;
+      case "thought.delta": {
+        const delta = String(event.text ?? "");
+        if (!delta) break;
+        const last = contentParts[contentParts.length - 1];
+        if (last?.thought) contentParts = [...contentParts.slice(0, -1), { thought: { text: boundedThought((last.thought.text ?? "") + delta) } }];
+        else contentParts = [...contentParts, { thought: { text: boundedThought(delta) } }].slice(-maxContentParts);
+        break;
+      }
       case "prompt.saved":
         contentPrompts = [...contentPrompts.filter((link) => link.request_id !== event.request_id), { request_id: String(event.request_id ?? ""), native_ids: (event.native_ids as unknown[]).map(String) }].slice(-8); break;
       case "message.saved":
@@ -407,13 +414,22 @@ export default function wiBridge(pi: ExtensionAPI) {
       case "message.delta": {
         if (contentTruncated) break;
         contentSavedAs = [];
-        const bytes = Buffer.from(contentText + String(event.text ?? ""), "utf8");
+        const current = contentText();
+        const bytes = Buffer.from(current + String(event.text ?? ""), "utf8");
+        let text = bytes.toString("utf8");
         if (bytes.length > maxContentBytes) {
           let end = maxContentBytes;
           while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
-          contentText = bytes.subarray(0, end).toString("utf8");
+          text = bytes.subarray(0, end).toString("utf8");
           contentTruncated = true;
-        } else contentText = bytes.toString("utf8");
+        }
+        // Text extends the text part the message ends with, or starts one
+        // after a tool call or reasoning.
+        const added = text.slice(current.length);
+        if (!added) break;
+        const last = contentParts[contentParts.length - 1];
+        if (last && !last.thought && !last.tool) contentParts = [...contentParts.slice(0, -1), { text: (last.text ?? "") + added }];
+        else contentParts = [...contentParts, { text: added }].slice(-maxContentParts);
         break;
       }
       case "activity":
@@ -421,6 +437,9 @@ export default function wiBridge(pi: ExtensionAPI) {
     }
     if (activity) contentActivity = activity;
   };
+  // contentText is the current message's text parts joined, as
+  // driverprotocol's Content.Text.
+  const contentText = () => contentParts.map((part) => (part.thought || part.tool ? "" : part.text ?? "")).join("");
   // publishContent numbers one content event, applies it, and sends it to every
   // subscriber. A subscriber that cannot keep up is dropped and resubscribes.
   const publishContent = (event: Record<string, unknown>) => {
@@ -476,15 +495,16 @@ export default function wiBridge(pi: ExtensionAPI) {
   // it is published only while the live text is still that message's text.
   const markSaved = (message: { role?: string; timestamp?: number; content?: unknown }) => {
     const text = textFromContent(message.content).trim();
-    if (message.role !== "assistant" || !text || typeof message.timestamp !== "number") return;
+    // A reply with only calls or reasoning is linked to its entry too.
+    if (message.role !== "assistant" || typeof message.timestamp !== "number") return;
     afterAppend(() => findEntry("assistant", message.timestamp!), (id) => {
       // Whitespace may differ between streamed and saved text.
-      if (contentText.split(/\s+/).join(" ").trim() !== text.split(/\s+/).join(" ").trim()) return;
+      if (!contentParts.length || contentText().split(/\s+/).join(" ").trim() !== text.split(/\s+/).join(" ").trim()) return;
       syncContentLeaf();
       publishContent({ type: "message.saved", message_id: contentMessageId || undefined, native_ids: [id] });
     });
   };
-  const contentSnapshot = () => ({ protocol_version: contentVersion, runtime_id: runtimeId, work_item_id: workItemId, sequence: contentSequence, idle_guard: true, message_id: contentMessageId || undefined, text: contentText, truncated: contentTruncated, activity: contentActivity, leaf_id: contentLeaf, saved_as: contentSavedAs.length ? contentSavedAs : undefined, thought: contentThought || undefined, tool: contentTool, tools: contentTools.length ? contentTools : undefined, prompts: contentPrompts.length ? contentPrompts : undefined });
+  const contentSnapshot = () => ({ protocol_version: contentVersion, runtime_id: runtimeId, work_item_id: workItemId, sequence: contentSequence, idle_guard: true, message_id: contentMessageId || undefined, parts: contentParts.length ? contentParts : undefined, truncated: contentTruncated, activity: contentActivity, leaf_id: contentLeaf, saved_as: contentSavedAs.length ? contentSavedAs : undefined, prompts: contentPrompts.length ? contentPrompts : undefined });
 
   const reconcileIdle = () => {
     if (!activityReportedBusy || !context?.isIdle()) return;

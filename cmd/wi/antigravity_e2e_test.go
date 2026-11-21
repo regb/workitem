@@ -57,17 +57,13 @@ func TestAntigravityDriverEndToEnd(t *testing.T) {
 		}
 		return value.Msg.Messages
 	}
-	// lastReply is the text of the latest turn, whose reply can span
-	// several messages around its tools.
+	// lastReply is the text of the latest reply.
 	lastReply := func() string {
 		messages := history()
-		var texts []string
-		for i := len(messages) - 1; i >= 0 && messages[i].Role == v1.MessageRole_MESSAGE_ROLE_ASSISTANT; i-- {
-			if messages[i].Text != "" {
-				texts = append([]string{messages[i].Text}, texts...)
-			}
+		if len(messages) == 0 || messages[len(messages)-1].Role != v1.MessageRole_MESSAGE_ROLE_ASSISTANT {
+			return ""
 		}
-		return strings.Join(texts, "\n\n")
+		return messageText(messages[len(messages)-1])
 	}
 	waitReply := func(want string) {
 		t.Helper()
@@ -93,15 +89,15 @@ func TestAntigravityDriverEndToEnd(t *testing.T) {
 
 	waitReply("Echo: hello there")
 	f.idle(item)
-	// The reply keeps its order: reasoning and the tool it called, then
-	// the text after it.
+	// The reply is one message in the order it was written: reasoning, the
+	// tool it called, then the text after it.
 	messages := history()
-	step, reply := messages[len(messages)-2], messages[len(messages)-1]
-	if step.Role != v1.MessageRole_MESSAGE_ROLE_ASSISTANT || step.Reasoning == nil || step.Reasoning.Text != "Thinking about it." || len(step.Tools) != 1 || step.Tools[0].Status != v1.ToolCallStatus_TOOL_CALL_STATUS_COMPLETED || step.Tools[0].Output != "file contents" {
-		t.Fatalf("reply before its tool: %v", step)
-	}
-	if reply.Text != "Echo: hello there" || len(reply.Tools) != 0 {
-		t.Fatalf("reply after its tool: %v", reply)
+	reply := messages[len(messages)-1]
+	if parts := reply.Parts; reply.Role != v1.MessageRole_MESSAGE_ROLE_ASSISTANT || len(parts) != 3 ||
+		parts[0].GetThought().GetText() != "Thinking about it." ||
+		parts[1].GetTool().GetStatus() != v1.ToolCallStatus_TOOL_CALL_STATUS_COMPLETED || parts[1].GetTool().GetOutput() != "file contents" ||
+		parts[2].GetText() != "Echo: hello there" {
+		t.Fatalf("reply out of order: %v", reply)
 	}
 	if capabilities := agentState().Capabilities; capabilities == nil || !capabilities.Answer || !capabilities.Steering || len(capabilities.LiveSettings) != 2 {
 		t.Fatalf("capabilities: %v", capabilities)
@@ -117,7 +113,7 @@ func TestAntigravityDriverEndToEnd(t *testing.T) {
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		linked := ""
 		for _, m := range history() {
-			if m.Role == v1.MessageRole_MESSAGE_ROLE_USER && m.Text == "linked" {
+			if m.Role == v1.MessageRole_MESSAGE_ROLE_USER && messageText(m) == "linked" {
 				linked = m.ClientMessageId
 			}
 		}
@@ -199,7 +195,7 @@ func TestAntigravityDriverEndToEnd(t *testing.T) {
 	f.idle(item)
 	// Each turn is one reply in history.
 	for i, m := range history() {
-		if m.Role == v1.MessageRole_MESSAGE_ROLE_ASSISTANT && m.Text == "" && len(m.Tools) == 0 {
+		if m.Role == v1.MessageRole_MESSAGE_ROLE_ASSISTANT && len(m.Parts) == 0 {
 			t.Fatalf("empty reply %d: %v", i, history())
 		}
 	}
@@ -231,8 +227,8 @@ func TestAntigravityDriverEndToEnd(t *testing.T) {
 	}
 	send("after restart", v1.Delivery_DELIVERY_PROMPT)
 	waitReply("Echo: after restart")
-	// The prompt, then the reply's tool step and its text.
-	if after := len(history()); after != before+3 {
+	// The prompt, then the reply, one message with its tool call.
+	if after := len(history()); after != before+2 {
 		t.Fatalf("history across restart: %d then %d messages", before, after)
 	}
 	calls, _ := os.ReadFile(callLog)

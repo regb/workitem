@@ -40,23 +40,25 @@ type Record struct {
 	RequestID string                  `json:"request_id,omitempty"`
 	Text      string                  `json:"text,omitempty"`
 	Images    []protocol.HistoryImage `json:"images,omitempty"`
-	// Assistant records hold one reply: its text, reasoning, tool calls and
-	// how it ended.
-	Thought string                 `json:"thought,omitempty"`
-	Tools   []protocol.HistoryTool `json:"tools,omitempty"`
-	// Steps keep the order of a reply that called tools between its texts;
-	// Text, Thought and Tools then hold all of it together.
-	Steps      []Step `json:"steps,omitempty"`
-	StopReason string `json:"stop_reason,omitempty"`
-	Failed     bool   `json:"failed,omitempty"`
+	// Assistant records hold one reply: its text, reasoning and tool calls
+	// as parts, in the order agy wrote them, and how it ended.
+	Parts []protocol.Part `json:"parts,omitempty"`
+	// Older journals hold a reply's text in Text, with its reasoning and
+	// calls in Thought and Tools, or in Steps when it called tools between
+	// its texts.
+	Thought    string                 `json:"thought,omitempty"`
+	Tools      []protocol.HistoryTool `json:"tools,omitempty"`
+	Steps      []Step                 `json:"steps,omitempty"`
+	StopReason string                 `json:"stop_reason,omitempty"`
+	Failed     bool                   `json:"failed,omitempty"`
 	// Reason classifies a failure, such as usage_limit.
 	Reason string `json:"reason,omitempty"`
 	// Error is the agent's failure text, shown in history.
 	Error string `json:"error,omitempty"`
 }
 
-// Step is a stretch of a reply: text and reasoning, then the tools called
-// after them.
+// Step is a stretch of an older journal's reply: text and reasoning, then
+// the tools called after them.
 type Step struct {
 	Text    string                 `json:"text,omitempty"`
 	Thought string                 `json:"thought,omitempty"`
@@ -188,12 +190,13 @@ func fact(line uint64, r Record) (protocol.ConversationFact, bool) {
 	case recordAssistant:
 		f := protocol.ConversationFact{Line: line, Type: "message", Role: "assistant", Timestamp: r.Timestamp, StopReason: r.StopReason, Failed: r.Failed, Terminal: true}
 		if r.Reason != "" {
-			f.StopReason = r.Reason
+			f.StopReason, f.UsageProvider = r.Reason, reasonUsageProvider(r.Reason)
 		}
-		if r.Text != "" {
+		parts := replyParts(r)
+		if protocol.PartsText(parts) != "" {
 			f.ContentTypes = append(f.ContentTypes, "text")
 		}
-		if len(r.Tools) > 0 {
+		if len(protocol.PartsTools(parts)) > 0 {
 			f.ContentTypes = append(f.ContentTypes, "tool_use")
 		}
 		return f, true
@@ -250,9 +253,16 @@ func historyPage(path, beforeID string, limit int) (protocol.History, error) {
 	err := readJournal(path, func(_ uint64, r Record) error {
 		switch r.Type {
 		case recordUser:
-			messages = append(messages, protocol.HistoryMessage{ID: r.ID, NativeIDs: []string{r.ID}, Role: "user", Text: r.Text, Images: r.Images, Timestamp: r.Timestamp.Format(time.RFC3339Nano)})
+			m := protocol.HistoryMessage{ID: r.ID, NativeIDs: []string{r.ID}, Role: "user", Parts: []protocol.Part{}, Timestamp: r.Timestamp.Format(time.RFC3339Nano)}
+			if r.Text != "" {
+				m.Parts = append(m.Parts, protocol.TextPart(r.Text))
+			}
+			for _, image := range r.Images {
+				m.Parts = append(m.Parts, protocol.ImagePart(image))
+			}
+			messages = append(messages, m)
 		case recordAssistant:
-			messages = append(messages, assistantMessages(r)...)
+			messages = append(messages, assistantMessage(r))
 		}
 		return nil
 	}, nil)
@@ -291,29 +301,60 @@ func historyPage(path, beforeID string, limit int) (protocol.History, error) {
 	return page, nil
 }
 
-// assistantMessages are a reply's history messages: one per step, in order,
-// the last one carrying the reply's ID and how it ended.
-func assistantMessages(r Record) []protocol.HistoryMessage {
+// usageProvider is the provider whose quota a usage limit reports, as the
+// usage plugin names it: agy's quota belongs to the Google account, whatever
+// the model.
+const usageProvider = "antigravity"
+
+// reasonUsageProvider names the provider of a usage_limit reason.
+func reasonUsageProvider(reason string) string {
+	if reason == "usage_limit" {
+		return usageProvider
+	}
+	return ""
+}
+
+// assistantMessage is a reply's history message, its parts in order.
+func assistantMessage(r Record) protocol.HistoryMessage {
+	m := protocol.HistoryMessage{ID: r.ID, NativeIDs: []string{r.ID}, Role: "assistant", Parts: replyParts(r), Timestamp: r.Timestamp.Format(time.RFC3339Nano), Aborted: r.StopReason == "cancelled"}
+	if r.Failed && protocol.PartsText(m.Parts) == "" {
+		text := r.Error
+		// agy refuses a turn for an exhausted quota without saying so.
+		if text == "" && r.Reason == "usage_limit" {
+			text = "Antigravity usage limit reached."
+		}
+		if text != "" {
+			m.Parts, m.Error = append(m.Parts, protocol.TextPart(text)), true
+			m.UsageProvider = reasonUsageProvider(r.Reason)
+		}
+	}
+	return m
+}
+
+// replyParts are a reply's parts. Older journals do not say where reasoning
+// came within a step; it goes before the step's text, as models reason
+// before they write.
+func replyParts(r Record) []protocol.Part {
+	if r.Parts != nil {
+		return r.Parts
+	}
 	steps := r.Steps
 	if len(steps) == 0 {
 		steps = []Step{{Text: r.Text, Thought: r.Thought, Tools: r.Tools}}
 	}
-	timestamp := r.Timestamp.Format(time.RFC3339Nano)
-	out := make([]protocol.HistoryMessage, 0, len(steps))
-	for i, step := range steps {
-		m := protocol.HistoryMessage{ID: fmt.Sprintf("%s.%d", r.ID, i), NativeIDs: []string{r.ID}, Role: "assistant", Text: step.Text, Tools: step.Tools, Timestamp: timestamp}
+	parts := []protocol.Part{}
+	for _, step := range steps {
 		if step.Thought != "" {
-			m.Reasoning = &protocol.HistoryReasoning{Text: step.Thought}
+			parts = append(parts, protocol.ThoughtPart(protocol.Thought{Text: step.Thought}))
 		}
-		if i == len(steps)-1 {
-			m.ID, m.Aborted = r.ID, r.StopReason == "cancelled"
-			if r.Failed && r.Text == "" && r.Error != "" {
-				m.Text, m.Error = r.Error, true
-			}
+		if step.Text != "" {
+			parts = append(parts, protocol.TextPart(step.Text))
 		}
-		out = append(out, m)
+		for _, tool := range step.Tools {
+			parts = append(parts, protocol.ToolPart(tool))
+		}
 	}
-	return out
+	return parts
 }
 
 // forkJournal copies a journal for a checkout moved to another directory:

@@ -13,10 +13,10 @@ const usageLimitReply = `{"type":"assistant","uuid":"limit","parentUuid":"u","is
 
 func TestAUsageLimitEndsTheTurnWithItsReason(t *testing.T) {
 	fact, valid := summarize(7, []byte(usageLimitReply))
-	if !valid || !fact.Terminal || !fact.Failed || fact.StopReason != "usage_limit" {
+	if !valid || !fact.Terminal || !fact.Failed || fact.StopReason != "usage_limit" || fact.UsageProvider != "claude" {
 		t.Fatalf("fact=%+v valid=%v", fact, valid)
 	}
-	if reason := settledReason(protocol.EventAgentSettled, true, settleReason(fact)); reason != "usage_limit" {
+	if reason := settledReason(protocol.EventAgentSettled, true, settleReason(fact)); reason != "usage_limit" || reasonUsageProvider(reason) != "claude" {
 		t.Fatalf("settlement reason %q", reason)
 	}
 	if protocol.RuntimeReasonText("usage_limit") == "" {
@@ -24,7 +24,7 @@ func TestAUsageLimitEndsTheTurnWithItsReason(t *testing.T) {
 	}
 	// Other API errors keep failing without the usage limit reason.
 	other, _ := summarize(8, []byte(`{"type":"assistant","uuid":"x","isApiErrorMessage":true,"error":"server_error","message":{"role":"assistant","content":[]}}`))
-	if !other.Failed || other.StopReason == "usage_limit" {
+	if !other.Failed || other.StopReason == "usage_limit" || other.UsageProvider != "" {
 		t.Fatalf("server error fact=%+v", other)
 	}
 }
@@ -35,7 +35,7 @@ func TestHistoryMarksHarnessReplies(t *testing.T) {
 	if err != nil || len(page.Messages) != 2 {
 		t.Fatalf("page=%+v err=%v", page, err)
 	}
-	if page.Messages[0].Error || !page.Messages[1].Error || page.Messages[1].Text == "" {
+	if page.Messages[0].Error || !page.Messages[1].Error || page.Messages[1].Text() == "" || page.Messages[1].UsageProvider != "claude" || page.Messages[0].UsageProvider != "" {
 		t.Fatalf("messages=%+v", page.Messages)
 	}
 }

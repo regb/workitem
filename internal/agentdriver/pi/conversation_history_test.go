@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -26,11 +27,11 @@ func TestHistorySelectsBranchAndIgnoresIncompleteAppend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.Messages) != 2 || result.LeafID != "active" || strings.Contains(result.Messages[1].Text, "old answer") || strings.Contains(result.Messages[1].Text, "private") {
+	if len(result.Messages) != 2 || result.LeafID != "active" || strings.Contains(result.Messages[1].Text(), "old answer") || strings.Contains(result.Messages[1].Text(), "private") {
 		t.Fatalf("branch %+v", result)
 	}
 	result, err = ReadHistory(context.Background(), path, "abandoned")
-	if err != nil || len(result.Messages) != 2 || result.Messages[1].Text != "old answer" {
+	if err != nil || len(result.Messages) != 2 || result.Messages[1].Text() != "old answer" {
 		t.Fatalf("live TUI leaf %+v %v", result, err)
 	}
 	if _, err := ReadHistory(context.Background(), path, "missing"); err == nil {
@@ -55,10 +56,10 @@ func TestHistoryJoinsToolCallAndResult(t *testing.T) {
 	if len(result.Messages) != 3 {
 		t.Fatalf("messages = %+v", result.Messages)
 	}
-	if len(result.Messages[0].Images) != 1 || result.Messages[0].Images[0].MIMEType != "image/png" {
-		t.Fatalf("images = %+v", result.Messages[0].Images)
+	if len(result.Messages[0].Images()) != 1 || result.Messages[0].Images()[0].MIMEType != "image/png" {
+		t.Fatalf("images = %+v", result.Messages[0].Images())
 	}
-	tool := result.Messages[1].Tools
+	tool := result.Messages[1].Tools()
 	if len(tool) != 1 || tool[0].Name != "bash" || tool[0].Status != "completed" || tool[0].Output != "README.md" || !strings.Contains(tool[0].Input, `"ls"`) {
 		t.Fatalf("tool = %+v", tool)
 	}
@@ -129,7 +130,7 @@ func TestHistoryMarksAnAbortedReply(t *testing.T) {
 	if err != nil || len(result.Messages) != 4 {
 		t.Fatalf("%+v %v", result, err)
 	}
-	if stopped := result.Messages[1]; !stopped.Aborted || stopped.Text != "partial" || result.Messages[3].Aborted {
+	if stopped := result.Messages[1]; !stopped.Aborted || stopped.Text() != "partial" || result.Messages[3].Aborted {
 		t.Fatalf("aborted marks: %+v", result.Messages)
 	}
 }
@@ -148,10 +149,10 @@ func TestHistoryShowsAnOperatorCommand(t *testing.T) {
 		t.Fatalf("%+v %v", result, err)
 	}
 	ran := result.Messages[0]
-	if ran.Role != "user" || len(ran.Tools) != 1 || ran.Tools[0].Name != "bash" || ran.Tools[0].Input != `{"command":"ls"}` || ran.Tools[0].Output != "README.md\n" || ran.Tools[0].Status != "completed" {
+	if ran.Role != "user" || len(ran.Tools()) != 1 || ran.Tools()[0].Name != "bash" || ran.Tools()[0].Input != `{"command":"ls"}` || ran.Tools()[0].Output != "README.md\n" || ran.Tools()[0].Status != "completed" {
 		t.Fatalf("command: %+v", ran)
 	}
-	if broke := result.Messages[1].Tools[0]; broke.Status != "failed" {
+	if broke := result.Messages[1].Tools()[0]; broke.Status != "failed" {
 		t.Fatalf("failed command: %+v", broke)
 	}
 }
@@ -171,7 +172,7 @@ func TestHistoryTellsACompactionFromABranchSummary(t *testing.T) {
 		t.Fatalf("%+v %v", result, err)
 	}
 	compaction, branch := result.Messages[1], result.Messages[2]
-	if compaction.Role != "summary" || compaction.Text != "## Goal\nearlier work\n\n**Read files**\n\n- `README.md`\n- `main.go`\n\n\n**Modified files**\n\n- `main.go`\n" || *compaction.Summary != (driverprotocol.HistorySummary{Kind: "compaction", TokensBefore: 261479}) {
+	if compaction.Role != "summary" || compaction.Text() != "## Goal\nearlier work\n\n**Read files**\n\n- `README.md`\n- `main.go`\n\n\n**Modified files**\n\n- `main.go`\n" || *compaction.Summary != (driverprotocol.HistorySummary{Kind: "compaction", TokensBefore: 261479}) {
 		t.Fatalf("compaction: %+v", compaction)
 	}
 	if branch.Role != "summary" || *branch.Summary != (driverprotocol.HistorySummary{Kind: "branch"}) {
@@ -192,11 +193,41 @@ func TestHistoryKeepsPiReasoning(t *testing.T) {
 	if err != nil || len(result.Messages) != 2 {
 		t.Fatalf("%+v %v", result, err)
 	}
+	// Adjacent reasoning blocks are one thought, before the text as written.
 	answer := result.Messages[1]
-	if answer.Text != "because" || answer.Reasoning == nil || answer.Reasoning.Text != "**Weighing it**" {
-		t.Fatalf("answer %+v %+v", answer, answer.Reasoning)
+	if len(answer.Parts) != 2 || answer.Parts[0].Thought == nil || answer.Parts[0].Thought.Text != "**Weighing it**" || answer.Parts[1].Text != "because" {
+		t.Fatalf("answer %+v", answer.Parts)
 	}
-	if result.Messages[0].Reasoning != nil {
-		t.Fatal("the question reasoned")
+	if len(result.Messages[0].Parts) != 1 || !result.Messages[0].Parts[0].IsText() {
+		t.Fatalf("the question reasoned: %+v", result.Messages[0].Parts)
+	}
+}
+
+// One reply keeps its blocks in the order the model wrote them, with each
+// call's result joined in, rather than text first and calls after.
+func TestHistoryKeepsAnInterleavedReplyInOrder(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "native.jsonl")
+	data := `{"type":"session","version":3,"id":"session"}
+{"type":"message","id":"ask","parentId":null,"message":{"role":"user","content":"go"}}
+{"type":"message","id":"reply","parentId":"ask","message":{"role":"assistant","content":[{"type":"text","text":"first"},{"type":"toolCall","id":"call","name":"bash","arguments":{"command":"ls"}},{"type":"text","text":"then"},{"type":"thinking","thinking":"hmm"}],"stopReason":"toolUse"}}
+{"type":"message","id":"result","parentId":"reply","message":{"role":"toolResult","toolCallId":"call","toolName":"bash","content":[{"type":"text","text":"a.go"}]}}
+`
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := ReadHistory(context.Background(), path, "")
+	if err != nil || len(result.Messages) != 2 {
+		t.Fatalf("%+v %v", result, err)
+	}
+	reply := result.Messages[1]
+	parts := reply.Parts
+	if len(parts) != 4 || parts[0].Text != "first" || parts[1].Tool == nil || parts[2].Text != "then" || parts[3].Thought == nil || parts[3].Thought.Text != "hmm" {
+		t.Fatalf("parts = %+v", parts)
+	}
+	if tool := parts[1].Tool; tool.ID != "call" || tool.Status != "completed" || tool.Output != "a.go" {
+		t.Fatalf("tool = %+v", tool)
+	}
+	if !reflect.DeepEqual(reply.NativeIDs, []string{"result"}) {
+		t.Fatalf("native ids = %v", reply.NativeIDs)
 	}
 }

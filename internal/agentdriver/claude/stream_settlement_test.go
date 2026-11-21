@@ -42,7 +42,7 @@ func TestSettledTranscriptRecoversMissingDisplayBeforeHookStart(t *testing.T) {
 	}
 	stream.PublishPromptTranscript("current-leaf", "Complete native answer", "Message saved", nil, "current", recorded)
 	value, err := protocol.ReadContent(context.Background(), socket, "runtime", "item")
-	if err != nil || stream.active || value.Text != "Complete native answer" || value.Truncated || value.LeafID != "current-leaf" {
+	if err != nil || stream.active || value.Text() != "Complete native answer" || value.Truncated || value.LeafID != "current-leaf" {
 		t.Fatal(value, err)
 	}
 }

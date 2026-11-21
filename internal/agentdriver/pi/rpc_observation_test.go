@@ -105,7 +105,7 @@ func TestNativeObservationKeepsTheContentBranchCurrent(t *testing.T) {
 		t.Fatal(err)
 	}
 	snapshot := content.Snapshot()
-	if snapshot.LeafID != "093285ce" || snapshot.Text != "Updated rules_python." {
+	if snapshot.LeafID != "093285ce" || snapshot.Text() != "Updated rules_python." {
 		t.Fatalf("branch or reply lost: %+v", snapshot)
 	}
 }

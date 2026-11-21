@@ -34,7 +34,10 @@ type RuntimeActivity struct {
 	AgentState string `json:"agent_state,omitempty"`
 	// FailureReason is the reason code of the last failed settlement, such as
 	// usage_limit, while the agent stays failed.
-	FailureReason   string     `json:"failure_reason,omitempty"`
+	FailureReason string `json:"failure_reason,omitempty"`
+	// FailureProvider names whose quota ran out when FailureReason is
+	// usage_limit.
+	FailureProvider string     `json:"failure_provider,omitempty"`
 	LeafID          string     `json:"leaf_id,omitempty"`
 	TurnState       string     `json:"turn_state,omitempty"`
 	LastEventAt     *time.Time `json:"last_event_at,omitempty"`

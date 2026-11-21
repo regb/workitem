@@ -212,12 +212,12 @@ type runtime struct {
 // turn is the agent's work from a prompt, or a wake, until it settles.
 type turn struct {
 	commandID, requestID string
-	text, thought        strings.Builder
-	tools                []protocol.HistoryTool
-	toolIndex            map[string]int
-	// steps keep the reply's order: text and reasoning, then the tools it
-	// called, then the text after them.
-	steps []turnStep
+	// parts are the reply in the order agy wrote it: text, reasoning and
+	// tool calls.
+	parts []protocol.Part
+	// toolIndex finds a call's part by its ID; tools counts the calls.
+	toolIndex map[string]int
+	tools     int
 	// outliving are tools that keep running after their prompt returns,
 	// such as commands and timers.
 	outliving map[string]bool
@@ -236,39 +236,36 @@ type turn struct {
 	lastEvent  time.Time
 }
 
-// turnStep is a stretch of a reply: its text and reasoning, then the tools,
-// by index into turn.tools, called after them.
-type turnStep struct {
-	text, thought strings.Builder
-	tools         []int
+// write adds text to the reply: to the text part it ends with, or as a new
+// part after reasoning or a call.
+func (t *turn) write(text string) {
+	if n := len(t.parts); n > 0 && t.parts[n-1].IsText() {
+		t.parts[n-1].Text += text
+		return
+	}
+	if text = strings.TrimLeft(text, "\n"); text != "" {
+		t.parts = append(t.parts, protocol.TextPart(text))
+	}
 }
 
-// step returns the step new text or reasoning goes to: a new one once the
-// current step has called tools.
-func (t *turn) step() *turnStep {
-	if n := len(t.steps); n > 0 && len(t.steps[n-1].tools) == 0 {
-		return &t.steps[n-1]
+// think adds reasoning to the reply, as write adds text.
+func (t *turn) think(text string) {
+	if n := len(t.parts); n > 0 && t.parts[n-1].Thought != nil {
+		t.parts[n-1].Thought.Text += text
+		return
 	}
-	t.steps = append(t.steps, turnStep{})
-	return &t.steps[len(t.steps)-1]
+	t.parts = append(t.parts, protocol.ThoughtPart(protocol.Thought{Text: text}))
 }
 
-// journalSteps are the reply's steps for its record, or none when it has a
-// single one: the record's text and tools then hold it.
-func (t *turn) journalSteps() []Step {
-	if len(t.steps) < 2 {
-		return nil
-	}
-	out := make([]Step, 0, len(t.steps))
-	for i := range t.steps {
-		s := &t.steps[i]
-		step := Step{Text: strings.TrimLeft(s.text.String(), "\n"), Thought: s.thought.String()}
-		for _, tool := range s.tools {
-			step.Tools = append(step.Tools, t.tools[tool])
+// text is the reply's text parts joined, as live content shows them.
+func (t *turn) text() string {
+	text := ""
+	for _, part := range t.parts {
+		if part.IsText() {
+			text += part.Text
 		}
-		out = append(out, step)
 	}
-	return out
+	return text
 }
 
 type promptDone struct {
@@ -821,17 +818,17 @@ func (rt *runtime) settle() {
 	rt.turn = nil
 	rt.sequence++
 	id := fmt.Sprintf("a-%s-%d", rt.request.Runtime.ID, rt.sequence)
-	record := Record{Type: recordAssistant, ID: id, Text: t.text.String(), Thought: t.thought.String(), Tools: t.tools, Steps: t.journalSteps(), StopReason: t.stop, Failed: t.failed, Reason: t.reason, Error: t.errText}
+	record := Record{Type: recordAssistant, ID: id, Parts: t.parts, StopReason: t.stop, Failed: t.failed, Reason: t.reason, Error: t.errText}
 	if record.StopReason == "" {
 		record.StopReason = acp.StopEndTurn
 	}
 	if err := rt.journal.append(record); err != nil {
 		fmt.Fprintf(os.Stderr, "Antigravity journal write failed: %v\n", err)
 	}
-	rt.content.MarkSaved(record.Text, []string{id})
+	rt.content.MarkSaved(t.text(), []string{id})
 	rt.content.SetActivity("Idle")
 	rt.content.Update(protocol.EventAgentSettled, "", "")
-	rt.emit(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: t.failed, ReasonCode: t.reason, CommandID: t.commandID, RequestID: t.requestID})
+	rt.emit(protocol.RuntimeEvent{Type: protocol.EventAgentSettled, Failed: t.failed, ReasonCode: t.reason, UsageProvider: reasonUsageProvider(t.reason), CommandID: t.commandID, RequestID: t.requestID})
 	if len(rt.queue) > 0 {
 		next := rt.queue[0]
 		rt.queue = rt.queue[1:]
@@ -899,18 +896,16 @@ func (rt *runtime) update(u acp.SessionUpdate) {
 		if text := blockText(u.Content); text != "" {
 			// A later reply of the same turn, such as after a background
 			// command, starts a paragraph of its own.
-			if t.replyEnded && t.text.Len() > 0 && !strings.HasPrefix(text, "\n") {
+			if t.replyEnded && t.text() != "" && !strings.HasPrefix(text, "\n") {
 				text = "\n\n" + text
 			}
 			t.replyEnded = false
-			t.text.WriteString(text)
-			t.step().text.WriteString(text)
+			t.write(text)
 			rt.content.Update(protocol.EventMessageDelta, text, "")
 		}
 	case acp.UpdateAgentThought:
 		if text := blockText(u.Content); text != "" {
-			t.thought.WriteString(text)
-			t.step().thought.WriteString(text)
+			t.think(text)
 			rt.content.Thought(text)
 		}
 	case acp.UpdateToolCall, acp.UpdateToolCallPatch:
@@ -926,19 +921,15 @@ func (rt *runtime) tool(u acp.SessionUpdate) {
 	}
 	i, known := t.toolIndex[u.ToolCallID]
 	if !known {
-		if len(t.tools) >= 256 {
+		if t.tools >= 256 {
 			return
 		}
-		t.tools = append(t.tools, protocol.HistoryTool{ID: u.ToolCallID, Status: "running"})
-		i = len(t.tools) - 1
+		t.tools++
+		t.parts = append(t.parts, protocol.ToolPart(protocol.HistoryTool{ID: u.ToolCallID, Status: "running"}))
+		i = len(t.parts) - 1
 		t.toolIndex[u.ToolCallID] = i
-		if len(t.steps) == 0 {
-			t.steps = append(t.steps, turnStep{})
-		}
-		last := &t.steps[len(t.steps)-1]
-		last.tools = append(last.tools, i)
 	}
-	tool := &t.tools[i]
+	tool := t.parts[i].Tool
 	if u.Name != nil && *u.Name != "" {
 		tool.Name = *u.Name
 	} else if u.Title != nil && tool.Name == "" {

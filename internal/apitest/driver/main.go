@@ -192,8 +192,9 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 			message = map[string]any{"role": "toolResult", "toolCallId": text, "toolName": "AskUserQuestion", "content": []map[string]string{{"type": "text", "text": "answered"}}}
 		}
 		if role == "error" {
-			// A provider refusal, as Pi records it: an empty failed reply.
-			message = map[string]any{"role": "assistant", "content": []any{}, "stopReason": "error", "errorMessage": text}
+			// A provider refusal, as Pi records it: an empty failed reply,
+			// from the fake "test" provider.
+			message = map[string]any{"role": "assistant", "content": []any{}, "stopReason": "error", "errorMessage": text, "provider": "test"}
 		}
 		_ = json.NewEncoder(file).Encode(map[string]any{"type": "message", "id": entry, "parentId": parent, "timestamp": time.Now().UTC().Format(time.RFC3339Nano), "message": message})
 		_ = file.Sync()
@@ -306,7 +307,7 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 					mu.Unlock()
 					content.MarkSaved("", []string{failed})
 					content.SetActivity("Idle")
-					_ = emit(p.RuntimeEvent{Type: p.EventAgentSettled, Outcome: "failed", Failed: true, ReasonCode: "usage_limit", Readiness: "ready"})
+					_ = emit(p.RuntimeEvent{Type: p.EventAgentSettled, Outcome: "failed", Failed: true, ReasonCode: "usage_limit", UsageProvider: "test", Readiness: "ready"})
 					continue
 				}
 				answer := "Echo: " + c.Message

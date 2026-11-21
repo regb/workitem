@@ -70,6 +70,7 @@ type RuntimeEvent struct {
 	Failed           bool              `json:"failed,omitempty"`
 	Readiness        string            `json:"readiness,omitempty"`
 	ReasonCode       string            `json:"reason_code,omitempty"`
+	UsageProvider    string            `json:"usage_provider,omitempty"`
 	DeliveryState    string            `json:"delivery_state,omitempty"`
 	Settings         map[string]string `json:"settings,omitempty"`
 	NativeIDs        []string          `json:"native_ids,omitempty"`

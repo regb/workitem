@@ -121,7 +121,11 @@ type RuntimeEvent struct {
 	Failed          bool      `json:"failed,omitempty"`
 	Readiness       string    `json:"readiness,omitempty"`
 	ReasonCode      string    `json:"reason_code,omitempty"`
-	DeliveryState   string    `json:"delivery_state,omitempty"`
+	// UsageProvider names whose quota ran out when ReasonCode is
+	// usage_limit, as the usage plugin names providers (claude, codex,
+	// antigravity): the host makes the item wait on it.
+	UsageProvider string `json:"usage_provider,omitempty"`
+	DeliveryState string `json:"delivery_state,omitempty"`
 
 	// Outcome is explicit final settlement: completed or failed. An absent
 	// outcome from older drivers must not be mistaken for proven success.
