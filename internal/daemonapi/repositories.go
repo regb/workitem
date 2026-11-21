@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/regb/workitem/internal/remoteurl"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -30,7 +31,7 @@ func (s *Server) repo(ctx context.Context, repositoryID string) (*v1.Repository,
 	}
 	out := repository(source.Repository.OwnedRepository)
 	if source.Repository.Upstream != nil {
-		out.Upstream = &v1.Upstream{Url: source.Repository.Upstream.URL, Branch: source.Repository.Upstream.Branch}
+		out.Upstream = upstream(source.Repository.Upstream.URL, source.Repository.Upstream.Branch)
 	}
 	out.IntegrationCommit = source.Commit
 	return out, nil
@@ -55,7 +56,7 @@ func (s *Server) ListRepositories(ctx context.Context, req *connect.Request[v1.L
 		r := repository(value.OwnedRepository)
 		r.Upstream = nil
 		if value.Upstream != nil {
-			r.Upstream = &v1.Upstream{Url: value.Upstream.URL, Branch: value.Upstream.Branch}
+			r.Upstream = upstream(value.Upstream.URL, value.Upstream.Branch)
 		}
 		out.Repositories = append(out.Repositories, r)
 	}
@@ -453,4 +454,14 @@ func (s *Server) SearchRepositoryFiles(ctx context.Context, req *connect.Request
 		paths = paths[:req.Msg.Limit]
 	}
 	return response(&v1.SearchRepositoryFilesResponse{Paths: paths}, err)
+}
+
+// upstream is a repository's upstream as every client sees it: its URL
+// without the credentials it may hold, and its page on a known host.
+func upstream(url, branch string) *v1.Upstream {
+	out := &v1.Upstream{Url: url, Branch: branch}
+	if remote := remoteurl.Describe(url, branch); remote != nil {
+		out.Url, out.WebUrl, out.Host = remote.URL, remote.WebURL, remote.Host
+	}
+	return out
 }

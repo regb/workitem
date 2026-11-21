@@ -25,7 +25,7 @@ func (s *Server) GetInfo(ctx context.Context, req *connect.Request[v1.GetInfoReq
 	case apitransport.WebAdapter:
 		kind = v1.CallerKind_CALLER_KIND_WEB_ADAPTER
 	}
-	info := &v1.GetInfoResponse{Caller: &v1.Caller{Access: access, Kind: kind}, Version: version.Current().Version, ApiVersion: "1.0", DataRoot: s.Root, DefaultAgentProfile: s.App.DefaultProfile(), StartedAt: stamp(s.StartedAt), Managed: s.Config.Daemon.Managed}
+	info := &v1.GetInfoResponse{Caller: &v1.Caller{Access: access, Kind: kind, Label: caller(ctx).label}, Version: version.Current().Version, ApiVersion: "1.0", DataRoot: s.Root, DefaultAgentProfile: s.App.DefaultProfile(), StartedAt: stamp(s.StartedAt), Managed: s.Config.Daemon.Managed}
 	if apitransport.Caller(ctx) == apitransport.Agent {
 		info.DataRoot = ""
 	}

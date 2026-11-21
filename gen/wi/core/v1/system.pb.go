@@ -259,9 +259,12 @@ func (x *GetInfoResponse) GetCaller() *Caller {
 // selects lease holder presentation ("terminal" or "web"); neither header
 // changes access or identity kind.
 type Caller struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Access        CallerAccess           `protobuf:"varint,1,opt,name=access,proto3,enum=wi.core.v1.CallerAccess" json:"access,omitempty"`
-	Kind          CallerKind             `protobuf:"varint,2,opt,name=kind,proto3,enum=wi.core.v1.CallerKind" json:"kind,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Access CallerAccess           `protobuf:"varint,1,opt,name=access,proto3,enum=wi.core.v1.CallerAccess" json:"access,omitempty"`
+	Kind   CallerKind             `protobuf:"varint,2,opt,name=kind,proto3,enum=wi.core.v1.CallerKind" json:"kind,omitempty"`
+	// label is who the caller acts as, when known: for the web, the user the
+	// web adapter's proxy authenticated.
+	Label         string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -308,6 +311,13 @@ func (x *Caller) GetKind() CallerKind {
 		return x.Kind
 	}
 	return CallerKind_CALLER_KIND_UNSPECIFIED
+}
+
+func (x *Caller) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
 }
 
 type GetHealthRequest struct {
@@ -1395,10 +1405,11 @@ const file_wi_core_v1_system_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12\x18\n" +
 	"\amanaged\x18\x06 \x01(\bR\amanaged\x12*\n" +
-	"\x06caller\x18\a \x01(\v2\x12.wi.core.v1.CallerR\x06caller\"f\n" +
+	"\x06caller\x18\a \x01(\v2\x12.wi.core.v1.CallerR\x06caller\"|\n" +
 	"\x06Caller\x120\n" +
 	"\x06access\x18\x01 \x01(\x0e2\x18.wi.core.v1.CallerAccessR\x06access\x12*\n" +
-	"\x04kind\x18\x02 \x01(\x0e2\x16.wi.core.v1.CallerKindR\x04kind\"\x12\n" +
+	"\x04kind\x18\x02 \x01(\x0e2\x16.wi.core.v1.CallerKindR\x04kind\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\"\x12\n" +
 	"\x10GetHealthRequest\"\x95\x01\n" +
 	"\x11GetHealthResponse\x12\x18\n" +
 	"\ahealthy\x18\x01 \x01(\bR\ahealthy\x12\x1a\n" +

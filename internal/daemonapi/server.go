@@ -115,7 +115,24 @@ func (s *Server) lock(id string) func() {
 	return mu.Unlock
 }
 
-type identity struct{ client, holder, actor string }
+// identity is who a call is from: the client and its kind, the actor of a
+// control command, and, from the web listener, the signed-in user wi web
+// vouches for (label).
+type identity struct{ client, holder, actor, label string }
+
+// LabelHeader carries the user wi web's proxy authenticated, such as a
+// Tailscale login. Only the web listener's is believed: wi web sets it and
+// drops whatever the page sends.
+const LabelHeader = "Wi-Client-Label"
+
+// webLabel is a web caller's user, when wi web sent a valid one.
+func webLabel(ctx context.Context, header http.Header) string {
+	label := strings.TrimSpace(header.Get(LabelHeader))
+	if apitransport.Caller(ctx) != apitransport.WebAdapter || len(label) > 128 || !utf8.ValidString(label) || strings.IndexFunc(label, unicode.IsControl) >= 0 {
+		return ""
+	}
+	return label
+}
 
 const ControlActorHeader = "Wi-Control-Actor"
 
@@ -137,7 +154,7 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("authenticated daemon endpoint is required"))
 			}
 			s.noteActivity()
-			who := identity{client: req.Header().Get(ClientHeader), holder: req.Header().Get(HolderHeader), actor: req.Header().Get(ControlActorHeader)}
+			who := identity{client: req.Header().Get(ClientHeader), holder: req.Header().Get(HolderHeader), actor: req.Header().Get(ControlActorHeader), label: webLabel(ctx, req.Header())}
 			if len(who.actor) > 128 || !utf8.ValidString(who.actor) || strings.IndexFunc(who.actor, unicode.IsControl) >= 0 {
 				return nil, invalid("invalid control actor")
 			}
@@ -150,6 +167,9 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 			ctx = context.WithValue(ctx, identityKey{}, who)
 			if apitransport.Caller(ctx) == apitransport.Agent && !agentAllowed(req.Spec().Procedure) {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("agent endpoint does not allow this operation"))
+			}
+			if apitransport.Caller(ctx) == apitransport.WebAdapter && !webAllowed(req.Spec().Procedure) {
+				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("the web endpoint does not allow this operation"))
 			}
 			method := req.Spec().Procedure[strings.LastIndex(req.Spec().Procedure, "/")+1:]
 			readOnly := strings.HasPrefix(method, "Get") || strings.HasPrefix(method, "List") || strings.HasPrefix(method, "Search") || strings.HasPrefix(method, "Resolve") || method == "SuggestTitle"

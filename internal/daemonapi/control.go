@@ -3,6 +3,7 @@ package daemonapi
 import (
 	"context"
 	"errors"
+	"github.com/regb/workitem/internal/apitransport"
 	"time"
 
 	"connectrpc.com/connect"
@@ -16,7 +17,7 @@ func (s *Server) controlRequest(ctx context.Context, itemID, client string, conf
 	if client == "" {
 		client = who.client
 	}
-	return app.ControlRequest{ResolveOptions: resolve(itemID), Holder: who.holder, ClientID: client, Label: who.holder, Confirm: confirm, EnsureRuntime: start, TTL: app.WebLeaseTTL}
+	return app.ControlRequest{ResolveOptions: resolve(itemID), Holder: who.holder, ClientID: client, Label: labelOr(who.label, who.holder), Confirm: confirm, EnsureRuntime: start, TTL: app.WebLeaseTTL}
 }
 func lease(value *model.ControlLease) *v1.ControlLease {
 	if value == nil {
@@ -44,7 +45,9 @@ func (s *Server) AcquireControl(ctx context.Context, req *connect.Request[v1.Acq
 	if request.ClientID != caller(ctx).client {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("client_id does not match the caller metadata"))
 	}
-	if req.Msg.Label != "" {
+	// A web caller's label is the user wi web vouches for (controlRequest
+	// takes it), never what the page says.
+	if apitransport.Caller(ctx) != apitransport.WebAdapter && req.Msg.Label != "" {
 		request.Label = req.Msg.Label
 	}
 	status, plan, err := s.App.PlanControl(ctx, request)
@@ -161,4 +164,12 @@ func (s *Server) ReleaseControl(ctx context.Context, req *connect.Request[v1.Rel
 		}
 	}
 	return response(&v1.ReleaseControlResponse{}, err)
+}
+
+// labelOr is label, or else fallback.
+func labelOr(label, fallback string) string {
+	if label != "" {
+		return label
+	}
+	return fallback
 }

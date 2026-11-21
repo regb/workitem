@@ -24,7 +24,10 @@ func (i apiInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) 
 		if apitransport.Caller(ctx) == apitransport.Agent && !agentAllowed(conn.Spec().Procedure) {
 			return connect.NewError(connect.CodePermissionDenied, errors.New("agent endpoint does not allow this stream"))
 		}
-		who := identity{client: conn.RequestHeader().Get(ClientHeader), holder: conn.RequestHeader().Get(HolderHeader)}
+		if apitransport.Caller(ctx) == apitransport.WebAdapter && !webAllowed(conn.Spec().Procedure) {
+			return connect.NewError(connect.CodePermissionDenied, errors.New("the web endpoint does not allow this stream"))
+		}
+		who := identity{client: conn.RequestHeader().Get(ClientHeader), holder: conn.RequestHeader().Get(HolderHeader), label: webLabel(ctx, conn.RequestHeader())}
 		if who.client == "" {
 			who.client = "cli"
 		}

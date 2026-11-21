@@ -65,6 +65,9 @@ message GetInfoResponse {
 message Caller {
   CallerAccess access = 1;
   CallerKind kind = 2;
+  // label is who the caller acts as, when known: for the web, the user the
+  // web adapter's proxy authenticated.
+  string label = 3;
 }
 
 enum CallerAccess {
