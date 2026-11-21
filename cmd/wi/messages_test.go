@@ -15,14 +15,3 @@ func messageText(m *v1.ConversationMessage) string {
 	}
 	return text
 }
-
-// messageTools are a message's tool calls, in order.
-func messageTools(m *v1.ConversationMessage) []*v1.ToolCall {
-	tools := []*v1.ToolCall{}
-	for _, part := range m.GetParts() {
-		if tool := part.GetTool(); tool != nil {
-			tools = append(tools, tool)
-		}
-	}
-	return tools
-}

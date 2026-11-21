@@ -53,7 +53,7 @@ Short-lived work has a durable record: restarting an agent, releasing a worktree
 - Preserve deliberate partial outcomes: for example, if creation or a lifecycle transition succeeds but later materialization fails, retain and report the durable result.
 - Route structured mutations through the daemon and item locks. Keep compact event history append-only.
 - Clients reach wi only through the generated API clients. Do not import use-case, adapter or storage packages from client code, except shared presentation and validation helpers.
-- API contract changes go through `proto/`, regeneration and `buf lint`. Within `v1`, change additively: new fields and methods, never renumbered or retyped fields. Handlers stay thin translations to use cases.
+- API contract changes go through `proto/`, regeneration and `buf lint`. Within `v1`, change additively by default: new fields and methods, never renumbered or retyped fields. When the right design breaks the contract, the operator may decide to change `v1` and update every client together, with no compatibility fields: removed fields keep their numbers and names `reserved`, nothing reuses them, and affected driver protocol versions are bumped so an old peer is refused rather than misread. Handlers stay thin translations to use cases.
 - Never edit or move driver-owned native conversations manually.
 - Treat absence of optional resources as normal state where appropriate. Do not emit repetitive warnings for an absent tmux server/session; reserve warnings for actionable inspection failures or inconsistent state.
 

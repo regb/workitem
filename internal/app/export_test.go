@@ -1,5 +1,10 @@
 package app
 
+// The old start composition, kept for the architecture tests only: they
+// exercise lifecycle, checkout and runtime invariants through the same
+// primitives the daemon composes (internal/daemonapi startItem), and
+// production has that one start path.
+
 import (
 	"context"
 	"fmt"
@@ -99,4 +104,59 @@ func (a *App) materializeTransitionAgent(ctx context.Context, opts ResolveOption
 		}
 	}
 	return StartResult{Transition: transition, Workspace: workspace}, nil
+}
+
+type NewAgentWorkItemResult struct {
+	New     NewWorkItemResult  `json:"new"`
+	Start   StartResult        `json:"start"`
+	Control AgentControlResult `json:"control"`
+}
+
+// NewAgentWorkItem creates a durable item, starts a runtime without attaching,
+// and submits a separate startup message. Later failures retain partial outcomes.
+func (a *App) NewAgentWorkItem(ctx context.Context, opts NewWorkItemOptions, mode agent.Mode, message, actor string) (NewAgentWorkItemResult, error) {
+	prompt := a.AgentStartupMessage(message)
+	if mode == "" {
+		mode = agent.ModeTUI
+	}
+	if !mode.Valid() {
+		return NewAgentWorkItemResult{}, fmt.Errorf("invalid agent runtime mode %q", mode)
+	}
+	if err := a.ValidateAgentConfig(ctx, opts.Agent, opts.AgentSettings); err != nil {
+		return NewAgentWorkItemResult{}, err
+	}
+	created, err := a.NewWorkItem(ctx, opts)
+	if err != nil {
+		return NewAgentWorkItemResult{}, err
+	}
+	result := NewAgentWorkItemResult{New: created}
+	resolve := ResolveOptions{Selector: created.Manifest.ID, CWD: opts.CWD, Env: opts.Env}
+	started, err := a.StartWorkItemInMode(ctx, resolve, false, false, mode)
+	if err != nil {
+		return result, fmt.Errorf("created work item %s (%s), but could not start its agent: %w", created.Manifest.Slug, created.Manifest.ID, err)
+	}
+	result.Start = started
+	if err := a.waitForAgentRuntimeReady(ctx, created.Manifest.ID, started.Workspace.AgentRuntime); err != nil {
+		return result, fmt.Errorf("created and started work item %s (%s), but could not submit its prompt: %w", created.Manifest.Slug, created.Manifest.ID, err)
+	}
+	controlled, err := a.AgentControl(ctx, AgentControlOptions{ResolveOptions: resolve, CommandType: agent.CommandPrompt, Message: prompt, Actor: actor, ExpectedRuntimeID: started.Workspace.AgentRuntime.ID})
+	result.Control = controlled
+	if err != nil {
+		return result, fmt.Errorf("created and started work item %s (%s), but could not submit its prompt: %w", created.Manifest.Slug, created.Manifest.ID, err)
+	}
+	return result, nil
+}
+
+func (a *App) WaitForAgentRuntimeReady(ctx context.Context, itemID string, runtime *model.AgentRuntime) error {
+	return a.waitForAgentRuntimeReady(ctx, itemID, runtime)
+}
+
+func (a *App) transitionState(ctx context.Context, opts ResolveOptions, target, eventType string, force bool) (StateTransitionResult, error) {
+	m, operation, err := a.lockItemOperation(ctx, opts)
+	if err != nil {
+		return StateTransitionResult{}, err
+	}
+	defer operation.Release()
+	opts.Selector = m.ID
+	return a.itemService().TransitionState(ctx, opts, target, eventType, force, a.DeepWorkConfig.MaxActive)
 }
