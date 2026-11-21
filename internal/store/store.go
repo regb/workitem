@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,7 +23,7 @@ const (
 	terminalRuntimeFile = "terminal-runtime.json"
 )
 
-var ErrNotFound = errors.New("work item not found")
+var ErrNotFound = apperr.NotFoundf("work item not found")
 
 // AmbiguousError is returned when a selector matches more than one work item.
 type AmbiguousError struct {
@@ -333,7 +333,7 @@ func normalizeManifest(m *model.Manifest) error {
 			return fmt.Errorf("workspace claim id is invalid")
 		}
 		if claim.Generation == 0 || claim.Generation != m.Checkout.ClaimGeneration {
-			return fmt.Errorf("workspace claim generation %d does not match checkout generation %d", claim.Generation, m.Checkout.ClaimGeneration)
+			return apperr.Stalef("workspace claim generation %d does not match checkout generation %d", claim.Generation, m.Checkout.ClaimGeneration)
 		}
 		if claim.Executor == "" {
 			claim.Executor = m.Checkout.Specification.Executor
@@ -492,7 +492,7 @@ func validateAgentRuntime(itemID string, runtime model.AgentRuntime) error {
 		return fmt.Errorf("work_item_id %q does not match %q", runtime.WorkItemID, itemID)
 	}
 	if (strings.TrimSpace(runtime.WorkspaceClaimID) == "") != (runtime.WorkspaceClaimGeneration == 0) {
-		return fmt.Errorf("workspace claim id and generation must either both be set or both be absent")
+		return apperr.Invalidf("workspace claim id and generation must either both be set or both be absent")
 	}
 	return nil
 }

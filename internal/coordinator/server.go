@@ -512,7 +512,7 @@ func (s *Server) dispatchWire(ctx context.Context, conn io.Writer, request Reque
 	if err != nil {
 		var protocolError *ProtocolError
 		if !errors.As(err, &protocolError) {
-			protocolError = &ProtocolError{Code: "internal_error", Message: err.Error()}
+			protocolError = protocolErr("internal_error", err)
 		}
 		s.writeError(conn, request.ID, protocolError.Code, protocolError.Message)
 		return
@@ -560,7 +560,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 	case MethodStatus:
 		status, err := s.status()
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		status.Access = access
@@ -587,7 +587,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		var session ConversationIndex
 		found, err := s.database.ReadProjection(ConversationProjection, itemRequest.ItemID, &session)
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		s.importMu.RLock()
@@ -616,7 +616,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 			leaseResult, err = s.leases.release(leaseRequest)
 		}
 		if err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		// A handover changes who may write; a renewal changes nothing readers show.
@@ -633,14 +633,14 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		resources := ItemResourcesResult{}
 		var runtime model.AgentRuntime
 		if found, err := s.database.ReadProjection(RuntimeOwnershipProjection, itemRequest.ItemID, &runtime); err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		} else if found {
 			resources.Runtime = &runtime
 		}
 		var terminal model.TerminalRuntime
 		if found, err := s.database.ReadProjection(TerminalOwnershipProjection, itemRequest.ItemID, &terminal); err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		} else if found {
 			resources.Terminal = &terminal
@@ -655,7 +655,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		var observation AgentObservation
 		found, err := s.database.ReadProjection(AgentObservationProjection, itemRequest.ItemID, &observation)
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		result = AgentObservationResult{Projection: ProjectionMetadata{Revision: uint64(observation.ObservedAt.UnixNano()), Source: "daemon.external_observer", ObservedAt: observation.ObservedAt, Fresh: found && time.Since(observation.ObservedAt) < 5*time.Second, Warnings: append([]string(nil), observation.Warnings...)}, Found: found, Observation: observation}
@@ -667,7 +667,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		canonical, err := s.database.CanonicalManifest(itemRequest.ItemID)
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		result = canonical
@@ -676,7 +676,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		barrier, err := s.activityBarrier(barrierCtx)
 		cancel()
 		if err != nil {
-			return nil, &ProtocolError{Code: "barrier_error", Message: err.Error()}
+			return nil, protocolErr("barrier_error", err)
 
 		}
 		result = barrier
@@ -694,7 +694,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		snapshot, err := s.actionabilitySnapshot(snapshotCtx, snapshotRequest.CurrentItemID, snapshotRequest.Queue)
 		cancel()
 		if err != nil {
-			return nil, &ProtocolError{Code: "snapshot_error", Message: err.Error()}
+			return nil, protocolErr("snapshot_error", err)
 
 		}
 		result = snapshot
@@ -706,7 +706,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		activity, err := s.database.AttentionActivity(itemRequest.ItemID)
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		result = activity
@@ -718,7 +718,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		domainEvents, err := s.database.ListItemEvents(itemRequest.ItemID)
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		events := make([]model.Event, 0, len(domainEvents))
@@ -752,7 +752,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		eventsResult, err := s.database.RuntimeEvents(eventsRequest.ItemID, eventsRequest.AfterSequence, eventsRequest.Limit)
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		if len(eventsResult.Events) == 0 && eventsRequest.WaitMillis > 0 {
@@ -771,7 +771,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 			}
 			eventsResult, err = s.database.RuntimeEvents(eventsRequest.ItemID, eventsRequest.AfterSequence, eventsRequest.Limit)
 			if err != nil {
-				return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+				return nil, protocolErr("database_error", err)
 
 			}
 		}
@@ -821,7 +821,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		if access == AccessRuntimeHost {
 			if err := s.validateHostStoreMutation(storeRequest); err != nil {
 				s.domainMu.Unlock()
-				return nil, &ProtocolError{Code: "runtime_owner_mismatch", Message: err.Error()}
+				return nil, protocolErr("runtime_owner_mismatch", err)
 			}
 		}
 		err := StageStoreMutation(s.database, storeRequest.Command, storeRequest.Payload)
@@ -839,7 +839,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+			return nil, protocolErr("command_error", err)
 
 		}
 		result = storeResult
@@ -859,7 +859,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 			pin := "refs/wi/pins/" + ref.CreatedFromCommit
 			if _, err := git.RevParse(ctx, source.GitDir, pin); err != nil {
 				if err := git.UpdateRef(ctx, source.GitDir, pin, source.Commit, "", "wi: retain item base"); err != nil {
-					return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+					return nil, protocolErr("repository_error", err)
 
 				}
 			}
@@ -867,12 +867,12 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		if access == AccessAgent {
 			createRequest.Command.Actor = "agent"
 			if err := validateAgentCreateItem(createRequest.Command.Manifest); err != nil {
-				return nil, &ProtocolError{Code: "permission_denied", Message: err.Error()}
+				return nil, protocolErr("permission_denied", err)
 
 			}
 		}
 		if err := validateCreateDescription(createRequest.Command, createRequest.Description); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		s.domainMu.Lock()
@@ -895,7 +895,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+			return nil, protocolErr("command_error", err)
 
 		}
 		result = createResult
@@ -916,99 +916,99 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+			return nil, protocolErr("command_error", err)
 
 		}
 		result = queueResult
 	case MethodAddNote:
 		var noteRequest AddNoteRequest
 		if err := json.Unmarshal(request.Payload, &noteRequest); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		note, err := s.addNote(ctx, noteRequest)
 		if err != nil {
-			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+			return nil, protocolErr("command_error", err)
 
 		}
 		result = note
 	case MethodAttach:
 		var attachRequest AttachRequest
 		if err := json.Unmarshal(request.Payload, &attachRequest); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		note, err := s.attach(ctx, attachRequest)
 		if err != nil {
-			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+			return nil, protocolErr("command_error", err)
 
 		}
 		result = note
 	case MethodAgentProfiles:
 		value, err := s.database.AgentProfiles()
 		if err != nil {
-			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+			return nil, protocolErr("command_error", err)
 
 		}
 		result = value
 	case MethodChangeAgentProfile:
 		var command ChangeAgentProfileCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		s.domainMu.Lock()
 		value, err := s.database.ChangeAgentProfile(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+			return nil, protocolErr("command_error", err)
 
 		}
 		result = value
 	case MethodRepositoryEnvironment:
 		var query RepositoryEnvironmentRequest
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		value, err := s.database.RepositoryEnvironment(query.Selector)
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		result = value
 	case MethodSetRepositoryEnvironment:
 		var command SetRepositoryEnvironmentCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		s.domainMu.Lock()
 		value, err := s.database.SetRepositoryEnvironment(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		result = value
 	case MethodRepositoryFiles, MethodRepositoryFileRead, MethodRepositoryFilePut, MethodRepositoryFileRemove:
 		value, err := s.repositoryFile(request.Method, request.Payload)
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		result = value
 	case MethodEditItem:
 		var editRequest EditItemRequest
 		if err := json.Unmarshal(request.Payload, &editRequest); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		s.domainMu.Lock()
 		editResult, err := s.editItem(editRequest)
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+			return nil, protocolErr("command_error", err)
 
 		}
 		result = editResult
@@ -1029,7 +1029,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "command_error", Message: err.Error()}
+			return nil, protocolErr("command_error", err)
 
 		}
 		result = commandResult
@@ -1041,102 +1041,102 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		if request.Method == MethodRepositoryStatus {
 			var query RepositoryStatusRequest
 			if err := json.Unmarshal(request.Payload, &query); err != nil {
-				return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+				return nil, protocolErr("invalid_request", err)
 
 			}
 			value, operationErr = s.repositoryStatus(operationCtx, query)
 		} else {
 			var command RepositorySyncRequest
 			if err := json.Unmarshal(request.Payload, &command); err != nil {
-				return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+				return nil, protocolErr("invalid_request", err)
 
 			}
 			value, operationErr = s.repositorySync(operationCtx, command)
 		}
 		if operationErr != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: operationErr.Error()}
+			return nil, protocolErr("repository_error", operationErr)
 
 		}
 		result = value
 	case MethodSetRepositoryUpstream:
 		var command SetRepositoryUpstreamCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		operationCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		value, err := s.setRepositoryUpstream(operationCtx, command)
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		result = value
 	case MethodRepositorySettings:
 		var query RepositorySettingsRequest
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		value, err := s.database.RepositorySettings(query.Selector)
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		result = value
 	case MethodSetRepositorySetting:
 		var command SetRepositorySettingCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		s.domainMu.Lock()
 		value, err := s.database.SetRepositorySetting(command, s.repositorySettingsRegistry)
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		result = value
 	case MethodRenameRepository:
 		var command RenameRepositoryCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		s.domainMu.Lock()
 		renamed, err := s.database.RenameRepository(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		result = renamed
 	case MethodSetRepositoryArchived:
 		var command SetRepositoryArchivedCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		s.domainMu.Lock()
 		value, err := s.database.SetRepositoryArchived(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		result = value
 	case MethodListRepositories:
 		repositories, err := s.database.ListRepositories()
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		var query struct {
 			ObserveUpstream bool `json:"observe_upstream"`
 		}
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		if query.ObserveUpstream {
@@ -1148,7 +1148,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 			for _, repo := range repositories {
 				view, err := s.database.repositoryView(ctx, repo)
 				if err != nil {
-					return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+					return nil, protocolErr("repository_error", err)
 
 				}
 				views = append(views, view)
@@ -1160,7 +1160,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 	case MethodRepositorySource:
 		var query RepositorySourceRequest
 		if err := json.Unmarshal(request.Payload, &query); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		if access == AccessAgent && query.ObserveUpstream {
@@ -1169,7 +1169,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		value, err := s.database.RepositorySource(ctx, query)
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		if access == AccessAgent {
@@ -1180,7 +1180,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 	case MethodRegisterRepository:
 		var command RegisterRepositoryCommand
 		if err := json.Unmarshal(request.Payload, &command); err != nil {
-			return nil, &ProtocolError{Code: "invalid_request", Message: err.Error()}
+			return nil, protocolErr("invalid_request", err)
 
 		}
 		path, err := model.OwnedRepositoryGitDir(s.dataRoot, command.Repository.ID)
@@ -1190,21 +1190,21 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 			cancel()
 		}
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		s.domainMu.Lock()
 		registered, err := s.database.RegisterRepository(command)
 		s.domainMu.Unlock()
 		if err != nil {
-			return nil, &ProtocolError{Code: "repository_error", Message: err.Error()}
+			return nil, protocolErr("repository_error", err)
 
 		}
 		result = registered
 	case MethodListManifests:
 		manifests, err := s.database.ListManifests()
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		if access == AccessAgent {
@@ -1214,7 +1214,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		database, err := s.database.Status()
 		if err != nil {
-			return nil, &ProtocolError{Code: "database_error", Message: err.Error()}
+			return nil, protocolErr("database_error", err)
 
 		}
 		projection := ProjectionMetadata{Revision: database.GlobalSequence, Source: "daemon-canonical", ObservedAt: time.Now().UTC(), Fresh: true, Warnings: []string{}}

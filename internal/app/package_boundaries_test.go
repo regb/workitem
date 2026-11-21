@@ -24,7 +24,9 @@ var childPackageImports = map[string]map[string]bool{
 		internalImportPrefix + "model":        true,
 	},
 	"core/primaryagent/": {
-		internalImportPrefix + "agent":        true,
+		internalImportPrefix + "agent": true,
+		// Error kinds, a leaf like model: how a failure is reported.
+		internalImportPrefix + "apperr":       true,
 		internalImportPrefix + "app/contract": true,
 		internalImportPrefix + "model":        true,
 		internalImportPrefix + "lock":         true,

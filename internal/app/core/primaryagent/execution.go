@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"os"
 	"path/filepath"
 
@@ -52,7 +53,7 @@ func (s *Service) Execute(ctx context.Context, itemID, sessionID, runtimeID stri
 	if runtime.WorkspaceClaimID != "" {
 		claim := m.Checkout.Claim
 		if claim == nil || claim.ID != runtime.WorkspaceClaimID || claim.Generation != runtime.WorkspaceClaimGeneration {
-			return fmt.Errorf("agent runtime %s belongs to superseded workspace claim %s generation %d", runtime.ID, runtime.WorkspaceClaimID, runtime.WorkspaceClaimGeneration)
+			return apperr.Stalef("agent runtime %s belongs to superseded workspace claim %s generation %d", runtime.ID, runtime.WorkspaceClaimID, runtime.WorkspaceClaimGeneration)
 		}
 	}
 	absolute, err := s.AbsPath(m.ID, session.NativeLocator())

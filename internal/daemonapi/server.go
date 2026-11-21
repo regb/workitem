@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"net/http"
 	"os"
 	"strings"
@@ -248,10 +249,24 @@ func rpcError(err error) error {
 		err = errors.New(message)
 	}
 	code := connect.CodeFailedPrecondition
+	// An error's kind decides its code. Matching words remains only for
+	// errors not yet given a kind, or whose kind a %v wrap lost: two exact
+	// stale phrases, but no longer "generation", which also named invalid
+	// requests, telling clients to retry what would fail again.
 	switch {
+	case errors.Is(err, apperr.Exhausted):
+		code = connect.CodeResourceExhausted
+	case errors.Is(err, apperr.Stale):
+		code = connect.CodeAborted
+	case errors.Is(err, apperr.NotFound):
+		code = connect.CodeNotFound
+	case errors.Is(err, apperr.Exists):
+		code = connect.CodeAlreadyExists
+	case errors.Is(err, apperr.Invalid):
+		code = connect.CodeInvalidArgument
 	case strings.Contains(message, "exhausted"):
 		code = connect.CodeResourceExhausted
-	case strings.Contains(message, "revision conflict"), strings.Contains(message, "changed since"), strings.Contains(message, "generation"):
+	case strings.Contains(message, "revision conflict"), strings.Contains(message, "changed since"):
 		code = connect.CodeAborted
 	case strings.Contains(message, "not found"), strings.Contains(message, "no such"), strings.Contains(message, "is not registered"), strings.Contains(message, "no agent profile"), strings.Contains(message, "does not exist"):
 		code = connect.CodeNotFound
@@ -280,7 +295,12 @@ func optionalStamp(t *time.Time) *timestamppb.Timestamp {
 	}
 	return stamp(*t)
 }
-func id() string                               { value, _ := model.NewID(); return value }
+func id() string { value, _ := model.NewID(); return value }
+
+// resolve names an item by its ID. The interceptor has refused any item_id
+// that is not a whole ID, and a whole ID never falls back to matching slugs,
+// titles or labels, so this resolves exactly that item or none. Names are
+// resolved only by ResolveItem.
 func resolve(itemID string) app.ResolveOptions { return app.ResolveOptions{Selector: itemID} }
 func state(value string) v1.ItemState {
 	return v1.ItemState(v1.ItemState_value["ITEM_STATE_"+strings.ToUpper(value)])

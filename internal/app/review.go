@@ -6,13 +6,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/workspacefiles"
 )
 
-var ErrReviewChanged = errors.New("review revision or workspace claim changed since it was opened; refresh before continuing")
+var ErrReviewChanged = apperr.Stalef("review revision or workspace claim changed since it was opened; refresh before continuing")
 
 type ReviewOptions struct{ Comparison, Commit, BaseCommit string }
 type ReviewRevision struct {

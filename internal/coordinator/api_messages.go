@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	bolt "go.etcd.io/bbolt"
 	"time"
 )
@@ -48,7 +48,7 @@ func (d *Database) RecordAPIMessage(value APIMessageReceipt) error {
 				return err
 			}
 			if old.RuntimeID != value.RuntimeID || old.Generation != value.Generation {
-				return fmt.Errorf("message was reserved on another agent generation")
+				return apperr.Stalef("message was reserved on another agent generation")
 			}
 			if old.Delivered {
 				return nil

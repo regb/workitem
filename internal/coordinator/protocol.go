@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/regb/workitem/internal/apperr"
 	"github.com/regb/workitem/internal/dataroot"
 	"github.com/regb/workitem/internal/model"
 )
@@ -88,6 +89,9 @@ func (e *CompatibilityError) Error() string {
 type ProtocolError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Kind is the apperr kind of the error behind it, such as "stale", so
+	// it reaches the API's error codes across the protocol.
+	Kind string `json:"kind,omitempty"`
 }
 
 func (e *ProtocolError) Error() string {
@@ -95,6 +99,17 @@ func (e *ProtocolError) Error() string {
 		return ""
 	}
 	return e.Message
+}
+
+// Is matches the kind of the error behind it.
+func (e *ProtocolError) Is(target error) bool {
+	kind := apperr.ByName(e.Kind)
+	return kind != nil && target == kind
+}
+
+// protocolErr reports err under a protocol code, keeping its kind.
+func protocolErr(code string, err error) *ProtocolError {
+	return &ProtocolError{Code: code, Message: err.Error(), Kind: apperr.KindOf(err)}
 }
 
 type ProjectionMetadata struct {

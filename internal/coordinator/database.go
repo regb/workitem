@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"os"
 	"path/filepath"
 	"sort"
@@ -260,7 +261,7 @@ func (d *Database) commit(command Command, pending []PendingEvent, updates []Pro
 		revisions := tx.Bucket(bucketRevisions)
 		currentRevision := decodeUint64(revisions.Get([]byte(command.ItemID)))
 		if command.ExpectedRevision != nil && *command.ExpectedRevision != currentRevision {
-			return fmt.Errorf("item revision conflict: expected %d, current %d", *command.ExpectedRevision, currentRevision)
+			return apperr.Stalef("item revision conflict: expected %d, current %d", *command.ExpectedRevision, currentRevision)
 		}
 		meta, events, eventIDs := tx.Bucket(bucketMeta), tx.Bucket(bucketEvents), tx.Bucket(bucketEventIDs)
 		sequence := decodeUint64(meta.Get(keyGlobalSequence))

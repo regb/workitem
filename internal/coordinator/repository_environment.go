@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"time"
 
 	"github.com/regb/workitem/internal/model"
@@ -109,7 +110,7 @@ func (d *Database) SetRepositoryEnvironment(command SetRepositoryEnvironmentComm
 			return err
 		}
 		if command.ExpectedRevision != nil && *command.ExpectedRevision != environment.Revision {
-			return fmt.Errorf("the environment of %s changed since it was read; reload and try again", settings.Repository.Name)
+			return apperr.Stalef("the environment of %s changed since it was read; reload and try again", settings.Repository.Name)
 		}
 		next := environment.Vars
 		if command.Replace {

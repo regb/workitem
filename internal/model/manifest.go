@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"strings"
 	"time"
 )
@@ -189,7 +190,7 @@ func (c *Checkout) AssignNewClaim(executor, repositoryKey, slot, path string) (*
 		return nil, fmt.Errorf("workspace already has claim %s", c.Claim.ID)
 	}
 	if c.ClaimGeneration == ^uint64(0) {
-		return nil, fmt.Errorf("workspace claim generation exhausted")
+		return nil, apperr.Exhaustedf("workspace claim generation exhausted")
 	}
 	id, err := NewID()
 	if err != nil {
@@ -206,7 +207,7 @@ func (c *Checkout) AcceptClaim(claim WorkspaceClaim) error {
 		return fmt.Errorf("workspace already has claim %s", c.Claim.ID)
 	}
 	if claim.Generation == 0 || claim.Generation != c.ClaimGeneration+1 {
-		return fmt.Errorf("workspace claim generation %d does not follow %d", claim.Generation, c.ClaimGeneration)
+		return apperr.Stalef("workspace claim generation %d does not follow %d", claim.Generation, c.ClaimGeneration)
 	}
 	c.ClaimGeneration = claim.Generation
 	c.Claim = &claim

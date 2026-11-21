@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"io"
 	"os"
 	"path"
@@ -21,7 +22,7 @@ import (
 const MaxBytes = 1 << 20
 
 // ErrConflict means the file changed since the caller read it.
-var ErrConflict = errors.New("file changed since it was opened; reload before saving")
+var ErrConflict = apperr.Stalef("file changed since it was opened; reload before saving")
 
 // ErrInvalidPath refuses a path that is not a clean relative path outside Git
 // metadata.

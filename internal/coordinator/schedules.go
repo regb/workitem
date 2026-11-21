@@ -2,8 +2,8 @@ package coordinator
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"sort"
 	"time"
 
@@ -14,7 +14,7 @@ import (
 const maxSchedules = 200
 
 // ErrScheduleChanged means a schedule was edited since the caller read it.
-var ErrScheduleChanged = errors.New("schedule changed since it was read; reload and try again")
+var ErrScheduleChanged = apperr.Stalef("schedule changed since it was read; reload and try again")
 
 func scheduleBucket(tx *bolt.Tx) (*bolt.Bucket, error) {
 	if bucket := tx.Bucket(bucketSchedules); bucket != nil {

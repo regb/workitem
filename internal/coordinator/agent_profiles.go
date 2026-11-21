@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"slices"
 	"time"
 
@@ -103,7 +104,7 @@ func (d *Database) ChangeAgentProfile(command ChangeAgentProfileCommand) (model.
 			return err
 		}
 		if command.ExpectedRevision != nil && *command.ExpectedRevision != profiles.Revision {
-			return fmt.Errorf("the agent profiles changed since they were read; reload and try again")
+			return apperr.Stalef("the agent profiles changed since they were read; reload and try again")
 		}
 		name, action := "", ""
 		switch {

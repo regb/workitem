@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"sort"
 	"strings"
 	"time"
@@ -222,7 +223,7 @@ func (d *Database) executeManifestCommand(command ManifestCommand, queueOptions 
 		revisions := tx.Bucket(bucketRevisions)
 		revision := decodeUint64(revisions.Get([]byte(command.ItemID)))
 		if revision != *command.ExpectedRevision {
-			return fmt.Errorf("item revision conflict: expected %d, current %d", *command.ExpectedRevision, revision)
+			return apperr.Stalef("item revision conflict: expected %d, current %d", *command.ExpectedRevision, revision)
 		}
 		allManifests, err := manifestsFromProjection(projection)
 		if err != nil {

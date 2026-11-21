@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"os"
 	"path/filepath"
 	"time"
@@ -94,7 +95,7 @@ func (d *Database) ExecuteStoreCommand(command StoreCommand, payload json.RawMes
 		revisions := tx.Bucket(bucketRevisions)
 		revision := decodeUint64(revisions.Get([]byte(command.ItemID)))
 		if revision != *command.ExpectedRevision {
-			return fmt.Errorf("item revision conflict: expected %d, current %d", *command.ExpectedRevision, revision)
+			return apperr.Stalef("item revision conflict: expected %d, current %d", *command.ExpectedRevision, revision)
 		}
 		eventType, compactPayload, err := applyCanonicalStoreMutation(tx, command, payload)
 		if err != nil {
@@ -250,7 +251,7 @@ func applyCanonicalStoreMutation(tx *bolt.Tx, command StoreCommand, payload json
 				runtime.Generation = current.Generation
 			} else if current.ID != runtime.ID {
 				if current.Generation == ^uint32(0) {
-					return "", nil, errors.New("agent generation exhausted")
+					return "", nil, apperr.Exhaustedf("agent generation exhausted")
 				}
 				runtime.Generation = current.Generation + 1
 			}

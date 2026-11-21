@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/regb/workitem/internal/apperr"
 	"time"
 
 	"github.com/regb/workitem/internal/model"
@@ -14,7 +15,7 @@ var (
 	ErrNoWorkspaceClaim = errors.New("item has no workspace claim")
 	// ErrWorkspaceClaimChanged means the checkout was released or reclaimed
 	// since the caller read from it.
-	ErrWorkspaceClaimChanged = errors.New("workspace claim changed since it was read; reload before continuing")
+	ErrWorkspaceClaimChanged = apperr.Stalef("workspace claim changed since it was read; reload before continuing")
 	// ErrCheckoutBranch means the checkout is not on the item's branch, so
 	// Wi does not edit it.
 	ErrCheckoutBranch = errors.New("checkout branch does not match its claim")
