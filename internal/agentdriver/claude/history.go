@@ -48,6 +48,10 @@ type historyRecord struct {
 		Type   string          `json:"type"`
 		Prompt json.RawMessage `json:"prompt"`
 		Mode   string          `json:"commandMode"`
+		// SourceUUID is the uuid the message was sent with. Claude saves a
+		// steered message under a uuid of its own; wi chose this one and
+		// linked the send to it.
+		SourceUUID string `json:"source_uuid"`
 	} `json:"attachment"`
 }
 
@@ -207,6 +211,11 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		if record.steered() {
 			message.Role = "user"
 			content(record.Attachment.Prompt, &message, &result.Truncated)
+			// The entry answers to the uuid it was sent with too, so the send
+			// it was linked to finds it.
+			if source := record.Attachment.SourceUUID; source != "" && source != record.ID && len(source) <= 128 {
+				message.NativeIDs = append(message.NativeIDs, source)
+			}
 		} else {
 			content(record.Message.Content, &message, &result.Truncated)
 		}
