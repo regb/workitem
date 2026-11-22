@@ -57,6 +57,9 @@ message Schedule {
   google.protobuf.Timestamp last_run_at = 13;
   string last_item_id = 14;
   string last_error = 15;
+  // agent_settings override the profile's settings for each run's item, as
+  // CreateItemRequest.agent_settings does: model and reasoning.
+  map<string, string> agent_settings = 16;
 }
 
 message ListSchedulesRequest {}

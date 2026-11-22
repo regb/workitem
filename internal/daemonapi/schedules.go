@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -20,7 +21,7 @@ import (
 const scheduleTick = 30 * time.Second
 
 func scheduleMessage(value model.Schedule) *v1.Schedule {
-	out := &v1.Schedule{Id: value.ID, Revision: value.Revision, RepositoryId: value.RepositoryID, Cron: value.Cron, Title: value.Title, Prompt: value.Prompt, AgentProfile: value.AgentProfile, Labels: append([]string{}, value.Labels...), Enabled: value.Enabled, CreatedAt: timestamppb.New(value.CreatedAt), UpdatedAt: timestamppb.New(value.UpdatedAt), LastItemId: value.LastItemID, LastError: value.LastError}
+	out := &v1.Schedule{Id: value.ID, Revision: value.Revision, RepositoryId: value.RepositoryID, Cron: value.Cron, Title: value.Title, Prompt: value.Prompt, AgentProfile: value.AgentProfile, AgentSettings: value.AgentSettings, Labels: append([]string{}, value.Labels...), Enabled: value.Enabled, CreatedAt: timestamppb.New(value.CreatedAt), UpdatedAt: timestamppb.New(value.UpdatedAt), LastItemId: value.LastItemID, LastError: value.LastError}
 	if value.NextRunAt != nil {
 		out.NextRunAt = timestamppb.New(*value.NextRunAt)
 	}
@@ -54,7 +55,7 @@ func (s *Server) PutSchedule(ctx context.Context, req *connect.Request[v1.PutSch
 	if r == nil {
 		return nil, invalid("schedule is required")
 	}
-	value := model.Schedule{ID: r.Id, RepositoryID: r.RepositoryId, Cron: r.Cron, Title: r.Title, Prompt: r.Prompt, AgentProfile: r.AgentProfile, Labels: r.Labels, Enabled: r.Enabled}
+	value := model.Schedule{ID: r.Id, RepositoryID: r.RepositoryId, Cron: r.Cron, Title: r.Title, Prompt: r.Prompt, AgentProfile: r.AgentProfile, AgentSettings: r.AgentSettings, Labels: r.Labels, Enabled: r.Enabled}
 	if err := value.Validate(); err != nil {
 		return nil, invalid(err.Error())
 	}
@@ -69,6 +70,10 @@ func (s *Server) PutSchedule(ctx context.Context, req *connect.Request[v1.PutSch
 	}
 	if _, ok := profiles.Find(value.AgentProfile); !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no agent profile %s", value.AgentProfile))
+	}
+	// A setting each run's item would refuse fails now, not at the run.
+	if value.AgentSettings, err = app.NormalizeAgentSettings(value.AgentSettings); err != nil {
+		return nil, invalid(err.Error())
 	}
 	saved, err := s.Core.Database().PutSchedule(value, req.Msg.ExpectedRevision, time.Now().UTC())
 	if err != nil {
@@ -115,7 +120,7 @@ func (s *Server) fireSchedule(ctx context.Context, value model.Schedule, at time
 	title := model.RenderScheduleText(value.Title, at, repoName)
 	prompt := model.RenderScheduleText(value.Prompt, at, repoName)
 	request := &v1.CreateAndStartItemRequest{
-		Item:  &v1.CreateItemRequest{RepositoryId: value.RepositoryID, Title: title, GenerateTitle: title == "", Description: prompt, Labels: value.Labels, AgentProfile: value.AgentProfile, RequestId: key},
+		Item:  &v1.CreateItemRequest{RepositoryId: value.RepositoryID, Title: title, GenerateTitle: title == "", Description: prompt, Labels: value.Labels, AgentProfile: value.AgentProfile, AgentSettings: value.AgentSettings, RequestId: key},
 		Start: &v1.StartOptions{Prompt: prompt, Mode: v1.AgentMode_AGENT_MODE_HEADLESS, ClientMessageId: key},
 	}
 	itemID, failure := "", ""

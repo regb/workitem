@@ -31,7 +31,10 @@ func TestSchedulesStartItemsLikeTheDashboard(t *testing.T) {
 	if _, err := put(&v1.Schedule{RepositoryId: repository, Cron: "0 9 * * *", AgentProfile: "test", Enabled: true}); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("no prompt: %v", err)
 	}
-	schedule, err := put(&v1.Schedule{RepositoryId: repository, Cron: "0 9 * * *", Title: "Triage {{date}}", Prompt: "Look at CI for {{repo}}", AgentProfile: "test", Labels: []string{"ci"}, Enabled: true})
+	if _, err := put(&v1.Schedule{RepositoryId: repository, Cron: "0 9 * * *", Prompt: "p", AgentProfile: "test", AgentSettings: map[string]string{"bogus": "x"}, Enabled: true}); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("a setting the driver refuses is refused on save: %v", err)
+	}
+	schedule, err := put(&v1.Schedule{RepositoryId: repository, Cron: "0 9 * * *", Title: "Triage {{date}}", Prompt: "Look at CI for {{repo}}", AgentProfile: "test", AgentSettings: map[string]string{"reasoning": "high"}, Labels: []string{"ci"}, Enabled: true})
 	if err != nil || schedule.Id == "" || schedule.NextRunAt == nil {
 		t.Fatalf("put: %v %v", schedule, err)
 	}
@@ -52,7 +55,7 @@ func TestSchedulesStartItemsLikeTheDashboard(t *testing.T) {
 		id = partialItem(err)
 	}
 	created := item(id)
-	if created.Title != "Triage "+time.Now().Format("2006-01-02") || created.AgentProfile != "test" || len(created.Labels) != 1 || created.Labels[0] != "ci" {
+	if created.Title != "Triage "+time.Now().Format("2006-01-02") || created.AgentProfile != "test" || created.AgentSettings["reasoning"] != "high" || len(created.Labels) != 1 || created.Labels[0] != "ci" {
 		t.Fatalf("run created: %v", created)
 	}
 	description, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id, IncludeDescription: true}))

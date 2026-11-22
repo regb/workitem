@@ -430,6 +430,13 @@ func (a *App) adoptReportedSettings(ctx context.Context, id string, definition m
 	return a.Store.AppendEvent(ctx, m.ID, model.NewEvent(m.UpdatedAt, "agent.settings_adopted", "runtime", map[string]any{"settings": names}))
 }
 
+// NormalizeAgentSettings checks the settings a new item may override, as
+// creating one does, and drops empty ones.
+func NormalizeAgentSettings(settings map[string]string) (map[string]string, error) {
+	normalized, _, err := mergeSettings(nil, settings)
+	return normalized, err
+}
+
 // mergeSettings applies changes to an item's overrides and reports which
 // settings changed. An item chooses only its model and reasoning level; the
 // rest of the configuration stays with the operator's profile.

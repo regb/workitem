@@ -15,9 +15,9 @@ wi schedule edit 01M7 --cron "30 8 * * 1-5"
 wi schedule rm 01M7
 ```
 
-A schedule has a repository, a cron expression, an agent profile and a prompt, all required, and optionally a title and labels for the items it creates. The prompt is stored in the schedule itself, in the daemon. `--prompt-file` and `--stdin` are only ways to pass a long prompt: the command reads the file or standard input once, when `add` or `edit` runs, and sends its text. The file can live anywhere, even a temporary file. wi does not keep its path or read it again, so later changes to the file have no effect. To change the prompt, pass the new text to `wi schedule edit ID` with `--prompt`, `--prompt-file` or `--stdin`. `wi schedule --json` shows the full stored prompt.
+A schedule has a repository, a cron expression, an agent profile and a prompt, all required, and optionally a title and labels for the items it creates, and a model and thinking level for their agents (`--model`, `--reasoning`); without them, runs use the profile's. The prompt is stored in the schedule itself, in the daemon. `--prompt-file` and `--stdin` are only ways to pass a long prompt: the command reads the file or standard input once, when `add` or `edit` runs, and sends its text. The file can live anywhere, even a temporary file. wi does not keep its path or read it again, so later changes to the file have no effect. To change the prompt, pass the new text to `wi schedule edit ID` with `--prompt`, `--prompt-file` or `--stdin`. `wi schedule --json` shows the full stored prompt.
 
-In the web app, schedules are under **Settings → Schedules**, where a toggle enables or disables each one.
+In the web app, schedules are under **Settings → Schedules**, where a toggle enables or disables each one. Editing one picks its agent, model and thinking level the way new work does.
 
 ## Cron and templates
 

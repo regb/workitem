@@ -87,6 +87,8 @@ func rpcPutSchedule(ctx context.Context, action string, args []string, cfg Confi
 	promptFile := fs.String("prompt-file", "", "read the prompt from a file")
 	stdin := fs.Bool("stdin", false, "read the prompt from standard input")
 	agent := fs.String("agent", "", "agent profile")
+	modelName := fs.String("model", "", "model for each run; empty uses the profile's")
+	reasoning := fs.String("reasoning", "", "reasoning level for each run; empty uses the profile's")
 	disabled := fs.Bool("disabled", false, "create the schedule disabled")
 	var labels repeatFlag
 	fs.Var(&labels, "label", "label; repeatable")
@@ -137,6 +139,20 @@ func rpcPutSchedule(ctx context.Context, action string, args []string, cfg Confi
 	}
 	if set["agent"] {
 		value.AgentProfile = *agent
+	}
+	// An empty value resets the setting to the profile's.
+	for name, flagged := range map[string]*string{"model": modelName, "reasoning": reasoning} {
+		if !set[name] {
+			continue
+		}
+		if value.AgentSettings == nil {
+			value.AgentSettings = map[string]string{}
+		}
+		if *flagged == "" {
+			delete(value.AgentSettings, name)
+		} else {
+			value.AgentSettings[name] = *flagged
+		}
 	}
 	if *clearLabels {
 		value.Labels = nil
@@ -224,7 +240,13 @@ func renderSchedules(w io.Writer, schedules []*v1.Schedule) error {
 		if title == "" {
 			title = "(generated)"
 		}
-		fmt.Fprintf(w, "  Title:  %s\n  Agent:  %s\n", title, s.AgentProfile)
+		agent := s.AgentProfile
+		for _, name := range []string{"model", "reasoning"} {
+			if value := s.AgentSettings[name]; value != "" {
+				agent += ", " + name + " " + value
+			}
+		}
+		fmt.Fprintf(w, "  Title:  %s\n  Agent:  %s\n", title, agent)
 		if len(s.Labels) > 0 {
 			fmt.Fprintf(w, "  Labels: %s\n", strings.Join(s.Labels, ", "))
 		}

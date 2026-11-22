@@ -49,9 +49,12 @@ type Schedule struct {
 	NextRunAt *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=next_run_at,json=nextRunAt,proto3" json:"next_run_at,omitempty"`
 	// last_run_at, last_item_id and last_error describe the latest firing:
 	// the item it started, or why it could not.
-	LastRunAt     *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_run_at,json=lastRunAt,proto3" json:"last_run_at,omitempty"`
-	LastItemId    string                 `protobuf:"bytes,14,opt,name=last_item_id,json=lastItemId,proto3" json:"last_item_id,omitempty"`
-	LastError     string                 `protobuf:"bytes,15,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	LastRunAt  *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=last_run_at,json=lastRunAt,proto3" json:"last_run_at,omitempty"`
+	LastItemId string                 `protobuf:"bytes,14,opt,name=last_item_id,json=lastItemId,proto3" json:"last_item_id,omitempty"`
+	LastError  string                 `protobuf:"bytes,15,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	// agent_settings override the profile's settings for each run's item, as
+	// CreateItemRequest.agent_settings does: model and reasoning.
+	AgentSettings map[string]string `protobuf:"bytes,16,rep,name=agent_settings,json=agentSettings,proto3" json:"agent_settings,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -189,6 +192,13 @@ func (x *Schedule) GetLastError() string {
 		return x.LastError
 	}
 	return ""
+}
+
+func (x *Schedule) GetAgentSettings() map[string]string {
+	if x != nil {
+		return x.AgentSettings
+	}
+	return nil
 }
 
 type ListSchedulesRequest struct {
@@ -544,7 +554,7 @@ var File_wi_core_v1_schedules_proto protoreflect.FileDescriptor
 const file_wi_core_v1_schedules_proto_rawDesc = "" +
 	"\n" +
 	"\x1awi/core/v1/schedules.proto\x12\n" +
-	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xa3\x04\n" +
+	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb5\x05\n" +
 	"\bSchedule\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\rR\brevision\x12#\n" +
@@ -565,7 +575,11 @@ const file_wi_core_v1_schedules_proto_rawDesc = "" +
 	"\flast_item_id\x18\x0e \x01(\tR\n" +
 	"lastItemId\x12\x1d\n" +
 	"\n" +
-	"last_error\x18\x0f \x01(\tR\tlastError\"\x16\n" +
+	"last_error\x18\x0f \x01(\tR\tlastError\x12N\n" +
+	"\x0eagent_settings\x18\x10 \x03(\v2'.wi.core.v1.Schedule.AgentSettingsEntryR\ragentSettings\x1a@\n" +
+	"\x12AgentSettingsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x16\n" +
 	"\x14ListSchedulesRequest\"K\n" +
 	"\x15ListSchedulesResponse\x122\n" +
 	"\tschedules\x18\x01 \x03(\v2\x14.wi.core.v1.ScheduleR\tschedules\"s\n" +
@@ -599,7 +613,7 @@ func file_wi_core_v1_schedules_proto_rawDescGZIP() []byte {
 	return file_wi_core_v1_schedules_proto_rawDescData
 }
 
-var file_wi_core_v1_schedules_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_wi_core_v1_schedules_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_wi_core_v1_schedules_proto_goTypes = []any{
 	(*Schedule)(nil),               // 0: wi.core.v1.Schedule
 	(*ListSchedulesRequest)(nil),   // 1: wi.core.v1.ListSchedulesRequest
@@ -610,29 +624,31 @@ var file_wi_core_v1_schedules_proto_goTypes = []any{
 	(*DeleteScheduleResponse)(nil), // 6: wi.core.v1.DeleteScheduleResponse
 	(*RunScheduleRequest)(nil),     // 7: wi.core.v1.RunScheduleRequest
 	(*RunScheduleResponse)(nil),    // 8: wi.core.v1.RunScheduleResponse
-	(*timestamppb.Timestamp)(nil),  // 9: google.protobuf.Timestamp
+	nil,                            // 9: wi.core.v1.Schedule.AgentSettingsEntry
+	(*timestamppb.Timestamp)(nil),  // 10: google.protobuf.Timestamp
 }
 var file_wi_core_v1_schedules_proto_depIdxs = []int32{
-	9,  // 0: wi.core.v1.Schedule.created_at:type_name -> google.protobuf.Timestamp
-	9,  // 1: wi.core.v1.Schedule.updated_at:type_name -> google.protobuf.Timestamp
-	9,  // 2: wi.core.v1.Schedule.next_run_at:type_name -> google.protobuf.Timestamp
-	9,  // 3: wi.core.v1.Schedule.last_run_at:type_name -> google.protobuf.Timestamp
-	0,  // 4: wi.core.v1.ListSchedulesResponse.schedules:type_name -> wi.core.v1.Schedule
-	0,  // 5: wi.core.v1.PutScheduleRequest.schedule:type_name -> wi.core.v1.Schedule
-	0,  // 6: wi.core.v1.PutScheduleResponse.schedule:type_name -> wi.core.v1.Schedule
-	1,  // 7: wi.core.v1.ScheduleService.ListSchedules:input_type -> wi.core.v1.ListSchedulesRequest
-	3,  // 8: wi.core.v1.ScheduleService.PutSchedule:input_type -> wi.core.v1.PutScheduleRequest
-	5,  // 9: wi.core.v1.ScheduleService.DeleteSchedule:input_type -> wi.core.v1.DeleteScheduleRequest
-	7,  // 10: wi.core.v1.ScheduleService.RunSchedule:input_type -> wi.core.v1.RunScheduleRequest
-	2,  // 11: wi.core.v1.ScheduleService.ListSchedules:output_type -> wi.core.v1.ListSchedulesResponse
-	4,  // 12: wi.core.v1.ScheduleService.PutSchedule:output_type -> wi.core.v1.PutScheduleResponse
-	6,  // 13: wi.core.v1.ScheduleService.DeleteSchedule:output_type -> wi.core.v1.DeleteScheduleResponse
-	8,  // 14: wi.core.v1.ScheduleService.RunSchedule:output_type -> wi.core.v1.RunScheduleResponse
-	11, // [11:15] is the sub-list for method output_type
-	7,  // [7:11] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	10, // 0: wi.core.v1.Schedule.created_at:type_name -> google.protobuf.Timestamp
+	10, // 1: wi.core.v1.Schedule.updated_at:type_name -> google.protobuf.Timestamp
+	10, // 2: wi.core.v1.Schedule.next_run_at:type_name -> google.protobuf.Timestamp
+	10, // 3: wi.core.v1.Schedule.last_run_at:type_name -> google.protobuf.Timestamp
+	9,  // 4: wi.core.v1.Schedule.agent_settings:type_name -> wi.core.v1.Schedule.AgentSettingsEntry
+	0,  // 5: wi.core.v1.ListSchedulesResponse.schedules:type_name -> wi.core.v1.Schedule
+	0,  // 6: wi.core.v1.PutScheduleRequest.schedule:type_name -> wi.core.v1.Schedule
+	0,  // 7: wi.core.v1.PutScheduleResponse.schedule:type_name -> wi.core.v1.Schedule
+	1,  // 8: wi.core.v1.ScheduleService.ListSchedules:input_type -> wi.core.v1.ListSchedulesRequest
+	3,  // 9: wi.core.v1.ScheduleService.PutSchedule:input_type -> wi.core.v1.PutScheduleRequest
+	5,  // 10: wi.core.v1.ScheduleService.DeleteSchedule:input_type -> wi.core.v1.DeleteScheduleRequest
+	7,  // 11: wi.core.v1.ScheduleService.RunSchedule:input_type -> wi.core.v1.RunScheduleRequest
+	2,  // 12: wi.core.v1.ScheduleService.ListSchedules:output_type -> wi.core.v1.ListSchedulesResponse
+	4,  // 13: wi.core.v1.ScheduleService.PutSchedule:output_type -> wi.core.v1.PutScheduleResponse
+	6,  // 14: wi.core.v1.ScheduleService.DeleteSchedule:output_type -> wi.core.v1.DeleteScheduleResponse
+	8,  // 15: wi.core.v1.ScheduleService.RunSchedule:output_type -> wi.core.v1.RunScheduleResponse
+	12, // [12:16] is the sub-list for method output_type
+	8,  // [8:12] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_schedules_proto_init() }
@@ -646,7 +662,7 @@ func file_wi_core_v1_schedules_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_schedules_proto_rawDesc), len(file_wi_core_v1_schedules_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

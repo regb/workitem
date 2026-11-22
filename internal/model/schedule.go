@@ -21,17 +21,20 @@ const (
 // Schedule starts a new item in a repository on a cron schedule, as if its
 // prompt had been sent from the dashboard. Runs are ordinary items.
 type Schedule struct {
-	ID           string    `json:"id"`
-	Revision     uint32    `json:"revision"`
-	RepositoryID string    `json:"repository_id"`
-	Cron         string    `json:"cron"`
-	Title        string    `json:"title,omitempty"`
-	Prompt       string    `json:"prompt"`
-	AgentProfile string    `json:"agent_profile"`
-	Labels       []string  `json:"labels,omitempty"`
-	Enabled      bool      `json:"enabled"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           string `json:"id"`
+	Revision     uint32 `json:"revision"`
+	RepositoryID string `json:"repository_id"`
+	Cron         string `json:"cron"`
+	Title        string `json:"title,omitempty"`
+	Prompt       string `json:"prompt"`
+	AgentProfile string `json:"agent_profile"`
+	// AgentSettings override the profile's settings, such as the model, for
+	// each run's item.
+	AgentSettings map[string]string `json:"agent_settings,omitempty"`
+	Labels        []string          `json:"labels,omitempty"`
+	Enabled       bool              `json:"enabled"`
+	CreatedAt     time.Time         `json:"created_at"`
+	UpdatedAt     time.Time         `json:"updated_at"`
 	// NextRunAt is the next firing of an enabled schedule.
 	NextRunAt *time.Time `json:"next_run_at,omitempty"`
 	// LastRunAt, LastItemID and LastError describe the latest firing.
