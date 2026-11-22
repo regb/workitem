@@ -35,7 +35,13 @@ func rpcMerge(ctx context.Context, args []string, cfg Config, jsonOut bool) erro
 	if err != nil {
 		return err
 	}
-	value, err := cfg.API.Repositories.IntegrateItem(ctx, rpcRequest(cfg, &v1.IntegrateItemRequest{ItemId: id, TargetBranch: *target, Local: *local, Rebase: *rebase, Message: *message}))
+	request := &v1.IntegrateItemRequest{ItemId: id, TargetBranch: *target, Local: *local, Rebase: *rebase, Message: *message}
+	// An agent merging its own item does so from inside its turn: it says
+	// which runtime it is, and the merge does not wait for that turn.
+	if runtime := cfg.Env["WI_AGENT_RUNTIME_ID"]; runtime != "" && cfg.Env["WI_ID"] == id {
+		request.AgentRuntimeId = runtime
+	}
+	value, err := cfg.API.Repositories.IntegrateItem(ctx, rpcRequest(cfg, request))
 	if err != nil {
 		return err
 	}

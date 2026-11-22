@@ -172,10 +172,21 @@ func (s *Server) IntegrateItem(ctx context.Context, req *connect.Request[v1.Inte
 	if _, err := s.canonical(ctx, req.Msg.ItemId, 0); err != nil {
 		return nil, rpcError(err)
 	}
+	// The item's own agent may merge from inside its turn; only its running
+	// runtime counts as its own.
+	if id := req.Msg.AgentRuntimeId; id != "" {
+		runtime, err := s.App.AgentRuntimeStatus(ctx, resolve(req.Msg.ItemId))
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		if !runtime.Online || runtime.Runtime == nil || runtime.Runtime.ID != id {
+			return nil, precondition("agent_runtime_id is not this item's running agent")
+		}
+	}
 	job := s.startJobKey("integrate_item", "integrate_item:"+req.Msg.TargetBranch+fmt.Sprint(req.Msg.Local, req.Msg.Rebase)+req.Msg.Message, req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(req.Msg.ItemId)
 		defer unlock()
-		result, err := s.App.MergeWorkItem(ctx, app.MergeOptions{Selector: req.Msg.ItemId, Target: req.Msg.TargetBranch, Local: req.Msg.Local, Rebase: req.Msg.Rebase, Message: req.Msg.Message})
+		result, err := s.App.MergeWorkItem(ctx, app.MergeOptions{Selector: req.Msg.ItemId, Target: req.Msg.TargetBranch, Local: req.Msg.Local, Rebase: req.Msg.Rebase, Message: req.Msg.Message, ByOwnAgent: req.Msg.AgentRuntimeId != ""})
 		if err != nil && result.RevisionID != "" {
 			completed := []string{"captured merge input " + result.RevisionID}
 			if result.SourceCommitted {

@@ -1252,9 +1252,15 @@ type IntegrateItemRequest struct {
 	// Preserve the rebased series instead of the default single squash commit.
 	Rebase bool `protobuf:"varint,4,opt,name=rebase,proto3" json:"rebase,omitempty"`
 	// Squash message; defaults to the item title.
-	Message       string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Message string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	// agent_runtime_id is set when the item's own agent merges from inside
+	// its turn: its runtime's ID, which the CLI reads from the agent's
+	// environment. A merge otherwise waits for the agent to be idle, so it
+	// never captures a checkout mid-edit; the agent asking is waiting on the
+	// merge, so its turn does not count. Any other runtime ID is refused.
+	AgentRuntimeId string `protobuf:"bytes,6,opt,name=agent_runtime_id,json=agentRuntimeId,proto3" json:"agent_runtime_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *IntegrateItemRequest) Reset() {
@@ -1318,6 +1324,13 @@ func (x *IntegrateItemRequest) GetRebase() bool {
 func (x *IntegrateItemRequest) GetMessage() string {
 	if x != nil {
 		return x.Message
+	}
+	return ""
+}
+
+func (x *IntegrateItemRequest) GetAgentRuntimeId() string {
+	if x != nil {
+		return x.AgentRuntimeId
 	}
 	return ""
 }
@@ -3248,13 +3261,14 @@ const file_wi_core_v1_repositories_proto_rawDesc = "" +
 	"\x04mode\x18\x02 \x01(\x0e2\x14.wi.core.v1.SyncModeR\x04mode\x12\x18\n" +
 	"\aconfirm\x18\x03 \x01(\bR\aconfirm\";\n" +
 	"\x16SyncRepositoryResponse\x12!\n" +
-	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\x9c\x01\n" +
+	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\xc6\x01\n" +
 	"\x14IntegrateItemRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12#\n" +
 	"\rtarget_branch\x18\x02 \x01(\tR\ftargetBranch\x12\x14\n" +
 	"\x05local\x18\x03 \x01(\bR\x05local\x12\x16\n" +
 	"\x06rebase\x18\x04 \x01(\bR\x06rebase\x12\x18\n" +
-	"\amessage\x18\x05 \x01(\tR\amessage\":\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage\x12(\n" +
+	"\x10agent_runtime_id\x18\x06 \x01(\tR\x0eagentRuntimeId\":\n" +
 	"\x15IntegrateItemResponse\x12!\n" +
 	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"$\n" +
 	"\n" +

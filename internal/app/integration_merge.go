@@ -47,6 +47,9 @@ type MergeOptions struct {
 	Local    bool
 	Rebase   bool
 	Message  string
+	// ByOwnAgent means the item's running agent asked, from inside its
+	// turn, which waits on the merge: that turn does not hold it back.
+	ByOwnAgent bool
 }
 
 type MergeResult struct {
@@ -86,7 +89,7 @@ func (a *App) MergeWorkItem(ctx context.Context, opts MergeOptions) (result Merg
 		return MergeResult{}, err
 	}
 	defer operation.Release()
-	if err := a.ensureMergeIdle(ctx, m.ID); err != nil {
+	if err := a.ensureMergeIdle(ctx, m.ID, opts.ByOwnAgent); err != nil {
 		return MergeResult{WorkItemID: m.ID, RevisionID: input.ID}, err
 	}
 	res := MergeResult{WorkItemID: m.ID, SourceBranch: expectedCheckoutBranch(m), Warnings: []string{}, RevisionID: input.ID}
@@ -431,16 +434,19 @@ type mergeInput struct {
 	ClaimGeneration uint64
 }
 
-func (a *App) ensureMergeIdle(ctx context.Context, item string) error {
+func (a *App) ensureMergeIdle(ctx context.Context, item string, byOwnAgent bool) error {
 	if a.ReviewCaptures != nil && a.ReviewCaptures.Capturing(item) {
 		return fmt.Errorf("code capture is in progress; wait for capture to finish before merging")
+	}
+	if byOwnAgent {
+		return nil
 	}
 	runtime, err := a.AgentRuntimeStatus(ctx, ResolveOptions{Selector: item})
 	if err != nil {
 		return err
 	}
 	if runtime.Online && a.AgentBusy(ctx, item) {
-		return fmt.Errorf("agent is busy running a turn; wait for it to finish before merging")
+		return fmt.Errorf("agent is busy running a turn; wait for it to finish before merging, or have the agent run wi merge itself")
 	}
 	return nil
 }
@@ -459,7 +465,7 @@ func (a *App) captureMergeInput(ctx context.Context, opts MergeOptions) (mergeIn
 	if branch != expectedCheckoutBranch(m) {
 		return mergeInput{}, fmt.Errorf("checkout branch mismatch: expected %s, found %s", expectedCheckoutBranch(m), branch)
 	}
-	if err := a.ensureMergeIdle(ctx, m.ID); err != nil {
+	if err := a.ensureMergeIdle(ctx, m.ID, opts.ByOwnAgent); err != nil {
 		return mergeInput{}, err
 	}
 	id, err := model.NewID()

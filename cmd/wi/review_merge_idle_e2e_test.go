@@ -78,4 +78,28 @@ func TestMergeAllowsIdleOnlineAgentAndRefusesRunningTurn(t *testing.T) {
 	if out, err := f.command("merge", "--item", item, "--local"); err == nil || !strings.Contains(string(out), "busy running a turn") {
 		t.Fatalf("busy merge not refused clearly: %v %s", err, out)
 	}
+	// The item's own agent merges from inside its turn: it names its
+	// runtime, as its environment gives it, and only that runtime counts.
+	// The runtime's ID names its state directory; the daemon gives it to the
+	// agent's environment.
+	runtimes, _ := filepath.Glob(filepath.Join(f.root, "state", "wi", "*", "items", item, "runtimes", "*"))
+	if len(runtimes) != 1 {
+		t.Fatalf("runtimes: %v", runtimes)
+	}
+	runtimeID := filepath.Base(runtimes[0])
+	asAgent := func(runtimeID string) ([]byte, error) {
+		cmd := exec.Command(f.wi, "merge", "--item", item, "--local")
+		cmd.Env = append(append([]string{}, f.env...), "WI_ID="+item, "WI_AGENT_RUNTIME_ID="+runtimeID)
+		cmd.Dir = f.root
+		return cmd.CombinedOutput()
+	}
+	if out, err := asAgent("another-runtime"); err == nil || !strings.Contains(string(out), "not this item's running agent") {
+		t.Fatalf("a foreign runtime merged: %v %s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(ws.Msg.Checkout.Claim.Path, "agent-work.txt"), []byte("merged by its own agent\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := asAgent(runtimeID); err != nil {
+		t.Fatalf("the agent's own merge from inside its turn: %v %s", err, out)
+	}
 }
