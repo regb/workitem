@@ -241,3 +241,43 @@ func TestAUsageLimitSettlesNamingAntigravity(t *testing.T) {
 		t.Fatalf("settled: %+v", settled)
 	}
 }
+
+// ACP has no skills, so agy gets wi's in its appended system prompt, with
+// the operator's instructions and where to put what the operator should
+// see: its own artifacts folder is invisible to them.
+func TestSystemPromptCarriesSkillsAndWhereDeliverablesGo(t *testing.T) {
+	rt := &runtime{request: protocol.LaunchRequest{
+		AppendSystemPrompt: "Be brief.",
+		Skills:             []protocol.Skill{{Name: "wi", Files: []protocol.SkillFile{{Path: "SKILL.md", Data: []byte("Attach reports with wi attach.")}, {Path: "notes.txt", Data: []byte("ignored")}}}},
+	}}
+	rt.init.AgentCapabilities.Meta = json.RawMessage(`{"antigravity":{"systemPrompt":{"append":true}}}`)
+	var meta struct {
+		Antigravity struct {
+			SystemPrompt struct {
+				Append string `json:"append"`
+			} `json:"systemPrompt"`
+		} `json:"antigravity"`
+	}
+	if err := json.Unmarshal(rt.sessionMeta(), &meta); err != nil {
+		t.Fatal(err)
+	}
+	text := meta.Antigravity.SystemPrompt.Append
+	for _, want := range []string{"Be brief.", "# Skill: wi", "Attach reports with wi attach.", "artifacts folder", "wi attach FILE"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("system prompt lacks %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "ignored") || strings.Index(text, "Be brief.") > strings.Index(text, "# Skill: wi") {
+		t.Fatalf("system prompt:\n%s", text)
+	}
+	// Without the operator's instructions or skills, the note still goes.
+	rt.request = protocol.LaunchRequest{}
+	if !strings.Contains(string(rt.sessionMeta()), "artifacts folder") {
+		t.Fatal("no note without instructions")
+	}
+	// An agy that cannot append gets nothing.
+	rt.init.AgentCapabilities.Meta = nil
+	if rt.sessionMeta() != nil {
+		t.Fatal("appended to an agy that cannot")
+	}
+}

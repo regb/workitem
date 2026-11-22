@@ -125,11 +125,12 @@ func TestAntigravityDriverEndToEnd(t *testing.T) {
 		}
 	}
 
-	// wi's instructions reach the agent's system prompt.
+	// wi's instructions reach the agent's system prompt: the wi skill, which
+	// ACP has no other way to pass, and where deliverables go.
 	send("system", v1.Delivery_DELIVERY_PROMPT)
 	waitReply("System: ")
-	if strings.TrimPrefix(lastReply(), "System: ") == "" {
-		t.Fatalf("no system prompt addition: %q", lastReply())
+	if system := lastReply(); !strings.Contains(system, "# Skill: wi") || !strings.Contains(system, "wi attach FILE") {
+		t.Fatalf("system prompt addition: %q", system)
 	}
 	f.idle(item)
 

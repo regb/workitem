@@ -372,13 +372,37 @@ func (rt *runtime) signInError(err error) error {
 	return err
 }
 
+// deliverables tells agy where the operator can see what it writes: its own
+// artifact folder is private to it, and wi shows only the checkout and the
+// item's attachments.
+const deliverables = `Your artifacts folder (under ~/.gemini) is private to you: the operator cannot see or open anything there. Write a file the operator should read, such as a report, plan or review, into the working directory, or attach it to the work item with ` + "`wi attach FILE`" + `, and refer to it by that path or name.`
+
+// systemPrompt is what wi appends to agy's system prompt: the operator's
+// instructions, the skills wi gives every agent, which ACP has no other way
+// to pass, and where deliverables go.
+func (rt *runtime) systemPrompt() string {
+	parts := []string{}
+	if text := strings.TrimSpace(rt.request.AppendSystemPrompt); text != "" {
+		parts = append(parts, text)
+	}
+	skills := rt.request.Skills
+	if protocol.ValidateSkills(skills) != nil {
+		skills = nil
+	}
+	for _, skill := range skills {
+		for _, file := range skill.Files {
+			if file.Path == "SKILL.md" {
+				parts = append(parts, fmt.Sprintf("# Skill: %s\n\n%s", skill.Name, strings.TrimSpace(string(file.Data))))
+			}
+		}
+	}
+	return strings.Join(append(parts, deliverables), "\n\n")
+}
+
 // sessionMeta asks agy to append wi's instructions to its system prompt,
 // when it says it can.
 func (rt *runtime) sessionMeta() json.RawMessage {
-	text := strings.TrimSpace(rt.request.AppendSystemPrompt)
-	if text == "" {
-		return nil
-	}
+	text := rt.systemPrompt()
 	var meta struct {
 		Antigravity struct {
 			SystemPrompt struct {
