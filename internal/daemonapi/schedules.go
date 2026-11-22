@@ -108,11 +108,18 @@ func (s *Server) RunSchedule(ctx context.Context, req *connect.Request[v1.RunSch
 	return connect.NewResponse(&v1.RunScheduleResponse{ItemId: itemID}), nil
 }
 
+// scheduleClient is the client the daemon runs schedules as: a run is the
+// schedule's, not the caller's, and the scheduler has no caller at all.
+const scheduleClient = "wi-schedule"
+
 // fireSchedule starts the schedule's item as the dashboard starts one: the
 // prompt as its description and first message, a generated title unless the
 // schedule sets one, and a headless agent. key makes a repeated firing
-// create no second item. The outcome is recorded on the schedule.
+// create no second item. The outcome is recorded on the schedule: at once
+// when the item cannot be created, and when its start finishes, so a run
+// whose prompt never reached the agent says why.
 func (s *Server) fireSchedule(ctx context.Context, value model.Schedule, at time.Time, key string) (string, error) {
+	ctx, done := s.actOnItself(ctx, "", scheduleClient, "schedule")
 	repoName := value.RepositoryID
 	if repo, err := s.repo(ctx, value.RepositoryID); err == nil {
 		repoName = repo.Name
@@ -125,9 +132,11 @@ func (s *Server) fireSchedule(ctx context.Context, value model.Schedule, at time
 	}
 	itemID, failure := "", ""
 	created, err := s.CreateAndStartItem(ctx, connect.NewRequest(request))
+	var job *v1.Job
 	if created != nil && created.Msg.Item != nil {
-		itemID = created.Msg.Item.Id
+		itemID, job = created.Msg.Item.Id, created.Msg.Job
 	}
+	done(job)
 	if err != nil {
 		failure = err.Error()
 		if itemID == "" {
@@ -136,6 +145,20 @@ func (s *Server) fireSchedule(ctx context.Context, value model.Schedule, at time
 	}
 	if recordErr := s.Core.Database().RecordScheduleRun(value.ID, at, itemID, failure); recordErr != nil {
 		fmt.Fprintf(os.Stderr, "wi: record schedule %s run: %v\n", value.ID, recordErr)
+	}
+	if job != nil && err == nil && s.startCallback() {
+		go func() {
+			defer s.callbacks.Done()
+			if outcome := s.jobOutcome(s.ctx, job.Id); outcome != nil && outcome.State != v1.JobState_JOB_STATE_SUCCEEDED {
+				failure := outcome.Error
+				if failure == "" {
+					failure = "the run's start did not finish"
+				}
+				if recordErr := s.Core.Database().RecordScheduleOutcome(value.ID, itemID, "starting the run: "+failure); recordErr != nil {
+					fmt.Fprintf(os.Stderr, "wi: record schedule %s outcome: %v\n", value.ID, recordErr)
+				}
+			}
+		}()
 	}
 	return itemID, err
 }

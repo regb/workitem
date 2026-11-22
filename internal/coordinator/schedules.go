@@ -186,3 +186,20 @@ func (d *Database) RecordScheduleRun(id string, at time.Time, itemID, failure st
 		return writeSchedule(bucket, current)
 	})
 }
+
+// RecordScheduleOutcome records why a run's start failed, unless a later run
+// has been recorded since.
+func (d *Database) RecordScheduleOutcome(id, itemID, failure string) error {
+	return d.updateNotify(func(tx *bolt.Tx) error {
+		bucket, err := scheduleBucket(tx)
+		if err != nil {
+			return err
+		}
+		current, found, err := readSchedule(bucket, id)
+		if err != nil || !found || current.LastItemID != itemID {
+			return err
+		}
+		current.LastError = failure
+		return writeSchedule(bucket, current)
+	})
+}

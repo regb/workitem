@@ -37,4 +37,6 @@ The title and prompt can use these placeholders, filled in when the schedule fir
 
 The daemon checks for due schedules every 30 seconds. A firing up to five minutes late still runs. One missed by longer, because the daemon was stopped or the machine asleep, is skipped, and the schedule waits for its next run. Each firing creates a new item, even when an earlier run's item is still open. If the new item cannot start, for example because no deep-work capacity is free, it is still created, and the schedule's last run shows the error.
 
+A run is the schedule's own: the daemon creates the item and starts its agent itself, then gives control back, so the item is free for you or a browser to take. When the item cannot be created, or its start stops before the prompt reaches the agent, the schedule's last run shows why, in `wi schedule` and in Settings → Schedules.
+
 Editing or enabling a schedule computes its next run from now. Disabling it stops future firings; items it already started are unaffected, as they are when you remove it.

@@ -216,21 +216,13 @@ func (s *Server) sendFollowUps(ctx context.Context, m model.Manifest, observatio
 // holds control, if one does, so a follow-up never displaces it. The message
 // ID makes a repeated attempt deliver it once.
 func (s *Server) sendFollowUp(ctx context.Context, itemID string, followUp model.FollowUp) error {
-	who := identity{client: followUpClient, holder: "wi", actor: "follow-up"}
-	if lease, err := s.Local.Lease(ctx, itemID); err == nil && lease != nil {
-		who.client, who.holder = lease.ClientID, lease.Holder
-	} else {
-		// Control taken to send is given back at once, so no client finds
-		// the item controlled by the daemon.
-		defer func() {
-			if lease, err := s.Local.Lease(ctx, itemID); err == nil && lease != nil && lease.ClientID == followUpClient {
-				expected := lease.ID
-				_, _ = s.Local.ReleaseLease(ctx, model.LeaseRequest{ItemID: itemID, Holder: lease.Holder, ClientID: lease.ClientID, ExpectedLeaseID: &expected})
-			}
-		}()
+	ctx, done := s.actOnItself(ctx, itemID, followUpClient, "follow-up")
+	sent, err := s.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: itemID, Text: followUp.Message, ClientMessageId: "follow-up-" + followUp.ID}))
+	var job *v1.Job
+	if err == nil {
+		job = sent.Msg.Job
 	}
-	ctx = context.WithValue(ctx, identityKey{}, who)
-	_, err := s.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: itemID, Text: followUp.Message, ClientMessageId: "follow-up-" + followUp.ID}))
+	done(job)
 	return err
 }
 

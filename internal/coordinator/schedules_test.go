@@ -39,6 +39,17 @@ func TestSchedulesAreStoredEditedAndAdvancedOnce(t *testing.T) {
 	if err := db.RecordScheduleRun(created.ID, due, "item", ""); err != nil {
 		t.Fatal(err)
 	}
+	// A run's start failing later is recorded on it, but never over a later
+	// run's record.
+	if err := db.RecordScheduleOutcome(created.ID, "item", "starting the run: refused"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.RecordScheduleOutcome(created.ID, "earlier-item", "starting the run: stale"); err != nil {
+		t.Fatal(err)
+	}
+	if all, err := db.ListSchedules(); err != nil || all[0].LastError != "starting the run: refused" || all[0].LastItemID != "item" {
+		t.Fatalf("outcome: %+v %v", all, err)
+	}
 	// Disabling clears the next run; an edit keeps the last run.
 	edited, err := db.PutSchedule(model.Schedule{ID: created.ID, RepositoryID: "r", Cron: "0 9 * * *", Prompt: "q", AgentProfile: "a"}, 1, now)
 	if err != nil || edited.Revision != 2 || edited.NextRunAt != nil || edited.LastItemID != "item" || edited.Prompt != "q" {
