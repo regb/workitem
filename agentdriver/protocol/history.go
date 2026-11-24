@@ -1,8 +1,9 @@
 package driverprotocol
 
 // History is a bounded chronological view of one branch. LeafID is the native
-// branch identity. Truncated means older entries or oversized content were
-// omitted from this page. HasMore and BeforeID allow paging earlier entries.
+// branch identity. Truncated means content in this page was shortened or
+// left out: oversized text, images or tool calls. HasMore and BeforeID page
+// to earlier entries.
 // History is read-only native content, never a compact daemon event.
 type History struct {
 	// NativeEntryIDs preserves native chronology even when tool results fold into calls.

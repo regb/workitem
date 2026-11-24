@@ -297,9 +297,7 @@ func ReadHistoryPage(ctx context.Context, path, leaf, before string) (driverprot
 			}
 		}
 	}
-	if result.HasMore {
-		result.Truncated = true
-	} else {
+	if !result.HasMore {
 		result.BeforeID = ""
 	}
 	return result, nil

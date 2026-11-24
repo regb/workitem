@@ -97,7 +97,7 @@ func TestHistoryLimitsAndPublicOperation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.History == nil || !response.History.Truncated || len(response.History.Messages) != 200 {
+	if response.History == nil || !response.History.HasMore || response.History.Truncated || len(response.History.Messages) != 200 {
 		t.Fatalf("history limit %+v", response.History)
 	}
 }

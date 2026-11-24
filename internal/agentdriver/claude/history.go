@@ -374,9 +374,7 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		}
 	}
 	recoverSiblingResults(file, index, seen, result.Messages, &textRemaining, &imageRemaining, &result.Truncated)
-	if result.HasMore {
-		result.Truncated = true
-	} else {
+	if !result.HasMore {
 		result.BeforeID = ""
 	}
 	return result, nil

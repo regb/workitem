@@ -2578,7 +2578,9 @@ type GetHistoryResponse struct {
 	Messages []*ConversationMessage `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
 	LeafId   string                 `protobuf:"bytes,2,opt,name=leaf_id,json=leafId,proto3" json:"leaf_id,omitempty"`
 	// next_before reads the previous page; empty at the start.
-	NextBefore    string   `protobuf:"bytes,3,opt,name=next_before,json=nextBefore,proto3" json:"next_before,omitempty"`
+	NextBefore string `protobuf:"bytes,3,opt,name=next_before,json=nextBefore,proto3" json:"next_before,omitempty"`
+	// truncated means content in this page was shortened: oversized text,
+	// images or tool calls. Older entries are next_before's.
 	Truncated     bool     `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
 	Warnings      []string `protobuf:"bytes,5,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields

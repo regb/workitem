@@ -421,6 +421,8 @@ message GetHistoryResponse {
   string leaf_id = 2;
   // next_before reads the previous page; empty at the start.
   string next_before = 3;
+  // truncated means content in this page was shortened: oversized text,
+  // images or tool calls. Older entries are next_before's.
   bool truncated = 4;
   repeated string warnings = 5;
 }
