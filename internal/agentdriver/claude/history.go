@@ -17,13 +17,16 @@ import (
 )
 
 type historyRecord struct {
-	Type      string `json:"type"`
-	ID        string `json:"uuid"`
-	Parent    string `json:"parentUuid"`
-	PromptID  string `json:"promptId"`
-	Timestamp string `json:"timestamp"`
-	Sidechain bool   `json:"isSidechain"`
-	Meta      bool   `json:"isMeta"`
+	Type   string `json:"type"`
+	ID     string `json:"uuid"`
+	Parent string `json:"parentUuid"`
+	// LogicalParent links a compaction boundary, which has no parent, to
+	// the conversation it compacted.
+	LogicalParent string `json:"logicalParentUuid"`
+	PromptID      string `json:"promptId"`
+	Timestamp     string `json:"timestamp"`
+	Sidechain     bool   `json:"isSidechain"`
+	Meta          bool   `json:"isMeta"`
 	// Effort is the reasoning effort of an assistant reply.
 	Effort         string `json:"effort"`
 	CompactSummary bool   `json:"isCompactSummary"`
@@ -61,10 +64,29 @@ func (r historyRecord) steered() bool {
 }
 
 type historyOffset struct {
-	parent, typ, timestamp, reply string
-	offset                        int64
-	length                        int
-	visible                       bool
+	parent, logicalParent, typ, timestamp, reply string
+	// previous is the record written just before this one on its side of
+	// the transcript.
+	previous string
+	offset   int64
+	length   int
+	visible  bool
+}
+
+// next is the record before this one on its branch. A compaction boundary
+// starts a new parent chain; the conversation it compacted continues before
+// it. Its logical parent names that record, except that Claude sometimes
+// names one written after the boundary, while compacting, which descends
+// from the boundary; the record written just before the boundary is then the
+// conversation's last.
+func (h historyOffset) next(index map[string]historyOffset) string {
+	if h.parent != "" || h.typ != "system" || h.logicalParent == "" {
+		return h.parent
+	}
+	if logical, ok := index[h.logicalParent]; ok && logical.offset < h.offset {
+		return h.logicalParent
+	}
+	return h.previous
 }
 
 // ReadHistoryPage indexes the native parent graph without retaining message
@@ -134,13 +156,13 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 		}
 		start := offset
 		offset += int64(len(line))
-		if len(r.ID) > 128 || len(r.Parent) > 128 {
+		if len(r.ID) > 128 || len(r.Parent) > 128 || len(r.LogicalParent) > 128 {
 			return result, fmt.Errorf("invalid Claude history identity")
 		}
 		if r.ID == "" || r.Sidechain != sidechain {
 			continue
 		}
-		index[r.ID] = historyOffset{parent: r.Parent, typ: r.Type, timestamp: r.Timestamp, reply: r.Message.ID, offset: start, length: len(line), visible: (!r.Meta && (r.Type == "user" || r.Type == "assistant")) || r.steered() || r.CompactSummary || (r.Type == "system" && r.Subtype == "compact_boundary")}
+		index[r.ID] = historyOffset{parent: r.Parent, logicalParent: r.LogicalParent, previous: last, typ: r.Type, timestamp: r.Timestamp, reply: r.Message.ID, offset: start, length: len(line), visible: (!r.Meta && (r.Type == "user" || r.Type == "assistant")) || r.steered() || r.CompactSummary || (r.Type == "system" && r.Subtype == "compact_boundary")}
 		last = r.ID
 	}
 	if leaf == "" {
@@ -167,14 +189,14 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 			if id == before {
 				found = true
 			}
-			id = entry.parent
+			id = entry.next(index)
 			continue
 		}
 		if entry.visible {
 			candidates = append(candidates, entry)
 			ids = append(ids, id)
 		}
-		id = entry.parent
+		id = entry.next(index)
 	}
 	if !found {
 		return result, fmt.Errorf("history cursor is not on the selected Claude branch")

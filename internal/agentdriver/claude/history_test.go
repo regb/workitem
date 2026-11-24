@@ -120,6 +120,50 @@ func TestHistoryCompactionAndResultAcrossPageBoundary(t *testing.T) {
 	}
 }
 
+// A compaction boundary starts a new parent chain; the conversation before it
+// stays readable through the boundary's logical parent.
+func TestHistoryContinuesBeforeACompaction(t *testing.T) {
+	path := historyFixture(t,
+		`{"type":"user","uuid":"old","parentUuid":null,"message":{"content":"before"}}`,
+		`{"type":"assistant","uuid":"reply","parentUuid":"old","message":{"id":"m","content":[{"type":"text","text":"earlier answer"}]}}`,
+		`{"type":"system","subtype":"compact_boundary","uuid":"boundary","parentUuid":null,"logicalParentUuid":"reply","compactMetadata":{"preTokens":1}}`,
+		`{"type":"user","isMeta":true,"isCompactSummary":true,"uuid":"summary","parentUuid":"boundary","message":{"content":"summary text"}}`,
+		`{"type":"user","uuid":"new","parentUuid":"summary","message":{"content":"after"}}`,
+	)
+	h, err := ReadHistoryPage(context.Background(), path, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	texts := []string{}
+	for _, message := range h.Messages {
+		texts = append(texts, message.Text())
+	}
+	if got := strings.Join(texts, "|"); got != "before|earlier answer||summary text|after" {
+		t.Fatalf("history %q", got)
+	}
+	// Paging from the boundary reaches the earlier conversation too.
+	if h, err = ReadHistoryPage(context.Background(), path, "", "boundary"); err != nil || len(h.Messages) != 2 || h.Messages[1].Text() != "earlier answer" {
+		t.Fatalf("%+v %v", h, err)
+	}
+	// Claude can name a logical parent it wrote after the boundary, while
+	// compacting, which descends from the boundary: the record written before
+	// the boundary continues the history instead.
+	late := historyFixture(t,
+		`{"type":"user","uuid":"old","parentUuid":null,"message":{"content":"before"}}`,
+		`{"type":"system","subtype":"compact_boundary","uuid":"boundary","parentUuid":null,"logicalParentUuid":"reminder"}`,
+		`{"type":"attachment","uuid":"reminder","parentUuid":"boundary","attachment":{"type":"total_tokens_reminder"}}`,
+		`{"type":"user","uuid":"new","parentUuid":"reminder","message":{"content":"after"}}`,
+	)
+	if h, err = ReadHistoryPage(context.Background(), late, "", ""); err != nil || len(h.Messages) != 3 || h.Messages[0].Text() != "before" {
+		t.Fatalf("%+v %v", h, err)
+	}
+	// A logical parent no longer in the transcript ends the history there.
+	trimmed := historyFixture(t, `{"type":"system","subtype":"compact_boundary","uuid":"boundary","parentUuid":null,"logicalParentUuid":"gone"}`)
+	if h, err = ReadHistoryPage(context.Background(), trimmed, "", ""); err != nil || len(h.Messages) != 1 {
+		t.Fatalf("%+v %v", h, err)
+	}
+}
+
 func TestHistoryInvalidAndCanceled(t *testing.T) {
 	for _, line := range []string{`bad`, `{"type":"user","uuid":"a","parentUuid":"a"}`, `{"type":"user","uuid":"a","parentUuid":"missing"}`} {
 		if _, err := ReadHistoryPage(context.Background(), historyFixture(t, line), "", ""); err == nil {
