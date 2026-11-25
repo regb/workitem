@@ -420,6 +420,9 @@ func (s *Server) messageEnvelope(ctx context.Context, itemID, sender string) (mo
 		_, _ = s.App.MarkUnread(ctx, resolve(visible.ID))
 		return model.Envelope{}, precondition(fmt.Sprintf("agents have exchanged %d messages without a person; a person's message to %s resets this", hops-1, from))
 	}
+	if sent, err := s.Core.Database().APIMessagesFrom(itemID, sender, time.Now().Add(-time.Hour)); err == nil && sent >= model.MaxAgentMessagesPerHour {
+		return model.Envelope{}, connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("%s sent %s %d messages in the last hour; wait, or ask the user", sender, itemID, sent))
+	}
 	return model.Envelope{Marker: model.NewEnvelopeMarker(), From: sender, Title: source.Manifest.Title, Relation: relation, Hops: hops}, nil
 }
 

@@ -138,3 +138,24 @@ func (s *Server) RotateCredentials(ctx context.Context, req *connect.Request[v1.
 	s.credentials = next
 	return connect.NewResponse(&v1.RotateCredentialsResponse{}), nil
 }
+
+// callerOrigin is a call's origin: its principal, acting for itself when it
+// is a user, and for the user who owns the top of its item's owner chain
+// when it is an item's agent.
+func (s *Server) callerOrigin(ctx context.Context, who principal) model.Origin {
+	origin := model.Origin{Actor: who.String()}
+	if !who.item() {
+		return origin
+	}
+	origin.For = model.OperatorUser
+	if current, err := s.Local.CanonicalManifest(ctx, who.itemID); err == nil {
+		top := current.Manifest
+		if chain := model.OwnerChain(top, s.manifestLookup(ctx)); len(chain) > 0 {
+			top = chain[len(chain)-1]
+		}
+		if owner := top.OwnerPrincipal(); model.PrincipalItem(owner) == "" {
+			origin.For = owner
+		}
+	}
+	return origin
+}

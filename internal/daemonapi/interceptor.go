@@ -34,7 +34,7 @@ func (i apiInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) 
 			}
 		}
 		who := callerIdentity(principal, conn.RequestHeader())
-		ctx = model.WithOrigin(context.WithValue(ctx, identityKey{}, who), model.Origin{Actor: principal.String()})
+		ctx = model.WithOrigin(context.WithValue(ctx, identityKey{}, who), s.callerOrigin(ctx, principal))
 		return rpcError(next(ctx, conn))
 	}
 }

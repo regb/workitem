@@ -102,3 +102,22 @@ func (d *Database) LatestAPIMessage(itemID string) (APIMessageReceipt, bool, err
 	}
 	return latest, found, nil
 }
+
+// APIMessagesFrom counts the messages sender sent an item since a time.
+func (d *Database) APIMessagesFrom(itemID, sender string, since time.Time) (int, error) {
+	raw, err := d.ListProjection(apiMessagesProjection)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, data := range raw {
+		var value APIMessageReceipt
+		if err := json.Unmarshal(data, &value); err != nil {
+			return 0, err
+		}
+		if value.ItemID == itemID && value.Sender == sender && !value.CreatedAt.Before(since) {
+			count++
+		}
+	}
+	return count, nil
+}

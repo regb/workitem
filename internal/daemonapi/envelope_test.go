@@ -2,6 +2,7 @@ package daemonapi
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -84,5 +85,32 @@ func TestBlockersRecordWhoSetThem(t *testing.T) {
 	m, err := f.api.App.Store.LoadManifest(id)
 	if err != nil || len(m.Blockers) != 1 || m.Blockers[0].SetBy != model.ItemPrincipal(other.Msg.Item.Id) {
 		t.Fatalf("blockers: %+v %v", m.Blockers, err)
+	}
+}
+
+// One item's agent may send another item only so many messages an hour.
+func TestAgentMessagesAreRateLimited(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	repo := f.repo(t)
+	create := func(title string) string {
+		value, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: title}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value.Msg.Item.Id
+	}
+	from, to := create("from"), create("to")
+	sender := model.ItemPrincipal(from)
+	for i := 0; i < model.MaxAgentMessagesPerHour; i++ {
+		if err := f.core.Database().RecordAPIMessage(coordinator.APIMessageReceipt{ItemID: to, MessageID: fmt.Sprintf("m%d", i), RuntimeID: "r", Generation: 1, CreatedAt: time.Now().UTC(), Sender: sender}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := f.api.messageEnvelope(ctx, to, sender); connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("over the hourly limit: %v", err)
+	}
+	if _, err := f.api.messageEnvelope(ctx, from, model.ItemPrincipal(to)); err != nil {
+		t.Fatalf("the other way: %v", err)
 	}
 }

@@ -204,7 +204,7 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 			s.noteActivity()
 			caller := callerIdentity(who, req.Header())
 			ctx = context.WithValue(ctx, identityKey{}, caller)
-			ctx = model.WithOrigin(ctx, model.Origin{Actor: who.String()})
+			ctx = model.WithOrigin(ctx, s.callerOrigin(ctx, who))
 			if who.web() && !webAllowed(req.Spec().Procedure) {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("the web endpoint does not allow this operation"))
 			}

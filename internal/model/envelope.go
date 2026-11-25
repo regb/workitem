@@ -18,6 +18,10 @@ import (
 // person's message in between; a person's message resets the count.
 const MaxAgentHops = 8
 
+// MaxAgentMessagesPerHour bounds how many messages one item's agent sends
+// another item in an hour, however they are spread across turns.
+const MaxAgentMessagesPerHour = 30
+
 // Relations of a sending item to the receiving one.
 const (
 	RelationOwner      = "owner"      // the sender owns the receiving item
