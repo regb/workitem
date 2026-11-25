@@ -19,19 +19,19 @@ func (f *binaryFixture) cliControlCompatibility(item string) {
 	if err := os.WriteFile(file, []byte("legacy file prompt"), 0600); err != nil {
 		f.t.Fatal(err)
 	}
-	f.run("agent", "control", "send", "--item", item, "--file", file)
+	f.run("send", "--item", item, "--file", file)
 	f.historyReady(item, 6)
 	f.idle(item)
-	f.run("agent", "control", "send", "--item", item, "--follow-up", "legacy followup")
+	f.run("send", "--item", item, "--follow-up", "legacy followup")
 	f.historyReady(item, 8)
 	f.idle(item)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, f.wi, "agent", "control", "send", "--item", item, "--stdin")
+	command := exec.CommandContext(ctx, f.wi, "send", "--item", item, "--stdin")
 	command.Env = f.env
 	command.Dir = f.root
 	command.Stdin = strings.NewReader("legacy stdin prompt")
-	if out, err := command.CombinedOutput(); err != nil || !bytes.Contains(out, []byte("submitted")) {
+	if out, err := command.CombinedOutput(); err != nil || !bytes.Contains(out, []byte("sent to")) {
 		f.t.Fatalf("stdin send: %v %s", err, out)
 	}
 	f.historyReady(item, 10)
@@ -40,7 +40,7 @@ func (f *binaryFixture) cliControlCompatibility(item string) {
 	if err := os.WriteFile(image, []byte("\x89PNG\r\n\x1a\nimage"), 0600); err != nil {
 		f.t.Fatal(err)
 	}
-	f.run("agent", "control", "send", "--item", item, "--image", image)
+	f.run("send", "--item", item, "--image", image)
 	f.historyReady(item, 12)
 	f.idle(item)
 	f.run("agent", "control", "abort", "--item", item)

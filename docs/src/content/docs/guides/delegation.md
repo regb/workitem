@@ -23,7 +23,7 @@ wi new --desc-file handoff.md --title "Fix stale runtime ownership"
 wi start fix-stale-runtime-ownership
 ```
 
-Existing-item `start` starts the agent without sending a prompt. Ask the agent to read `wi show` in the TUI, or send that instruction with `wi agent control send`.
+Existing-item `start` starts the agent without sending a prompt. Ask the agent to read `wi show` in the TUI, or send that instruction with `wi send`.
 
 ## Prompt-only questions
 
@@ -39,7 +39,7 @@ The prompt goes to the conversation; no description or title is inferred from it
 ## Corrections and separate follow-ups
 
 ```bash
-wi agent control send --follow-up --item fix-stale-runtime-ownership \
+wi send --follow-up --item fix-stale-runtime-ownership \
   "Also test PID reuse and report the focused test command."
 wi agent monitor --content --item fix-stale-runtime-ownership
 ```

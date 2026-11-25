@@ -41,6 +41,12 @@ service SystemService {
   // sent before the daemon stops; the job reports the result to watchers
   // until then.
   rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+  // RotateCredentials replaces the operator's and wi web's credentials:
+  // their files get new ones, and the old ones stop working at once. Clients
+  // that read the files, such as the CLI and wi web, pick up the new ones.
+  // Item credentials are unaffected: they end with their runtimes. Only a
+  // person rotates them.
+  rpc RotateCredentials(RotateCredentialsRequest) returns (RotateCredentialsResponse);
 }
 
 message GetInfoRequest {}
@@ -155,6 +161,10 @@ message ShutdownRequest {
 message ShutdownResponse {
   Job job = 1;
 }
+
+message RotateCredentialsRequest {}
+
+message RotateCredentialsResponse {}
 
 message GetUsageRequest {
   // refresh asks the providers again rather than reading their cached

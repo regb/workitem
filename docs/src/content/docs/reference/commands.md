@@ -83,6 +83,7 @@ Use a JSON parser rather than matching serialized whitespace. An active item can
 | `wi events` | Read append-only item history |
 | `wi own` | Take an item an agent delegated; it becomes yours and appears in your list |
 | `wi send ITEM [--wait] MESSAGE` | Say something to an item's agent, starting it when needed; `--wait` prints its answer |
+| `wi auth rotate` | Replace the operator's and `wi web`'s credentials; the old ones stop working |
 | `wi access [list\|grant\|revoke]` | Say what items' agents may do to other items |
 | `wi proposal [list\|file\|dismiss]` | List the items agents proposed with `wi new --propose`, file one as yours, or dismiss it |
 | `wi note` / `wi notes` | Add to or read the item's log of short progress notes |
@@ -158,7 +159,6 @@ The former title, label, and deep metadata commands have been removed; there are
 | `wi agent profile remove NAME` / `wi agent profile default NAME` | Remove a profile, or make one the default |
 | `wi agent profile title-model [DRIVER [model=MODEL] [reasoning=LEVEL] \| --clear]` | Show or set the model that writes item titles, whatever agent an item uses; cleared, the default profile's model does |
 | `wi agent profile set PROFILE [NAME=VALUE...]` | Move a stopped item to another profile of its conversation's driver |
-| `wi agent control send` | Send steering or follow-up text and optional repeatable `--image` attachments |
 | `wi agent control abort` | Abort the current agent run |
 | `wi agent answer [ANSWER...]` | Show the question the agent waits on, or answer it: one answer per question, an option number or label, or your own text |
 

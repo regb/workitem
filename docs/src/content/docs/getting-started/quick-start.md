@@ -84,7 +84,7 @@ wi events add-api-retries
 When the agent is idle, review its changes before deciding that the task is done. Send another message if needed:
 
 ```bash
-wi agent control send --item add-api-retries \
+wi send --item add-api-retries \
   "Fix the failing retry test, rerun it, and report the command and result."
 ```
 

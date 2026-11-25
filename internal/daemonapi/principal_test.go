@@ -145,3 +145,30 @@ func TestActionsRecordWhoDidThem(t *testing.T) {
 		}
 	}
 }
+
+// Rotating replaces the operator's and wi web's credentials: the old ones
+// stop working, clients reading the files carry on.
+func TestRotatingCredentials(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	before, err := credential.Read(credential.OperatorFile(f.root+"/data"), credential.Operator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := f.clientsWith(t, func() (string, error) { return before.Token(), nil })
+	if _, err := stale.System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.clients.System.RotateCredentials(ctx, connect.NewRequest(&v1.RotateCredentialsRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stale.System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("old credential: %v", err)
+	}
+	if _, err := f.clients.System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); err != nil {
+		t.Fatalf("a client reading the file: %v", err)
+	}
+	if _, err := f.webClients(t).System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); err != nil {
+		t.Fatalf("wi web reading its file: %v", err)
+	}
+}

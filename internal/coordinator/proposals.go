@@ -12,9 +12,9 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-// ProposalProjection holds the items agents asked their user to file. A
-// proposal is pending input, not an item: its description is kept here
-// until it is filed and becomes the new item's description.
+// ProposalProjection holds the items agents asked their user to file. Like
+// an item's, a proposal's description is a file (in the proposing item's
+// directory), not database content: Description is never stored here.
 const ProposalProjection = "proposals"
 
 // Proposal states.
@@ -34,7 +34,7 @@ type Proposal struct {
 	Proposer     string     `json:"proposer"`
 	RepositoryID string     `json:"repository_id"`
 	Title        string     `json:"title"`
-	Description  string     `json:"description,omitempty"`
+	Description  string     `json:"-"`
 	Labels       []string   `json:"labels,omitempty"`
 	State        string     `json:"state"`
 	CreatedAt    time.Time  `json:"created_at"`

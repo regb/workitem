@@ -102,6 +102,7 @@ var usersOnly = map[string]string{
 	corev1connect.ItemServiceGrantAccessProcedure:                    "granting access",
 	corev1connect.ItemServiceRevokeAccessProcedure:                   "revoking access",
 	corev1connect.SystemServiceShutdownProcedure:                     "stopping the daemon",
+	corev1connect.SystemServiceRotateCredentialsProcedure:            "rotating credentials",
 	corev1connect.RepositoryServiceAddRepositoryProcedure:            "registering a repository",
 	corev1connect.RepositoryServiceArchiveRepositoryProcedure:        "archiving a repository",
 	corev1connect.RepositoryServiceRestoreRepositoryProcedure:        "restoring a repository",
@@ -269,4 +270,48 @@ func (s *Server) RevokeAccess(ctx context.Context, req *connect.Request[v1.Revok
 
 func accessEntry(entry model.AccessEntry) *v1.AccessEntry {
 	return &v1.AccessEntry{Id: entry.ID, Subject: entry.Subject, ItemId: entry.ItemID, Level: v1.AccessLevel(entry.Level), GrantedBy: entry.GrantedBy, GrantedAt: stamp(entry.GrantedAt)}
+}
+
+// viewable keeps the items the caller may view, in order.
+func (s *Server) viewable(ctx context.Context, itemIDs []string) []string {
+	who := caller(ctx).principal
+	if !who.item() || len(itemIDs) == 0 {
+		return itemIDs
+	}
+	out := []string{}
+	for _, id := range itemIDs {
+		if level, err := s.itemAccess(ctx, who.String(), id); err == nil && level >= model.AccessView {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// viewableJobs keeps the jobs the caller may see: those of items it may
+// view, and for an item's agent no job that names no item.
+func (s *Server) viewableJobs(ctx context.Context, jobs []*v1.Job) []*v1.Job {
+	if !caller(ctx).principal.item() {
+		return jobs
+	}
+	ids := map[string]bool{}
+	for _, id := range s.viewable(ctx, jobItems(jobs)) {
+		ids[id] = true
+	}
+	out := []*v1.Job{}
+	for _, job := range jobs {
+		if ids[job.ItemId] {
+			out = append(out, job)
+		}
+	}
+	return out
+}
+
+func jobItems(jobs []*v1.Job) []string {
+	out := []string{}
+	for _, job := range jobs {
+		if job.ItemId != "" {
+			out = append(out, job.ItemId)
+		}
+	}
+	return out
 }

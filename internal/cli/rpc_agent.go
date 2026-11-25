@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -429,50 +428,22 @@ func rpcCurrentItem(ctx context.Context, cfg Config, id string) (*v1.Item, error
 }
 func rpcControl(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	if len(args) == 0 {
-		return usageErr{errors.New("agent control requires send, abort, shutdown or a lease action")}
+		return usageErr{errors.New("agent control requires status, take, release, abort or shutdown")}
 	}
 	action := args[0]
+	switch action {
+	case "send", "prompt", "steer", "follow-up", "follow_up":
+		return usageErr{fmt.Errorf("agent control %s is now wi send --item ITEM [--follow-up] MESSAGE", action)}
+	}
 	fs := newFlagSet("agent control "+action, cfg.Stderr)
 	selected := fs.String("item", "", "item")
-	fromStdin := fs.Bool("stdin", false, "read stdin")
-	file := fs.String("file", "", "read file")
-	followUp := fs.Bool("follow-up", false, "deliver after the current turn settles")
 	confirm := fs.Bool("confirm", false, "confirm takeover")
 	planToken := fs.String("plan-token", "", "observed plan token")
-	clientMessage := fs.String("client-message-id", "", "message idempotency key")
-	var imagePaths repeatFlag
-	fs.Var(&imagePaths, "image", "image path; repeatable")
 	if err := rpcParse(fs, args[1:]); err != nil {
 		return err
 	}
-	isMessage := action == "send" || action == "prompt" || action == "steer" || action == "follow-up" || action == "follow_up"
-	if !isMessage && (*file != "" || *fromStdin || len(imagePaths) > 0 || *followUp || fs.NArg() > 0) {
-		return usageErr{fmt.Errorf("agent control %s does not accept message content", action)}
-	}
-	if *followUp && action != "send" {
-		return usageErr{errors.New("--follow-up applies to agent control send")}
-	}
-	var message string
-	var images []*v1.Image
-	if isMessage {
-		content, err := readAgentControlImages(cfg.CWD, imagePaths)
-		if err != nil {
-			return usageErr{err}
-		}
-		for _, image := range content {
-			data, err := base64.StdEncoding.DecodeString(image.Data)
-			if err != nil {
-				return err
-			}
-			images = append(images, &v1.Image{MimeType: image.MIMEType, Data: data})
-		}
-		if len(images) == 0 || fs.NArg() > 0 || *file != "" || *fromStdin {
-			var err error
-			message, err = readAgentControlMessage(cfg, fs.Args(), *file, *fromStdin)
-			if err != nil {
-				return usageErr{err}
-			}
-		}
+	if fs.NArg() > 0 {
+		return usageErr{fmt.Errorf("agent control %s takes no message: use wi send", action)}
 	}
 	id, err := rpcSelect(ctx, cfg, *selected)
 	if err != nil {
@@ -535,33 +506,7 @@ func rpcControl(ctx context.Context, args []string, cfg Config, jsonOut bool) er
 		}
 		return rpcEmit(cfg, jsonOut, value.Msg)
 	}
-	if !isMessage {
-		return usageErr{fmt.Errorf("unknown agent control action %q", action)}
-	}
-	delivery := v1.Delivery_DELIVERY_UNSPECIFIED
-	if action != "send" {
-		delivery = v1.Delivery(v1.Delivery_value["DELIVERY_"+strings.ToUpper(strings.ReplaceAll(action, "-", "_"))])
-	}
-	if *followUp {
-		delivery = v1.Delivery_DELIVERY_FOLLOW_UP
-	}
-	if *clientMessage == "" {
-		*clientMessage = newCommandID()
-	}
-	request := rpcRequest(cfg, &v1.SendMessageRequest{ItemId: id, Text: message, Images: images, Delivery: delivery, RequireOnline: true, ClientMessageId: *clientMessage, StartMode: v1.AgentMode_AGENT_MODE_HEADLESS})
-	value, err := cfg.API.Agents.SendMessage(ctx, request)
-	if err != nil {
-		return err
-	}
-	value.Msg.Job, err = rpcWaitJob(ctx, cfg, value.Msg.Job, jsonOut)
-	if err != nil {
-		return err
-	}
-	if jsonOut {
-		return rpcEmit(cfg, true, value.Msg)
-	}
-	fmt.Fprintf(cfg.Stdout, "submitted %s control command %s to agent generation %d\n", action, *clientMessage, value.Msg.Generation)
-	return nil
+	return usageErr{fmt.Errorf("unknown agent control action %q", action)}
 }
 func rpcProfiles(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	action := "list"

@@ -34,7 +34,7 @@ Choose checks appropriate to the repository. Review the actual diff and output, 
 ## Request corrections
 
 ```bash
-wi agent control send --item add-api-retries \
+wi send --item add-api-retries \
   "Fix the retry test's final-timeout case, rerun it, and report the result."
 ```
 

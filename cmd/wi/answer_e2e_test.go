@@ -29,7 +29,7 @@ func TestAnsweringTheAgentsQuestion(t *testing.T) {
 		t.Fatalf("answer without a question: %v %s", err, out)
 	}
 
-	f.run("agent", "control", "send", "--item", item, "please ask me something")
+	f.run("send", "--item", item, "please ask me something")
 	var observation *v1.ItemObservation
 	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 		value, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: item}))

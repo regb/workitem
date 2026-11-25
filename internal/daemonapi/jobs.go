@@ -3,6 +3,7 @@ package daemonapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"sync"
 	"time"
@@ -300,15 +301,21 @@ func (s *Server) GetJob(ctx context.Context, req *connect.Request[v1.GetJobReque
 		return nil, err
 	}
 	value, _ := job.snapshot()
+	if !s.jobVisible(ctx, value) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("job %s not found", req.Msg.JobId))
+	}
 	return response(&v1.GetJobResponse{Job: value}, nil)
 }
 func (s *Server) ListJobs(ctx context.Context, req *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error) {
-	return response(&v1.ListJobsResponse{Jobs: s.jobs.list(req.Msg.ItemId, req.Msg.RunningOnly)}, nil)
+	return response(&v1.ListJobsResponse{Jobs: s.viewableJobs(ctx, s.jobs.list(req.Msg.ItemId, req.Msg.RunningOnly))}, nil)
 }
 func (s *Server) WatchJob(ctx context.Context, req *connect.Request[v1.WatchJobRequest], stream *connect.ServerStream[v1.WatchJobResponse]) error {
 	job, err := s.jobs.get(req.Msg.JobId)
 	if err != nil {
 		return err
+	}
+	if value, _ := job.snapshot(); !s.jobVisible(ctx, value) {
+		return connect.NewError(connect.CodeNotFound, fmt.Errorf("job %s not found", req.Msg.JobId))
 	}
 	for {
 		value, changed := job.snapshot()
@@ -361,4 +368,11 @@ func partial(err error, item string, completed ...string) error {
 		value.AddDetail(detail)
 	}
 	return value
+}
+
+// jobVisible reports whether the caller may follow a job it names by ID: an
+// item's agent follows the jobs of items it may view, and those of no item,
+// such as a repository sync it started.
+func (s *Server) jobVisible(ctx context.Context, job *v1.Job) bool {
+	return job.ItemId == "" || len(s.viewable(ctx, []string{job.ItemId})) == 1
 }

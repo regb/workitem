@@ -50,6 +50,7 @@ type Server struct {
 	leases          sync.Map
 	planSecret      [32]byte
 	credentials     credentials
+	credentialsMu   sync.RWMutex
 	callbackMu      sync.Mutex
 	callbacksClosed bool
 	callbacks       sync.WaitGroup

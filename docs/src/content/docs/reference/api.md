@@ -19,7 +19,7 @@ Every call presents a credential, `Authorization: Bearer <credential>`, and the 
 | Web | `<data root>/credentials/proxy` | `wi web`, acting for the user it names; held to the [web exposure table](https://github.com/regb/workitem/blob/main/docs/design/api/README.md) |
 | Item | A file in each agent runtime's state directory, named by `WI_ITEM_CREDENTIAL_FILE` in the agent's environment | That item's agent, `item:<id>` |
 
-The daemon creates the operator and web credentials when it starts, if they are missing. It mints an item credential each time an agent starts and keeps only its hash. The credential stops working when that runtime stops or another one takes the item over, and `wi` then fails instead of acting as the operator. `GetInfo` reports the caller it resolved (`caller.principal`).
+The daemon creates the operator and web credentials when it starts, if they are missing; `wi auth rotate` (`SystemService.RotateCredentials`) replaces both, and the old ones stop working at once. It mints an item credential each time an agent starts and keeps only its hash. The credential stops working when that runtime stops or another one takes the item over, and `wi` then fails instead of acting as the operator. `GetInfo` reports the caller it resolved (`caller.principal`).
 
 The credentials identify callers to a daemon that trusts its own Unix user. They are not isolation: an agent running as that user can read the operator's credential. They keep agents acting as themselves, and become a boundary when an agent runs somewhere the operator's credential is not mounted, such as a sandbox. A sandbox mounts the socket and the agent's own credential file; `WI_API_SOCKET` gives the socket's path there.
 

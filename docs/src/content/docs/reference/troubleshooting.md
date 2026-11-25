@@ -77,7 +77,7 @@ wi start --agent-mode headless item-slug
 For creation and immediate delivery, use `wi new --title "Task" --desc-file task.md --start`. `--prompt` implies `--start` and overrides only the startup message. Registered managed worktrees receive per-launch Pi project approval, while `.envrc` approval remains separate. A readiness timeout or refused prompt reports a retained partial outcome; it does not report successful delivery. For an existing active item, use:
 
 ```bash
-wi agent control send --item ITEM 'Read the task with wi show, implement it, and report the result.'
+wi send --item ITEM 'Read the task with wi show, implement it, and report the result.'
 ```
 
 ## An `.envrc` is not loaded

@@ -198,7 +198,7 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	if first.Generation == 0 || first.Mode != v1.AgentMode_AGENT_MODE_HEADLESS {
 		t.Fatal(first.String())
 	}
-	f.run("agent", "control", "prompt", "--item", agentItem, "second prompt")
+	f.run("send", "--item", agentItem, "second prompt")
 	f.historyReady(agentItem, 4)
 	f.idle(agentItem)
 	history, err := f.clients.Agents.GetHistory(context.Background(), connect.NewRequest(&v1.GetHistoryRequest{ItemId: agentItem}))

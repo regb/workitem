@@ -217,7 +217,7 @@ class ClaudeNativeTests(unittest.TestCase):
         self.poll(lambda: not self.status()["online"], "runtime offline", timeout=15)
 
     def send(self, text, *options, settle=True):
-        result = self.wi("agent", "control", "send", "--item", self.item, *options, text)
+        result = self.wi("send", "--item", self.item, *options, text)
         command = result["command"]["id"]
         self.last_command = command
         receipt = self.event("command.accepted", command)
@@ -271,7 +271,7 @@ class ClaudeNativeTests(unittest.TestCase):
         self.poll(lambda: any(e["type"] == "tool.started" and e.get("tool_name") == "Bash"
                              for e in self.events()), "Bash started")
         steer = self.send("Reply CANCELLED_STEER after the running tool. No tools.", settle=False)
-        follow = self.wi("agent", "control", "send", "--item", self.item, "--follow-up",
+        follow = self.wi("send", "--item", self.item, "--follow-up",
                          "Reply CANCELLED_FOLLOWUP. No tools.")["command"]["id"]
         abort = self.wi("agent", "control", "abort", "--item", self.item)["command"]["id"]
         self.event("command.accepted", abort)

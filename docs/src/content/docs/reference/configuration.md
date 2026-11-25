@@ -206,7 +206,7 @@ All are repository-scoped, so set them with `wi repo settings set NAME plugins.s
 
 `agent.startup_message` is the global message the daemon sends when an item starts with a message but none is given, as `wi new --start` does. It must be a non-empty quoted string. Escape newlines as `\n` within the string. `--prompt TEXT` overrides this message for that creation and implies `--start`. It conflicts with an explicit `--start=false`. Neither message changes the durable description supplied through `--desc-file`.
 
-`wi resume` never sends a startup message. `wi start` for an existing item starts its agent without submitting a message. Use `wi agent control send` to explicitly start a turn in an existing conversation.
+`wi resume` never sends a startup message. `wi start` for an existing item starts its agent without submitting a message. Use `wi send` to explicitly start a turn in an existing conversation.
 
 ## Usage limits
 
@@ -279,9 +279,9 @@ Headless requires Claude Code 2.1.299 or later. The adapter also checks native l
 
 ```sh
 wi start --agent-mode headless ITEM
-wi agent control send --item ITEM "Explain the focused test failures."
-wi agent control send --item ITEM --follow-up "Then summarize the changes."
-wi agent control send --item ITEM --image picture.png "Describe this image."
+wi send --item ITEM "Explain the focused test failures."
+wi send --item ITEM --follow-up "Then summarize the changes."
+wi send --item ITEM --image picture.png "Describe this image."
 wi agent control abort --item ITEM
 ```
 
@@ -313,7 +313,7 @@ Command events the driver reports carry optional `delivery_state` and `reason_co
 
 History reads a bounded page from one native transcript branch, skips subagent sidechains, renders compaction boundaries and summaries, folds tool results into calls, and provides cursors for earlier pages. Results whose calls are on an earlier page recover bounded call context without duplicating older entries. It ignores an incomplete trailing record while the TUI writes. Native content stays in read-only history responses and private live snapshots, not daemon events.
 
-Attach images with `wi agent control send --item ITEM --image picture.png "Describe this image"`. Repeat `--image` for up to four images totaling 8 MiB decoded; text is optional. Claude currently accepts PNG and JPEG only. The driver validates image formats and bounds dimensions to 10,000 pixels per side and 20 million pixels per image. It stages private temporary files outside the checkout, pastes each pathname through Claude's native image-attachment handling, and verifies a new image marker before submitting once. It does not use the system clipboard or ask the model to read files. Native image markers are included in the expected prompt digest. Staged files are removed after matching confirmation or normal runtime exit; uncertain attachment delivery retains them until exit and never retries. Images and paths do not enter compact daemon events. Queued images, like queued text, are runtime-local.
+Attach images with `wi send --item ITEM --image picture.png "Describe this image"`. Repeat `--image` for up to four images totaling 8 MiB decoded; text is optional. Claude currently accepts PNG and JPEG only. The driver validates image formats and bounds dimensions to 10,000 pixels per side and 20 million pixels per image. It stages private temporary files outside the checkout, pastes each pathname through Claude's native image-attachment handling, and verifies a new image marker before submitting once. It does not use the system clipboard or ask the model to read files. Native image markers are included in the expected prompt digest. Staged files are removed after matching confirmation or normal runtime exit; uncertain attachment delivery retains them until exit and never retries. Images and paths do not enter compact daemon events. Queued images, like queued text, are runtime-local.
 
 The runtime exposes a read-only content socket with owner-fenced, bounded snapshots. `MessageDisplay` sends assistant line batches to a separate private runtime endpoint, never the compact event socket. The hook returns no display replacement, so Claude's native UI remains unchanged. Wi replaces the current snapshot as batches arrive, checks prompt/message identities and batch indices, ignores duplicates and retired messages, and marks gaps or truncation explicitly. Text is bounded to 256 KiB; each incoming batch is bounded to 16 KiB. Optional transport failures time out after 500 ms without blocking native display or reporting native content as an error. This is whole-line streaming, not per-token streaming.
 

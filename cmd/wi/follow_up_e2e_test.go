@@ -78,7 +78,7 @@ func TestUsageLimitWaitsAndContinuesThroughAFollowUp(t *testing.T) {
 	f.idle(item)
 
 	// A usage limit makes the item wait, with a follow-up to continue.
-	f.run("agent", "control", "prompt", "--item", item, "this turn hits the usage limit")
+	f.run("send", "--item", item, "this turn hits the usage limit")
 	var usage *v1.Blocker
 	waitFor("a usage blocker", func() bool {
 		for _, b := range getItem().Blockers {
@@ -115,7 +115,7 @@ func TestUsageLimitWaitsAndContinuesThroughAFollowUp(t *testing.T) {
 
 	// A usage blocker cleared without its follow-up is not set again for
 	// the same failure.
-	f.run("agent", "control", "prompt", "--item", item, "another usage limit")
+	f.run("send", "--item", item, "another usage limit")
 	usage = nil
 	waitFor("a second usage blocker", func() bool {
 		for _, b := range getItem().Blockers {

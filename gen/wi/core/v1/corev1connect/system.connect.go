@@ -49,6 +49,9 @@ const (
 	SystemServiceGetUsageProcedure = "/wi.core.v1.SystemService/GetUsage"
 	// SystemServiceShutdownProcedure is the fully-qualified name of the SystemService's Shutdown RPC.
 	SystemServiceShutdownProcedure = "/wi.core.v1.SystemService/Shutdown"
+	// SystemServiceRotateCredentialsProcedure is the fully-qualified name of the SystemService's
+	// RotateCredentials RPC.
+	SystemServiceRotateCredentialsProcedure = "/wi.core.v1.SystemService/RotateCredentials"
 )
 
 // SystemServiceClient is a client for the wi.core.v1.SystemService service.
@@ -77,6 +80,12 @@ type SystemServiceClient interface {
 	// sent before the daemon stops; the job reports the result to watchers
 	// until then.
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
+	// RotateCredentials replaces the operator's and wi web's credentials:
+	// their files get new ones, and the old ones stop working at once. Clients
+	// that read the files, such as the CLI and wi web, pick up the new ones.
+	// Item credentials are unaffected: they end with their runtimes. Only a
+	// person rotates them.
+	RotateCredentials(context.Context, *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.RotateCredentialsResponse], error)
 }
 
 // NewSystemServiceClient constructs a client for the wi.core.v1.SystemService service. By default,
@@ -136,18 +145,25 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(systemServiceMethods.ByName("Shutdown")),
 			connect.WithClientOptions(opts...),
 		),
+		rotateCredentials: connect.NewClient[v1.RotateCredentialsRequest, v1.RotateCredentialsResponse](
+			httpClient,
+			baseURL+SystemServiceRotateCredentialsProcedure,
+			connect.WithSchema(systemServiceMethods.ByName("RotateCredentials")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // systemServiceClient implements SystemServiceClient.
 type systemServiceClient struct {
-	getInfo        *connect.Client[v1.GetInfoRequest, v1.GetInfoResponse]
-	getHealth      *connect.Client[v1.GetHealthRequest, v1.GetHealthResponse]
-	runDiagnostics *connect.Client[v1.RunDiagnosticsRequest, v1.RunDiagnosticsResponse]
-	getConfig      *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
-	listPlugins    *connect.Client[v1.ListPluginsRequest, v1.ListPluginsResponse]
-	getUsage       *connect.Client[v1.GetUsageRequest, v1.GetUsageResponse]
-	shutdown       *connect.Client[v1.ShutdownRequest, v1.ShutdownResponse]
+	getInfo           *connect.Client[v1.GetInfoRequest, v1.GetInfoResponse]
+	getHealth         *connect.Client[v1.GetHealthRequest, v1.GetHealthResponse]
+	runDiagnostics    *connect.Client[v1.RunDiagnosticsRequest, v1.RunDiagnosticsResponse]
+	getConfig         *connect.Client[v1.GetConfigRequest, v1.GetConfigResponse]
+	listPlugins       *connect.Client[v1.ListPluginsRequest, v1.ListPluginsResponse]
+	getUsage          *connect.Client[v1.GetUsageRequest, v1.GetUsageResponse]
+	shutdown          *connect.Client[v1.ShutdownRequest, v1.ShutdownResponse]
+	rotateCredentials *connect.Client[v1.RotateCredentialsRequest, v1.RotateCredentialsResponse]
 }
 
 // GetInfo calls wi.core.v1.SystemService.GetInfo.
@@ -185,6 +201,11 @@ func (c *systemServiceClient) Shutdown(ctx context.Context, req *connect.Request
 	return c.shutdown.CallUnary(ctx, req)
 }
 
+// RotateCredentials calls wi.core.v1.SystemService.RotateCredentials.
+func (c *systemServiceClient) RotateCredentials(ctx context.Context, req *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.RotateCredentialsResponse], error) {
+	return c.rotateCredentials.CallUnary(ctx, req)
+}
+
 // SystemServiceHandler is an implementation of the wi.core.v1.SystemService service.
 type SystemServiceHandler interface {
 	// GetInfo reads the daemon's version, API version, data location and
@@ -211,6 +232,12 @@ type SystemServiceHandler interface {
 	// sent before the daemon stops; the job reports the result to watchers
 	// until then.
 	Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error)
+	// RotateCredentials replaces the operator's and wi web's credentials:
+	// their files get new ones, and the old ones stop working at once. Clients
+	// that read the files, such as the CLI and wi web, pick up the new ones.
+	// Item credentials are unaffected: they end with their runtimes. Only a
+	// person rotates them.
+	RotateCredentials(context.Context, *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.RotateCredentialsResponse], error)
 }
 
 // NewSystemServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -266,6 +293,12 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(systemServiceMethods.ByName("Shutdown")),
 		connect.WithHandlerOptions(opts...),
 	)
+	systemServiceRotateCredentialsHandler := connect.NewUnaryHandler(
+		SystemServiceRotateCredentialsProcedure,
+		svc.RotateCredentials,
+		connect.WithSchema(systemServiceMethods.ByName("RotateCredentials")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/wi.core.v1.SystemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SystemServiceGetInfoProcedure:
@@ -282,6 +315,8 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 			systemServiceGetUsageHandler.ServeHTTP(w, r)
 		case SystemServiceShutdownProcedure:
 			systemServiceShutdownHandler.ServeHTTP(w, r)
+		case SystemServiceRotateCredentialsProcedure:
+			systemServiceRotateCredentialsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -317,4 +352,8 @@ func (UnimplementedSystemServiceHandler) GetUsage(context.Context, *connect.Requ
 
 func (UnimplementedSystemServiceHandler) Shutdown(context.Context, *connect.Request[v1.ShutdownRequest]) (*connect.Response[v1.ShutdownResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.SystemService.Shutdown is not implemented"))
+}
+
+func (UnimplementedSystemServiceHandler) RotateCredentials(context.Context, *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.RotateCredentialsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.SystemService.RotateCredentials is not implemented"))
 }

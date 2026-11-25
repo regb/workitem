@@ -216,6 +216,21 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = rpcSearch(ctx, args[1:], cfg, jsonOut)
 	case "edit":
 		err = rpcEdit(ctx, args[1:], cfg, jsonOut)
+	case "auth":
+		if len(args) != 2 || args[1] != "rotate" {
+			err = usageErr{errors.New("usage: wi auth rotate")}
+			break
+		}
+		value, e := cfg.API.System.RotateCredentials(ctx, rpcRequest(cfg, &v1.RotateCredentialsRequest{}))
+		if e != nil {
+			err = e
+			break
+		}
+		if jsonOut {
+			err = rpcEmit(cfg, true, value.Msg)
+			break
+		}
+		fmt.Fprintln(cfg.Stdout, "replaced the operator's and wi web's credentials; the old ones no longer work")
 	case "send":
 		err = rpcSend(ctx, args[1:], cfg, jsonOut)
 	case "access":

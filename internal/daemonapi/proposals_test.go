@@ -2,6 +2,8 @@ package daemonapi
 
 import (
 	"context"
+	"github.com/regb/workitem/internal/coordinator"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -52,6 +54,21 @@ func TestAgentsProposeAndUsersFile(t *testing.T) {
 	listed, err := f.clients.Items.ListProposals(ctx, connect.NewRequest(&v1.ListProposalsRequest{PendingOnly: true}))
 	if err != nil || len(listed.Msg.Proposals) != 2 {
 		t.Fatalf("pending: %v %v", listed, err)
+	}
+	// The description is a file with the proposing item, not database content.
+	for _, p := range listed.Msg.Proposals {
+		if p.Description != "It failed once on reopen." {
+			t.Fatalf("description: %q", p.Description)
+		}
+	}
+	raw, err := f.core.Database().ListProjection(coordinator.ProposalProjection)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, data := range raw {
+		if strings.Contains(string(data), "It failed once") {
+			t.Fatalf("the database holds a description: %s", data)
+		}
 	}
 	items, _ := f.clients.Items.ListItems(ctx, connect.NewRequest(&v1.ListItemsRequest{}))
 	if len(items.Msg.Items) != 2 {

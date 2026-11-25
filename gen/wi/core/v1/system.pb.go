@@ -955,6 +955,78 @@ func (x *ShutdownResponse) GetJob() *Job {
 	return nil
 }
 
+type RotateCredentialsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RotateCredentialsRequest) Reset() {
+	*x = RotateCredentialsRequest{}
+	mi := &file_wi_core_v1_system_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RotateCredentialsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RotateCredentialsRequest) ProtoMessage() {}
+
+func (x *RotateCredentialsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_system_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RotateCredentialsRequest.ProtoReflect.Descriptor instead.
+func (*RotateCredentialsRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{16}
+}
+
+type RotateCredentialsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RotateCredentialsResponse) Reset() {
+	*x = RotateCredentialsResponse{}
+	mi := &file_wi_core_v1_system_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RotateCredentialsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RotateCredentialsResponse) ProtoMessage() {}
+
+func (x *RotateCredentialsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_system_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RotateCredentialsResponse.ProtoReflect.Descriptor instead.
+func (*RotateCredentialsResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{17}
+}
+
 type GetUsageRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// refresh asks the providers again rather than reading their cached
@@ -968,7 +1040,7 @@ type GetUsageRequest struct {
 
 func (x *GetUsageRequest) Reset() {
 	*x = GetUsageRequest{}
-	mi := &file_wi_core_v1_system_proto_msgTypes[16]
+	mi := &file_wi_core_v1_system_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -980,7 +1052,7 @@ func (x *GetUsageRequest) String() string {
 func (*GetUsageRequest) ProtoMessage() {}
 
 func (x *GetUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_system_proto_msgTypes[16]
+	mi := &file_wi_core_v1_system_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -993,7 +1065,7 @@ func (x *GetUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUsageRequest.ProtoReflect.Descriptor instead.
 func (*GetUsageRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{16}
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetUsageRequest) GetRefresh() bool {
@@ -1028,7 +1100,7 @@ type GetUsageResponse struct {
 
 func (x *GetUsageResponse) Reset() {
 	*x = GetUsageResponse{}
-	mi := &file_wi_core_v1_system_proto_msgTypes[17]
+	mi := &file_wi_core_v1_system_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1040,7 +1112,7 @@ func (x *GetUsageResponse) String() string {
 func (*GetUsageResponse) ProtoMessage() {}
 
 func (x *GetUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_system_proto_msgTypes[17]
+	mi := &file_wi_core_v1_system_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1053,7 +1125,7 @@ func (x *GetUsageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUsageResponse.ProtoReflect.Descriptor instead.
 func (*GetUsageResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{17}
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *GetUsageResponse) GetEnabled() bool {
@@ -1114,7 +1186,7 @@ type UsageQuota struct {
 
 func (x *UsageQuota) Reset() {
 	*x = UsageQuota{}
-	mi := &file_wi_core_v1_system_proto_msgTypes[18]
+	mi := &file_wi_core_v1_system_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1126,7 +1198,7 @@ func (x *UsageQuota) String() string {
 func (*UsageQuota) ProtoMessage() {}
 
 func (x *UsageQuota) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_system_proto_msgTypes[18]
+	mi := &file_wi_core_v1_system_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1139,7 +1211,7 @@ func (x *UsageQuota) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageQuota.ProtoReflect.Descriptor instead.
 func (*UsageQuota) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{18}
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *UsageQuota) GetProvider() string {
@@ -1221,7 +1293,7 @@ type UsageWindow struct {
 
 func (x *UsageWindow) Reset() {
 	*x = UsageWindow{}
-	mi := &file_wi_core_v1_system_proto_msgTypes[19]
+	mi := &file_wi_core_v1_system_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1233,7 +1305,7 @@ func (x *UsageWindow) String() string {
 func (*UsageWindow) ProtoMessage() {}
 
 func (x *UsageWindow) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_system_proto_msgTypes[19]
+	mi := &file_wi_core_v1_system_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1246,7 +1318,7 @@ func (x *UsageWindow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageWindow.ProtoReflect.Descriptor instead.
 func (*UsageWindow) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{19}
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *UsageWindow) GetId() string {
@@ -1303,7 +1375,7 @@ type UsageCredits struct {
 
 func (x *UsageCredits) Reset() {
 	*x = UsageCredits{}
-	mi := &file_wi_core_v1_system_proto_msgTypes[20]
+	mi := &file_wi_core_v1_system_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1315,7 +1387,7 @@ func (x *UsageCredits) String() string {
 func (*UsageCredits) ProtoMessage() {}
 
 func (x *UsageCredits) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_system_proto_msgTypes[20]
+	mi := &file_wi_core_v1_system_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1328,7 +1400,7 @@ func (x *UsageCredits) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageCredits.ProtoReflect.Descriptor instead.
 func (*UsageCredits) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{20}
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UsageCredits) GetRemaining() float64 {
@@ -1412,7 +1484,9 @@ const file_wi_core_v1_system_proto_rawDesc = "" +
 	"\x0fShutdownRequest\x12\x14\n" +
 	"\x05force\x18\x01 \x01(\bR\x05force\"5\n" +
 	"\x10ShutdownResponse\x12!\n" +
-	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"?\n" +
+	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\x1a\n" +
+	"\x18RotateCredentialsRequest\"\x1b\n" +
+	"\x19RotateCredentialsResponse\"?\n" +
 	"\x0fGetUsageRequest\x12\x18\n" +
 	"\arefresh\x18\x01 \x01(\bR\arefresh\x12\x12\n" +
 	"\x04wait\x18\x02 \x01(\bR\x04wait\"\xcd\x01\n" +
@@ -1462,7 +1536,7 @@ const file_wi_core_v1_system_proto_rawDesc = "" +
 	"\x17CALLER_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCALLER_KIND_LOCAL_OPERATOR\x10\x01\x12\x1b\n" +
 	"\x17CALLER_KIND_WEB_ADAPTER\x10\x02\x12\x15\n" +
-	"\x11CALLER_KIND_AGENT\x10\x032\xb2\x04\n" +
+	"\x11CALLER_KIND_AGENT\x10\x032\x94\x05\n" +
 	"\rSystemService\x12G\n" +
 	"\aGetInfo\x12\x1a.wi.core.v1.GetInfoRequest\x1a\x1b.wi.core.v1.GetInfoResponse\"\x03\x90\x02\x01\x12M\n" +
 	"\tGetHealth\x12\x1c.wi.core.v1.GetHealthRequest\x1a\x1d.wi.core.v1.GetHealthResponse\"\x03\x90\x02\x01\x12W\n" +
@@ -1470,7 +1544,8 @@ const file_wi_core_v1_system_proto_rawDesc = "" +
 	"\tGetConfig\x12\x1c.wi.core.v1.GetConfigRequest\x1a\x1d.wi.core.v1.GetConfigResponse\"\x03\x90\x02\x01\x12S\n" +
 	"\vListPlugins\x12\x1e.wi.core.v1.ListPluginsRequest\x1a\x1f.wi.core.v1.ListPluginsResponse\"\x03\x90\x02\x01\x12E\n" +
 	"\bGetUsage\x12\x1b.wi.core.v1.GetUsageRequest\x1a\x1c.wi.core.v1.GetUsageResponse\x12E\n" +
-	"\bShutdown\x12\x1b.wi.core.v1.ShutdownRequest\x1a\x1c.wi.core.v1.ShutdownResponseB0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
+	"\bShutdown\x12\x1b.wi.core.v1.ShutdownRequest\x1a\x1c.wi.core.v1.ShutdownResponse\x12`\n" +
+	"\x11RotateCredentials\x12$.wi.core.v1.RotateCredentialsRequest\x1a%.wi.core.v1.RotateCredentialsResponseB0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
 var (
 	file_wi_core_v1_system_proto_rawDescOnce sync.Once
@@ -1485,64 +1560,68 @@ func file_wi_core_v1_system_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_system_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_wi_core_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_wi_core_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_wi_core_v1_system_proto_goTypes = []any{
-	(CallerKind)(0),                // 0: wi.core.v1.CallerKind
-	(*GetInfoRequest)(nil),         // 1: wi.core.v1.GetInfoRequest
-	(*GetInfoResponse)(nil),        // 2: wi.core.v1.GetInfoResponse
-	(*Caller)(nil),                 // 3: wi.core.v1.Caller
-	(*GetHealthRequest)(nil),       // 4: wi.core.v1.GetHealthRequest
-	(*GetHealthResponse)(nil),      // 5: wi.core.v1.GetHealthResponse
-	(*RunDiagnosticsRequest)(nil),  // 6: wi.core.v1.RunDiagnosticsRequest
-	(*Diagnostic)(nil),             // 7: wi.core.v1.Diagnostic
-	(*RunDiagnosticsResponse)(nil), // 8: wi.core.v1.RunDiagnosticsResponse
-	(*GetConfigRequest)(nil),       // 9: wi.core.v1.GetConfigRequest
-	(*GetConfigResponse)(nil),      // 10: wi.core.v1.GetConfigResponse
-	(*PluginOption)(nil),           // 11: wi.core.v1.PluginOption
-	(*Plugin)(nil),                 // 12: wi.core.v1.Plugin
-	(*ListPluginsRequest)(nil),     // 13: wi.core.v1.ListPluginsRequest
-	(*ListPluginsResponse)(nil),    // 14: wi.core.v1.ListPluginsResponse
-	(*ShutdownRequest)(nil),        // 15: wi.core.v1.ShutdownRequest
-	(*ShutdownResponse)(nil),       // 16: wi.core.v1.ShutdownResponse
-	(*GetUsageRequest)(nil),        // 17: wi.core.v1.GetUsageRequest
-	(*GetUsageResponse)(nil),       // 18: wi.core.v1.GetUsageResponse
-	(*UsageQuota)(nil),             // 19: wi.core.v1.UsageQuota
-	(*UsageWindow)(nil),            // 20: wi.core.v1.UsageWindow
-	(*UsageCredits)(nil),           // 21: wi.core.v1.UsageCredits
-	(*timestamppb.Timestamp)(nil),  // 22: google.protobuf.Timestamp
-	(*Job)(nil),                    // 23: wi.core.v1.Job
+	(CallerKind)(0),                   // 0: wi.core.v1.CallerKind
+	(*GetInfoRequest)(nil),            // 1: wi.core.v1.GetInfoRequest
+	(*GetInfoResponse)(nil),           // 2: wi.core.v1.GetInfoResponse
+	(*Caller)(nil),                    // 3: wi.core.v1.Caller
+	(*GetHealthRequest)(nil),          // 4: wi.core.v1.GetHealthRequest
+	(*GetHealthResponse)(nil),         // 5: wi.core.v1.GetHealthResponse
+	(*RunDiagnosticsRequest)(nil),     // 6: wi.core.v1.RunDiagnosticsRequest
+	(*Diagnostic)(nil),                // 7: wi.core.v1.Diagnostic
+	(*RunDiagnosticsResponse)(nil),    // 8: wi.core.v1.RunDiagnosticsResponse
+	(*GetConfigRequest)(nil),          // 9: wi.core.v1.GetConfigRequest
+	(*GetConfigResponse)(nil),         // 10: wi.core.v1.GetConfigResponse
+	(*PluginOption)(nil),              // 11: wi.core.v1.PluginOption
+	(*Plugin)(nil),                    // 12: wi.core.v1.Plugin
+	(*ListPluginsRequest)(nil),        // 13: wi.core.v1.ListPluginsRequest
+	(*ListPluginsResponse)(nil),       // 14: wi.core.v1.ListPluginsResponse
+	(*ShutdownRequest)(nil),           // 15: wi.core.v1.ShutdownRequest
+	(*ShutdownResponse)(nil),          // 16: wi.core.v1.ShutdownResponse
+	(*RotateCredentialsRequest)(nil),  // 17: wi.core.v1.RotateCredentialsRequest
+	(*RotateCredentialsResponse)(nil), // 18: wi.core.v1.RotateCredentialsResponse
+	(*GetUsageRequest)(nil),           // 19: wi.core.v1.GetUsageRequest
+	(*GetUsageResponse)(nil),          // 20: wi.core.v1.GetUsageResponse
+	(*UsageQuota)(nil),                // 21: wi.core.v1.UsageQuota
+	(*UsageWindow)(nil),               // 22: wi.core.v1.UsageWindow
+	(*UsageCredits)(nil),              // 23: wi.core.v1.UsageCredits
+	(*timestamppb.Timestamp)(nil),     // 24: google.protobuf.Timestamp
+	(*Job)(nil),                       // 25: wi.core.v1.Job
 }
 var file_wi_core_v1_system_proto_depIdxs = []int32{
-	22, // 0: wi.core.v1.GetInfoResponse.started_at:type_name -> google.protobuf.Timestamp
+	24, // 0: wi.core.v1.GetInfoResponse.started_at:type_name -> google.protobuf.Timestamp
 	3,  // 1: wi.core.v1.GetInfoResponse.caller:type_name -> wi.core.v1.Caller
 	0,  // 2: wi.core.v1.Caller.kind:type_name -> wi.core.v1.CallerKind
-	22, // 3: wi.core.v1.GetHealthResponse.last_observation_at:type_name -> google.protobuf.Timestamp
+	24, // 3: wi.core.v1.GetHealthResponse.last_observation_at:type_name -> google.protobuf.Timestamp
 	7,  // 4: wi.core.v1.RunDiagnosticsResponse.diagnostics:type_name -> wi.core.v1.Diagnostic
 	11, // 5: wi.core.v1.Plugin.options:type_name -> wi.core.v1.PluginOption
 	12, // 6: wi.core.v1.ListPluginsResponse.plugins:type_name -> wi.core.v1.Plugin
-	23, // 7: wi.core.v1.ShutdownResponse.job:type_name -> wi.core.v1.Job
-	19, // 8: wi.core.v1.GetUsageResponse.quotas:type_name -> wi.core.v1.UsageQuota
-	22, // 9: wi.core.v1.GetUsageResponse.checked_at:type_name -> google.protobuf.Timestamp
-	22, // 10: wi.core.v1.UsageQuota.observed_at:type_name -> google.protobuf.Timestamp
-	20, // 11: wi.core.v1.UsageQuota.windows:type_name -> wi.core.v1.UsageWindow
-	21, // 12: wi.core.v1.UsageQuota.credits:type_name -> wi.core.v1.UsageCredits
-	22, // 13: wi.core.v1.UsageWindow.resets_at:type_name -> google.protobuf.Timestamp
+	25, // 7: wi.core.v1.ShutdownResponse.job:type_name -> wi.core.v1.Job
+	21, // 8: wi.core.v1.GetUsageResponse.quotas:type_name -> wi.core.v1.UsageQuota
+	24, // 9: wi.core.v1.GetUsageResponse.checked_at:type_name -> google.protobuf.Timestamp
+	24, // 10: wi.core.v1.UsageQuota.observed_at:type_name -> google.protobuf.Timestamp
+	22, // 11: wi.core.v1.UsageQuota.windows:type_name -> wi.core.v1.UsageWindow
+	23, // 12: wi.core.v1.UsageQuota.credits:type_name -> wi.core.v1.UsageCredits
+	24, // 13: wi.core.v1.UsageWindow.resets_at:type_name -> google.protobuf.Timestamp
 	1,  // 14: wi.core.v1.SystemService.GetInfo:input_type -> wi.core.v1.GetInfoRequest
 	4,  // 15: wi.core.v1.SystemService.GetHealth:input_type -> wi.core.v1.GetHealthRequest
 	6,  // 16: wi.core.v1.SystemService.RunDiagnostics:input_type -> wi.core.v1.RunDiagnosticsRequest
 	9,  // 17: wi.core.v1.SystemService.GetConfig:input_type -> wi.core.v1.GetConfigRequest
 	13, // 18: wi.core.v1.SystemService.ListPlugins:input_type -> wi.core.v1.ListPluginsRequest
-	17, // 19: wi.core.v1.SystemService.GetUsage:input_type -> wi.core.v1.GetUsageRequest
+	19, // 19: wi.core.v1.SystemService.GetUsage:input_type -> wi.core.v1.GetUsageRequest
 	15, // 20: wi.core.v1.SystemService.Shutdown:input_type -> wi.core.v1.ShutdownRequest
-	2,  // 21: wi.core.v1.SystemService.GetInfo:output_type -> wi.core.v1.GetInfoResponse
-	5,  // 22: wi.core.v1.SystemService.GetHealth:output_type -> wi.core.v1.GetHealthResponse
-	8,  // 23: wi.core.v1.SystemService.RunDiagnostics:output_type -> wi.core.v1.RunDiagnosticsResponse
-	10, // 24: wi.core.v1.SystemService.GetConfig:output_type -> wi.core.v1.GetConfigResponse
-	14, // 25: wi.core.v1.SystemService.ListPlugins:output_type -> wi.core.v1.ListPluginsResponse
-	18, // 26: wi.core.v1.SystemService.GetUsage:output_type -> wi.core.v1.GetUsageResponse
-	16, // 27: wi.core.v1.SystemService.Shutdown:output_type -> wi.core.v1.ShutdownResponse
-	21, // [21:28] is the sub-list for method output_type
-	14, // [14:21] is the sub-list for method input_type
+	17, // 21: wi.core.v1.SystemService.RotateCredentials:input_type -> wi.core.v1.RotateCredentialsRequest
+	2,  // 22: wi.core.v1.SystemService.GetInfo:output_type -> wi.core.v1.GetInfoResponse
+	5,  // 23: wi.core.v1.SystemService.GetHealth:output_type -> wi.core.v1.GetHealthResponse
+	8,  // 24: wi.core.v1.SystemService.RunDiagnostics:output_type -> wi.core.v1.RunDiagnosticsResponse
+	10, // 25: wi.core.v1.SystemService.GetConfig:output_type -> wi.core.v1.GetConfigResponse
+	14, // 26: wi.core.v1.SystemService.ListPlugins:output_type -> wi.core.v1.ListPluginsResponse
+	20, // 27: wi.core.v1.SystemService.GetUsage:output_type -> wi.core.v1.GetUsageResponse
+	16, // 28: wi.core.v1.SystemService.Shutdown:output_type -> wi.core.v1.ShutdownResponse
+	18, // 29: wi.core.v1.SystemService.RotateCredentials:output_type -> wi.core.v1.RotateCredentialsResponse
+	22, // [22:30] is the sub-list for method output_type
+	14, // [14:22] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name
 	14, // [14:14] is the sub-list for extension extendee
 	0,  // [0:14] is the sub-list for field type_name
@@ -1554,16 +1633,16 @@ func file_wi_core_v1_system_proto_init() {
 		return
 	}
 	file_wi_core_v1_jobs_proto_init()
-	file_wi_core_v1_system_proto_msgTypes[18].OneofWrappers = []any{}
-	file_wi_core_v1_system_proto_msgTypes[19].OneofWrappers = []any{}
 	file_wi_core_v1_system_proto_msgTypes[20].OneofWrappers = []any{}
+	file_wi_core_v1_system_proto_msgTypes[21].OneofWrappers = []any{}
+	file_wi_core_v1_system_proto_msgTypes[22].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_system_proto_rawDesc), len(file_wi_core_v1_system_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   21,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

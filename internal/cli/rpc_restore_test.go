@@ -131,7 +131,7 @@ func TestControlSendFlagsAndAbortActor(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			sent = nil
 			f.cfg.Stdin = strings.NewReader(test.stdin)
-			f.run(t, append([]string{"agent", "control", "send", "--json"}, test.args...)...)
+			f.run(t, append([]string{"send", "--item", created.Item.Id, "--json"}, test.args...)...)
 			if sent == nil || sent.Text != test.text || (sent.Delivery == v1.Delivery_DELIVERY_FOLLOW_UP) != test.follow {
 				t.Fatalf("request: %v", sent)
 			}
@@ -149,11 +149,8 @@ func TestControlSendFlagsAndAbortActor(t *testing.T) {
 	if !aborted || actor != "" {
 		t.Fatalf("abort: %t %q", aborted, actor)
 	}
-	for _, args := range [][]string{{"send", "--stdin", "text"}, {"abort", "text"}, {"abort", "--image", image}, {"send", "--file", file, "text"}, {"monitor", "--limit", "-1"}} {
-		command := append([]string{"agent", "control"}, args...)
-		if args[0] == "monitor" {
-			command = append([]string{"agent"}, args...)
-		}
+	for _, args := range [][]string{{"send", "--item", created.Item.Id, "--stdin", "text"}, {"agent", "control", "abort", "text"}, {"agent", "control", "abort", "--image", image}, {"send", "--item", created.Item.Id, "--file", file, "text"}, {"agent", "control", "send", "text"}, {"agent", "monitor", "--limit", "-1"}} {
+		command := args
 		if code := Run(context.Background(), command, f.cfg); code != ExitUsage {
 			t.Fatalf("%v returned %d", command, code)
 		}

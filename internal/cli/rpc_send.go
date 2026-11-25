@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
@@ -17,31 +18,57 @@ import (
 // as the command's result, without writing back to it.
 func rpcSend(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("send", cfg.Stderr)
+	selected := fs.String("item", "", "item")
 	wait := fs.Bool("wait", false, "wait for the agent's answer")
 	timeout := fs.Duration("timeout", 30*time.Minute, "how long --wait waits")
 	followUp := fs.Bool("follow-up", false, "deliver after the current turn settles")
 	file := fs.String("file", "", "read the message from a file")
 	fromStdin := fs.Bool("stdin", false, "read the message from standard input")
+	clientMessage := fs.String("client-message-id", "", "message idempotency key")
+	var imagePaths repeatFlag
+	fs.Var(&imagePaths, "image", "image path; repeatable")
 	if err := rpcParse(fs, args); err != nil {
 		return err
 	}
-	if fs.NArg() < 1 {
-		return usageErr{errors.New("usage: wi send ITEM [--wait] [--follow-up] [--file PATH | --stdin | MESSAGE...]")}
+	// The item is --item, or the first argument.
+	rest := fs.Args()
+	selector := *selected
+	if selector == "" {
+		if len(rest) == 0 {
+			return usageErr{errors.New("usage: wi send (ITEM | --item ITEM) [--wait] [--follow-up] [--image PATH] [--file PATH | --stdin | MESSAGE...]")}
+		}
+		selector, rest = rest[0], rest[1:]
 	}
-	id, err := rpcSelect(ctx, cfg, fs.Arg(0))
+	id, err := rpcSelect(ctx, cfg, selector)
 	if err != nil {
 		return err
 	}
-	message, err := readAgentControlMessage(cfg, fs.Args()[1:], *file, *fromStdin)
+	var images []*v1.Image
+	content, err := readAgentControlImages(cfg.CWD, imagePaths)
 	if err != nil {
 		return usageErr{err}
+	}
+	for _, image := range content {
+		data, err := base64.StdEncoding.DecodeString(image.Data)
+		if err != nil {
+			return err
+		}
+		images = append(images, &v1.Image{MimeType: image.MIMEType, Data: data})
+	}
+	message := ""
+	if len(images) == 0 || len(rest) > 0 || *file != "" || *fromStdin {
+		if message, err = readAgentControlMessage(cfg, rest, *file, *fromStdin); err != nil {
+			return usageErr{err}
+		}
 	}
 	delivery := v1.Delivery_DELIVERY_UNSPECIFIED
 	if *followUp {
 		delivery = v1.Delivery_DELIVERY_FOLLOW_UP
 	}
-	clientMessage := newCommandID()
-	value, err := cfg.API.Agents.SendMessage(ctx, rpcRequest(cfg, &v1.SendMessageRequest{ItemId: id, Text: message, Delivery: delivery, ClientMessageId: clientMessage, StartMode: v1.AgentMode_AGENT_MODE_HEADLESS}))
+	if *clientMessage == "" {
+		*clientMessage = newCommandID()
+	}
+	value, err := cfg.API.Agents.SendMessage(ctx, rpcRequest(cfg, &v1.SendMessageRequest{ItemId: id, Text: message, Images: images, Delivery: delivery, ClientMessageId: *clientMessage, StartMode: v1.AgentMode_AGENT_MODE_HEADLESS}))
 	if err != nil {
 		return err
 	}
@@ -55,7 +82,7 @@ func rpcSend(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 		fmt.Fprintf(cfg.Stdout, "sent to %s\n", id)
 		return nil
 	}
-	answer, err := awaitAnswer(ctx, cfg, id, clientMessage, *timeout)
+	answer, err := awaitAnswer(ctx, cfg, id, *clientMessage, *timeout)
 	if err != nil {
 		return err
 	}

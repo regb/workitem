@@ -138,6 +138,7 @@ var webRefused = map[string]string{
 	corev1connect.SystemServiceListPluginsProcedure:                "operator configuration",
 	corev1connect.SystemServiceRunDiagnosticsProcedure:             "operator diagnostics",
 	corev1connect.SystemServiceShutdownProcedure:                   "stopping the daemon is the operator's, from a terminal",
+	corev1connect.SystemServiceRotateCredentialsProcedure:          "replacing credentials belongs to the command line",
 	corev1connect.WorkspaceServiceEnsureWorkspaceProcedure:         "plumbing or operator command the page does not use",
 	corev1connect.WorkspaceServiceGetWorkspaceProcedure:            "plumbing or operator command the page does not use",
 	corev1connect.WorkspaceServiceReleaseWorkspaceProcedure:        "plumbing or operator command the page does not use",

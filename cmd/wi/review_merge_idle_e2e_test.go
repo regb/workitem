@@ -60,7 +60,7 @@ func TestMergeAllowsIdleOnlineAgentAndRefusesRunningTurn(t *testing.T) {
 	if !agent.Online || agent.Generation != generation {
 		t.Fatal("merge stopped or replaced the idle agent", agent)
 	}
-	f.run("agent", "control", "prompt", "--item", item, "hold merge running turn")
+	f.run("send", "--item", item, "hold merge running turn")
 	deadline = time.Now().Add(5 * time.Second)
 	for {
 		current, err := f.clients.Agents.GetAgent(ctx, connect.NewRequest(&v1.GetAgentRequest{ItemId: item}))

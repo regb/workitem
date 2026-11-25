@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,6 +43,16 @@ func (s *Server) ProposeItem(ctx context.Context, req *connect.Request[v1.Propos
 		sum := sha256.Sum256([]byte(r.ItemId + ":" + r.RequestId))
 		proposalID = "proposal-" + hex.EncodeToString(sum[:12])
 	}
+	if len(r.Description) > coordinator.MaxProposalDescription {
+		return nil, invalid("the description is too long")
+	}
+	// The description is written first, so a recorded proposal always has
+	// it; a retry of one already recorded keeps what it recorded.
+	if _, err := s.Core.Database().GetProposal(proposalID); err != nil {
+		if err := writeProposalDescription(s.proposalFile(r.ItemId, proposalID), r.Description); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, err)
+		}
+	}
 	saved, created, err := s.Core.Database().SaveProposal(coordinator.Proposal{ID: proposalID, ItemID: r.ItemId, Proposer: model.ActorFrom(ctx), RepositoryID: repository, Title: title, Description: r.Description, Labels: labels, CreatedAt: time.Now().UTC()})
 	if err != nil {
 		return nil, rpcError(err)
@@ -49,7 +61,7 @@ func (s *Server) ProposeItem(ctx context.Context, req *connect.Request[v1.Propos
 		_ = s.App.Store.AppendEvent(ctx, r.ItemId, model.NewEventFrom(ctx, saved.CreatedAt, "proposal.created", map[string]any{"proposal_id": saved.ID, "title": saved.Title}))
 	}
 	s.Core.Database().NotifyItems(r.ItemId)
-	return response(&v1.ProposeItemResponse{Proposal: proposal(saved)}, nil)
+	return response(&v1.ProposeItemResponse{Proposal: s.proposal(saved)}, nil)
 }
 
 func (s *Server) ListProposals(ctx context.Context, req *connect.Request[v1.ListProposalsRequest]) (*connect.Response[v1.ListProposalsResponse], error) {
@@ -59,7 +71,7 @@ func (s *Server) ListProposals(ctx context.Context, req *connect.Request[v1.List
 	}
 	out := &v1.ListProposalsResponse{Proposals: []*v1.Proposal{}}
 	for _, value := range values {
-		out.Proposals = append(out.Proposals, proposal(value))
+		out.Proposals = append(out.Proposals, s.proposal(value))
 	}
 	return response(out, nil)
 }
@@ -79,7 +91,7 @@ func (s *Server) FileProposal(ctx context.Context, req *connect.Request[v1.FileP
 	if value.State == coordinator.ProposalDismissed {
 		return nil, precondition("the proposal was dismissed")
 	}
-	title, description, labels := value.Title, value.Description, value.Labels
+	title, description, labels := value.Title, s.proposalDescription(value), value.Labels
 	if strings.TrimSpace(r.Title) != "" {
 		title = strings.TrimSpace(r.Title)
 	}
@@ -100,7 +112,7 @@ func (s *Server) FileProposal(ctx context.Context, req *connect.Request[v1.FileP
 	}
 	_ = s.App.Store.AppendEvent(filing, value.ItemID, model.NewEventFrom(filing, *decided.DecidedAt, "proposal.filed", map[string]any{"proposal_id": value.ID, "item_id": created.Msg.Item.Id}))
 	s.Core.Database().NotifyItems(value.ItemID, created.Msg.Item.Id)
-	return response(&v1.FileProposalResponse{Proposal: proposal(decided), Item: created.Msg.Item}, nil)
+	return response(&v1.FileProposalResponse{Proposal: s.proposal(decided), Item: created.Msg.Item}, nil)
 }
 
 func (s *Server) DismissProposal(ctx context.Context, req *connect.Request[v1.DismissProposalRequest]) (*connect.Response[v1.DismissProposalResponse], error) {
@@ -118,10 +130,50 @@ func (s *Server) DismissProposal(ctx context.Context, req *connect.Request[v1.Di
 	}
 	_ = s.App.Store.AppendEvent(ctx, decided.ItemID, model.NewEventFrom(ctx, *decided.DecidedAt, "proposal.dismissed", map[string]any{"proposal_id": decided.ID}))
 	s.Core.Database().NotifyItems(decided.ItemID)
-	return response(&v1.DismissProposalResponse{Proposal: proposal(decided)}, nil)
+	return response(&v1.DismissProposalResponse{Proposal: s.proposal(decided)}, nil)
 }
 
-func proposal(value coordinator.Proposal) *v1.Proposal {
+// proposalFile is where a proposal's description is kept: with the item
+// that proposed it.
+func (s *Server) proposalFile(itemID, proposalID string) string {
+	return filepath.Join(s.App.Store.ItemDir(itemID), "proposals", proposalID+".md")
+}
+
+func writeProposalDescription(path, text string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	temp, err := os.CreateTemp(filepath.Dir(path), ".proposal-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temp.Name())
+	if _, err := temp.WriteString(text); err != nil {
+		temp.Close()
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temp.Name(), path)
+}
+
+func (s *Server) proposalDescription(value coordinator.Proposal) string {
+	data, err := os.ReadFile(s.proposalFile(value.ItemID, value.ID))
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// proposal is the API form of a proposal, with its description read from
+// its file.
+func (s *Server) proposal(value coordinator.Proposal) *v1.Proposal {
+	value.Description = s.proposalDescription(value)
+	return proposalView(value)
+}
+
+func proposalView(value coordinator.Proposal) *v1.Proposal {
 	state := map[string]v1.ProposalState{coordinator.ProposalPending: v1.ProposalState_PROPOSAL_STATE_PENDING, coordinator.ProposalFiled: v1.ProposalState_PROPOSAL_STATE_FILED, coordinator.ProposalDismissed: v1.ProposalState_PROPOSAL_STATE_DISMISSED}[value.State]
 	return &v1.Proposal{Id: value.ID, ItemId: value.ItemID, Proposer: value.Proposer, RepositoryId: value.RepositoryID, Title: value.Title, Description: value.Description, Labels: value.Labels, State: state, CreatedAt: stamp(value.CreatedAt), FiledItemId: value.FiledItemID, DecidedBy: value.DecidedBy, DecidedAt: optionalStamp(value.DecidedAt), Reason: value.Reason}
 }

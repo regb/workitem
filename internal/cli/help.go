@@ -279,9 +279,16 @@ var helpDocs = map[string]helpDoc{
 		},
 		Examples: []string{`wi edit --title "Clarified objective"`, `wi edit --item auth --desc-file task.md --label backend`, `wi edit --no-deep auth`, `wi edit auth`},
 	},
+	"auth": {
+		Summary:     "Replace the operator's and wi web's credentials",
+		Usage:       []string{"wi auth rotate"},
+		Description: []string{"Writes new credentials to the files the daemon keeps in its data root (wi info operator-credential) and stops the old ones working at once. The wi command and wi web read the files, so they carry on; any other client holding a copy must read it again. Agents' credentials are unaffected: each ends with its agent's runtime."},
+		SeeAlso:     []string{"info"},
+	},
 	"send": {
 		Summary:     "Say something to an item's agent, and optionally wait for its answer",
-		Usage:       []string{"wi send <item> [--wait] [--timeout <duration>] [--follow-up] [--file <path> | --stdin | <message...>]"},
+		Usage:       []string{"wi send (<item> | --item <selector>) [--wait] [--timeout <duration>] [--follow-up] [--image <path>] [--file <path> | --stdin | <message...>]"},
+		Options:     []helpOption{{"--item <selector>", "The item, instead of the first argument."}, {"--wait", "Wait for the turn to settle and print the agent's last reply."}, {"--timeout <duration>", "How long --wait waits; default 30m."}, {"--follow-up", "Deliver only after the current turn fully settles."}, {"--image <path>", "Attach an image; repeatable, up to four files and 8 MiB total. Text is optional with images."}, {"--stdin", "Read the message from standard input."}, {"--file <path>", "Read the message from a file."}},
 		Description: []string{"Sends the message as the dashboard does: a running agent that is busy is steered, an idle one starts a turn, and an item with no agent running starts one, headless, with the message. With --wait the command waits for the turn the message started to settle and prints the agent's last reply: another item's agent asking gets the answer as the command's result. Run by an item's agent, the message reaches the other agent in an envelope naming the sender; you are identified automatically. A chain of messages between agents without a person stops after eight."},
 		Examples:    []string{`wi send parser-fix --wait "Do the checks pass?"`, `wi send reviewer --follow-up --file notes.md`},
 		SeeAlso:     []string{"agent", "access"},
@@ -780,22 +787,11 @@ var helpDocs = map[string]helpDoc{
 		},
 	},
 	"agent control": {
-		Summary:     "Submit a low-level command to the owning agent runtime",
-		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--image <path>] [--stdin | --file <path> | <message...>]", "wi agent control <abort|shutdown> [--item <selector>]"},
-		Description: []string{"Submits directly to runtime control without consulting derived busy/idle status. Send defaults to the driver's steering delivery; --follow-up waits until the current run settles."},
-		Options: []helpOption{
-			{"--item <selector>", "Select an item explicitly."},
-			{"--stdin", "Read the message from standard input."},
-			{"--file <path>", "Read the message from a file."},
-			{"--image <path>", "Attach an image; repeatable, up to four files and 8 MiB total. Text is optional with images."},
-		},
-		Examples: []string{`wi agent control send --item auth "Focus on the failing test"`, `wi agent control send --follow-up --item auth "Summarize when finished"`},
-	},
-	"agent control send": {
-		Summary:     "Send input with explicit delivery semantics",
-		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--image <path>] [--stdin | --file <path> | <message...>]"},
-		Description: []string{"Defaults to the driver's steering delivery; while idle, start a turn. --follow-up delivers only after the current run fully settles. Image attachments require an image-capable runtime."},
-		Options:     []helpOption{{"--follow-up", "Wait until the current run fully settles."}, {"--item <selector>", "Select an item explicitly."}, {"--stdin", "Read the message from standard input."}, {"--file <path>", "Read the message from a file."}, {"--image <path>", "Attach an image; repeatable, up to four files and 8 MiB total. Text is optional with images."}},
+		Summary:     "Take, release or use control of an item's agent",
+		Usage:       []string{"wi agent control <status|take|release|abort|shutdown> [--item <selector>] [--confirm] [--plan-token <token>]"},
+		Description: []string{"Control decides which client may send input. take acquires it, confirming a takeover with --confirm; release gives it back; abort stops the current turn; shutdown asks the runtime to stop. To send a message, use wi send."},
+		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}, {"--confirm", "Confirm taking control from another client."}},
+		SeeAlso:     []string{"send"},
 	},
 	"agent control abort": {
 		Summary: "Abort current agent work",
@@ -857,7 +853,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"search", "Find items by text"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}, {"reopen", "Reopen closed work"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
-	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"own", "Take an item an agent delegated"}, {"send", "Say something to an item's agent"}, {"proposal", "File or dismiss items agents proposed"}, {"access", "Say what items' agents may do to other items"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
+	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"own", "Take an item an agent delegated"}, {"send", "Say something to an item's agent"}, {"auth", "Replace the operator's and wi web's credentials"}, {"proposal", "File or dismiss items agents proposed"}, {"access", "Say what items' agents may do to other items"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Agent and checkout:")
 	printCommandRows(w, [][2]string{{"review", "Inspect and capture retained code revisions"}, {"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})

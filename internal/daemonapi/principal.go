@@ -1,8 +1,10 @@
 package daemonapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -44,6 +46,26 @@ func (p principal) item() bool { return p.kind == credential.Item }
 // credentials. Item credentials are checked against the database.
 type credentials struct{ operator, proxy [32]byte }
 
+// rotateCredentials writes new operator and wi web credentials and returns
+// their hashes; the caller swaps them in.
+func rotateCredentials(dataRoot string) (credentials, error) {
+	operator, err := credential.New(credential.Operator, "")
+	if err != nil {
+		return credentials{}, err
+	}
+	proxy, err := credential.New(credential.Proxy, "")
+	if err != nil {
+		return credentials{}, err
+	}
+	if err := credential.Write(credential.OperatorFile(dataRoot), operator); err != nil {
+		return credentials{}, err
+	}
+	if err := credential.Write(credential.ProxyFile(dataRoot), proxy); err != nil {
+		return credentials{}, err
+	}
+	return credentials{operator: operator.Hash(), proxy: proxy.Hash()}, nil
+}
+
 // loadCredentials makes sure the operator's and wi web's credential files
 // exist in the data root, and keeps their hashes.
 func loadCredentials(dataRoot string) (credentials, error) {
@@ -77,13 +99,14 @@ func (s *Server) authenticate(header http.Header) (principal, error) {
 	if err != nil {
 		return principal{}, connect.NewError(connect.CodeUnauthenticated, errUnauthenticated)
 	}
+	known := s.knownCredentials()
 	switch value.Kind {
 	case credential.Operator:
-		if value.Matches(s.credentials.operator) {
+		if value.Matches(known.operator) {
 			return principal{kind: credential.Operator}, nil
 		}
 	case credential.Proxy:
-		if value.Matches(s.credentials.proxy) {
+		if value.Matches(known.proxy) {
 			return principal{kind: credential.Proxy}, nil
 		}
 	case credential.Item:
@@ -97,4 +120,21 @@ func (s *Server) authenticate(header http.Header) (principal, error) {
 		return principal{}, connect.NewError(connect.CodeUnauthenticated, errors.New("this agent's wi credential is no longer valid: its runtime has stopped or was replaced"))
 	}
 	return principal{}, connect.NewError(connect.CodeUnauthenticated, errUnauthenticated)
+}
+
+func (s *Server) knownCredentials() credentials {
+	s.credentialsMu.RLock()
+	defer s.credentialsMu.RUnlock()
+	return s.credentials
+}
+
+func (s *Server) RotateCredentials(ctx context.Context, req *connect.Request[v1.RotateCredentialsRequest]) (*connect.Response[v1.RotateCredentialsResponse], error) {
+	s.credentialsMu.Lock()
+	defer s.credentialsMu.Unlock()
+	next, err := rotateCredentials(s.Root)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.credentials = next
+	return connect.NewResponse(&v1.RotateCredentialsResponse{}), nil
 }

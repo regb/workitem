@@ -53,7 +53,7 @@ Each running agent exposes up to three channels, reported by its driver at start
 | Claude headless | yes | structured; idle-only prompts are checked against observed status | no |
 | Claude TUI | yes | emulated with tmux keystrokes | yes |
 
-Observing (history and live output) works in every mode. Clients differ in what they need to control: a browser client needs structured control; a tmux client needs the terminal channel; the command line (`wi agent control send`) uses whichever control channel the agent has, structured or emulated keystrokes, so it never restarts an agent in another mode and does not displace a terminal someone is watching. Its control expires on its own, like a browser's.
+Observing (history and live output) works in every mode. Clients differ in what they need to control: a browser client needs structured control; a tmux client needs the terminal channel; the command line (`wi send`) uses whichever control channel the agent has, structured or emulated keystrokes, so it never restarts an agent in another mode and does not displace a terminal someone is watching. Its control expires on its own, like a browser's.
 
 ## The terminal
 
@@ -77,7 +77,7 @@ The lease is enforced for clients that go through Wi. A raw `tmux attach` that b
 ```bash
 wi agent status item-slug
 wi agent monitor --content --item item-slug
-wi agent control send --item item-slug "Run the focused tests and explain failures."
+wi send --item item-slug "Run the focused tests and explain failures."
 ```
 
 `wi agent status` reports the agent: whether it is online, its mode, status, capabilities, generation, terminal and who controls it. `wi agent monitor --content` follows what the agent is doing now: the reply as it is written, shared reasoning, tool calls and activity; ending it never affects the agent. Status reports activity, not task completion. While busy, the default message uses steering semantics; `--follow-up` waits for the run to settle. Use `--file` or `--stdin` for longer messages. Delivery acknowledges handoff, not completion. Unsupported controls are rejected, never simulated with TUI keystrokes.

@@ -24,7 +24,7 @@ func (s *Server) GetItemView(ctx context.Context, req *connect.Request[v1.GetIte
 		out := &v1.GetItemViewResponse{Item: current.Msg.Item, Description: current.Msg.Description, Observation: current.Msg.Observation, Agent: a, Control: control, Setup: s.setup(ctx, req.Msg.ItemId), Jobs: s.jobs.list(req.Msg.ItemId, true), ReadAt: stamp(readAt), Warnings: warnings}
 		if proposals, err := s.Core.Database().ListProposals(req.Msg.ItemId, false); err == nil {
 			for _, value := range proposals {
-				out.Proposals = append(out.Proposals, proposal(value))
+				out.Proposals = append(out.Proposals, s.proposal(value))
 			}
 		}
 		if out.Item.Conversation != nil {

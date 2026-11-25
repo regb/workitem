@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/credential"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
@@ -81,6 +82,14 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 	errors.As(err, &refusal)
 	if detail, _ := refusal.Details()[0].Value(); detail.(*v1.AccessDenied).Needed != v1.AccessLevel_ACCESS_LEVEL_VIEW {
 		t.Fatalf("detail: %v", detail)
+	}
+	// The change feed and jobs name only what it may view.
+	asAgent := context.WithValue(ctx, identityKey{}, identity{principal: principal{kind: credential.Item, itemID: a}})
+	if got := f.api.viewable(asAgent, []string{a, b, c}); len(got) != 2 || got[0] != a || got[1] != c {
+		t.Fatalf("viewable: %v", got)
+	}
+	if jobs := f.api.viewableJobs(asAgent, []*v1.Job{{ItemId: b}, {ItemId: c}, {}}); len(jobs) != 1 || jobs[0].ItemId != c {
+		t.Fatalf("viewable jobs: %v", jobs)
 	}
 	list, err := agent.Items.ListItems(ctx, connect.NewRequest(&v1.ListItemsRequest{Owner: ""}))
 	if err != nil || len(list.Msg.Items) != 1 || list.Msg.Items[0].Id != a {

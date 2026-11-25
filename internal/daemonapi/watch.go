@@ -103,6 +103,8 @@ func (s *Server) followChanges(ctx context.Context, cursor string, send func(*v1
 				value.All = false
 				value.ItemIDs = nil
 			}
+			// An item's agent hears only of items it may view.
+			value.ItemIDs = s.viewable(ctx, value.ItemIDs)
 			out := &v1.WatchChangesResponse{Cursor: base64.RawURLEncoding.EncodeToString([]byte(value.Epoch + ":" + strconv.FormatUint(value.Revision, 10))), ItemIds: value.ItemIDs, All: value.All, ProfilesChanged: value.All}
 			if err := send(out); err != nil {
 				return err
@@ -123,7 +125,7 @@ func (s *Server) followChanges(ctx context.Context, cursor string, send func(*v1
 func (s *Server) followJobs(ctx context.Context, send func(*v1.WatchResponse) error) error {
 	moved := s.jobs.movement()
 	seen := map[string]*v1.Job{}
-	running := s.jobs.list("", true)
+	running := s.viewableJobs(ctx, s.jobs.list("", true))
 	for _, job := range running {
 		seen[job.Id] = job
 	}
@@ -138,7 +140,7 @@ func (s *Server) followJobs(ctx context.Context, send func(*v1.WatchResponse) er
 		}
 		moved = s.jobs.movement()
 		var changed []*v1.Job
-		for _, job := range s.jobs.list("", false) {
+		for _, job := range s.viewableJobs(ctx, s.jobs.list("", false)) {
 			before, known := seen[job.Id]
 			// A job finished before this stream began is not news to it.
 			if !known && terminalJob(job.State) && job.FinishedAt.AsTime().Before(time.Now().Add(-time.Minute)) {
