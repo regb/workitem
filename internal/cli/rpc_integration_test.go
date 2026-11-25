@@ -13,7 +13,6 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/apitest"
-	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/config"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -219,29 +218,6 @@ func TestClientValidationHasNoDurableEffects(t *testing.T) {
 	listed, err := f.api.Clients.Items.ListItems(context.Background(), connect.NewRequest(&v1.ListItemsRequest{}))
 	if err != nil || len(listed.Msg.Items) != 1 {
 		t.Fatalf("invalid input mutated state: %v %v", listed, err)
-	}
-}
-func TestRestrictedClientCannotMutateLifecycleOrSettings(t *testing.T) {
-	f := newClientFixture(t)
-	item := f.create(t, "Restricted")
-	client, err := apitransport.NewClients(f.api.AgentSocket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-	f.cfg.API = client
-	f.cfg.Env["WI_ID"] = item.Id
-	for _, args := range [][]string{{"state", "set", "active"}, {"edit", "--title", "Forbidden"}, {"workspace", "ensure"}, {"new", "--repo", "test", "--title", "Cannot start", "--start"}} {
-		f.out.Reset()
-		f.errs.Reset()
-		if code := Run(context.Background(), args, f.cfg); code == ExitOK {
-			t.Fatal("restricted operation succeeded", args)
-		}
-	}
-	var created v1.CreateItemResponse
-	f.decode(t, f.run(t, "new", "--repo", "test", "--title", "Agent backlog", "--json"), &created)
-	if created.Item.State != v1.ItemState_ITEM_STATE_BACKLOG || created.Item.Checkout.Claim != nil {
-		t.Fatal(created.String())
 	}
 }
 func TestRepositorySettingsFilesAndEnvironmentThroughAPI(t *testing.T) {

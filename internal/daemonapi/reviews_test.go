@@ -9,7 +9,6 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
 )
 
 func reviewWorkspace(t *testing.T) (*fixture, string, *v1.Checkout) {
@@ -122,16 +121,5 @@ func TestReviewAndEditorThroughCoreAPI(t *testing.T) {
 	}
 	if _, err = f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_UNCOMMITTED})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("missing checkout: %v", err)
-	}
-	agent, err := apitransport.NewClients(filepath.Join(f.root, "agent.sock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer agent.Close()
-	if _, err = agent.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item})); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("agent review access: %v", err)
-	}
-	if _, err = agent.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("agent save access: %v", err)
 	}
 }

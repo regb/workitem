@@ -171,6 +171,16 @@ func (s *Service) EventSocketPath(itemID string, runtime *model.AgentRuntime) st
 	return runtimepath.SocketPath(strings.TrimSpace(s.RuntimeSocketRoot), s.store.ItemDir(itemID), itemID, runtime.ID, true)
 }
 
+// CredentialPath is the file holding the runtime's item credential.
+func (s *Service) CredentialPath(itemID string, runtime *model.AgentRuntime) string {
+	if runtime == nil || strings.TrimSpace(runtime.ID) == "" {
+		return ""
+	}
+	if strings.TrimSpace(s.RuntimeStateRoot) != "" {
+		return filepath.Join(s.RuntimeStateRoot, filepath.FromSlash(runtimepath.Credential(itemID, runtime.ID)))
+	}
+	return filepath.Join(s.store.ItemDir(itemID), "agent", "runtimes", runtime.ID, "credential")
+}
 func (s *Service) LogPath(itemID string, runtime *model.AgentRuntime) string {
 	if runtime == nil || strings.TrimSpace(runtime.ID) == "" {
 		return ""

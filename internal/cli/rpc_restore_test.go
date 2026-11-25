@@ -199,7 +199,7 @@ func TestAttentionConfigAndInfoRestored(t *testing.T) {
 	if shown.Observation.Unread {
 		t.Fatal(shown.String())
 	}
-	for _, args := range [][]string{{"config", "get", "deep_work.max_active"}, {"config", "get", "item.defaults.labels"}, {"config", "get", "plugins.setup.trust", "--origins"}, {"config", "plugins"}, {"info", "agent-socket"}, {"info", "config-file"}} {
+	for _, args := range [][]string{{"config", "get", "deep_work.max_active"}, {"config", "get", "item.defaults.labels"}, {"config", "get", "plugins.setup.trust", "--origins"}, {"config", "plugins"}, {"info", "socket"}, {"info", "config-file"}} {
 		out := f.run(t, args...)
 		if len(out) == 0 || strings.HasPrefix(strings.TrimSpace(out), "{") {
 			t.Fatalf("%v: %s", args, out)

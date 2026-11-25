@@ -49,6 +49,7 @@ type Server struct {
 	jobs            *jobRegistry
 	leases          sync.Map
 	planSecret      [32]byte
+	credentials     credentials
 	callbackMu      sync.Mutex
 	callbacksClosed bool
 	callbacks       sync.WaitGroup
@@ -68,6 +69,11 @@ func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.C
 		return nil, err
 	}
 	var err error
+	if s.credentials, err = loadCredentials(root); err != nil {
+		cancel()
+		return nil, err
+	}
+	a.ItemCredentials = core.Database()
 	s.jobs, err = newPersistentJobRegistry(ctx, core.Database())
 	if err != nil {
 		cancel()
@@ -120,23 +126,38 @@ func (s *Server) lock(id string) func() {
 	return mu.Unlock
 }
 
-// identity is who a call is from: the client and its kind, the actor of a
-// control command, and, from the web listener, the signed-in user wi web
-// vouches for (label).
-type identity struct{ client, holder, actor, label string }
+// identity is who a call is from: the principal its credential proves, the
+// client and its kind, the actor of a control command, and, from wi web, the
+// signed-in user it vouches for (label).
+type identity struct {
+	principal                    principal
+	client, holder, actor, label string
+}
 
 // LabelHeader carries the user wi web's proxy authenticated, such as a
-// Tailscale login. Only the web listener's is believed: wi web sets it and
-// drops whatever the page sends.
+// Tailscale login. It is believed only with wi web's credential: wi web sets
+// it and drops whatever the page sends.
 const LabelHeader = "Wi-Client-Label"
 
 // webLabel is a web caller's user, when wi web sent a valid one.
-func webLabel(ctx context.Context, header http.Header) string {
+func webLabel(who principal, header http.Header) string {
 	label := strings.TrimSpace(header.Get(LabelHeader))
-	if apitransport.Caller(ctx) != apitransport.WebAdapter || len(label) > 128 || !utf8.ValidString(label) || strings.IndexFunc(label, unicode.IsControl) >= 0 {
+	if !who.web() || len(label) > 128 || !utf8.ValidString(label) || strings.IndexFunc(label, unicode.IsControl) >= 0 {
 		return ""
 	}
 	return label
+}
+
+// callerIdentity reads who a call is from, once its credential is checked.
+func callerIdentity(who principal, header http.Header) identity {
+	value := identity{principal: who, client: header.Get(ClientHeader), holder: header.Get(HolderHeader), actor: header.Get(ControlActorHeader), label: webLabel(who, header)}
+	if value.client == "" {
+		value.client = "cli"
+	}
+	if value.holder != model.LeaseHolderTerminal && value.holder != model.LeaseHolderCLI {
+		value.holder = model.LeaseHolderWeb
+	}
+	return value
 }
 
 const ControlActorHeader = "Wi-Control-Actor"
@@ -155,25 +176,17 @@ func caller(ctx context.Context) identity { v, _ := ctx.Value(identityKey{}).(id
 func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if access := apitransport.Caller(ctx); access != apitransport.Operator && access != apitransport.Agent && access != apitransport.WebAdapter {
-				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("authenticated daemon endpoint is required"))
+			who, err := s.authenticate(req.Header())
+			if err != nil {
+				return nil, err
 			}
 			s.noteActivity()
-			who := identity{client: req.Header().Get(ClientHeader), holder: req.Header().Get(HolderHeader), actor: req.Header().Get(ControlActorHeader), label: webLabel(ctx, req.Header())}
-			if len(who.actor) > 128 || !utf8.ValidString(who.actor) || strings.IndexFunc(who.actor, unicode.IsControl) >= 0 {
+			caller := callerIdentity(who, req.Header())
+			if len(caller.actor) > 128 || !utf8.ValidString(caller.actor) || strings.IndexFunc(caller.actor, unicode.IsControl) >= 0 {
 				return nil, invalid("invalid control actor")
 			}
-			if who.client == "" {
-				who.client = "cli"
-			}
-			if who.holder != model.LeaseHolderTerminal && who.holder != model.LeaseHolderCLI {
-				who.holder = model.LeaseHolderWeb
-			}
-			ctx = context.WithValue(ctx, identityKey{}, who)
-			if apitransport.Caller(ctx) == apitransport.Agent && !agentAllowed(req.Spec().Procedure) {
-				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("agent endpoint does not allow this operation"))
-			}
-			if apitransport.Caller(ctx) == apitransport.WebAdapter && !webAllowed(req.Spec().Procedure) {
+			ctx = context.WithValue(ctx, identityKey{}, caller)
+			if who.web() && !webAllowed(req.Spec().Procedure) {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("the web endpoint does not allow this operation"))
 			}
 			method := req.Spec().Procedure[strings.LastIndex(req.Spec().Procedure, "/")+1:]
@@ -215,13 +228,6 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 			return result, rpcError(err)
 		}
 	}
-}
-func agentAllowed(procedure string) bool {
-	switch procedure {
-	case corev1connect.SystemServiceGetInfoProcedure, corev1connect.ItemServiceCreateItemProcedure, corev1connect.ItemServiceResolveItemProcedure, corev1connect.ItemServiceGetItemProcedure, corev1connect.ItemServiceListItemsProcedure, corev1connect.ItemServiceSearchItemsProcedure, corev1connect.ItemServiceAddNoteProcedure, corev1connect.ItemServiceAttachProcedure, corev1connect.ItemServiceListNotesProcedure, corev1connect.ItemServiceReadAttachmentProcedure, corev1connect.RepositoryServiceListRepositoriesProcedure, corev1connect.AgentProfileServiceListAgentProfilesProcedure:
-		return true
-	}
-	return false
 }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()

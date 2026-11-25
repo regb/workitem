@@ -50,4 +50,6 @@ Keep corrections within the original objective in this item. File independent di
 
 ## Agent authority
 
-A sandbox can point `WI_AGENT_DAEMON_SOCKET` at the daemon's restricted agent endpoint to file safe managed-slot backlog work. The CLI checks that the socket really is that endpoint and never starts a daemon for it. The endpoint allows reading items, repositories and agent profiles, creating backlog items, and adding notes and attachments; it rejects lifecycle, workspace, agent, terminal, deletion, shutdown, and `--start` operations. See [Endpoints](../../reference/api/#endpoints).
+An agent's `wi` commands act as its item, not as you. Each time an agent starts, the daemon gives it a credential, in the file `WI_ITEM_CREDENTIAL_FILE` names in its environment, and every call the agent and its tools make presents it. The credential stops working when that agent stops or is replaced; `wi` then fails rather than acting as you. Your own commands, including those in an item's shell windows, act as you.
+
+An agent can still do what you allow every agent to do; which items each agent may act on is not limited yet. The credential is not isolation either: an agent that runs as your Unix user can read your own credential. A sandbox mounts the daemon's socket and the agent's credential file but not yours, and sets `WI_API_SOCKET` to where the socket is mounted. See [Endpoint and credentials](../../reference/api/#endpoint-and-credentials).

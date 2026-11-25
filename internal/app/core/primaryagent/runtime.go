@@ -37,8 +37,21 @@ func (s *Service) Prepare(ctx context.Context, m model.Manifest, session model.C
 	if err := s.store.SaveAgentRuntime(ctx, m.ID, runtime); err != nil {
 		return model.AgentRuntime{}, err
 	}
+	if err := s.mintCredential(m.ID, &runtime); err != nil {
+		return model.AgentRuntime{}, fmt.Errorf("issue the agent's credential: %w", err)
+	}
 	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "agent_runtime.prepared", "wi", map[string]any{"runtime_id": runtime.ID, "mode": runtime.Mode, "conversation_id": runtime.ConversationID, "workspace_claim_id": runtime.WorkspaceClaimID, "workspace_claim_generation": runtime.WorkspaceClaimGeneration}))
 	return runtime, nil
+}
+
+// mintCredential gives the runtime its item credential: a file only its
+// agent is told about, whose hash the daemon keeps. Recording the new hash
+// ends the previous runtime's credential.
+func (s *Service) mintCredential(itemID string, runtime *model.AgentRuntime) error {
+	if s.Credentials == nil {
+		return nil
+	}
+	return s.Credentials.IssueItemCredential(itemID, runtime.ID, s.CredentialPath(itemID, runtime))
 }
 
 // ErrBusy marks a stop refused because the agent is working and the caller

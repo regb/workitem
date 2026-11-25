@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -61,11 +62,19 @@ type Clients struct {
 	transport    *http.Transport
 }
 
+// Credential supplies the credential a client presents with every request.
+// It is called per request, so clients made before the daemon has written
+// the operator's credential pick it up once it exists.
+type Credential func() (string, error)
+
 // NewClients creates Connect JSON clients. The socket is never inferred from
 // environment variables. Both peers must belong to this process's effective UID.
-func NewClients(socketPath string) (*Clients, error) {
+func NewClients(socketPath string, credential Credential) (*Clients, error) {
 	if !filepath.IsAbs(socketPath) {
 		return nil, errors.New("daemon socket path must be absolute")
+	}
+	if credential == nil {
+		return nil, errors.New("a daemon API client needs a credential")
 	}
 	protocols := new(http.Protocols)
 	protocols.SetUnencryptedHTTP2(true)
@@ -89,7 +98,7 @@ func NewClients(socketPath string) (*Clients, error) {
 		},
 	}
 	client := &http.Client{
-		Transport: t,
+		Transport: authorized{base: t, credential: credential},
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return errors.New("daemon API redirects are not allowed")
 		},
@@ -115,32 +124,39 @@ func NewClients(socketPath string) (*Clients, error) {
 
 func (c *Clients) Close() { c.transport.CloseIdleConnections() }
 
-// Access is assigned by the trusted listener, never by request metadata.
-// Agent access is only an endpoint identity, not an item-scoped credential.
-type Access string
+// authorized presents the client's credential on every request.
+type authorized struct {
+	base       http.RoundTripper
+	credential Credential
+}
 
-const (
-	Operator   Access = "operator"
-	Agent      Access = "agent"
-	WebAdapter Access = "web-adapter"
-)
+func (a authorized) RoundTrip(request *http.Request) (*http.Response, error) {
+	token, err := a.credential()
+	if err != nil {
+		return nil, fmt.Errorf("read wi credential: %w", err)
+	}
+	request = request.Clone(request.Context())
+	request.Header.Set("Authorization", "Bearer "+token)
+	return a.base.RoundTrip(request)
+}
 
-type accessKey struct{}
-
-func Caller(ctx context.Context) Access {
-	access, _ := ctx.Value(accessKey{}).(Access)
-	return access
+// Bearer is the credential a request presents, or "".
+func Bearer(header http.Header) string {
+	value := header.Get("Authorization")
+	if len(value) < 7 || !strings.EqualFold(value[:7], "Bearer ") {
+		return ""
+	}
+	return strings.TrimSpace(value[7:])
 }
 
 // Server serves authenticated peers. The caller owns socket creation and removal.
 type Server struct{ http *http.Server }
 
-// NewServer speaks Connect, gRPC and gRPC-Web on the same socket.
+// NewServer speaks Connect, gRPC and gRPC-Web on the same socket. Who a
+// caller is comes from the credential each request presents, which the
+// handler checks; the socket only admits the daemon's own Unix user.
 // No write timeout is installed because server streams can live indefinitely.
-func NewServer(handler http.Handler, access Access) (*Server, error) {
-	if access != Operator && access != Agent && access != WebAdapter {
-		return nil, errors.New("invalid daemon endpoint identity")
-	}
+func NewServer(handler http.Handler) (*Server, error) {
 	protocols := new(http.Protocols)
 	protocols.SetHTTP1(true)
 	protocols.SetUnencryptedHTTP2(true)
@@ -149,9 +165,6 @@ func NewServer(handler http.Handler, access Access) (*Server, error) {
 		Protocols:         protocols,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       90 * time.Second,
-		ConnContext: func(ctx context.Context, _ net.Conn) context.Context {
-			return context.WithValue(ctx, accessKey{}, access)
-		},
 	}}, nil
 }
 

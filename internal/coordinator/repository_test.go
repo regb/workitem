@@ -24,11 +24,7 @@ func TestRepositoryRegistrationThroughOperatorEndpoint(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	agentSocket, err := AgentSocketPath(runtime, root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server, err := NewServerWithAgentSocket(root, socket, agentSocket)
+	server, err := NewServer(root, socket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,25 +93,9 @@ func TestRepositoryRegistrationThroughOperatorEndpoint(t *testing.T) {
 	if err != nil || !archivedSource.Repository.Archived || archivedSource.Commit != sourceResult.Commit {
 		t.Fatalf("archived source=%+v err=%v", archivedSource, err)
 	}
-	agent := &Client{SocketPath: agentSocket}
-	if _, err := agent.SetRepositoryArchived(ctx, archive); err == nil {
-		t.Fatal("agent archived repository")
-	}
 	restore := archiveTestCommand("restore endpoint", true, false)
-	if _, err := agent.SetRepositoryArchived(ctx, restore); err == nil {
-		t.Fatal("agent restored repository")
-	}
 	if result, err := client.SetRepositoryArchived(ctx, restore); err != nil || result.Repository.Archived {
 		t.Fatalf("restore=%+v err=%v", result, err)
-	}
-	if _, err := agent.RenameRepository(ctx, rename); err == nil {
-		t.Fatal("agent renamed repository")
-	}
-	if _, err := agent.RegisterRepository(ctx, command); err == nil {
-		t.Fatal("agent registered repository")
-	}
-	if _, err := agent.ListRepositories(ctx); err == nil {
-		t.Fatal("agent read private registry")
 	}
 	if _, err := os.Stat(filepath.Join(path, "config")); err != nil {
 		t.Fatal(err)
@@ -152,11 +132,6 @@ func TestRepositoryRegistrationIsAtomicAndIdempotent(t *testing.T) {
 	}
 	if status.GlobalSequence != first.Sequence {
 		t.Fatal("failed command mutated event history")
-	}
-	for _, method := range []string{MethodRegisterRepository, MethodListRepositories} {
-		if agentMethodAllowed(method) {
-			t.Fatalf("restricted agent endpoint permits %s", method)
-		}
 	}
 }
 

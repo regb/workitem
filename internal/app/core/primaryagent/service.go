@@ -52,6 +52,15 @@ type Service struct {
 	ConversationObserver ConversationObserver
 	RuntimeStateRoot     string
 	RuntimeSocketRoot    string
+	// Credentials records the hash of the credential each runtime is given.
+	// Without it runtimes get no credential, as in tests without a daemon.
+	Credentials Credentials
+}
+
+// Credentials issues a runtime its item credential: it writes the file at
+// path and records the credential as the item's current one.
+type Credentials interface {
+	IssueItemCredential(itemID, runtimeID, path string) error
 }
 
 func New(st Store, p Process, git Git, tmux Tmux, r Resolver, newID func() (string, error), now func() time.Time, busy func(context.Context, string) (bool, error)) *Service {

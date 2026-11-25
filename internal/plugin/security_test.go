@@ -11,11 +11,14 @@ import (
 	"time"
 )
 
-func TestPluginInvocationPreservesRestrictedEndpoint(t *testing.T) {
-	t.Setenv("WI_AGENT_DAEMON_SOCKET", "/test/restricted.sock")
+// A plugin acts as its caller: an agent's plugin keeps the agent's
+// credential and the socket it reaches the daemon on.
+func TestPluginInvocationKeepsTheCallersIdentity(t *testing.T) {
+	t.Setenv("WI_API_SOCKET", "/test/mounted.sock")
+	t.Setenv("WI_ITEM_CREDENTIAL_FILE", "/test/credential")
 	t.Setenv("WI_ID", "must-not-inherit")
 	script := filepath.Join(t.TempDir(), "plugin")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\n[ \"$WI_AGENT_DAEMON_SOCKET\" = /test/restricted.sock ] && [ -z \"$WI_ID\" ] || exit 11\n[ \"$1\" = skill ] && echo 'Safe instructions'\nexit 0\n"), 0700); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n[ \"$WI_API_SOCKET\" = /test/mounted.sock ] && [ \"$WI_ITEM_CREDENTIAL_FILE\" = /test/credential ] && [ -z \"$WI_ID\" ] || exit 11\n[ \"$1\" = skill ] && echo 'Safe instructions'\nexit 0\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	spec := Spec{Name: "demo", Command: []string{script}, Instructions: "Safe instructions"}

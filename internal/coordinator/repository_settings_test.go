@@ -2,11 +2,8 @@ package coordinator
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"github.com/regb/workitem/internal/testutil"
 	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -265,36 +262,6 @@ func TestMalformedRepositorySettingsDoNotFallBackToDefaults(t *testing.T) {
 		if _, err := db.RepositorySettings(importTestID); err == nil {
 			t.Fatal("malformed settings silently defaulted")
 		}
-	}
-}
-
-func TestSettingsEndpointIsOperatorOnly(t *testing.T) {
-	root := t.TempDir()
-	sockets := testutil.ShortTempDir(t)
-	operator := filepath.Join(sockets, "operator.sock")
-	agentSocket := filepath.Join(sockets, "agent.sock")
-	server, err := NewServerWithAgentSocket(root, operator, agentSocket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server.ConfigureRepositorySettings(settingsRegistry(t))
-	defer server.Close()
-	if _, err := server.database.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-		t.Fatal(err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go server.Serve(ctx)
-	op := &Client{SocketPath: operator}
-	if _, err := op.SetRepositorySetting(context.Background(), settingCommand("socket", 0, "trust", json.RawMessage(`"always"`))); err != nil {
-		t.Fatal(err)
-	}
-	restricted := &Client{SocketPath: agentSocket}
-	if _, err := restricted.RepositorySettings(context.Background(), importTestID); err == nil || !strings.Contains(err.Error(), "agent endpoint") {
-		t.Fatal("agent could read private settings", err)
-	}
-	if _, err := restricted.SetRepositorySetting(context.Background(), settingCommand("agent", 1, "trust", json.RawMessage(`"never"`))); err == nil || !strings.Contains(err.Error(), "agent endpoint") {
-		t.Fatal("agent could modify trust", err)
 	}
 }
 

@@ -119,10 +119,6 @@ func TestRepositoryArchiveFencesCreationButNotExistingItems(t *testing.T) {
 	if _, err := db.ExecuteCreateItemCommand(second); err == nil || !strings.Contains(err.Error(), "archived") {
 		t.Fatalf("new item err=%v", err)
 	}
-	second.Actor = "agent"
-	if _, err := db.ExecuteAgentCreateItemCommand(second); err == nil || !strings.Contains(err.Error(), "archived") {
-		t.Fatalf("agent creation err=%v", err)
-	}
 	transition := ManifestCommand{ID: "existing:start", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: firstID, ExpectedRevision: &created.Revision, Actor: "user", TargetState: model.StateActive, CreatedAt: now}
 	working, err := db.ExecuteManifestCommand(transition)
 	if err != nil || working.Manifest.State != model.StateActive {
@@ -180,9 +176,6 @@ func TestRepositoryArchiveRejectsMalformedConflictingAndStaleCommands(t *testing
 	stale := archiveTestCommand("stale", false, false)
 	if _, err := db.SetRepositoryArchived(stale); err == nil {
 		t.Fatal("accepted stale archive state")
-	}
-	if agentMethodAllowed(MethodSetRepositoryArchived) {
-		t.Fatal("agent endpoint permits archive/restore")
 	}
 }
 

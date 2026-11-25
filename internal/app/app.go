@@ -113,18 +113,21 @@ type realClock struct{}
 func (realClock) Now() time.Time { return time.Now() }
 
 type App struct {
-	Store                      Store
-	Git                        Git
-	Tmux                       Tmux
-	ConversationBackends       map[string]ConversationBackend
-	Preparation                plugin.Pipeline
-	Process                    ProcessInspector
-	Clock                      Clock
-	NewID                      func() (string, error)
-	SelfPath                   string
-	Coordinator                *coordinator.Client
-	DaemonSocketPath           string
-	AgentRuntimeStateRoot      string
+	Store                 Store
+	Git                   Git
+	Tmux                  Tmux
+	ConversationBackends  map[string]ConversationBackend
+	Preparation           plugin.Pipeline
+	Process               ProcessInspector
+	Clock                 Clock
+	NewID                 func() (string, error)
+	SelfPath              string
+	Coordinator           *coordinator.Client
+	DaemonSocketPath      string
+	AgentRuntimeStateRoot string
+	// ItemCredentials keeps the hashes of agent runtimes' credentials; the
+	// daemon binds it to its database.
+	ItemCredentials            ItemCredentialStore
 	AgentRuntimeSocketRoot     string
 	AgentRuntimeReadyTimeout   time.Duration
 	AgentRuntimeReadyInterval  time.Duration
@@ -226,6 +229,9 @@ func (a *App) primaryAgentService() *agentcore.Service {
 	}
 	service.RuntimeStateRoot = a.AgentRuntimeStateRoot
 	service.RuntimeSocketRoot = a.AgentRuntimeSocketRoot
+	if a.ItemCredentials != nil {
+		service.Credentials = itemCredentials{a.ItemCredentials}
+	}
 	return service
 }
 func (a *App) attentionService() *attentioncore.Service {

@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/plugin"
 )
 
@@ -98,9 +97,6 @@ func runPlugin(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 			}
 		}
 	case "run":
-		if cfg.ControlAccess == coordinator.AccessAgent || cfg.Env["WI_AGENT_DAEMON_SOCKET"] != "" {
-			return fmt.Errorf("agent endpoint does not allow manual plugin runs")
-		}
 		if len(args) != 2 {
 			return usageErr{fmt.Errorf("usage: wi plugin run NAME")}
 		}

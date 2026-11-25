@@ -55,10 +55,6 @@ func (d *Database) ExecuteCreateItemCommand(command CreateItemCommand) (CreateIt
 	return d.executeCreateItemCommand(command, "user")
 }
 
-func (d *Database) ExecuteAgentCreateItemCommand(command CreateItemCommand) (CreateItemResult, error) {
-	return d.executeCreateItemCommand(command, "agent")
-}
-
 func (d *Database) executeCreateItemCommand(command CreateItemCommand, actor string) (CreateItemResult, error) {
 	if compactIdentifier(command.ID, 200) != command.ID || command.ID == "" {
 		return CreateItemResult{}, errors.New("command id is invalid")

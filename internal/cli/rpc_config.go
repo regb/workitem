@@ -11,6 +11,7 @@ import (
 
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/xdg"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -40,18 +41,14 @@ func rpcInfo(ctx context.Context, command string, args []string, cfg Config, jso
 			return err
 		}
 	}
-	operator, err := coordinator.SocketPath(paths.RuntimeDir, paths.DataRoot)
+	socket, err := coordinator.SocketPath(paths.RuntimeDir, paths.DataRoot)
 	if err != nil {
 		return err
 	}
-	agent, err := coordinator.AgentSocketPath(paths.RuntimeDir, paths.DataRoot)
-	if err != nil {
-		return err
+	if cfg.SocketPath != "" {
+		socket = cfg.SocketPath
 	}
-	if cfg.Env["WI_AGENT_DAEMON_SOCKET"] != "" {
-		agent = cfg.Env["WI_AGENT_DAEMON_SOCKET"]
-	}
-	entries := []struct{ key, value string }{{"data-root", paths.DataRoot}, {"database", filepath.Join(paths.DataRoot, "wi.db")}, {"config-file", paths.ConfigFile}, {"cache-root", paths.CacheRoot}, {"state-root", paths.DataStateRoot}, {"runtime-root", paths.DataRuntimeRoot}, {"operator-socket", operator}, {"agent-socket", agent}}
+	entries := []struct{ key, value string }{{"data-root", paths.DataRoot}, {"database", filepath.Join(paths.DataRoot, "wi.db")}, {"config-file", paths.ConfigFile}, {"cache-root", paths.CacheRoot}, {"state-root", paths.DataStateRoot}, {"runtime-root", paths.DataRuntimeRoot}, {"socket", socket}, {"operator-credential", credential.OperatorFile(paths.DataRoot)}, {"caller", cfg.Principal}}
 	if len(args) == 1 {
 		for _, entry := range entries {
 			if entry.key == args[0] {

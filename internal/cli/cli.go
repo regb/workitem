@@ -17,6 +17,7 @@ import (
 	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/daemonapp"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/plugin"
@@ -42,13 +43,15 @@ type Config struct {
 	StateRoot string
 	Paths     xdg.Paths
 	// Testable client-side terminal detection and attachment, never daemon use cases.
-	Interactive   func() bool
-	RunTerminal   func(context.Context, []string) error
-	API           *apitransport.Clients
-	SocketPath    string
-	GlobalConfig  *config.Config
-	ControlAccess string
-	Plugins       *plugin.Host
+	Interactive  func() bool
+	RunTerminal  func(context.Context, []string) error
+	API          *apitransport.Clients
+	SocketPath   string
+	GlobalConfig *config.Config
+	// Principal is who this process is to the daemon: "user:operator", or
+	// "item:<id>" when it runs as an item's agent.
+	Principal string
+	Plugins   *plugin.Host
 }
 
 func Main(ctx context.Context, args []string) int {
@@ -100,15 +103,17 @@ func Main(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return ExitError
 	}
-	agentSocket := strings.TrimSpace(env["WI_AGENT_DAEMON_SOCKET"])
-	if agentSocket != "" {
-		if !filepath.IsAbs(agentSocket) {
-			fmt.Fprintln(os.Stderr, "WI_AGENT_DAEMON_SOCKET must be absolute")
+	// A sandbox mounts the daemon's socket at a path of its own; the daemon
+	// is not started from there.
+	explicitSocket := strings.TrimSpace(env[apiSocketVariable])
+	if explicitSocket != "" {
+		if !filepath.IsAbs(explicitSocket) {
+			fmt.Fprintln(os.Stderr, apiSocketVariable+" must be absolute")
 			return ExitError
 		}
-		socket = agentSocket
+		socket = explicitSocket
 	}
-	clients, err := apitransport.NewClients(socket)
+	clients, err := apitransport.NewClients(socket, credential.ForProcess(env, paths.DataRoot))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return ExitError
@@ -117,7 +122,7 @@ func Main(ctx context.Context, args []string) int {
 	probe, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
 	info, probeErr := clients.System.GetInfo(probe, connect.NewRequest(&v1.GetInfoRequest{}))
 	cancel()
-	if probeErr != nil && agentSocket == "" {
+	if probeErr != nil && explicitSocket == "" {
 		if _, _, err := ensureDaemonRunning(ctx, paths, socket, cfgFile.Daemon.Managed); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return ExitError
@@ -126,11 +131,6 @@ func Main(ctx context.Context, args []string) int {
 	}
 	if probeErr != nil {
 		fmt.Fprintln(os.Stderr, "daemon API is unavailable:", probeErr)
-		return ExitError
-	}
-	access := callerAccess(info.Msg.Caller)
-	if agentSocket != "" && access != "agent" {
-		fmt.Fprintln(os.Stderr, "configured agent socket is not a restricted endpoint")
 		return ExitError
 	}
 	if !strings.HasPrefix(info.Msg.ApiVersion, "1.") {
@@ -168,20 +168,13 @@ func Main(ctx context.Context, args []string) int {
 		}
 		return ids, nil
 	}
-	return Run(ctx, args, Config{Paths: paths, API: clients, SocketPath: socket, CWD: cwd, Env: env, StateRoot: paths.DataStateRoot, GlobalConfig: &cfgFile, Plugins: host, ControlAccess: access, Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
+	return Run(ctx, args, Config{Paths: paths, API: clients, SocketPath: socket, CWD: cwd, Env: env, StateRoot: paths.DataStateRoot, GlobalConfig: &cfgFile, Plugins: host, Principal: info.Msg.Caller.GetPrincipal(), Stdin: os.Stdin, Stdout: os.Stdout, Stderr: os.Stderr})
 }
-func callerAccess(caller *v1.Caller) string {
-	if caller == nil {
-		return ""
-	}
-	switch caller.Access {
-	case v1.CallerAccess_CALLER_ACCESS_OPERATOR:
-		return coordinator.AccessOperator
-	case v1.CallerAccess_CALLER_ACCESS_AGENT:
-		return coordinator.AccessAgent
-	}
-	return ""
-}
+
+// apiSocketVariable names the daemon's socket where it is mounted at another
+// path, as in a sandbox.
+const apiSocketVariable = "WI_API_SOCKET"
+
 func mustOperatorSocket(paths xdg.Paths) string {
 	value, _ := coordinator.SocketPath(paths.RuntimeDir, paths.DataRoot)
 	return value

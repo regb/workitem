@@ -1,10 +1,8 @@
 # Review access
 
-Review uses the ordinary operator API and socket, like other Wi commands. Runtime startup does not issue a review token or install a review-only endpoint in the agent environment. There are no review credential headers, credential projections, runtime-principal checks, or review-specific CLI socket routing.
+Review uses the ordinary API and socket, like other Wi commands, with the caller's credential: the operator's, or an agent's item credential. There is no review-specific token, endpoint or socket routing; review is authorized like every other call.
 
-The explicit `WI_AGENT_DAEMON_SOCKET` restriction is unchanged. When set, it applies to every command, including review and plugins, and must be an absolute socket path. Selecting a review command or changing caller headers cannot bypass the endpoint's authority.
-
-The restricted agent endpoint retains its existing safe backlog/item operations. It does not allow review RPCs, workspace access, lifecycle, agent control, terminal operations, deletion or shutdown. Review commands from an explicitly sandboxed process are denied rather than silently routed to the operator socket.
+The per-feature review credential this note once described was removed in favor of general item credentials: every agent runtime gets one, and the daemon resolves every call's principal from it. See the API reference's endpoint and credentials section.
 
 The private runtime-host endpoint is also unchanged apart from removing the review credential method. Hosts can report their fenced runtime ownership and compact semantic events; they cannot acquire operator authority or run item/workspace/lifecycle mutations through that endpoint.
 

@@ -15,16 +15,17 @@ import (
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/testutil"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
 
 type binaryFixture struct {
-	root, wi, driver, source, socket, agentSocket string
-	env                                           []string
-	clients                                       *apitransport.Clients
-	t                                             *testing.T
+	root, wi, driver, source, socket string
+	env                              []string
+	clients                          *apitransport.Clients
+	t                                *testing.T
 }
 
 func newBinaryFixture(t *testing.T) *binaryFixture {
@@ -77,8 +78,7 @@ func newBinaryFixture(t *testing.T) *binaryFixture {
 	f.run("list", "--json") // Read-only commands also exercise isolated daemon autostart.
 	f.run("daemon", "start")
 	f.socket, _ = coordinator.SocketPath(filepath.Join(root, "run"), filepath.Join(root, "data", "wi"))
-	f.agentSocket, _ = coordinator.AgentSocketPath(filepath.Join(root, "run"), filepath.Join(root, "data", "wi"))
-	f.clients, err = apitransport.NewClients(f.socket)
+	f.clients, err = apitransport.NewClients(f.socket, credential.Source(credential.OperatorFile(filepath.Join(root, "data", "wi")), credential.Operator))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	if len(listed.Items) != 1 || listed.Items[0].Id != item {
 		t.Fatal(listed.String())
 	}
-	for _, args := range [][]string{{"info", "agent-socket"}, {"info", "config-file"}, {"config", "get", "plugins.setup.trust", "--origins"}, {"list", "--ids", "--no-agent"}, {"repo", "show", repo}} {
+	for _, args := range [][]string{{"info", "socket"}, {"info", "config-file"}, {"config", "get", "plugins.setup.trust", "--origins"}, {"list", "--ids", "--no-agent"}, {"repo", "show", repo}} {
 		if len(f.run(args...)) == 0 {
 			t.Fatalf("missing human output: %v", args)
 		}
@@ -239,25 +239,38 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	f.run("close", agentItem, "--resolution", "completed")
 	f.run("repo", "settings", "set", "--repo", repo, "plugins.setup.trust", "never")
 	f.run("repo", "env", "set", "--repo", repo, "PORT=8080")
-	// Direct curl proves the public socket speaks the declared Connect API.
-	cmd := exec.Command("curl", "--fail", "--silent", "--show-error", "--unix-socket", f.socket, "-H", "Content-Type: application/json", "-H", "Connect-Protocol-Version: 1", "--data", "{}", "http://localhost/wi.core.v1.SystemService/GetInfo")
-	cmd.Env = f.env
-	out, err := cmd.CombinedOutput()
-	if err != nil || !strings.Contains(string(out), `"api_version":"1.0"`) {
-		t.Fatalf("curl Connect: %v %s", err, out)
-	}
-	agent, err := apitransport.NewClients(f.agentSocket)
+	// Direct curl proves the public socket speaks the declared Connect API,
+	// to a caller presenting the operator's credential and to no other.
+	operator, err := credential.Read(credential.OperatorFile(filepath.Join(f.root, "data", "wi")), credential.Operator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer agent.Close()
-	info, err := agent.System.GetInfo(context.Background(), connect.NewRequest(&v1.GetInfoRequest{}))
-	if err != nil || info.Msg.Caller.GetAccess() != v1.CallerAccess_CALLER_ACCESS_AGENT {
-		t.Fatalf("agent endpoint: %v %v", info, err)
+	curl := func(headers ...string) ([]byte, error) {
+		args := []string{"--silent", "--show-error", "--unix-socket", f.socket, "-H", "Content-Type: application/json", "-H", "Connect-Protocol-Version: 1", "--data", "{}"}
+		for _, header := range headers {
+			args = append(args, "-H", header)
+		}
+		cmd := exec.Command("curl", append(args, "http://localhost/wi.core.v1.SystemService/GetInfo")...)
+		cmd.Env = f.env
+		return cmd.CombinedOutput()
 	}
-	_, err = agent.Items.SetItemState(context.Background(), connect.NewRequest(&v1.SetItemStateRequest{ItemId: item, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_COMPLETED}))
-	if connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("agent mutated lifecycle: %v", err)
+	if out, err := curl("Authorization: Bearer " + operator.Token()); err != nil || !strings.Contains(string(out), `"api_version":"1.0"`) || !strings.Contains(string(out), `"principal":"user:operator"`) {
+		t.Fatalf("curl Connect: %v %s", err, out)
+	}
+	if out, err := curl(); err != nil || !strings.Contains(string(out), `"unauthenticated"`) {
+		t.Fatalf("curl without a credential: %v %s", err, out)
+	}
+	// An agent whose runtime has stopped is refused, and does not fall back
+	// to acting as the operator.
+	stale, _ := filepath.Glob(filepath.Join(f.root, "state", "wi", "*", "items", agentItem, "runtimes", "*", "credential"))
+	if len(stale) == 0 {
+		t.Fatal("the agent's runtime was given no credential")
+	}
+	cmd := exec.Command(f.wi, "list", "--json")
+	cmd.Env = append(append([]string{}, f.env...), "WI_ITEM_CREDENTIAL_FILE="+stale[0])
+	cmd.Dir = f.root
+	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "no longer valid") {
+		t.Fatalf("a stopped agent's credential: %v %s", err, out)
 	}
 	f.schedules()
 	// A profile's models can be listed before any item uses it.

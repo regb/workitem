@@ -7,19 +7,21 @@ Wi's daemon serves one public API, `wi.core.v1`, and runs every operation behind
 
 The contract is protobuf, in [`proto/wi/core/v1/`](https://github.com/regb/workitem/tree/main/proto/wi/core/v1); the comments there are the reference for every message and field. The daemon serves it with [Connect](https://connectrpc.com/), so one endpoint speaks Connect (JSON or binary protobuf over HTTP), gRPC and gRPC-Web. JSON uses the proto field names (`api_version`, not `apiVersion`), enum values by name (`ITEM_STATE_ACTIVE`), timestamps as RFC 3339 strings and bytes as base64; fields at their default value (empty, zero, false) are left out.
 
-## Endpoints
+## Endpoint and credentials
 
-The daemon listens on Unix sockets only, each with its own access level. Access is decided by the socket a request arrives on, after checking that the peer runs as the same user; no request header can raise it.
+The daemon listens on one Unix socket, `$XDG_RUNTIME_DIR/wi/<data-root-key>.sock`, and accepts connections only from its own Unix user. On macOS, where socket paths are limited to 104 bytes, a path that would be too long moves under `/tmp/wi-<uid>/`. `wi info socket` prints it. The daemon also has a private endpoint for the agent processes it starts; it is not part of this API.
 
-| Socket | Path | Access |
+Every call presents a credential, `Authorization: Bearer <credential>`, and the credential decides who the caller is; no other header can change it. A call without a valid credential fails with `UNAUTHENTICATED`. There are three kinds:
+
+| Credential | Where it is | Caller |
 | --- | --- | --- |
-| Operator | `$XDG_RUNTIME_DIR/wi/<data-root-key>.sock` | Everything |
-| Web adapter | `web-<data-root-key>.sock` next to the operator socket | Operator access, identified as the web adapter |
-| Agent | `$XDG_RUNTIME_DIR/wi-agent/<data-root-key>/daemon.sock` | Restricted, for sandboxed agents |
+| Operator | `<data root>/credentials/operator`, readable by its owner only; `wi info operator-credential` prints the path | The installation's user, `user:operator` |
+| Web | `<data root>/credentials/proxy` | `wi web`, acting for the user it names; held to the [web exposure table](https://github.com/regb/workitem/blob/main/docs/design/api/README.md) |
+| Item | A file in each agent runtime's state directory, named by `WI_ITEM_CREDENTIAL_FILE` in the agent's environment | That item's agent, `item:<id>` |
 
-On macOS, where socket paths are limited to 104 bytes, a path that would be too long moves under `/tmp/wi-<uid>/`. `wi info operator-socket` prints the operator socket's path. The daemon also has a private endpoint for the agent processes it starts; it is not part of this API.
+The daemon creates the operator and web credentials when it starts, if they are missing. It mints an item credential each time an agent starts and keeps only its hash. The credential stops working when that runtime stops or another one takes the item over, and `wi` then fails instead of acting as the operator. `GetInfo` reports the caller it resolved (`caller.principal`).
 
-The agent endpoint allows reading items, repositories and agent profiles (`GetInfo`, `ResolveItem`, `GetItem`, `ListItems`, `SearchItems`, `ListNotes`, `ReadAttachment`, `ListRepositories`, `ListAgentProfiles`), creating backlog items without title generation (`CreateItem`), and adding notes and attachments (`AddNote`, `Attach`). Everything else fails with `PERMISSION_DENIED`. A sandbox selects it with `WI_AGENT_DAEMON_SOCKET`; see [Delegate work](../../guides/delegation/#agent-authority).
+The credentials identify callers to a daemon that trusts its own Unix user. They are not isolation: an agent running as that user can read the operator's credential. They keep agents acting as themselves, and become a boundary when an agent runs somewhere the operator's credential is not mounted, such as a sandbox. A sandbox mounts the socket and the agent's own credential file; `WI_API_SOCKET` gives the socket's path there.
 
 ## Call it
 
@@ -28,20 +30,21 @@ For a program, generate a client from the protos with [Buf](https://buf.build/) 
 For a quick look, unary calls take Connect JSON with curl over the socket. The path is `/<package>.<service>/<method>`, and the request body is the request message:
 
 ```bash
-socket="$(wi info operator-socket)"
-curl --silent --unix-socket "$socket" \
+socket="$(wi info socket)"
+auth="Authorization: Bearer $(cat "$(wi info operator-credential)")"
+curl --silent --unix-socket "$socket" -H "$auth" \
   -H 'Content-Type: application/json' -H 'Connect-Protocol-Version: 1' \
   --data '{}' http://localhost/wi.core.v1.SystemService/GetInfo
 ```
 
 ```json
-{"version":"devel+3f2a91c04b7e","api_version":"1.0","data_root":"/home/me/.local/share/wi","default_agent_profile":"pi","started_at":"2026-11-03T08:12:44.512Z","caller":{"access":"CALLER_ACCESS_OPERATOR","kind":"CALLER_KIND_LOCAL_OPERATOR"}}
+{"version":"devel+3f2a91c04b7e","api_version":"1.0","data_root":"/home/me/.local/share/wi","default_agent_profile":"pi","started_at":"2026-11-03T08:12:44.512Z","caller":{"kind":"CALLER_KIND_LOCAL_OPERATOR","principal":"user:operator"}}
 ```
 
 The items that need attention, in the daemon's ranking:
 
 ```bash
-curl --silent --unix-socket "$socket" \
+curl --silent --unix-socket "$socket" -H "$auth" \
   -H 'Content-Type: application/json' -H 'Connect-Protocol-Version: 1' \
   --data '{"order":"LIST_ORDER_ATTENTION"}' \
   http://localhost/wi.core.v1.ItemService/ListItems |

@@ -131,9 +131,6 @@ func TestRepositoryRenameRejectsInvalidAndConflictingCommands(t *testing.T) {
 			t.Fatal("failed rename changed registry")
 		}
 	}
-	if agentMethodAllowed(MethodRenameRepository) {
-		t.Fatal("agent endpoint permits rename")
-	}
 }
 
 func TestConcurrentRepositoryRenamesEnforceUniqueness(t *testing.T) {

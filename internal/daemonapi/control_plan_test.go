@@ -6,34 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
-	"github.com/regb/workitem/internal/coordinator"
 )
-
-func TestCallerIdentityComesFromListenerNotMetadata(t *testing.T) {
-	f := newFixture(t)
-	for _, test := range []struct {
-		path   string
-		access v1.CallerAccess
-		kind   v1.CallerKind
-	}{{f.root + "/api.sock", v1.CallerAccess_CALLER_ACCESS_OPERATOR, v1.CallerKind_CALLER_KIND_LOCAL_OPERATOR}, {f.root + "/agent.sock", v1.CallerAccess_CALLER_ACCESS_AGENT, v1.CallerKind_CALLER_KIND_AGENT}, {coordinator.WebSocketPath(f.root + "/api.sock"), v1.CallerAccess_CALLER_ACCESS_OPERATOR, v1.CallerKind_CALLER_KIND_WEB_ADAPTER}} {
-		clients, err := apitransport.NewClients(test.path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		req := connect.NewRequest(&v1.GetInfoRequest{})
-		req.Header().Set(HolderHeader, "agent")
-		req.Header().Set("Wi-Endpoint-Access", "operator")
-		value, err := clients.System.GetInfo(context.Background(), req)
-		clients.Close()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if value.Msg.Caller.Access != test.access || value.Msg.Caller.Kind != test.kind || value.Header().Get("Wi-Endpoint-Access") != "" {
-			t.Fatalf("caller: %v %v", value.Msg, value.Header())
-		}
-	}
-}
 
 func TestConfirmedControlBindsPlanAndIgnoresLeaseRenewal(t *testing.T) {
 	f := newFixture(t)

@@ -20,6 +20,7 @@ import (
 	"github.com/regb/workitem/internal/apiview"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/daemonapi"
 	"github.com/regb/workitem/internal/daemonapp"
 	"github.com/regb/workitem/internal/model"
@@ -29,8 +30,14 @@ import (
 	"github.com/regb/workitem/internal/xdg"
 )
 
-func probeDaemon(ctx context.Context, socketPath string) (coordinator.Status, error) {
-	clients, err := apitransport.NewClients(socketPath)
+// operatorCredential is how daemon management commands authenticate: they
+// act for the operator.
+func operatorCredential(paths xdg.Paths) apitransport.Credential {
+	return credential.Source(credential.OperatorFile(paths.DataRoot), credential.Operator)
+}
+
+func probeDaemon(ctx context.Context, paths xdg.Paths, socketPath string) (coordinator.Status, error) {
+	clients, err := apitransport.NewClients(socketPath, operatorCredential(paths))
 	if err != nil {
 		return coordinator.Status{}, err
 	}
@@ -41,7 +48,7 @@ func probeDaemon(ctx context.Context, socketPath string) (coordinator.Status, er
 	}
 	pid, _ := strconv.Atoi(value.Header().Get("Wi-Daemon-Pid"))
 	schema, _ := strconv.ParseUint(value.Header().Get("Wi-Database-Schema"), 10, 64)
-	out := coordinator.Status{PID: pid, StartedAt: apiview.Time(value.Msg.StartedAt).Format(time.RFC3339Nano), DataRoot: value.Msg.DataRoot, SocketPath: socketPath, Access: callerAccess(value.Msg.Caller), Managed: value.Msg.Managed, BuildIdentity: value.Header().Get("Wi-Build-Identity"), Database: coordinator.DatabaseStatus{SchemaVersion: schema}}
+	out := coordinator.Status{PID: pid, StartedAt: apiview.Time(value.Msg.StartedAt).Format(time.RFC3339Nano), DataRoot: value.Msg.DataRoot, SocketPath: socketPath, Access: value.Msg.Caller.GetPrincipal(), Managed: value.Msg.Managed, BuildIdentity: value.Header().Get("Wi-Build-Identity"), Database: coordinator.DatabaseStatus{SchemaVersion: schema}}
 	if !strings.HasPrefix(value.Msg.ApiVersion, "1.") {
 		return out, &coordinator.CompatibilityError{Kind: "API", Expected: "1", Actual: value.Msg.ApiVersion}
 	}
@@ -52,7 +59,7 @@ func probeDaemon(ctx context.Context, socketPath string) (coordinator.Status, er
 // or invokes a domain use case in the client process.
 func ensureDaemonRunning(ctx context.Context, paths xdg.Paths, socketPath string, managed bool) (coordinator.Status, bool, error) {
 	probe, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
-	status, err := probeDaemon(probe, socketPath)
+	status, err := probeDaemon(probe, paths, socketPath)
 	cancel()
 	if err == nil {
 		if status.BuildIdentity != "" && status.BuildIdentity != version.BuildIdentity() {
@@ -98,7 +105,7 @@ func ensureDaemonRunning(ctx context.Context, paths xdg.Paths, socketPath string
 			return status, true, err
 		}
 		probe, cancel := context.WithTimeout(ctx, 250*time.Millisecond)
-		status, err = probeDaemon(probe, socketPath)
+		status, err = probeDaemon(probe, paths, socketPath)
 		cancel()
 		if err == nil {
 			return status, true, nil
@@ -113,11 +120,6 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 		return ExitUsage
 	}
 	socket, err := coordinator.SocketPath(paths.RuntimeDir, paths.DataRoot)
-	if err != nil {
-		fmt.Fprintln(stderr, err)
-		return ExitError
-	}
-	agentSocket, err := coordinator.AgentSocketPath(paths.RuntimeDir, paths.DataRoot)
 	if err != nil {
 		fmt.Fprintln(stderr, err)
 		return ExitError
@@ -151,7 +153,7 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 				return converted, decoded, nil
 			}
 		}
-		core, err := coordinator.NewServerWithAgentSocket(paths.DataRoot, socket, agentSocket, decoders)
+		core, err := coordinator.NewServer(paths.DataRoot, socket, decoders)
 		if err != nil {
 			return fail(err)
 		}
@@ -195,7 +197,7 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 			return fail(err)
 		}
 		if jsonOut {
-			clients, _ := apitransport.NewClients(socket)
+			clients, _ := apitransport.NewClients(socket, operatorCredential(paths))
 			defer clients.Close()
 			value, err := clients.System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{}))
 			if err != nil {
@@ -214,7 +216,7 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 		return ExitOK
 	case "stop":
 		probe, cancel := context.WithTimeout(ctx, time.Second)
-		status, err := probeDaemon(probe, socket)
+		status, err := probeDaemon(probe, paths, socket)
 		cancel()
 		if err != nil {
 			return fail(err)
@@ -235,7 +237,7 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 		fmt.Fprintln(stdout, "daemon stopping")
 		return ExitOK
 	case "status", "doctor":
-		clients, err := apitransport.NewClients(socket)
+		clients, err := apitransport.NewClients(socket, operatorCredential(paths))
 		if err != nil {
 			return fail(err)
 		}

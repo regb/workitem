@@ -10,7 +10,6 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -29,9 +28,6 @@ func (s *Server) ListAgentProfiles(ctx context.Context, req *connect.Request[v1.
 	for _, p := range value.Profiles {
 		row := profile(p)
 		row.Users = uint32(s.App.AgentProfileUsers(p.Name))
-		if apitransport.Caller(ctx) == apitransport.Agent {
-			row.Config = nil
-		}
 		out.Profiles = append(out.Profiles, row)
 	}
 	return response(out, err)

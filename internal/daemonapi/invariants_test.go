@@ -7,7 +7,6 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 )
@@ -90,19 +89,6 @@ func TestMalformedStartDoesNotCreateAnItem(t *testing.T) {
 	items, err := f.clients.Items.ListItems(context.Background(), connect.NewRequest(&v1.ListItemsRequest{}))
 	if err != nil || len(items.Msg.Items) != 0 {
 		t.Fatalf("invalid request had effects: %v %v", items, err)
-	}
-}
-func TestRestrictedCaptureCannotLaunchTitleWork(t *testing.T) {
-	f := newFixture(t)
-	repository := f.repo(t)
-	clients, err := apitransport.NewClients(f.root + "/agent.sock")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clients.Close()
-	_, err = clients.Items.CreateItem(context.Background(), connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repository, Description: "title work", GenerateTitle: true}))
-	if connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("restricted title launch: %v", err)
 	}
 }
 func TestDeepWorkActivationHonorsDaemonCapacity(t *testing.T) {

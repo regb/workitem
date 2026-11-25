@@ -9,7 +9,6 @@ import (
 	"time"
 
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/plugins/github"
 )
 
@@ -60,15 +59,5 @@ func TestGitHubWaitUsesCurrentCLIContract(t *testing.T) {
 	f.decode(t, f.run(t, "show", "--json"), &shown)
 	if len(shown.Item.Blockers) != 0 || !strings.Contains(output.String(), "approved review by reviewer") {
 		t.Fatalf("wait not cleared: %s\n%s", shown.String(), output.String())
-	}
-	// The plugin must propagate the agent endpoint's refusal, not bypass it.
-	client, err := apitransport.NewClients(f.api.AgentSocket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-	f.cfg.API = client
-	if err := plugin.Wait(ctx, []string{"https://github.com/NetFabric-AI/netfabric-code/pull/3556"}); err == nil {
-		t.Fatal("restricted endpoint allowed adding a GitHub blocker")
 	}
 }

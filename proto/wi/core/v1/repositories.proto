@@ -214,12 +214,11 @@ message IntegrateItemRequest {
   bool rebase = 4;
   // Squash message; defaults to the item title.
   string message = 5;
-  // agent_runtime_id is set when the item's own agent merges from inside
-  // its turn: its runtime's ID, which the CLI reads from the agent's
-  // environment. A merge otherwise waits for the agent to be idle, so it
-  // never captures a checkout mid-edit; the agent asking is waiting on the
-  // merge, so its turn does not count. Any other runtime ID is refused.
-  string agent_runtime_id = 6;
+  // A merge waits for the item's agent to be idle, so it never captures a
+  // checkout mid-edit, except when the caller is that agent, proven by its
+  // item credential: it is waiting on the merge, so its turn does not count.
+  reserved 6;
+  reserved "agent_runtime_id";
 }
 
 message IntegrateItemResponse {

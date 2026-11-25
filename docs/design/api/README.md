@@ -54,7 +54,7 @@ under `proto/wi/core/v1/`.
 ## Conventions
 
 - Exact IDs in requests; clients resolve selectors (`ItemService.ResolveItem` for prefixes, slugs and checkout paths). Client-side policy, such as default labels, label filters or a custom ranking, is applied by the client and sent explicitly.
-- `GetInfoResponse.caller` reports listener-assigned access and identity kind. Local operator and web-adapter listeners have operator access; the restricted agent listener has agent access. Unix peer checks authenticate the local UID. The web adapter uses a separate daemon-owned Unix listener so its identity kind does not depend on an untrusted header. Caller information is descriptive and never grants permissions.
+- Every call presents a credential (`Authorization: Bearer`), which decides who the caller is: the operator, `wi web` acting for the user it names, or an item's agent. There is one socket; Unix peer checks admit only the daemon's user, and a call without a valid credential fails with `UNAUTHENTICATED`. Item credentials are minted per agent runtime, kept as hashes by the coordinator only, and stop working when the runtime stops or is replaced. `GetInfoResponse.caller` reports the resolved principal. It is identity, not isolation: an unsandboxed agent can read the operator's credential file; a sandbox that does not mount it cannot.
 - `Wi-Client-Id` is the lease client ID, defaulting to `cli`. `Wi-Client-Kind` selects lease holder presentation, `terminal` or `web`; it does not select authorization or caller kind. Browser tabs use distinct client IDs. There is no `Wi-Endpoint-Access` response header.
 - `v1` changes additively by default. When the right design breaks the contract, the operator may decide to change it and update every client together, as the move to ordered message parts did: removed fields stay `reserved` by number and name, and driver protocol versions are bumped so an old peer is refused rather than misread.
 - `expected_revision` and `expected_generation` fence mutations based on an earlier read.
@@ -169,9 +169,9 @@ Plugins run outside the daemon. The daemon keeps the registry and the options pl
 
 ## Web exposure
 
-`wi web` serves the page and forwards its API calls, unchanged, to the daemon's web-adapter socket, under the tab's identity (`Wi-Client-Id`) and the user its proxy vouches for (`Wi-Client-Label`). The page uses the generated clients like any other client; `wi web` adds nothing to the API. It serves only what a browser needs at a URL: item attachments and checkout documents, so the browser can show or download them.
+`wi web` serves the page and forwards its API calls, unchanged, to the daemon's socket with its own credential, under the tab's identity (`Wi-Client-Id`) and the user its proxy vouches for (`Wi-Client-Label`, believed only with that credential). The page uses the generated clients like any other client; `wi web` adds nothing to the API. It serves only what a browser needs at a URL: item attachments and checkout documents, so the browser can show or download them.
 
-What the web listener may call is a table in the daemon, `internal/daemonapi/exposure.go`, default deny: a test fails when a procedure is in neither list, so exposing a call to browsers is a reviewed line. Locally the browser is the operator and the allowed calls can already run code on the machine, so the table reduces surface and keeps secrets and irreversible operations out of a page bug's reach; with callers that are not the operator it becomes the authorization boundary.
+What `wi web`'s credential may call is a table in the daemon, `internal/daemonapi/exposure.go`, default deny: a test fails when a procedure is in neither list, so exposing a call to browsers is a reviewed line. Locally the browser is the operator and the allowed calls can already run code on the machine, so the table reduces surface and keeps secrets and irreversible operations out of a page bug's reach; with callers that are not the operator it becomes the authorization boundary.
 
 | Service | The page may call | Refused, and why |
 | --- | --- | --- |
@@ -214,9 +214,9 @@ The table in code is the reference; this summary groups it.
 mode and its selection options are removed; live content and the change feed
 cover monitoring. No `WatchAgentEvents` RPC is planned by this revision.
 
-Scoped agent credentials remain future work. The current agent listener
-identifies a restricted local endpoint, not an item-scoped principal.
-Credential issuance, item binding and revocation need their own design.
+Agents have item credentials, but what an item's agent may do is not yet
+limited per item: access lists come next (see the design attached to the
+survey item on agent roles).
 
 A gated terminal relay, structured native-agent questions/permissions and
 a separately versioned executable-hook protocol also remain future work.

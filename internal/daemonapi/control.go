@@ -3,7 +3,6 @@ package daemonapi
 import (
 	"context"
 	"errors"
-	"github.com/regb/workitem/internal/apitransport"
 	"time"
 
 	"connectrpc.com/connect"
@@ -64,7 +63,7 @@ func (s *Server) AcquireControl(ctx context.Context, req *connect.Request[v1.Acq
 	}
 	// A web caller's label is the user wi web vouches for (controlRequest
 	// takes it), never what the page says.
-	if apitransport.Caller(ctx) != apitransport.WebAdapter && req.Msg.Label != "" {
+	if !caller(ctx).principal.web() && req.Msg.Label != "" {
 		request.Label = req.Msg.Label
 	}
 	status, plan, err := s.App.PlanControl(ctx, request)

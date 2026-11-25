@@ -2,13 +2,11 @@ package daemonapi
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
 )
 
 func TestSchedulesStartItemsLikeTheDashboard(t *testing.T) {
@@ -90,14 +88,6 @@ func TestSchedulesStartItemsLikeTheDashboard(t *testing.T) {
 	}
 	if s := list.Msg.Schedules[0]; !s.LastRunAt.AsTime().Equal(due) || !s.NextRunAt.AsTime().Equal(next.AddDate(0, 0, 1)) {
 		t.Fatalf("missed firing: %v", s)
-	}
-	agent, err := apitransport.NewClients(filepath.Join(f.root, "agent.sock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer agent.Close()
-	if _, err := agent.Schedules.ListSchedules(ctx, connect.NewRequest(&v1.ListSchedulesRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("agent access: %v", err)
 	}
 	if _, err := f.clients.Schedules.DeleteSchedule(ctx, connect.NewRequest(&v1.DeleteScheduleRequest{Id: schedule.Id})); err != nil {
 		t.Fatal(err)

@@ -4,8 +4,6 @@ import (
 	"connectrpc.com/connect"
 	"context"
 	"errors"
-	"github.com/regb/workitem/internal/apitransport"
-	"github.com/regb/workitem/internal/model"
 )
 
 type apiInterceptor struct{ s *Server }
@@ -17,23 +15,16 @@ func (i apiInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) co
 	return next
 }
 func (i apiInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	s := i.s
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
-		if access := apitransport.Caller(ctx); access != apitransport.Operator && access != apitransport.Agent && access != apitransport.WebAdapter {
-			return connect.NewError(connect.CodePermissionDenied, errors.New("authenticated daemon endpoint is required"))
+		principal, err := s.authenticate(conn.RequestHeader())
+		if err != nil {
+			return err
 		}
-		if apitransport.Caller(ctx) == apitransport.Agent && !agentAllowed(conn.Spec().Procedure) {
-			return connect.NewError(connect.CodePermissionDenied, errors.New("agent endpoint does not allow this stream"))
-		}
-		if apitransport.Caller(ctx) == apitransport.WebAdapter && !webAllowed(conn.Spec().Procedure) {
+		if principal.web() && !webAllowed(conn.Spec().Procedure) {
 			return connect.NewError(connect.CodePermissionDenied, errors.New("the web endpoint does not allow this stream"))
 		}
-		who := identity{client: conn.RequestHeader().Get(ClientHeader), holder: conn.RequestHeader().Get(HolderHeader), label: webLabel(ctx, conn.RequestHeader())}
-		if who.client == "" {
-			who.client = "cli"
-		}
-		if who.holder != model.LeaseHolderTerminal && who.holder != model.LeaseHolderCLI {
-			who.holder = model.LeaseHolderWeb
-		}
+		who := callerIdentity(principal, conn.RequestHeader())
 		return rpcError(next(context.WithValue(ctx, identityKey{}, who), conn))
 	}
 }

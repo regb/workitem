@@ -31,8 +31,6 @@ type Server struct {
 	observer                   *ExternalObserver
 	native                     *store.Store
 	listener                   *net.UnixListener
-	agentListener              *net.UnixListener
-	webListener                *net.UnixListener
 	hostListener               *net.UnixListener
 	apiHandler                 http.Handler
 	apiServers                 []*apitransport.Server
@@ -40,7 +38,6 @@ type Server struct {
 	beforeClose                func()
 	runtimeSettingsObserver    func(string, string, map[string]string, bool)
 	runtimeSettlementObserver  func(string)
-	agentSocketPath            string
 	startedAt                  time.Time
 	buildIdentity              string
 	domainMu                   sync.Mutex
@@ -70,22 +67,12 @@ func (s *Server) ConfigureRepositorySettings(registry *options.Registry) {
 }
 
 func NewServer(dataRoot, socketPath string, decoders ...ConversationDecoders) (*Server, error) {
-	return newServer(dataRoot, socketPath, "", firstConversationDecoders(decoders))
+	return newServer(dataRoot, socketPath, firstConversationDecoders(decoders))
 }
 
-func NewServerWithAgentSocket(dataRoot, socketPath, agentSocketPath string, decoders ...ConversationDecoders) (*Server, error) {
-	if strings.TrimSpace(agentSocketPath) == "" {
-		return nil, errors.New("agent socket path is required")
-	}
-	return newServer(dataRoot, socketPath, agentSocketPath, firstConversationDecoders(decoders))
-}
-
-func newServer(dataRoot, socketPath, agentSocketPath string, conversationDecoders ConversationDecoders) (*Server, error) {
+func newServer(dataRoot, socketPath string, conversationDecoders ConversationDecoders) (*Server, error) {
 	if strings.TrimSpace(socketPath) == "" {
 		return nil, errors.New("socket path is required")
-	}
-	if agentSocketPath != "" && filepath.Clean(agentSocketPath) == filepath.Clean(socketPath) {
-		return nil, errors.New("operator and agent socket paths must differ")
 	}
 	database, err := OpenDatabase(dataRoot)
 	if err != nil {
@@ -123,23 +110,7 @@ func newServer(dataRoot, socketPath, agentSocketPath string, conversationDecoder
 		database.Close()
 		return nil, fmt.Errorf("listen on coordinator socket: %w", err)
 	}
-	var agentListener *net.UnixListener
-	if agentSocketPath != "" {
-		if err := prepareSocketPath(agentSocketPath); err != nil {
-			listener.Close()
-			database.Close()
-			_ = os.Remove(socketPath)
-			return nil, err
-		}
-		agentListener, err = listenUnixSocket(agentSocketPath)
-		if err != nil {
-			listener.Close()
-			database.Close()
-			_ = os.Remove(socketPath)
-			return nil, fmt.Errorf("listen on agent coordinator socket: %w", err)
-		}
-	}
-	server := &Server{dataRoot: dataRoot, socketPath: socketPath, agentSocketPath: agentSocketPath, database: database, observer: observer, native: nativeStore, listener: listener, agentListener: agentListener, startedAt: time.Now().UTC(), buildIdentity: version.BuildIdentity(), lastConversationImport: conversationReport, conversationDecoders: conversationDecoders, leases: newLeaseTable(), eventNotify: make(chan struct{}), closed: make(chan struct{}), closeDone: make(chan struct{})}
+	server := &Server{dataRoot: dataRoot, socketPath: socketPath, database: database, observer: observer, native: nativeStore, listener: listener, startedAt: time.Now().UTC(), buildIdentity: version.BuildIdentity(), lastConversationImport: conversationReport, conversationDecoders: conversationDecoders, leases: newLeaseTable(), eventNotify: make(chan struct{}), closed: make(chan struct{}), closeDone: make(chan struct{})}
 	return server, nil
 }
 
@@ -199,18 +170,11 @@ func (s *Server) Serve(ctx context.Context) error {
 		case <-s.closed:
 		}
 	}()
-	listenerCount := 1
-	if s.agentListener != nil {
-		listenerCount++
-	}
-	failures := make(chan error, listenerCount+1)
+	failures := make(chan error, 2)
 	if s.apiHandler == nil {
 		go s.acceptConnections(s.listener, AccessOperator, failures)
-		if s.agentListener != nil {
-			go s.acceptConnections(s.agentListener, AccessAgent, failures)
-		}
 	} else {
-		serve := func(listener *net.UnixListener, access apitransport.Access) {
+		serve := func(listener *net.UnixListener) {
 			if listener == nil {
 				return
 			}
@@ -221,7 +185,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				return
 			default:
 			}
-			server, _ := apitransport.NewServer(s.apiHandler, access)
+			server, _ := apitransport.NewServer(s.apiHandler)
 			s.apiServers = append(s.apiServers, server)
 			s.serversMu.Unlock()
 			go func() {
@@ -234,9 +198,7 @@ func (s *Server) Serve(ctx context.Context) error {
 				}
 			}()
 		}
-		serve(s.listener, apitransport.Operator)
-		serve(s.agentListener, apitransport.Agent)
-		serve(s.webListener, apitransport.WebAdapter)
+		serve(s.listener)
 		if s.hostListener != nil {
 			go s.acceptConnections(s.hostListener, AccessRuntimeHost, failures)
 		}
@@ -455,9 +417,6 @@ func (s *Server) Close() error {
 		for _, server := range servers {
 			_ = server.Close()
 		}
-		if s.webListener != nil {
-			_ = s.webListener.Close()
-		}
 		if s.hostListener != nil {
 			_ = s.hostListener.Close()
 			_ = os.Remove(InternalSocketPath(s.socketPath))
@@ -468,20 +427,11 @@ func (s *Server) Close() error {
 		if s.listener != nil {
 			result = s.listener.Close()
 		}
-		if s.agentListener != nil {
-			if err := s.agentListener.Close(); result == nil {
-				result = err
-			}
-		}
 		s.wg.Wait()
 		if err := s.database.Close(); result == nil {
 			result = err
 		}
 		_ = os.Remove(s.socketPath)
-		if s.agentSocketPath != "" {
-			_ = os.Remove(s.agentSocketPath)
-			_ = os.Remove(filepath.Dir(s.agentSocketPath))
-		}
 		close(s.closeDone)
 	})
 	return result
@@ -549,10 +499,6 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 	if access == AccessRuntimeHost && !hostMethodAllowed(request.Method) {
 		return nil, &ProtocolError{Code: "permission_denied", Message: "private runtime host endpoint does not allow " + request.Method}
 	}
-	if access == AccessAgent && !agentMethodAllowed(request.Method) {
-		return nil, &ProtocolError{Code: "permission_denied", Message: "agent endpoint does not allow " + request.Method}
-
-	}
 	var result any
 	switch request.Method {
 	case MethodPing:
@@ -564,12 +510,6 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 
 		}
 		status.Access = access
-		if access == AccessAgent {
-			status.DataRoot = ""
-			status.SocketPath = s.agentSocketPath
-			status.AgentSocketPath = ""
-			status.Database.Path = ""
-		}
 		result = status
 	case MethodShutdown:
 		if s.managed {
@@ -864,13 +804,6 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 				}
 			}
 		}
-		if access == AccessAgent {
-			createRequest.Command.Actor = "agent"
-			if err := validateAgentCreateItem(createRequest.Command.Manifest); err != nil {
-				return nil, protocolErr("permission_denied", err)
-
-			}
-		}
 		if err := validateCreateDescription(createRequest.Command, createRequest.Description); err != nil {
 			return nil, protocolErr("invalid_request", err)
 
@@ -880,11 +813,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		var createResult CreateItemResult
 		committed := false
 		if err == nil {
-			if access == AccessAgent {
-				createResult, err = s.database.ExecuteAgentCreateItemCommand(createRequest.Command)
-			} else {
-				createResult, err = s.database.ExecuteCreateItemCommand(createRequest.Command)
-			}
+			createResult, err = s.database.ExecuteCreateItemCommand(createRequest.Command)
 			committed = err == nil
 		}
 		if committed {
@@ -1140,10 +1069,6 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 
 		}
 		if query.ObserveUpstream {
-			if access == AccessAgent {
-				return nil, &ProtocolError{Code: "permission_denied", Message: "agent endpoint does not allow Git tracking inspection"}
-
-			}
 			views := make([]RepositoryView, 0, len(repositories))
 			for _, repo := range repositories {
 				view, err := s.database.repositoryView(ctx, repo)
@@ -1163,18 +1088,10 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 			return nil, protocolErr("invalid_request", err)
 
 		}
-		if access == AccessAgent && query.ObserveUpstream {
-			return nil, &ProtocolError{Code: "permission_denied", Message: "agent endpoint does not allow Git tracking inspection"}
-
-		}
 		value, err := s.database.RepositorySource(ctx, query)
 		if err != nil {
 			return nil, protocolErr("repository_error", err)
 
-		}
-		if access == AccessAgent {
-			value.GitDir = ""
-			value.Repository.Upstream = nil
 		}
 		result = value
 	case MethodRegisterRepository:
@@ -1207,11 +1124,6 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 			return nil, protocolErr("database_error", err)
 
 		}
-		if access == AccessAgent {
-			for index := range manifests {
-				manifests[index] = agentVisibleManifest(manifests[index])
-			}
-		}
 		database, err := s.database.Status()
 		if err != nil {
 			return nil, protocolErr("database_error", err)
@@ -1226,49 +1138,6 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 	return result, nil
 }
 
-func agentMethodAllowed(method string) bool {
-	switch method {
-	case MethodRepositorySource:
-		return true
-	case MethodPing, MethodStatus, MethodListManifests, MethodCreateItem:
-		return true
-	// Profiles hold no secrets; new items need the default one.
-	case MethodAgentProfiles:
-		return true
-	// Agents keep their items' notes and attachments.
-	case MethodAddNote, MethodAttach:
-		return true
-	default:
-		return false
-	}
-}
-
-func agentVisibleManifest(manifest model.Manifest) model.Manifest {
-	manifest.Repository = model.Repository{}
-	manifest.Checkout = model.Checkout{Specification: model.CheckoutSpecification{Kind: manifest.Checkout.Specification.Kind}}
-	manifest.PrimaryConversation = nil
-	return manifest
-}
-
-func validateAgentCreateItem(manifest model.Manifest) error {
-	if manifest.State != model.StateBacklog {
-		return errors.New("agent endpoint may create backlog items only")
-	}
-	if manifest.Checkout.Specification.Kind != model.WorkspaceKindManagedSlot || manifest.Checkout.Present() {
-		return errors.New("agent endpoint may create absent managed-slot checkouts only")
-	}
-	if manifest.Checkout.Claim != nil {
-		return errors.New("agent endpoint may not claim a workspace path")
-	}
-	if manifest.Checkout.Specification.Branch != model.ItemBranchName(manifest.Slug, manifest.ID) {
-		return errors.New("agent endpoint requires the canonical item branch")
-	}
-	if manifest.PrimaryConversation != nil {
-		return errors.New("agent endpoint may not create conversation state")
-	}
-	return nil
-}
-
 func (s *Server) status() (Status, error) {
 	database, err := s.database.Status()
 	if err != nil {
@@ -1277,7 +1146,7 @@ func (s *Server) status() (Status, error) {
 	s.importMu.RLock()
 	lastConversationImport := s.lastConversationImport
 	s.importMu.RUnlock()
-	return Status{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, PID: os.Getpid(), StartedAt: s.startedAt.Format(time.RFC3339Nano), DataRoot: s.dataRoot, SocketPath: s.socketPath, AgentSocketPath: s.agentSocketPath, Access: AccessOperator, Managed: s.managed, Database: database, ConversationImport: lastConversationImport}, nil
+	return Status{ProtocolVersion: ProtocolVersion, BuildIdentity: s.buildIdentity, PID: os.Getpid(), StartedAt: s.startedAt.Format(time.RFC3339Nano), DataRoot: s.dataRoot, SocketPath: s.socketPath, Access: AccessOperator, Managed: s.managed, Database: database, ConversationImport: lastConversationImport}, nil
 }
 
 func (s *Server) writeError(conn io.Writer, id, code, message string) {

@@ -9,10 +9,10 @@ Use `wi info` instead of guessing paths:
 wi info
 wi info --json
 wi info data-root
-wi info operator-socket
+wi info socket
 ```
 
-`wi info` asks the daemon (`SystemService.GetInfo`) for its version, API version, data root and default agent profile; `operator-socket` is the socket the command reached it on. Path resolution follows the XDG base directory specification; [Endpoints](../api/#endpoints) lists the daemon's sockets.
+`wi info` asks the daemon (`SystemService.GetInfo`) for its version, API version, data root and default agent profile; `socket` is the socket the command reached it on, `operator-credential` the file holding your credential, and `caller` who the daemon took the command to be. Path resolution follows the XDG base directory specification; see [Endpoint and credentials](../api/#endpoint-and-credentials).
 
 ## What to back up
 
@@ -78,6 +78,6 @@ Force cleanup stops a process only after the daemon verifies that it still belon
 
 Data directories and daemon endpoints are restricted to the current user.
 
-Each daemon socket has its own access level, checked per method; the peer must run as the same user. The separate agent-tool socket grants fewer methods than the operator socket. Sandboxed agents can read items, file safe managed-slot backlog work, and add notes and attachments, but they cannot control lifecycle, workspaces, agents, terminals, deletion, or shutdown. See [Endpoints](../api/#endpoints).
+The daemon's socket accepts only the current user, and every call presents a credential: yours, `wi web`'s, or an agent's, which identifies its item. The credentials live in the data root and agents' state directories, readable by you only. See [Endpoint and credentials](../api/#endpoint-and-credentials).
 
 The database stores compact agent events, not complete prompts, responses, text deltas, tool arguments, paths, or error text. Full conversation content remains in driver-owned native files.

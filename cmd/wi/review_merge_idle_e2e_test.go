@@ -78,28 +78,30 @@ func TestMergeAllowsIdleOnlineAgentAndRefusesRunningTurn(t *testing.T) {
 	if out, err := f.command("merge", "--item", item, "--local"); err == nil || !strings.Contains(string(out), "busy running a turn") {
 		t.Fatalf("busy merge not refused clearly: %v %s", err, out)
 	}
-	// The item's own agent merges from inside its turn: it names its
-	// runtime, as its environment gives it, and only that runtime counts.
-	// The runtime's ID names its state directory; the daemon gives it to the
-	// agent's environment.
-	runtimes, _ := filepath.Glob(filepath.Join(f.root, "state", "wi", "*", "items", item, "runtimes", "*"))
-	if len(runtimes) != 1 {
-		t.Fatalf("runtimes: %v", runtimes)
+	// The item's own agent merges from inside its turn: its credential, in
+	// the file its environment names, proves it is the item's current
+	// runtime. The daemon writes the file beside the runtime's log.
+	credentials, _ := filepath.Glob(filepath.Join(f.root, "state", "wi", "*", "items", item, "runtimes", "*", "credential"))
+	if len(credentials) != 1 {
+		t.Fatalf("credentials: %v", credentials)
 	}
-	runtimeID := filepath.Base(runtimes[0])
-	asAgent := func(runtimeID string) ([]byte, error) {
+	asAgent := func(file string) ([]byte, error) {
 		cmd := exec.Command(f.wi, "merge", "--item", item, "--local")
-		cmd.Env = append(append([]string{}, f.env...), "WI_ID="+item, "WI_AGENT_RUNTIME_ID="+runtimeID)
+		cmd.Env = append(append([]string{}, f.env...), "WI_ID="+item, "WI_ITEM_CREDENTIAL_FILE="+file)
 		cmd.Dir = f.root
 		return cmd.CombinedOutput()
 	}
-	if out, err := asAgent("another-runtime"); err == nil || !strings.Contains(string(out), "not this item's running agent") {
-		t.Fatalf("a foreign runtime merged: %v %s", err, out)
+	forged := filepath.Join(f.root, "forged-credential")
+	if err := os.WriteFile(forged, []byte("wi_item_"+item+"_"+strings.Repeat("A", 43)+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := asAgent(forged); err == nil || !strings.Contains(string(out), "no longer valid") {
+		t.Fatalf("a forged credential merged: %v %s", err, out)
 	}
 	if err := os.WriteFile(filepath.Join(ws.Msg.Checkout.Claim.Path, "agent-work.txt"), []byte("merged by its own agent\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := asAgent(runtimeID); err != nil {
+	if out, err := asAgent(credentials[0]); err != nil {
 		t.Fatalf("the agent's own merge from inside its turn: %v %s", err, out)
 	}
 }

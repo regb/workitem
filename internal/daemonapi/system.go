@@ -12,23 +12,20 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/version"
 )
 
 func (s *Server) GetInfo(ctx context.Context, req *connect.Request[v1.GetInfoRequest]) (*connect.Response[v1.GetInfoResponse], error) {
-	access, kind := v1.CallerAccess_CALLER_ACCESS_OPERATOR, v1.CallerKind_CALLER_KIND_LOCAL_OPERATOR
-	switch apitransport.Caller(ctx) {
-	case apitransport.Agent:
-		access, kind = v1.CallerAccess_CALLER_ACCESS_AGENT, v1.CallerKind_CALLER_KIND_AGENT
-	case apitransport.WebAdapter:
+	who := caller(ctx)
+	kind := v1.CallerKind_CALLER_KIND_LOCAL_OPERATOR
+	switch {
+	case who.principal.item():
+		kind = v1.CallerKind_CALLER_KIND_AGENT
+	case who.principal.web():
 		kind = v1.CallerKind_CALLER_KIND_WEB_ADAPTER
 	}
-	info := &v1.GetInfoResponse{Caller: &v1.Caller{Access: access, Kind: kind, Label: caller(ctx).label}, Version: version.Current().Version, ApiVersion: "1.0", DataRoot: s.Root, DefaultAgentProfile: s.App.DefaultProfile(), StartedAt: stamp(s.StartedAt), Managed: s.Config.Daemon.Managed}
-	if apitransport.Caller(ctx) == apitransport.Agent {
-		info.DataRoot = ""
-	}
+	info := &v1.GetInfoResponse{Caller: &v1.Caller{Kind: kind, Label: who.label, Principal: who.principal.String(), ItemId: who.principal.itemID}, Version: version.Current().Version, ApiVersion: "1.0", DataRoot: s.Root, DefaultAgentProfile: s.App.DefaultProfile(), StartedAt: stamp(s.StartedAt), Managed: s.Config.Daemon.Managed}
 	out := connect.NewResponse(info)
 	out.Header().Set("Wi-Daemon-Pid", strconv.Itoa(os.Getpid()))
 	out.Header().Set("Wi-Build-Identity", version.BuildIdentity())

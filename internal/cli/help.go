@@ -182,7 +182,7 @@ var helpDocs = map[string]helpDoc{
 		Summary:     "Show resolved paths for the current wi data root",
 		Usage:       []string{"wi info [key]"},
 		Description: []string{"Without a key, prints all resolved data, configuration, state, runtime, and socket paths. With a key, prints only its value for use in scripts. Contacts the daemon API to check compatibility and may start an unmanaged daemon if absent. Path keys are resolved for the caller's XDG environment; --json without a key returns the API daemon information."},
-		Examples:    []string{"wi info", "wi info agent-socket", "wi info --json"},
+		Examples:    []string{"wi info", "wi info socket", "wi info --json"},
 	},
 	"version": {
 		Summary:     "Show the baked-in build version",
@@ -196,7 +196,6 @@ var helpDocs = map[string]helpDoc{
 			"Normally creates a work item in backlog. Durable metadata and DESCRIPTION.md are written immediately; no terminal session, conversation or agent process is started. Creation runs in the daemon through the API. Items begin with an absent managed-slot checkout. Select a registered repository with --repo NAME, or inherit the current item’s repository. Without --base, the immutable starting commit comes from the registered integration branch, with no fallback to HEAD. When the repository has an upstream and repo.follow_upstream is fast-forward (the default), the branch is first fetched and fast-forwarded like wi repo sync; if that fails or the histories diverged, the item starts from the local branch with a warning. An explicit --base never fetches.",
 			"With --start, the item moves to active and an unattached agent receives the global agent.startup_message through runtime control. --prompt supplies that message and implies --start; it never changes DESCRIPTION.md. --desc-file remains the durable task description. TUI mode is the default: it creates the normal tmux runtime for later entry but does not switch or attach the caller. Use --agent-mode headless for an explicitly headless runtime. If startup or delivery fails, the command reports the durable partial outcome instead of deleting the item.",
 			"Use --desc-file for a backlog item's self-contained multiline description. Labels are repeatable and augment defaults from user config and WI_ITEM_DEFAULT_LABELS; use --no-default-labels to opt out. Deep work is a built-in attribute, not a label.",
-			"A sandbox may set WI_AGENT_DAEMON_SOCKET to the daemon's separately mounted agent endpoint. That endpoint permits only absent managed-slot backlog creation; --start is rejected. Worktree-relative bases require item and repository context available through the endpoint.",
 		},
 		Options: []helpOption{
 			{"--title <text>", "Explicit title; required unless --untitled is supplied. Derive the slug unless --slug is supplied; no title inference."},
@@ -215,7 +214,7 @@ var helpDocs = map[string]helpDoc{
 			{"--repo <name>", "Select a registered repository; overrides the current item’s repository."},
 			{"--base <revision>", "Use a named branch, tag, or commit from the owned store. ^ selects integration. HEAD, @, - and contextual expressions resolve in the current claimed worktree, or fail if context is missing or the repository differs."},
 		},
-		Environment: []helpOption{{"WI_ITEM_DEFAULT_LABELS", "Comma-separated additive default labels."}, {"WI_AGENT_DAEMON_SOCKET", "Use the restricted agent endpoint at an explicit absolute path; it is never auto-started."}},
+		Environment: []helpOption{{"WI_ITEM_DEFAULT_LABELS", "Comma-separated additive default labels."}, {"WI_API_SOCKET", "Use the daemon's socket mounted at this absolute path, as in a sandbox; the daemon is never started from it."}, {"WI_ITEM_CREDENTIAL_FILE", "Set by wi in an agent's environment: calls act as that item's agent."}},
 		Examples: []string{
 			`wi new --label follow-up --desc-file handoff.md --title "Investigate refresh race"`,
 			`wi new --desc-file handoff.md --start --title "Investigate refresh race"`,

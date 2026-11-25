@@ -79,7 +79,7 @@ extensions = ["/home/me/tools/web-search.ts"]
 
 ## Deep-work capacity
 
-`deep_work.max_active` limits active items marked as deep work, waiting or not. The daemon enforces it when an item becomes active. A value of `0` prevents starting deep backlog work unless you pass `--force`, which sends `override_capacity` with the request; only operator callers may override, never the agent endpoint.
+`deep_work.max_active` limits active items marked as deep work, waiting or not. The daemon enforces it when an item becomes active. A value of `0` prevents starting deep backlog work unless you pass `--force`, which sends `override_capacity` with the request; only you may override, never an agent.
 
 ## Daemon startup environment
 
@@ -429,7 +429,8 @@ Use command help to see variables accepted by a specific command. Common variabl
 | `WI_WORKTREE` | Current assigned checkout path |
 | `WI_AGENT_CONVERSATION_DIR` | Driver-owned native conversation directory |
 | `WI_REPOSITORY` | Owned bare Git store in Wi-created tmux shells; not guaranteed in every headless driver |
-| `WI_AGENT_DAEMON_SOCKET` | Use the restricted agent-tool daemon endpoint |
+| `WI_API_SOCKET` | The daemon's socket mounted at another path, as in a sandbox; never auto-started |
+| `WI_ITEM_CREDENTIAL_FILE` | Set by wi for an agent: its commands act as its item |
 | `WI_CLIENT_ID` | Client name the CLI gives the daemon for control leases (default `cli`) |
 
 Agents also receive `WI_AGENT_RUNTIME_ID`, `WI_AGENT_MODE`, `WI_AGENT_CONTROL_SOCKET`, and `WI_AGENT_EVENT_SOCKET`. Tmux panes receive `TMUX` and `TMUX_PANE`; headless agents do not require them. Driver-specific variables are implementation details.

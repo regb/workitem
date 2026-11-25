@@ -54,26 +54,27 @@ message GetInfoResponse {
   google.protobuf.Timestamp started_at = 5;
   // managed means a service manager runs the daemon.
   bool managed = 6;
-  // caller describes this authenticated endpoint. It grants no permissions.
+  // caller is who made this call. It grants no permissions.
   Caller caller = 7;
 }
 
-// Caller is assigned by the daemon's Unix listener, never request metadata.
-// Wi-Client-Id identifies a lease client (default "cli"). Wi-Client-Kind
-// selects lease holder presentation ("terminal" or "web"); neither header
-// changes access or identity kind.
+// Caller is who a call is from, as the credential it presented proves:
+// the local operator, wi web acting for its signed-in user, or a work item's
+// agent. Wi-Client-Id identifies a lease client (default "cli").
+// Wi-Client-Kind selects lease holder presentation ("terminal" or "web");
+// neither header changes who the caller is.
 message Caller {
-  CallerAccess access = 1;
+  reserved 1;
+  reserved "access";
   CallerKind kind = 2;
   // label is who the caller acts as, when known: for the web, the user the
   // web adapter's proxy authenticated.
   string label = 3;
-}
-
-enum CallerAccess {
-  CALLER_ACCESS_UNSPECIFIED = 0;
-  CALLER_ACCESS_OPERATOR = 1;
-  CALLER_ACCESS_AGENT = 2;
+  // principal names the caller: "user:operator", or "item:<id>" for an
+  // item's agent.
+  string principal = 4;
+  // item_id is the item whose agent is calling, for CALLER_KIND_AGENT.
+  string item_id = 5;
 }
 
 enum CallerKind {

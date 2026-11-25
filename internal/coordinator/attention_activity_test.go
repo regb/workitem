@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"testing"
 	"time"
 
@@ -175,7 +174,7 @@ func TestMalformedAttentionProjectionDoesNotFallbackOrCommitMarker(t *testing.T)
 	}
 }
 
-func TestAttentionActivityTransportAndAccessBoundary(t *testing.T) {
+func TestAttentionActivityTransport(t *testing.T) {
 	db, root := attentionTestDatabase(t)
 	at := time.Now().UTC()
 	appendAttentionEvent(t, db, "attention.read", at)
@@ -183,7 +182,7 @@ func TestAttentionActivityTransportAndAccessBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	socket := filepath.Join(t.TempDir(), "daemon.sock")
-	server, err := NewServerWithAgentSocket(root, socket, filepath.Join(filepath.Dir(socket), "agent.sock"))
+	server, err := NewServer(root, socket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,9 +198,5 @@ func TestAttentionActivityTransportAndAccessBoundary(t *testing.T) {
 	}
 	if err := client.Call(ctx, MethodAttentionActivity, map[string]any{"item_id": "../escape"}, nil); err == nil {
 		t.Fatal("transport accepted invalid identity")
-	}
-	restricted := &Client{SocketPath: server.agentSocketPath}
-	if _, err := restricted.AttentionActivity(ctx, importTestID); err == nil || !strings.Contains(err.Error(), "agent endpoint") {
-		t.Fatal("restricted endpoint policy changed", err)
 	}
 }

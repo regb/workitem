@@ -63,23 +63,19 @@ func TestGitHubWaitBinaryWithDefaultEmptyPluginLists(t *testing.T) {
 	if len(shown.Item.Blockers) != 1 || shown.Item.Blockers[0].Meta["github.pr"] != "NetFabric-AI/netfabric-code#3556" {
 		t.Fatal(shown.String())
 	}
-	// Explicit sandbox routing cannot gain operator permission by selecting
-	// a review command or an ordinary plugin command.
-	sandbox := exec.Command(f.wi, "wait", "--clear", "--item", item)
-	sandbox.Env = append(append([]string{}, f.env...), "WI_AGENT_DAEMON_SOCKET="+f.agentSocket)
-	sandbox.Dir = f.root
-	if out, err := sandbox.CombinedOutput(); err == nil || !strings.Contains(string(out), "permission_denied") {
-		t.Fatalf("sandbox restriction or error classification regressed: %v %s", err, out)
-	}
-	sandbox = exec.Command(f.wi, "review", "status", "--item", item)
-	sandbox.Env = append(append([]string{}, f.env...), "WI_AGENT_DAEMON_SOCKET="+f.agentSocket)
-	sandbox.Dir = f.root
-	if out, err := sandbox.CombinedOutput(); err == nil || !strings.Contains(string(out), "permission_denied") {
-		t.Fatalf("sandbox review escaped restriction: %v %s", err, out)
+	// A caller whose credential is not valid gains nothing by choosing a
+	// plugin or review command: the daemon refuses every call.
+	for _, args := range [][]string{{"wait", "--clear", "--item", item}, {"review", "status", "--item", item}} {
+		sandbox := exec.Command(f.wi, args...)
+		sandbox.Env = append(append([]string{}, f.env...), "WI_ITEM_CREDENTIAL_FILE="+filepath.Join(f.root, "missing-credential"))
+		sandbox.Dir = f.root
+		if out, err := sandbox.CombinedOutput(); err == nil || !strings.Contains(string(out), "credential") {
+			t.Fatalf("%v without a credential: %v %s", args, err, out)
+		}
 	}
 	f.json(&shown, "show", item)
 	if len(shown.Item.Blockers) != 1 {
-		t.Fatal("sandbox denial changed wait", shown.String())
+		t.Fatal("a refused call changed the wait", shown.String())
 	}
 	writeState(fmt.Sprintf(`{"state":"OPEN","reviews":[{"author":{"login":"reviewer"},"state":"APPROVED","submittedAt":%q}]}`, time.Now().UTC().Add(time.Second).Format(time.RFC3339Nano)))
 	f.run("plugin", "run", "github")

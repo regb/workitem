@@ -3,6 +3,7 @@ package daemonapi
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/daemonapp"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
@@ -46,7 +48,7 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	core, err := coordinator.NewServerWithAgentSocket(filepath.Join(root, "data"), filepath.Join(root, "api.sock"), filepath.Join(root, "agent.sock"))
+	core, err := coordinator.NewServer(filepath.Join(root, "data"), filepath.Join(root, "api.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +75,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	core.ConfigureRepositorySettings(host.Registry.Options())
 	core.SetBeforeClose(api.Close)
-	clients, err := apitransport.NewClients(filepath.Join(root, "api.sock"))
+	clients, err := apitransport.NewClients(filepath.Join(root, "api.sock"), credential.Source(credential.OperatorFile(filepath.Join(root, "data")), credential.Operator))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,6 +108,42 @@ func newFixture(t *testing.T) *fixture {
 		time.Sleep(10 * time.Millisecond)
 	}
 	return &fixture{api: api, core: core, clients: clients, root: root}
+}
+
+// clientsWith connects with another credential.
+func (f *fixture) clientsWith(t *testing.T, token func() (string, error)) *apitransport.Clients {
+	t.Helper()
+	clients, err := apitransport.NewClients(filepath.Join(f.root, "api.sock"), token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(clients.Close)
+	return clients
+}
+
+// webClients connects as wi web does.
+func (f *fixture) webClients(t *testing.T) *apitransport.Clients {
+	return f.clientsWith(t, credential.Source(credential.ProxyFile(filepath.Join(f.root, "data")), credential.Proxy))
+}
+
+// agentClients connects as itemID's agent: a runtime owns the item and
+// holds the credential recorded for it, as starting an agent does. It
+// returns the runtime, to stop or replace it.
+func (f *fixture) agentClients(t *testing.T, itemID string) (*apitransport.Clients, model.AgentRuntime) {
+	t.Helper()
+	now := time.Now().UTC()
+	runtime := model.AgentRuntime{ID: fmt.Sprintf("headless-%d", now.UnixNano()), WorkItemID: itemID, Mode: "headless", State: model.AgentRuntimeRunning, StartedAt: now, UpdatedAt: now}
+	if err := f.api.App.Store.SaveAgentRuntime(context.Background(), itemID, runtime); err != nil {
+		t.Fatal(err)
+	}
+	value, err := credential.New(credential.Item, itemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.core.Database().SaveItemCredential(itemID, runtime.ID, value.Hash()); err != nil {
+		t.Fatal(err)
+	}
+	return f.clientsWith(t, func() (string, error) { return value.Token(), nil }), runtime
 }
 func (f *fixture) repo(t *testing.T) string {
 	t.Helper()
@@ -268,31 +306,6 @@ func TestConcurrentFencedUpdatesHaveOneWinner(t *testing.T) {
 	}
 	if success != 1 || stale != 1 {
 		t.Fatalf("winners=%d stale=%d", success, stale)
-	}
-}
-func TestRestrictedEndpointRejectsStreamsAndLifecycle(t *testing.T) {
-	f := newFixture(t)
-	client, err := apitransport.NewClients(filepath.Join(f.root, "agent.sock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
-	info, err := client.System.GetInfo(context.Background(), connect.NewRequest(&v1.GetInfoRequest{}))
-	if err != nil || info.Msg.Caller.GetAccess() != v1.CallerAccess_CALLER_ACCESS_AGENT || info.Msg.DataRoot != "" {
-		t.Fatalf("agent info: %v %v", info, err)
-	}
-	_, err = client.Lifecycle.StartItem(context.Background(), connect.NewRequest(&v1.StartItemRequest{ItemId: "01KZYHGDCECSFS4BJ2SNTQP49W"}))
-	if connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatal(err)
-	}
-	stream, err := client.Events.WatchChanges(context.Background(), connect.NewRequest(&v1.WatchChangesRequest{}))
-	if err == nil {
-		defer stream.Close()
-		stream.Receive()
-		err = stream.Err()
-	}
-	if connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("agent stream: %v", err)
 	}
 }
 func TestChangeStreamInitialAndCancellation(t *testing.T) {

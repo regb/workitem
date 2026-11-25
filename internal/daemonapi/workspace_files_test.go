@@ -9,7 +9,6 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
 )
 
 func fileWorkspace(t *testing.T) (*fixture, string, *v1.Checkout) {
@@ -153,14 +152,6 @@ func TestWorkspaceFilesThroughCoreAPI(t *testing.T) {
 	save.ExpectedSha256 = ""
 	if _, err = f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("missing digest: %v", err)
-	}
-	agent, err := apitransport.NewClients(filepath.Join(f.root, "agent.sock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer agent.Close()
-	if _, err = agent.Workspaces.ListWorkspaceFiles(ctx, connect.NewRequest(&v1.ListWorkspaceFilesRequest{ItemId: item})); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("agent file access: %v", err)
 	}
 	if _, err = f.clients.Workspaces.ReleaseWorkspace(ctx, connect.NewRequest(&v1.ReleaseWorkspaceRequest{ItemId: item})); err == nil {
 		t.Fatal("released a checkout with uncommitted files")

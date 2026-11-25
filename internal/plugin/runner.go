@@ -42,13 +42,14 @@ type Spec struct {
 
 // Environment returns the plugin process environment: the caller's
 // environment without item or terminal context, plus the wi executable path
-// and the plugin's settings. The restricted agent endpoint is an authority
-// boundary, not disposable item context, and must survive every invocation.
+// and the plugin's settings. Who the caller is to the daemon (an agent's item
+// credential) and where its socket is mounted are not disposable item
+// context: a plugin acts as its caller.
 func Environment(base []string, spec Spec, wiPath string) []string {
 	env := make([]string, 0, len(base)+3)
 	for _, entry := range base {
 		key, _, _ := strings.Cut(entry, "=")
-		if strings.HasPrefix(key, "WI_") && key != "WI_AGENT_DAEMON_SOCKET" || key == "TMUX" || key == "TMUX_PANE" {
+		if strings.HasPrefix(key, "WI_") && key != "WI_API_SOCKET" && key != "WI_ITEM_CREDENTIAL_FILE" || key == "TMUX" || key == "TMUX_PANE" {
 			continue
 		}
 		env = append(env, entry)

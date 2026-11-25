@@ -23,7 +23,6 @@ const (
 
 const (
 	AccessOperator = "operator"
-	AccessAgent    = "agent"
 )
 
 const (
@@ -168,7 +167,6 @@ type Status struct {
 	StartedAt       string `json:"started_at"`
 	DataRoot        string `json:"data_root"`
 	SocketPath      string `json:"socket_path"`
-	AgentSocketPath string `json:"agent_socket_path,omitempty"`
 	Access          string `json:"access"`
 	// Managed reports a daemon a service manager owns: clients must not
 	// stop or replace it.
@@ -191,20 +189,6 @@ func SocketPath(runtimeDir, dataRoot string) (string, error) {
 	}
 	name := key + ".sock"
 	return portableSocketPath(filepath.Join(runtimeDir, "wi", name), "wi", name), nil
-}
-
-// AgentSocketPath is the restricted control-plane endpoint intended for
-// sandboxed agent tools. Its directory is separate so containers can mount it
-// without exposing the operator socket.
-func AgentSocketPath(runtimeDir, dataRoot string) (string, error) {
-	if strings.TrimSpace(runtimeDir) == "" || strings.TrimSpace(dataRoot) == "" {
-		return "", errors.New("runtime directory and data root are required")
-	}
-	key, err := dataroot.Key(dataRoot)
-	if err != nil {
-		return "", err
-	}
-	return portableSocketPath(filepath.Join(runtimeDir, "wi-agent", key, "daemon.sock"), "wi-agent", key, "daemon.sock"), nil
 }
 
 func portableSocketPath(candidate string, parts ...string) string {

@@ -19,11 +19,13 @@ type ExecutionSpec struct {
 	Mode                agent.Mode
 	CWD                 string
 	LogPath             string
-	WorkItemID          string
-	RuntimeID           string
-	ControlSocketPath   string
-	EventSocketPath     string
-	ConversationDir     string
+	// CredentialPath is the runtime's item credential file, when it has one.
+	CredentialPath    string
+	WorkItemID        string
+	RuntimeID         string
+	ControlSocketPath string
+	EventSocketPath   string
+	ConversationDir   string
 }
 
 type ExecuteBackend func(context.Context, ExecutionSpec) error
@@ -118,5 +120,9 @@ func (s *Service) Execute(ctx context.Context, itemID, sessionID, runtimeID stri
 		}
 		_ = s.store.SaveAgentRuntime(context.Background(), m.ID, *runtime)
 	}()
-	return execute(ctx, ExecutionSpec{ConversationLocator: absolute, Mode: mode, CWD: cwd, LogPath: logPath, WorkItemID: m.ID, RuntimeID: runtime.ID, ControlSocketPath: controlSocketPath, EventSocketPath: eventSocketPath, ConversationDir: s.ConversationDir(m.ID, session)})
+	credentialPath := s.CredentialPath(m.ID, runtime)
+	if _, err := os.Stat(credentialPath); err != nil {
+		credentialPath = ""
+	}
+	return execute(ctx, ExecutionSpec{ConversationLocator: absolute, Mode: mode, CWD: cwd, LogPath: logPath, CredentialPath: credentialPath, WorkItemID: m.ID, RuntimeID: runtime.ID, ControlSocketPath: controlSocketPath, EventSocketPath: eventSocketPath, ConversationDir: s.ConversationDir(m.ID, session)})
 }

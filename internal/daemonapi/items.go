@@ -16,7 +16,6 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/app"
 	view "github.com/regb/workitem/internal/app/view"
 	"github.com/regb/workitem/internal/coordinator"
@@ -31,7 +30,7 @@ func (s *Server) CreateItem(ctx context.Context, req *connect.Request[v1.CreateI
 	r := req.Msg
 	commandID := id()
 	if r.RequestId != "" {
-		sum := sha256.Sum256([]byte(string(apitransport.Caller(ctx)) + ":" + r.RequestId))
+		sum := sha256.Sum256([]byte(caller(ctx).principal.String() + ":" + r.RequestId))
 		commandID = "api-create:" + hex.EncodeToString(sum[:])
 		if saved, found, err := s.Core.Database().CreatedItem(commandID); err != nil {
 			return nil, err
@@ -42,9 +41,6 @@ func (s *Server) CreateItem(ctx context.Context, req *connect.Request[v1.CreateI
 	}
 	if !model.ValidID(r.RepositoryId) {
 		return nil, invalid("valid repository_id is required")
-	}
-	if r.GenerateTitle && apitransport.Caller(ctx) == apitransport.Agent {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("agent backlog capture cannot request model title generation"))
 	}
 	if r.AgentProfile != "" {
 		if _, found := s.App.Agents()[r.AgentProfile]; !found {
@@ -236,10 +232,6 @@ func (s *Server) GetItem(ctx context.Context, req *connect.Request[v1.GetItemReq
 	out := &v1.GetItemResponse{Item: item(c.Manifest, c.Revision), Observation: s.observation(ctx, c.Manifest)}
 	if req.Msg.IncludeDescription {
 		out.Description, err = coordinator.ReadEditDescription(s.App.Store, c.Manifest.ID)
-	}
-	if apitransport.Caller(ctx) == apitransport.Agent {
-		out.Item.Checkout.Claim = nil
-		out.Item.Conversation = nil
 	}
 	return response(out, err)
 }
@@ -498,7 +490,8 @@ func (s *Server) SetItemState(ctx context.Context, req *connect.Request[v1.SetIt
 		return nil, invalid("closing requires a resolution")
 	}
 	result, err := s.command(ctx, r.ItemId, coordinator.CommandStateSet, r.ExpectedRevision, func(c *coordinator.ManifestCommand) {
-		c.Force = r.OverrideCapacity && (apitransport.Caller(ctx) == apitransport.Operator || apitransport.Caller(ctx) == apitransport.WebAdapter)
+		// Capacity is the operator's to override, not an agent's.
+		c.Force = r.OverrideCapacity && !caller(ctx).principal.item()
 		c.TargetState = stateName(r.State)
 		c.Resolution = resolutionName(r.Resolution)
 	})

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/credential"
 	"os"
 	"strings"
 	"time"
@@ -76,6 +77,11 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 			}
 		}()
 		environment := map[string]string{"WI_ID": spec.WorkItemID, "WI_DIR": a.Store.ItemDir(spec.WorkItemID), "WI_WORKTREE": spec.CWD, "WI_AGENT_RUNTIME_ID": spec.RuntimeID, "WI_AGENT_MODE": string(spec.Mode), "WI_AGENT_CONTROL_SOCKET": spec.ControlSocketPath, "WI_AGENT_EVENT_SOCKET": spec.EventSocketPath, "WI_AGENT_CONVERSATION_DIR": spec.ConversationDir}
+		// The agent and everything it runs act as the item: wi reads the
+		// credential from this file.
+		if spec.CredentialPath != "" {
+			environment[credential.FileVariable] = spec.CredentialPath
+		}
 		format := ""
 		if manifest.PrimaryConversation != nil {
 			format = manifest.PrimaryConversation.Format

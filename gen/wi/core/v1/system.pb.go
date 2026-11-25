@@ -22,55 +22,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type CallerAccess int32
-
-const (
-	CallerAccess_CALLER_ACCESS_UNSPECIFIED CallerAccess = 0
-	CallerAccess_CALLER_ACCESS_OPERATOR    CallerAccess = 1
-	CallerAccess_CALLER_ACCESS_AGENT       CallerAccess = 2
-)
-
-// Enum value maps for CallerAccess.
-var (
-	CallerAccess_name = map[int32]string{
-		0: "CALLER_ACCESS_UNSPECIFIED",
-		1: "CALLER_ACCESS_OPERATOR",
-		2: "CALLER_ACCESS_AGENT",
-	}
-	CallerAccess_value = map[string]int32{
-		"CALLER_ACCESS_UNSPECIFIED": 0,
-		"CALLER_ACCESS_OPERATOR":    1,
-		"CALLER_ACCESS_AGENT":       2,
-	}
-)
-
-func (x CallerAccess) Enum() *CallerAccess {
-	p := new(CallerAccess)
-	*p = x
-	return p
-}
-
-func (x CallerAccess) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (CallerAccess) Descriptor() protoreflect.EnumDescriptor {
-	return file_wi_core_v1_system_proto_enumTypes[0].Descriptor()
-}
-
-func (CallerAccess) Type() protoreflect.EnumType {
-	return &file_wi_core_v1_system_proto_enumTypes[0]
-}
-
-func (x CallerAccess) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use CallerAccess.Descriptor instead.
-func (CallerAccess) EnumDescriptor() ([]byte, []int) {
-	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{0}
-}
-
 type CallerKind int32
 
 const (
@@ -107,11 +58,11 @@ func (x CallerKind) String() string {
 }
 
 func (CallerKind) Descriptor() protoreflect.EnumDescriptor {
-	return file_wi_core_v1_system_proto_enumTypes[1].Descriptor()
+	return file_wi_core_v1_system_proto_enumTypes[0].Descriptor()
 }
 
 func (CallerKind) Type() protoreflect.EnumType {
-	return &file_wi_core_v1_system_proto_enumTypes[1]
+	return &file_wi_core_v1_system_proto_enumTypes[0]
 }
 
 func (x CallerKind) Number() protoreflect.EnumNumber {
@@ -120,7 +71,7 @@ func (x CallerKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use CallerKind.Descriptor instead.
 func (CallerKind) EnumDescriptor() ([]byte, []int) {
-	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{1}
+	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{0}
 }
 
 type GetInfoRequest struct {
@@ -169,7 +120,7 @@ type GetInfoResponse struct {
 	StartedAt           *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	// managed means a service manager runs the daemon.
 	Managed bool `protobuf:"varint,6,opt,name=managed,proto3" json:"managed,omitempty"`
-	// caller describes this authenticated endpoint. It grants no permissions.
+	// caller is who made this call. It grants no permissions.
 	Caller        *Caller `protobuf:"bytes,7,opt,name=caller,proto3" json:"caller,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -254,17 +205,22 @@ func (x *GetInfoResponse) GetCaller() *Caller {
 	return nil
 }
 
-// Caller is assigned by the daemon's Unix listener, never request metadata.
-// Wi-Client-Id identifies a lease client (default "cli"). Wi-Client-Kind
-// selects lease holder presentation ("terminal" or "web"); neither header
-// changes access or identity kind.
+// Caller is who a call is from, as the credential it presented proves:
+// the local operator, wi web acting for its signed-in user, or a work item's
+// agent. Wi-Client-Id identifies a lease client (default "cli").
+// Wi-Client-Kind selects lease holder presentation ("terminal" or "web");
+// neither header changes who the caller is.
 type Caller struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Access CallerAccess           `protobuf:"varint,1,opt,name=access,proto3,enum=wi.core.v1.CallerAccess" json:"access,omitempty"`
-	Kind   CallerKind             `protobuf:"varint,2,opt,name=kind,proto3,enum=wi.core.v1.CallerKind" json:"kind,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  CallerKind             `protobuf:"varint,2,opt,name=kind,proto3,enum=wi.core.v1.CallerKind" json:"kind,omitempty"`
 	// label is who the caller acts as, when known: for the web, the user the
 	// web adapter's proxy authenticated.
-	Label         string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Label string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	// principal names the caller: "user:operator", or "item:<id>" for an
+	// item's agent.
+	Principal string `protobuf:"bytes,4,opt,name=principal,proto3" json:"principal,omitempty"`
+	// item_id is the item whose agent is calling, for CALLER_KIND_AGENT.
+	ItemId        string `protobuf:"bytes,5,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -299,13 +255,6 @@ func (*Caller) Descriptor() ([]byte, []int) {
 	return file_wi_core_v1_system_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *Caller) GetAccess() CallerAccess {
-	if x != nil {
-		return x.Access
-	}
-	return CallerAccess_CALLER_ACCESS_UNSPECIFIED
-}
-
 func (x *Caller) GetKind() CallerKind {
 	if x != nil {
 		return x.Kind
@@ -316,6 +265,20 @@ func (x *Caller) GetKind() CallerKind {
 func (x *Caller) GetLabel() string {
 	if x != nil {
 		return x.Label
+	}
+	return ""
+}
+
+func (x *Caller) GetPrincipal() string {
+	if x != nil {
+		return x.Principal
+	}
+	return ""
+}
+
+func (x *Caller) GetItemId() string {
+	if x != nil {
+		return x.ItemId
 	}
 	return ""
 }
@@ -1405,11 +1368,12 @@ const file_wi_core_v1_system_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12\x18\n" +
 	"\amanaged\x18\x06 \x01(\bR\amanaged\x12*\n" +
-	"\x06caller\x18\a \x01(\v2\x12.wi.core.v1.CallerR\x06caller\"|\n" +
-	"\x06Caller\x120\n" +
-	"\x06access\x18\x01 \x01(\x0e2\x18.wi.core.v1.CallerAccessR\x06access\x12*\n" +
+	"\x06caller\x18\a \x01(\v2\x12.wi.core.v1.CallerR\x06caller\"\x8f\x01\n" +
+	"\x06Caller\x12*\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x16.wi.core.v1.CallerKindR\x04kind\x12\x14\n" +
-	"\x05label\x18\x03 \x01(\tR\x05label\"\x12\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1c\n" +
+	"\tprincipal\x18\x04 \x01(\tR\tprincipal\x12\x17\n" +
+	"\aitem_id\x18\x05 \x01(\tR\x06itemIdJ\x04\b\x01\x10\x02R\x06access\"\x12\n" +
 	"\x10GetHealthRequest\"\x95\x01\n" +
 	"\x11GetHealthResponse\x12\x18\n" +
 	"\ahealthy\x18\x01 \x01(\bR\ahealthy\x12\x1a\n" +
@@ -1492,11 +1456,7 @@ const file_wi_core_v1_system_proto_rawDesc = "" +
 	"\n" +
 	"_remainingB\f\n" +
 	"\n" +
-	"_unlimited*b\n" +
-	"\fCallerAccess\x12\x1d\n" +
-	"\x19CALLER_ACCESS_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16CALLER_ACCESS_OPERATOR\x10\x01\x12\x17\n" +
-	"\x13CALLER_ACCESS_AGENT\x10\x02*}\n" +
+	"_unlimited*}\n" +
 	"\n" +
 	"CallerKind\x12\x1b\n" +
 	"\x17CALLER_KIND_UNSPECIFIED\x10\x00\x12\x1e\n" +
@@ -1524,70 +1484,68 @@ func file_wi_core_v1_system_proto_rawDescGZIP() []byte {
 	return file_wi_core_v1_system_proto_rawDescData
 }
 
-var file_wi_core_v1_system_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_wi_core_v1_system_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_wi_core_v1_system_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_wi_core_v1_system_proto_goTypes = []any{
-	(CallerAccess)(0),              // 0: wi.core.v1.CallerAccess
-	(CallerKind)(0),                // 1: wi.core.v1.CallerKind
-	(*GetInfoRequest)(nil),         // 2: wi.core.v1.GetInfoRequest
-	(*GetInfoResponse)(nil),        // 3: wi.core.v1.GetInfoResponse
-	(*Caller)(nil),                 // 4: wi.core.v1.Caller
-	(*GetHealthRequest)(nil),       // 5: wi.core.v1.GetHealthRequest
-	(*GetHealthResponse)(nil),      // 6: wi.core.v1.GetHealthResponse
-	(*RunDiagnosticsRequest)(nil),  // 7: wi.core.v1.RunDiagnosticsRequest
-	(*Diagnostic)(nil),             // 8: wi.core.v1.Diagnostic
-	(*RunDiagnosticsResponse)(nil), // 9: wi.core.v1.RunDiagnosticsResponse
-	(*GetConfigRequest)(nil),       // 10: wi.core.v1.GetConfigRequest
-	(*GetConfigResponse)(nil),      // 11: wi.core.v1.GetConfigResponse
-	(*PluginOption)(nil),           // 12: wi.core.v1.PluginOption
-	(*Plugin)(nil),                 // 13: wi.core.v1.Plugin
-	(*ListPluginsRequest)(nil),     // 14: wi.core.v1.ListPluginsRequest
-	(*ListPluginsResponse)(nil),    // 15: wi.core.v1.ListPluginsResponse
-	(*ShutdownRequest)(nil),        // 16: wi.core.v1.ShutdownRequest
-	(*ShutdownResponse)(nil),       // 17: wi.core.v1.ShutdownResponse
-	(*GetUsageRequest)(nil),        // 18: wi.core.v1.GetUsageRequest
-	(*GetUsageResponse)(nil),       // 19: wi.core.v1.GetUsageResponse
-	(*UsageQuota)(nil),             // 20: wi.core.v1.UsageQuota
-	(*UsageWindow)(nil),            // 21: wi.core.v1.UsageWindow
-	(*UsageCredits)(nil),           // 22: wi.core.v1.UsageCredits
-	(*timestamppb.Timestamp)(nil),  // 23: google.protobuf.Timestamp
-	(*Job)(nil),                    // 24: wi.core.v1.Job
+	(CallerKind)(0),                // 0: wi.core.v1.CallerKind
+	(*GetInfoRequest)(nil),         // 1: wi.core.v1.GetInfoRequest
+	(*GetInfoResponse)(nil),        // 2: wi.core.v1.GetInfoResponse
+	(*Caller)(nil),                 // 3: wi.core.v1.Caller
+	(*GetHealthRequest)(nil),       // 4: wi.core.v1.GetHealthRequest
+	(*GetHealthResponse)(nil),      // 5: wi.core.v1.GetHealthResponse
+	(*RunDiagnosticsRequest)(nil),  // 6: wi.core.v1.RunDiagnosticsRequest
+	(*Diagnostic)(nil),             // 7: wi.core.v1.Diagnostic
+	(*RunDiagnosticsResponse)(nil), // 8: wi.core.v1.RunDiagnosticsResponse
+	(*GetConfigRequest)(nil),       // 9: wi.core.v1.GetConfigRequest
+	(*GetConfigResponse)(nil),      // 10: wi.core.v1.GetConfigResponse
+	(*PluginOption)(nil),           // 11: wi.core.v1.PluginOption
+	(*Plugin)(nil),                 // 12: wi.core.v1.Plugin
+	(*ListPluginsRequest)(nil),     // 13: wi.core.v1.ListPluginsRequest
+	(*ListPluginsResponse)(nil),    // 14: wi.core.v1.ListPluginsResponse
+	(*ShutdownRequest)(nil),        // 15: wi.core.v1.ShutdownRequest
+	(*ShutdownResponse)(nil),       // 16: wi.core.v1.ShutdownResponse
+	(*GetUsageRequest)(nil),        // 17: wi.core.v1.GetUsageRequest
+	(*GetUsageResponse)(nil),       // 18: wi.core.v1.GetUsageResponse
+	(*UsageQuota)(nil),             // 19: wi.core.v1.UsageQuota
+	(*UsageWindow)(nil),            // 20: wi.core.v1.UsageWindow
+	(*UsageCredits)(nil),           // 21: wi.core.v1.UsageCredits
+	(*timestamppb.Timestamp)(nil),  // 22: google.protobuf.Timestamp
+	(*Job)(nil),                    // 23: wi.core.v1.Job
 }
 var file_wi_core_v1_system_proto_depIdxs = []int32{
-	23, // 0: wi.core.v1.GetInfoResponse.started_at:type_name -> google.protobuf.Timestamp
-	4,  // 1: wi.core.v1.GetInfoResponse.caller:type_name -> wi.core.v1.Caller
-	0,  // 2: wi.core.v1.Caller.access:type_name -> wi.core.v1.CallerAccess
-	1,  // 3: wi.core.v1.Caller.kind:type_name -> wi.core.v1.CallerKind
-	23, // 4: wi.core.v1.GetHealthResponse.last_observation_at:type_name -> google.protobuf.Timestamp
-	8,  // 5: wi.core.v1.RunDiagnosticsResponse.diagnostics:type_name -> wi.core.v1.Diagnostic
-	12, // 6: wi.core.v1.Plugin.options:type_name -> wi.core.v1.PluginOption
-	13, // 7: wi.core.v1.ListPluginsResponse.plugins:type_name -> wi.core.v1.Plugin
-	24, // 8: wi.core.v1.ShutdownResponse.job:type_name -> wi.core.v1.Job
-	20, // 9: wi.core.v1.GetUsageResponse.quotas:type_name -> wi.core.v1.UsageQuota
-	23, // 10: wi.core.v1.GetUsageResponse.checked_at:type_name -> google.protobuf.Timestamp
-	23, // 11: wi.core.v1.UsageQuota.observed_at:type_name -> google.protobuf.Timestamp
-	21, // 12: wi.core.v1.UsageQuota.windows:type_name -> wi.core.v1.UsageWindow
-	22, // 13: wi.core.v1.UsageQuota.credits:type_name -> wi.core.v1.UsageCredits
-	23, // 14: wi.core.v1.UsageWindow.resets_at:type_name -> google.protobuf.Timestamp
-	2,  // 15: wi.core.v1.SystemService.GetInfo:input_type -> wi.core.v1.GetInfoRequest
-	5,  // 16: wi.core.v1.SystemService.GetHealth:input_type -> wi.core.v1.GetHealthRequest
-	7,  // 17: wi.core.v1.SystemService.RunDiagnostics:input_type -> wi.core.v1.RunDiagnosticsRequest
-	10, // 18: wi.core.v1.SystemService.GetConfig:input_type -> wi.core.v1.GetConfigRequest
-	14, // 19: wi.core.v1.SystemService.ListPlugins:input_type -> wi.core.v1.ListPluginsRequest
-	18, // 20: wi.core.v1.SystemService.GetUsage:input_type -> wi.core.v1.GetUsageRequest
-	16, // 21: wi.core.v1.SystemService.Shutdown:input_type -> wi.core.v1.ShutdownRequest
-	3,  // 22: wi.core.v1.SystemService.GetInfo:output_type -> wi.core.v1.GetInfoResponse
-	6,  // 23: wi.core.v1.SystemService.GetHealth:output_type -> wi.core.v1.GetHealthResponse
-	9,  // 24: wi.core.v1.SystemService.RunDiagnostics:output_type -> wi.core.v1.RunDiagnosticsResponse
-	11, // 25: wi.core.v1.SystemService.GetConfig:output_type -> wi.core.v1.GetConfigResponse
-	15, // 26: wi.core.v1.SystemService.ListPlugins:output_type -> wi.core.v1.ListPluginsResponse
-	19, // 27: wi.core.v1.SystemService.GetUsage:output_type -> wi.core.v1.GetUsageResponse
-	17, // 28: wi.core.v1.SystemService.Shutdown:output_type -> wi.core.v1.ShutdownResponse
-	22, // [22:29] is the sub-list for method output_type
-	15, // [15:22] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	22, // 0: wi.core.v1.GetInfoResponse.started_at:type_name -> google.protobuf.Timestamp
+	3,  // 1: wi.core.v1.GetInfoResponse.caller:type_name -> wi.core.v1.Caller
+	0,  // 2: wi.core.v1.Caller.kind:type_name -> wi.core.v1.CallerKind
+	22, // 3: wi.core.v1.GetHealthResponse.last_observation_at:type_name -> google.protobuf.Timestamp
+	7,  // 4: wi.core.v1.RunDiagnosticsResponse.diagnostics:type_name -> wi.core.v1.Diagnostic
+	11, // 5: wi.core.v1.Plugin.options:type_name -> wi.core.v1.PluginOption
+	12, // 6: wi.core.v1.ListPluginsResponse.plugins:type_name -> wi.core.v1.Plugin
+	23, // 7: wi.core.v1.ShutdownResponse.job:type_name -> wi.core.v1.Job
+	19, // 8: wi.core.v1.GetUsageResponse.quotas:type_name -> wi.core.v1.UsageQuota
+	22, // 9: wi.core.v1.GetUsageResponse.checked_at:type_name -> google.protobuf.Timestamp
+	22, // 10: wi.core.v1.UsageQuota.observed_at:type_name -> google.protobuf.Timestamp
+	20, // 11: wi.core.v1.UsageQuota.windows:type_name -> wi.core.v1.UsageWindow
+	21, // 12: wi.core.v1.UsageQuota.credits:type_name -> wi.core.v1.UsageCredits
+	22, // 13: wi.core.v1.UsageWindow.resets_at:type_name -> google.protobuf.Timestamp
+	1,  // 14: wi.core.v1.SystemService.GetInfo:input_type -> wi.core.v1.GetInfoRequest
+	4,  // 15: wi.core.v1.SystemService.GetHealth:input_type -> wi.core.v1.GetHealthRequest
+	6,  // 16: wi.core.v1.SystemService.RunDiagnostics:input_type -> wi.core.v1.RunDiagnosticsRequest
+	9,  // 17: wi.core.v1.SystemService.GetConfig:input_type -> wi.core.v1.GetConfigRequest
+	13, // 18: wi.core.v1.SystemService.ListPlugins:input_type -> wi.core.v1.ListPluginsRequest
+	17, // 19: wi.core.v1.SystemService.GetUsage:input_type -> wi.core.v1.GetUsageRequest
+	15, // 20: wi.core.v1.SystemService.Shutdown:input_type -> wi.core.v1.ShutdownRequest
+	2,  // 21: wi.core.v1.SystemService.GetInfo:output_type -> wi.core.v1.GetInfoResponse
+	5,  // 22: wi.core.v1.SystemService.GetHealth:output_type -> wi.core.v1.GetHealthResponse
+	8,  // 23: wi.core.v1.SystemService.RunDiagnostics:output_type -> wi.core.v1.RunDiagnosticsResponse
+	10, // 24: wi.core.v1.SystemService.GetConfig:output_type -> wi.core.v1.GetConfigResponse
+	14, // 25: wi.core.v1.SystemService.ListPlugins:output_type -> wi.core.v1.ListPluginsResponse
+	18, // 26: wi.core.v1.SystemService.GetUsage:output_type -> wi.core.v1.GetUsageResponse
+	16, // 27: wi.core.v1.SystemService.Shutdown:output_type -> wi.core.v1.ShutdownResponse
+	21, // [21:28] is the sub-list for method output_type
+	14, // [14:21] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_system_proto_init() }
@@ -1604,7 +1562,7 @@ func file_wi_core_v1_system_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_system_proto_rawDesc), len(file_wi_core_v1_system_proto_rawDesc)),
-			NumEnums:      2,
+			NumEnums:      1,
 			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,

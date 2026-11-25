@@ -49,6 +49,11 @@ func EventSocket(itemID, runtimeID string) string {
 	return path.Join(ControlItemDir(itemID), hex.EncodeToString(digest[:8])+"-events.sock")
 }
 
+// Credential is where a runtime's item credential is written, beside its log.
+func Credential(itemID, runtimeID string) string {
+	return path.Join("items", itemID, "runtimes", runtimeID, "credential")
+}
+
 func DiagnosticLog(itemID, runtimeID string) string {
 	return path.Join("items", itemID, "runtimes", runtimeID, "runtime.log")
 }

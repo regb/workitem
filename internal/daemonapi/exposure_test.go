@@ -2,6 +2,7 @@ package daemonapi
 
 import (
 	"context"
+	"github.com/regb/workitem/internal/credential"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -9,7 +10,6 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/apitransport"
-	"github.com/regb/workitem/internal/coordinator"
 
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
@@ -67,20 +67,20 @@ func TestUpstreamsAreReturnedWithoutCredentials(t *testing.T) {
 	}
 }
 
-// Through the web listener, a refused call is denied, the user wi web vouches
-// for is the caller's label, and the page cannot choose a control label.
-func TestTheWebListenerEnforcesItsExposure(t *testing.T) {
+// With wi web's credential, a refused call is denied and the user wi web
+// vouches for is the caller's label.
+func TestWebCredentialEnforcesItsExposure(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()
-	web, err := apitransport.NewClients(coordinator.WebSocketPath(filepath.Join(f.root, "api.sock")))
+	web, err := apitransport.NewClients(filepath.Join(f.root, "api.sock"), credential.Source(credential.ProxyFile(filepath.Join(f.root, "data")), credential.Proxy))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := web.System.Shutdown(ctx, connect.NewRequest(&v1.ShutdownRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("shutdown through the web listener: %v", err)
+		t.Fatalf("shutdown as wi web: %v", err)
 	}
 	if _, err := web.System.GetConfig(ctx, connect.NewRequest(&v1.GetConfigRequest{})); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("config through the web listener: %v", err)
+		t.Fatalf("config as wi web: %v", err)
 	}
 	info := connect.NewRequest(&v1.GetInfoRequest{})
 	info.Header().Set(LabelHeader, "alice@example.com")
@@ -88,7 +88,7 @@ func TestTheWebListenerEnforcesItsExposure(t *testing.T) {
 	if err != nil || got.Msg.Caller.Label != "alice@example.com" || got.Msg.Caller.Kind != v1.CallerKind_CALLER_KIND_WEB_ADAPTER {
 		t.Fatalf("web caller: %v %v", got, err)
 	}
-	// The operator listener does not believe the header.
+	// Only wi web's credential makes the header believed.
 	operator := connect.NewRequest(&v1.GetInfoRequest{})
 	operator.Header().Set(LabelHeader, "alice@example.com")
 	if got, err := f.clients.System.GetInfo(ctx, operator); err != nil || got.Msg.Caller.Label != "" {

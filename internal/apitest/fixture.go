@@ -4,6 +4,7 @@ package apitest
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,7 @@ import (
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/daemonapi"
 	"github.com/regb/workitem/internal/daemonapp"
 	gitpkg "github.com/regb/workitem/internal/git"
@@ -27,12 +29,12 @@ import (
 )
 
 type Fixture struct {
-	Root, Socket, AgentSocket string
-	Core                      *coordinator.Server
-	App                       *app.App
-	Server                    *daemonapi.Server
-	Clients                   *apitransport.Clients
-	Config                    config.Config
+	Root, Socket string
+	Core         *coordinator.Server
+	App          *app.App
+	Server       *daemonapi.Server
+	Clients      *apitransport.Clients
+	Config       config.Config
 }
 
 func New(t testing.TB) *Fixture {
@@ -48,8 +50,8 @@ func New(t testing.TB) *Fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	socket, agentSocket := filepath.Join(root, "api.sock"), filepath.Join(root, "agent.sock")
-	core, err := coordinator.NewServerWithAgentSocket(filepath.Join(root, "data"), socket, agentSocket)
+	socket := filepath.Join(root, "api.sock")
+	core, err := coordinator.NewServer(filepath.Join(root, "data"), socket)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +82,7 @@ func New(t testing.TB) *Fixture {
 	core.ConfigureRepositorySettings(host.Registry.Options())
 	done := make(chan error, 1)
 	go func() { done <- core.ServeAPI(ctx, server.Handler()) }()
-	clients, err := apitransport.NewClients(socket)
+	clients, err := apitransport.NewClients(socket, credential.Source(credential.OperatorFile(filepath.Join(root, "data")), credential.Operator))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +112,7 @@ func New(t testing.TB) *Fixture {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	return &Fixture{Root: root, Socket: socket, AgentSocket: agentSocket, Core: core, App: application, Server: server, Clients: clients, Config: cfg}
+	return &Fixture{Root: root, Socket: socket, Core: core, App: application, Server: server, Clients: clients, Config: cfg}
 }
 func Git(t testing.TB, dir string, args ...string) string {
 	t.Helper()
@@ -180,4 +182,42 @@ func (Backend) ObserveConversation(_ context.Context, _ model.Conversation, path
 // InvokeModel answers like a model asked for a title.
 func (Backend) InvokeModel(context.Context, string, json.RawMessage, driver.ModelInvokeRequest) (string, error) {
 	return "Suggested title", nil
+}
+
+// DataRoot is the daemon's data root.
+func (f *Fixture) DataRoot() string { return filepath.Join(f.Root, "data") }
+
+// Clients connects with another credential: wi web's, or an item's.
+func (f *Fixture) ClientsWith(t testing.TB, token func() (string, error)) *apitransport.Clients {
+	t.Helper()
+	clients, err := apitransport.NewClients(f.Socket, token)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(clients.Close)
+	return clients
+}
+
+// WebClients connects as wi web does.
+func (f *Fixture) WebClients(t testing.TB) *apitransport.Clients {
+	return f.ClientsWith(t, credential.Source(credential.ProxyFile(f.DataRoot()), credential.Proxy))
+}
+
+// AgentClients connects as itemID's agent: it records a runtime owning the
+// item and the credential that runtime was given, as starting an agent does.
+func (f *Fixture) AgentClients(t testing.TB, itemID string) *apitransport.Clients {
+	t.Helper()
+	runtimeID := fmt.Sprintf("headless-%d", time.Now().UnixNano())
+	now := time.Now().UTC()
+	if err := f.App.Store.SaveAgentRuntime(context.Background(), itemID, model.AgentRuntime{ID: runtimeID, WorkItemID: itemID, Mode: "headless", State: model.AgentRuntimeRunning, StartedAt: now, UpdatedAt: now}); err != nil {
+		t.Fatal(err)
+	}
+	value, err := credential.New(credential.Item, itemID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Core.Database().SaveItemCredential(itemID, runtimeID, value.Hash()); err != nil {
+		t.Fatal(err)
+	}
+	return f.ClientsWith(t, func() (string, error) { return value.Token(), nil })
 }

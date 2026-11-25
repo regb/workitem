@@ -12,9 +12,9 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/model"
 	setupplugin "github.com/regb/workitem/internal/plugins/setup"
 	"github.com/regb/workitem/internal/repofiles"
@@ -37,16 +37,6 @@ func (s *Server) repo(ctx context.Context, repositoryID string) (*v1.Repository,
 	return out, nil
 }
 func (s *Server) ListRepositories(ctx context.Context, req *connect.Request[v1.ListRepositoriesRequest]) (*connect.Response[v1.ListRepositoriesResponse], error) {
-	if apitransport.Caller(ctx) == apitransport.Agent {
-		values, err := s.Local.ListRepositories(ctx)
-		out := &v1.ListRepositoriesResponse{Repositories: []*v1.Repository{}}
-		for _, repo := range values {
-			if !repo.Archived || req.Msg.IncludeArchived {
-				out.Repositories = append(out.Repositories, repository(repo))
-			}
-		}
-		return response(out, err)
-	}
 	values, err := s.Local.ListRepositoryViews(ctx)
 	out := &v1.ListRepositoriesResponse{Repositories: []*v1.Repository{}}
 	for _, value := range values {
@@ -172,21 +162,13 @@ func (s *Server) IntegrateItem(ctx context.Context, req *connect.Request[v1.Inte
 	if _, err := s.canonical(ctx, req.Msg.ItemId, 0); err != nil {
 		return nil, rpcError(err)
 	}
-	// The item's own agent may merge from inside its turn; only its running
-	// runtime counts as its own.
-	if id := req.Msg.AgentRuntimeId; id != "" {
-		runtime, err := s.App.AgentRuntimeStatus(ctx, resolve(req.Msg.ItemId))
-		if err != nil {
-			return nil, rpcError(err)
-		}
-		if !runtime.Online || runtime.Runtime == nil || runtime.Runtime.ID != id {
-			return nil, precondition("agent_runtime_id is not this item's running agent")
-		}
-	}
+	// The item's own agent may merge from inside its turn: its credential
+	// proves it is that item's current runtime.
+	byOwnAgent := caller(ctx).principal == principal{kind: credential.Item, itemID: req.Msg.ItemId}
 	job := s.startJobKey("integrate_item", "integrate_item:"+req.Msg.TargetBranch+fmt.Sprint(req.Msg.Local, req.Msg.Rebase)+req.Msg.Message, req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(req.Msg.ItemId)
 		defer unlock()
-		result, err := s.App.MergeWorkItem(ctx, app.MergeOptions{Selector: req.Msg.ItemId, Target: req.Msg.TargetBranch, Local: req.Msg.Local, Rebase: req.Msg.Rebase, Message: req.Msg.Message, ByOwnAgent: req.Msg.AgentRuntimeId != ""})
+		result, err := s.App.MergeWorkItem(ctx, app.MergeOptions{Selector: req.Msg.ItemId, Target: req.Msg.TargetBranch, Local: req.Msg.Local, Rebase: req.Msg.Rebase, Message: req.Msg.Message, ByOwnAgent: byOwnAgent})
 		if err != nil && result.RevisionID != "" {
 			completed := []string{"captured merge input " + result.RevisionID}
 			if result.SourceCommitted {

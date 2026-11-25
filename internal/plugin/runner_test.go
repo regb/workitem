@@ -10,9 +10,9 @@ import (
 )
 
 func TestEnvironmentDropsItemContextButPreservesAuthority(t *testing.T) {
-	env := Environment([]string{"PATH=/bin", "WI_ID=item", "WI_AGENT_DAEMON_SOCKET=/restricted", "TMUX=/tmp/x", "TMUX_PANE=%1", "HOME=/h"}, Spec{Name: "github", Settings: map[string]any{"ignore_authors": []string{"codecov"}}}, "/usr/bin/wi")
+	env := Environment([]string{"PATH=/bin", "WI_ID=item", "WI_API_SOCKET=/mounted", "WI_ITEM_CREDENTIAL_FILE=/agent/credential", "TMUX=/tmp/x", "TMUX_PANE=%1", "HOME=/h"}, Spec{Name: "github", Settings: map[string]any{"ignore_authors": []string{"codecov"}}}, "/usr/bin/wi")
 	joined := strings.Join(env, "\n")
-	if strings.Contains(joined, "WI_ID=") || strings.Contains(joined, "TMUX=") || !strings.Contains(joined, "WI_EXECUTABLE=/usr/bin/wi") || !strings.Contains(joined, "WI_AGENT_DAEMON_SOCKET=/restricted") || !strings.Contains(joined, `WI_PLUGIN_CONFIG={"ignore_authors":["codecov"]}`) {
+	if strings.Contains(joined, "WI_ID=") || strings.Contains(joined, "TMUX=") || !strings.Contains(joined, "WI_EXECUTABLE=/usr/bin/wi") || !strings.Contains(joined, "WI_API_SOCKET=/mounted") || !strings.Contains(joined, "WI_ITEM_CREDENTIAL_FILE=/agent/credential") || !strings.Contains(joined, `WI_PLUGIN_CONFIG={"ignore_authors":["codecov"]}`) {
 		t.Fatal("incorrect context/authority sanitization")
 	}
 }
