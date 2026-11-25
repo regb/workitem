@@ -64,6 +64,9 @@ type Blocker struct {
 	Provider  string    `json:"provider,omitempty"`
 	FollowUp  string    `json:"follow_up,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
+	// SetBy is who set it, as the daemon verified: its follow-up is sent as
+	// them.
+	SetBy string `json:"set_by,omitempty"`
 }
 
 // FollowUp is a message armed by a cleared blocker. It is sent to the agent
@@ -76,6 +79,8 @@ type FollowUp struct {
 	// BlockedAt is when the blocker was set; ClearedAt when it was cleared.
 	BlockedAt time.Time `json:"blocked_at"`
 	ClearedAt time.Time `json:"cleared_at"`
+	// SetBy is who set the blocker; the message is theirs.
+	SetBy string `json:"set_by,omitempty"`
 }
 
 // Open reports whether the blocker still prevents progress at now. An expired

@@ -137,8 +137,11 @@ func Main(ctx context.Context, args []string) int {
 		fmt.Fprintln(os.Stderr, "unsupported daemon API version:", info.Msg.ApiVersion)
 		return ExitError
 	}
+	// An item's agent may not read secrets: its plugins get settings
+	// without them.
+	runsAsItem := info.Msg.Caller.GetKind() == v1.CallerKind_CALLER_KIND_AGENT
 	host.ReadRepository = func(ctx context.Context, id string) (model.RepositorySettings, error) {
-		value, err := clients.Repositories.GetRepositorySettings(ctx, connect.NewRequest(&v1.GetRepositorySettingsRequest{RepositoryId: id, ShowSensitive: true}))
+		value, err := clients.Repositories.GetRepositorySettings(ctx, connect.NewRequest(&v1.GetRepositorySettingsRequest{RepositoryId: id, ShowSensitive: !runsAsItem}))
 		if err != nil {
 			return model.RepositorySettings{}, err
 		}

@@ -474,12 +474,18 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 		}
 		return manifests[i].ID < manifests[j].ID
 	})
+	byID := map[string]model.Manifest{}
+	for _, m := range manifests {
+		byID[m.ID] = m
+	}
+	lookup := func(id string) (model.Manifest, bool) { m, ok := byID[id]; return m, ok }
 	now := time.Now()
 	projected := map[string]ActionabilityQueueCandidate{}
 	candidates := []priority.Candidate{}
 	for _, manifest := range manifests {
-		// A delegated item's owner, another item's agent, follows it up.
-		if manifest.State != model.StateActive || manifest.Delegated() || !matchesCanonicalLabels(manifest.Labels, options.LabelRules) || observationsBucket == nil {
+		// A delegated item's owner, another item's agent, follows it up,
+		// while its owners are active.
+		if manifest.State != model.StateActive || manifest.Delegated() && model.FollowedUp(manifest, lookup) || !matchesCanonicalLabels(manifest.Labels, options.LabelRules) || observationsBucket == nil {
 			continue
 		}
 		encoded := observationsBucket.Get([]byte(manifest.ID))

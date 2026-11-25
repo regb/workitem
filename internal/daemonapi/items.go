@@ -301,6 +301,11 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 	if err != nil {
 		return nil, err
 	}
+	byID := map[string]model.Manifest{}
+	for _, m := range manifests {
+		byID[m.ID] = m
+	}
+	lookup := func(id string) (model.Manifest, bool) { m, ok := byID[id]; return m, ok }
 	out := &v1.ListItemsResponse{Items: []*v1.ItemSummary{}}
 	for _, m := range manifests {
 		if !visible(m) {
@@ -309,8 +314,7 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 		if !allowedState(r.States, m, true) || !labelMatch(r.LabelRules, m.Labels) {
 			continue
 		}
-		// Items an item owns are its agent's to follow up, not its user's.
-		if r.Owner != "" && m.OwnerPrincipal() != r.Owner || r.Owner == "" && m.Delegated() {
+		if r.Owner != "" && m.OwnerPrincipal() != r.Owner {
 			continue
 		}
 		if len(r.RepositoryIds) > 0 {
@@ -325,6 +329,12 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 			}
 		}
 		row := s.summary(ctx, m)
+		// Items an item owns are its agent's to follow up, not its user's,
+		// unless no active owner can, or its agent needs a person: a
+		// problem or a question.
+		if r.Owner == "" && m.Delegated() && model.FollowedUp(m, lookup) && row.Observation.GetAgentStatus() != v1.AgentStatus_AGENT_STATUS_PROBLEM && !row.Observation.GetAsking() {
+			continue
+		}
 		if r.Order == v1.ListOrder_LIST_ORDER_ATTENTION {
 			switch {
 			case m.State == model.StateClosed:

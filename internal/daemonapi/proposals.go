@@ -70,7 +70,18 @@ func (s *Server) ListProposals(ctx context.Context, req *connect.Request[v1.List
 		return nil, rpcError(err)
 	}
 	out := &v1.ListProposalsResponse{Proposals: []*v1.Proposal{}}
+	items := []string{}
 	for _, value := range values {
+		items = append(items, value.ItemID)
+	}
+	viewable := map[string]bool{}
+	for _, id := range s.viewable(ctx, items) {
+		viewable[id] = true
+	}
+	for _, value := range values {
+		if !viewable[value.ItemID] {
+			continue
+		}
 		out.Proposals = append(out.Proposals, s.proposal(value))
 	}
 	return response(out, nil)

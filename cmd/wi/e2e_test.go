@@ -235,6 +235,15 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("stale generation: %v", err)
 	}
+	// Keep a copy of the agent's credential: its file goes with the runtime.
+	running, _ := filepath.Glob(filepath.Join(f.root, "state", "wi", "*", "items", agentItem, "runtimes", "*", "credential"))
+	if len(running) != 1 {
+		t.Fatalf("the agent's credential: %v", running)
+	}
+	staleCopy := filepath.Join(f.root, "stale-credential")
+	if data, err := os.ReadFile(running[0]); err != nil || os.WriteFile(staleCopy, data, 0o600) != nil {
+		t.Fatalf("copy credential: %v", err)
+	}
 	f.run("agent", "runtime", "stop", "--item", agentItem, "--force")
 	f.run("close", agentItem, "--resolution", "completed")
 	f.run("repo", "settings", "set", "--repo", repo, "plugins.setup.trust", "never")
@@ -262,12 +271,11 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	}
 	// An agent whose runtime has stopped is refused, and does not fall back
 	// to acting as the operator.
-	stale, _ := filepath.Glob(filepath.Join(f.root, "state", "wi", "*", "items", agentItem, "runtimes", "*", "credential"))
-	if len(stale) == 0 {
-		t.Fatal("the agent's runtime was given no credential")
+	if gone, _ := filepath.Glob(filepath.Join(f.root, "state", "wi", "*", "items", agentItem, "runtimes", "*", "credential")); len(gone) != 0 {
+		t.Fatalf("a stopped runtime's credential file remains: %v", gone)
 	}
 	cmd := exec.Command(f.wi, "list", "--json")
-	cmd.Env = append(append([]string{}, f.env...), "WI_ITEM_CREDENTIAL_FILE="+stale[0])
+	cmd.Env = append(append([]string{}, f.env...), "WI_ITEM_CREDENTIAL_FILE="+staleCopy)
 	cmd.Dir = f.root
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "no longer valid") {
 		t.Fatalf("a stopped agent's credential: %v %s", err, out)

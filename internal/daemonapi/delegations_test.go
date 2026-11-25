@@ -27,6 +27,13 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	if parent.Msg.Item.Owner != model.OperatorUser {
 		t.Fatalf("the operator's item is owned by %q", parent.Msg.Item.Owner)
 	}
+	setState := func(state v1.ItemState) {
+		t.Helper()
+		if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: parentID, State: state})); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setState(v1.ItemState_ITEM_STATE_ACTIVE)
 	agent, _ := f.agentClients(t, parentID)
 	delegated := []string{}
 	for i := 0; i < coordinator.MaxOpenDelegations; i++ {
@@ -60,6 +67,29 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	if theirs := list(model.ItemPrincipal(parentID)); len(theirs) != len(delegated) {
 		t.Fatalf("the parent's delegations: %v", theirs)
 	}
+	// An owner that is not active cannot follow them up: they are the user's
+	// to see.
+	setState(v1.ItemState_ITEM_STATE_BACKLOG)
+	if mine := list(""); !mine[delegated[0]] {
+		t.Fatal("an inactive owner's delegation is hidden")
+	}
+	setState(v1.ItemState_ITEM_STATE_ACTIVE)
+	// Rights reach down the owner chain: what a delegation delegates is its
+	// owner's too.
+	childAgent, _ := f.agentClients(t, delegated[1])
+	grandchild, err := childAgent.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "grandchild"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.clients.Items.RevokeAccess(ctx, connect.NewRequest(&v1.RevokeAccessRequest{EntryId: coordinator.DefaultAccessID})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agent.Items.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: grandchild.Msg.Item.Id, AddLabels: []string{"x"}})); err != nil {
+		t.Fatalf("managing a delegation's delegation: %v", err)
+	}
+	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: grandchild.Msg.Item.Id, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_ABANDONED})); err != nil {
+		t.Fatal(err)
+	}
 	// Only a person takes an item over.
 	if _, err := agent.Items.TakeOwnership(ctx, connect.NewRequest(&v1.TakeOwnershipRequest{ItemId: delegated[0]})); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("an agent took an item: %v", err)
@@ -77,10 +107,9 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
-		mine := list("")
 		back := 0
 		for _, id := range delegated {
-			if mine[id] {
+			if got, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id})); err == nil && got.Msg.Item.Owner == model.OperatorUser {
 				back++
 			}
 		}

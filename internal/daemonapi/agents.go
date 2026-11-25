@@ -412,7 +412,12 @@ func (s *Server) messageEnvelope(ctx context.Context, itemID, sender string) (mo
 	}
 	hops := s.turnHops(from) + 1
 	if hops > model.MaxAgentHops {
-		_, _ = s.App.MarkUnread(ctx, resolve(itemID))
+		// The user hears of it on the item of theirs the chain belongs to.
+		visible := target.Manifest
+		if chain := model.OwnerChain(target.Manifest, s.manifestLookup(ctx)); len(chain) > 0 {
+			visible = chain[len(chain)-1]
+		}
+		_, _ = s.App.MarkUnread(ctx, resolve(visible.ID))
 		return model.Envelope{}, precondition(fmt.Sprintf("agents have exchanged %d messages without a person; a person's message to %s resets this", hops-1, from))
 	}
 	return model.Envelope{Marker: model.NewEnvelopeMarker(), From: sender, Title: source.Manifest.Title, Relation: relation, Hops: hops}, nil

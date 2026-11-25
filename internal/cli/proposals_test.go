@@ -12,6 +12,9 @@ import (
 func TestProposeFileAndDelegateFromTheCommandLine(t *testing.T) {
 	f := newClientFixture(t)
 	source := f.create(t, "Source")
+	// An active owner follows its delegations up, so they stay out of the
+	// user's list.
+	f.run(t, "state", "set", "active", source.Id)
 	operator := f.cfg.API
 	f.cfg.API = f.api.AgentClients(t, source.Id)
 	f.cfg.Env["WI_ID"] = source.Id

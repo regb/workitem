@@ -216,7 +216,13 @@ func (s *Server) sendFollowUps(ctx context.Context, m model.Manifest, observatio
 // holds control, if one does, so a follow-up never displaces it. The message
 // ID makes a repeated attempt deliver it once.
 func (s *Server) sendFollowUp(ctx context.Context, itemID string, followUp model.FollowUp) error {
-	ctx, done := s.actOnItself(ctx, itemID, followUpClient, "follow-up", model.Origin{Actor: model.OperatorUser, Cause: "follow-up:" + followUp.ID})
+	// The message is whoever set the blocker's: another item's agent's
+	// reaches the agent enveloped and counts as one of its messages.
+	actor := followUp.SetBy
+	if !model.ValidPrincipal(actor) {
+		actor = model.OperatorUser
+	}
+	ctx, done := s.actOnItself(ctx, itemID, followUpClient, "follow-up", model.Origin{Actor: actor, Cause: "follow-up:" + followUp.ID})
 	sent, err := s.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: itemID, Text: followUp.Message, ClientMessageId: "follow-up-" + followUp.ID}))
 	var job *v1.Job
 	if err == nil {

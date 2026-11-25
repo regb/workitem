@@ -58,3 +58,31 @@ func TestAgentMessagesAreEnvelopedAndBounded(t *testing.T) {
 		t.Fatalf("after a person's message: %+v %v", e, err)
 	}
 }
+
+// A blocker records who set it, so its follow-up is sent as them: an
+// agent's reaches the item enveloped, never as the operator's.
+func TestBlockersRecordWhoSetThem(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	repo := f.repo(t)
+	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "waits"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created.Msg.Item.Id
+	other, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "setter"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, _ := f.agentClients(t, other.Msg.Item.Id)
+	if _, err := f.clients.Items.GrantAccess(ctx, connect.NewRequest(&v1.GrantAccessRequest{Subject: model.ItemPrincipal(other.Msg.Item.Id), OnItemId: id, Level: v1.AccessLevel_ACCESS_LEVEL_MESSAGE})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agent.Items.AddBlocker(ctx, connect.NewRequest(&v1.AddBlockerRequest{ItemId: id, Kind: v1.BlockerKind_BLOCKER_KIND_EXTERNAL, Event: "review", FollowUp: "continue"})); err != nil {
+		t.Fatal(err)
+	}
+	m, err := f.api.App.Store.LoadManifest(id)
+	if err != nil || len(m.Blockers) != 1 || m.Blockers[0].SetBy != model.ItemPrincipal(other.Msg.Item.Id) {
+		t.Fatalf("blockers: %+v %v", m.Blockers, err)
+	}
+}

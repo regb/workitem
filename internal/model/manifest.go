@@ -74,6 +74,39 @@ func (m Manifest) OwnerPrincipal() string {
 	return m.Owner
 }
 
+// OwnerChain walks an item's owners: the items that own it, nearest first,
+// ending with the first one a person owns. lookup finds an item by ID; a
+// missing or cyclic chain ends where it breaks.
+func OwnerChain(m Manifest, lookup func(string) (Manifest, bool)) []Manifest {
+	chain := []Manifest{}
+	seen := map[string]bool{m.ID: true}
+	for current := m; current.Delegated(); {
+		owner, ok := lookup(PrincipalItem(current.Owner))
+		if !ok || seen[owner.ID] || len(chain) >= 32 {
+			break
+		}
+		seen[owner.ID] = true
+		chain = append(chain, owner)
+		current = owner
+	}
+	return chain
+}
+
+// FollowedUp reports whether a delegated item's owners can follow it up:
+// every item up its chain is active, the last one owned by a person.
+func FollowedUp(m Manifest, lookup func(string) (Manifest, bool)) bool {
+	chain := OwnerChain(m, lookup)
+	if len(chain) == 0 || chain[len(chain)-1].Delegated() {
+		return false
+	}
+	for _, owner := range chain {
+		if owner.State != StateActive {
+			return false
+		}
+	}
+	return true
+}
+
 // Delegated reports an item another item owns.
 func (m Manifest) Delegated() bool { return PrincipalItem(m.Owner) != "" }
 

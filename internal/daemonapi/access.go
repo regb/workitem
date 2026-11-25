@@ -102,6 +102,7 @@ var usersOnly = map[string]string{
 	corev1connect.ItemServiceGrantAccessProcedure:                    "granting access",
 	corev1connect.ItemServiceRevokeAccessProcedure:                   "revoking access",
 	corev1connect.SystemServiceShutdownProcedure:                     "stopping the daemon",
+	corev1connect.RepositoryServiceReadRepositoryFileProcedure:       "reading stored repository files, which may hold secrets",
 	corev1connect.SystemServiceRotateCredentialsProcedure:            "rotating credentials",
 	corev1connect.RepositoryServiceAddRepositoryProcedure:            "registering a repository",
 	corev1connect.RepositoryServiceArchiveRepositoryProcedure:        "archiving a repository",
@@ -146,7 +147,6 @@ var anyItem = map[string]bool{
 	corev1connect.RepositoryServiceGetRepositoryStatusProcedure:   true,
 	corev1connect.RepositoryServiceListRepositoriesProcedure:      true,
 	corev1connect.RepositoryServiceListRepositoryFilesProcedure:   true,
-	corev1connect.RepositoryServiceReadRepositoryFileProcedure:    true,
 	corev1connect.RepositoryServiceSearchRepositoryFilesProcedure: true,
 	corev1connect.RepositoryServiceSyncRepositoryProcedure:        true,
 	corev1connect.AgentProfileServiceGetProfileModelsProcedure:    true,
@@ -159,6 +159,32 @@ var anyItem = map[string]bool{
 	corev1connect.SystemServiceGetUsageProcedure:                  true,
 	corev1connect.SystemServiceListPluginsProcedure:               true,
 	corev1connect.SystemServiceRunDiagnosticsProcedure:            true,
+}
+
+// refineForItems refuses what an item's agent may call but not ask for:
+// secrets, and a repository reset to its upstream.
+func refineForItems(who principal, message any) error {
+	if !who.item() {
+		return nil
+	}
+	refuse := func(what string) error {
+		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("%s is for a person, not an item's agent", what))
+	}
+	switch r := message.(type) {
+	case *v1.GetConfigRequest:
+		if r.ShowSensitive {
+			return refuse("reading secret configuration")
+		}
+	case *v1.GetRepositorySettingsRequest:
+		if r.ShowSensitive {
+			return refuse("reading secret repository settings")
+		}
+	case *v1.SyncRepositoryRequest:
+		if r.Mode == v1.SyncMode_SYNC_MODE_RESET_TO_UPSTREAM {
+			return refuse("resetting a repository to its upstream")
+		}
+	}
+	return nil
 }
 
 // authorize holds an item's agent to the lists above. itemID is the item
@@ -205,7 +231,7 @@ func (s *Server) itemAccess(ctx context.Context, subject, itemID string) (model.
 	if err != nil {
 		return model.AccessNone, rpcError(err)
 	}
-	return model.ItemAccess(subject, target.Manifest, entries), nil
+	return model.ItemAccess(subject, target.Manifest, entries, s.manifestLookup(ctx)), nil
 }
 
 // visibleTo filters items to those the caller may view: all of them for a
@@ -220,7 +246,8 @@ func (s *Server) visibleTo(ctx context.Context) (func(model.Manifest) bool, erro
 		return nil, rpcError(err)
 	}
 	subject := who.String()
-	return func(m model.Manifest) bool { return model.ItemAccess(subject, m, entries) >= model.AccessView }, nil
+	lookup := s.manifestLookup(ctx)
+	return func(m model.Manifest) bool { return model.ItemAccess(subject, m, entries, lookup) >= model.AccessView }, nil
 }
 
 func (s *Server) ListAccess(ctx context.Context, req *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error) {

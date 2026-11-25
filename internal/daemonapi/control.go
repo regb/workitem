@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/gen/wi/core/v1/corev1connect"
 	"github.com/regb/workitem/internal/app"
 	"github.com/regb/workitem/internal/model"
 )
@@ -159,6 +160,10 @@ func (s *Server) ReleaseControl(ctx context.Context, req *connect.Request[v1.Rel
 		}
 		if value.ClientID != who.client {
 			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("lease belongs to another client"))
+		}
+		// Named by lease, the item is known only now.
+		if err := s.authorize(ctx, corev1connect.ControlServiceReleaseControlProcedure, value.ItemID); err != nil {
+			return nil, err
 		}
 		itemID = value.ItemID
 		// A request naming its item was locked on it by the interceptor.

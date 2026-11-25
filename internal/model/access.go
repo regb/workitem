@@ -86,11 +86,19 @@ func (e AccessEntry) Matches(subject, itemID string) bool {
 }
 
 // ItemAccess is the level an item's agent (subject, "item:<id>") has on an
-// item: everything on itself and on what it delegated, otherwise the most
-// its entries grant.
-func ItemAccess(subject string, target Manifest, entries []AccessEntry) AccessLevel {
+// item: everything on itself and on what it delegated, directly or through
+// items it delegated, otherwise the most its entries grant. lookup finds
+// items by ID to walk the owner chain.
+func ItemAccess(subject string, target Manifest, entries []AccessEntry, lookup func(string) (Manifest, bool)) AccessLevel {
 	if subject == ItemPrincipal(target.ID) || target.Owner == subject {
 		return AccessManage
+	}
+	if lookup != nil {
+		for _, owner := range OwnerChain(target, lookup) {
+			if ItemPrincipal(owner.ID) == subject {
+				return AccessManage
+			}
+		}
 	}
 	level := AccessNone
 	for _, entry := range entries {

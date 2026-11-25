@@ -38,7 +38,7 @@ func TestClearedBlockerArmsItsFollowUpUntilSentOrDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 	canonical, _ = db.CanonicalManifest(a)
-	want := model.FollowUp{ID: first.ID, Message: "Address the review", BlockedAt: now, ClearedAt: cleared}
+	want := model.FollowUp{ID: first.ID, Message: "Address the review", BlockedAt: now, ClearedAt: cleared, SetBy: model.OperatorUser}
 	if len(canonical.Manifest.FollowUps) != 1 || canonical.Manifest.FollowUps[0] != want {
 		t.Fatalf("follow-ups = %+v", canonical.Manifest.FollowUps)
 	}

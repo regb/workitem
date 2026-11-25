@@ -123,6 +123,9 @@ func (s *Service) Execute(ctx context.Context, itemID, sessionID, runtimeID stri
 	credentialPath := s.CredentialPath(m.ID, runtime)
 	if _, err := os.Stat(credentialPath); err != nil {
 		credentialPath = ""
+	} else {
+		// Ended, the runtime's credential no longer works; its file goes.
+		defer os.Remove(credentialPath)
 	}
 	return execute(ctx, ExecutionSpec{ConversationLocator: absolute, Mode: mode, CWD: cwd, LogPath: logPath, CredentialPath: credentialPath, WorkItemID: m.ID, RuntimeID: runtime.ID, ControlSocketPath: controlSocketPath, EventSocketPath: eventSocketPath, ConversationDir: s.ConversationDir(m.ID, session)})
 }

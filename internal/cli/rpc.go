@@ -560,7 +560,14 @@ func rpcList(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	if *closed || *selected == "closed" {
 		mode = "archived"
 	}
-	return rpcRenderList(ctx, cfg, value.Msg, mode, *ids, *noAgent)
+	if err := rpcRenderList(ctx, cfg, value.Msg, mode, *ids, *noAgent); err != nil {
+		return err
+	}
+	// Items agents proposed wait for the user, wherever they came from.
+	if proposals, err := cfg.API.Items.ListProposals(ctx, rpcRequest(cfg, &v1.ListProposalsRequest{PendingOnly: true})); err == nil && len(proposals.Msg.Proposals) > 0 && mode == "active" {
+		fmt.Fprintf(cfg.Stdout, "\n%d proposed item(s) wait for you to file or dismiss: wi proposal list\n", len(proposals.Msg.Proposals))
+	}
+	return nil
 }
 func rpcSearch(ctx context.Context, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet("search", cfg.Stderr)

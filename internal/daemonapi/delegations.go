@@ -43,3 +43,11 @@ func (s *Server) returnDelegations(closedID string) {
 		}
 	}()
 }
+
+// manifestLookup finds items by ID, for walking owner chains.
+func (s *Server) manifestLookup(ctx context.Context) func(string) (model.Manifest, bool) {
+	return func(id string) (model.Manifest, bool) {
+		c, err := s.Local.CanonicalManifest(ctx, id)
+		return c.Manifest, err == nil
+	}
+}

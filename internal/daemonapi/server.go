@@ -211,6 +211,9 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 			if err := s.authorize(ctx, req.Spec().Procedure, requestItem(req.Any())); err != nil {
 				return nil, err
 			}
+			if err := refineForItems(who, req.Any()); err != nil {
+				return nil, err
+			}
 			method := req.Spec().Procedure[strings.LastIndex(req.Spec().Procedure, "/")+1:]
 			readOnly := strings.HasPrefix(method, "Get") || strings.HasPrefix(method, "List") || strings.HasPrefix(method, "Search") || strings.HasPrefix(method, "Resolve") || method == "SuggestTitle"
 			if msg, ok := req.Any().(proto.Message); ok {

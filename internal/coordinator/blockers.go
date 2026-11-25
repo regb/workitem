@@ -76,7 +76,7 @@ func clearBlocker(manifest *model.Manifest, blocker model.Blocker, data map[stri
 	}
 	appendEvent("blocker.cleared", data)
 	if arm {
-		manifest.FollowUps = append(manifest.FollowUps, model.FollowUp{ID: blocker.ID, Message: blocker.FollowUp, BlockedAt: blocker.CreatedAt, ClearedAt: now})
+		manifest.FollowUps = append(manifest.FollowUps, model.FollowUp{ID: blocker.ID, Message: blocker.FollowUp, BlockedAt: blocker.CreatedAt, ClearedAt: now, SetBy: blocker.SetBy})
 	}
 }
 
@@ -138,6 +138,7 @@ func applyBlockerAddCommand(command ManifestCommand, manifest *model.Manifest, a
 		blocker.Label = strings.TrimSpace(blocker.Label)
 		blocker.ID = blockerID(command.ID, index)
 		blocker.CreatedAt = now
+		blocker.SetBy = command.Actor
 		if blocker.Until != nil {
 			until := blocker.Until.UTC()
 			blocker.Until = &until

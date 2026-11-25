@@ -92,8 +92,13 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 		t.Fatalf("viewable jobs: %v", jobs)
 	}
 	list, err := agent.Items.ListItems(ctx, connect.NewRequest(&v1.ListItemsRequest{Owner: ""}))
-	if err != nil || len(list.Msg.Items) != 1 || list.Msg.Items[0].Id != a {
-		t.Fatalf("the agent's list: %v %v", list, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range list.Msg.Items {
+		if row.Id == b {
+			t.Fatalf("the agent's list shows an item it may not view: %v", list)
+		}
 	}
 	// Its own item and its delegations stay its own.
 	for _, id := range []string{a, c} {
@@ -141,6 +146,18 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 		},
 		"shutdown": func() error {
 			_, err := agent.System.Shutdown(ctx, connect.NewRequest(&v1.ShutdownRequest{}))
+			return err
+		},
+		"secret configuration": func() error {
+			_, err := agent.System.GetConfig(ctx, connect.NewRequest(&v1.GetConfigRequest{ShowSensitive: true}))
+			return err
+		},
+		"secret repository settings": func() error {
+			_, err := agent.Repositories.GetRepositorySettings(ctx, connect.NewRequest(&v1.GetRepositorySettingsRequest{RepositoryId: repo, ShowSensitive: true}))
+			return err
+		},
+		"reset to upstream": func() error {
+			_, err := agent.Repositories.SyncRepository(ctx, connect.NewRequest(&v1.SyncRepositoryRequest{RepositoryId: repo, Mode: v1.SyncMode_SYNC_MODE_RESET_TO_UPSTREAM, Confirm: true}))
 			return err
 		},
 	} {
