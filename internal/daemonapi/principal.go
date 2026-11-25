@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/credential"
+	"github.com/regb/workitem/internal/model"
 )
 
 // principal is who a call is from, as the credential it presented proves.
@@ -22,12 +23,12 @@ type principal struct {
 }
 
 // OperatorUser is the one user an installation has.
-const OperatorUser = "user:operator"
+const OperatorUser = model.OperatorUser
 
 // String is how records and clients name the principal.
 func (p principal) String() string {
 	if p.kind == credential.Item {
-		return "item:" + p.itemID
+		return model.ItemPrincipal(p.itemID)
 	}
 	return OperatorUser
 }

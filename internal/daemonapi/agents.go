@@ -141,7 +141,7 @@ func (s *Server) StartAgent(ctx context.Context, req *connect.Request[v1.StartAg
 	if current.Online && s.App.AgentBusy(ctx, m.ID) {
 		return nil, precondition("agent is busy")
 	}
-	job := s.startJobKey("start_agent", "start_agent:"+mode(req.Msg.Mode), m.ID, "", func(ctx context.Context, j *jobRun) error {
+	job := s.startJobKey(ctx, "start_agent", "start_agent:"+mode(req.Msg.Mode), m.ID, "", func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(m.ID)
 		defer unlock()
 		j.phase("starting agent")
@@ -195,7 +195,7 @@ func (s *Server) RestartAgent(ctx context.Context, req *connect.Request[v1.Resta
 	if s.App.AgentBusy(ctx, req.Msg.ItemId) {
 		return nil, precondition("agent is busy")
 	}
-	job := s.startJobKey("restart_agent", "restart_agent:"+fmt.Sprint(current.Generation), req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
+	job := s.startJobKey(ctx, "restart_agent", "restart_agent:"+fmt.Sprint(current.Generation), req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(req.Msg.ItemId)
 		defer unlock()
 		if _, err := s.generation(ctx, req.Msg.ItemId, current.Generation); err != nil {
@@ -432,7 +432,7 @@ func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMe
 		return nil, rpcError(err)
 	}
 	who := caller(ctx)
-	job := s.startJobKey("send_message", "send_message:"+r.ClientMessageId, r.ItemId, "", func(ctx context.Context, j *jobRun) error {
+	job := s.startJobKey(ctx, "send_message", "send_message:"+r.ClientMessageId, r.ItemId, "", func(ctx context.Context, j *jobRun) error {
 		ctx = context.WithValue(ctx, identityKey{}, who)
 		unlock := s.lock(r.ItemId)
 		defer unlock()

@@ -94,3 +94,54 @@ func TestCallersAreWhoTheirCredentialSays(t *testing.T) {
 		t.Fatalf("stopped runtime stream: %v", err)
 	}
 }
+
+// What a caller does is recorded as theirs: an item's agent acts as the
+// item, for the operator; the operator as themselves.
+func TestActionsRecordWhoDidThem(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	repo := f.repo(t)
+	parent, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "parent"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentID := parent.Msg.Item.Id
+	agent, _ := f.agentClients(t, parentID)
+	child, err := agent.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "child"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	childID := child.Msg.Item.Id
+	if _, err := agent.Items.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: childID, AddLabels: []string{"triage"}})); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := agent.Items.MarkRead(ctx, connect.NewRequest(&v1.MarkReadRequest{ItemId: childID})); err != nil {
+		t.Fatal(err)
+	}
+	events := func(itemID string) []*v1.ItemEvent {
+		t.Helper()
+		value, err := f.clients.Items.ListItemEvents(ctx, connect.NewRequest(&v1.ListItemEventsRequest{ItemId: itemID}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return value.Msg.Events
+	}
+	agentPrincipal := model.ItemPrincipal(parentID)
+	seen := map[string]bool{}
+	for _, event := range events(childID) {
+		seen[event.Type] = true
+		if event.Actor != agentPrincipal || event.ForUser != model.OperatorUser {
+			t.Fatalf("%s recorded as %q for %q", event.Type, event.Actor, event.ForUser)
+		}
+	}
+	for _, kind := range []string{"work_item.created", "attention.read"} {
+		if !seen[kind] {
+			t.Fatalf("no %s event: %v", kind, seen)
+		}
+	}
+	for _, event := range events(parentID) {
+		if event.Type == "work_item.created" && (event.Actor != model.OperatorUser || event.ForUser != model.OperatorUser) {
+			t.Fatalf("operator's creation recorded as %q for %q", event.Actor, event.ForUser)
+		}
+	}
+}

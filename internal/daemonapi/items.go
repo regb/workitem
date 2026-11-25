@@ -78,7 +78,8 @@ func (s *Server) CreateItem(ctx context.Context, req *connect.Request[v1.CreateI
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	created, err := s.Local.CreateItem(ctx, coordinator.CreateItemRequest{Command: coordinator.CreateItemCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Manifest: prepared.Manifest, DescriptionDigest: coordinator.DescriptionDigest(r.Description), Actor: "user", CreatedAt: prepared.Manifest.CreatedAt}, Description: r.Description})
+	origin := model.ActingOrigin(ctx)
+	created, err := s.Local.CreateItem(ctx, coordinator.CreateItemRequest{Command: coordinator.CreateItemCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Manifest: prepared.Manifest, DescriptionDigest: coordinator.DescriptionDigest(r.Description), Actor: origin.Actor, For: origin.For, Cause: origin.Cause, CreatedAt: prepared.Manifest.CreatedAt}, Description: r.Description})
 	if err != nil {
 		if retained, found, _ := s.Core.Database().CreatedItem(commandID); found {
 			return nil, partial(err, retained.Manifest.ID, "created item")
@@ -86,7 +87,7 @@ func (s *Server) CreateItem(ctx context.Context, req *connect.Request[v1.CreateI
 		return nil, rpcError(err)
 	}
 	if r.GenerateTitle {
-		s.startJob("suggest_title", created.Manifest.ID, r.RepositoryId, func(ctx context.Context, _ *jobRun) error {
+		s.startJob(ctx, "suggest_title", created.Manifest.ID, r.RepositoryId, func(ctx context.Context, _ *jobRun) error {
 			// A model failure still yields the description's first line;
 			// the job then records why the model did not title the item.
 			title, generated := s.App.GenerateTitle(ctx, r.Description)
@@ -422,7 +423,9 @@ func (s *Server) command(ctx context.Context, itemID, kind string, expected uint
 	if err != nil {
 		return coordinator.ManifestCommandResult{}, err
 	}
-	command := coordinator.ManifestCommand{ID: id(), ProtocolVersion: coordinator.ProtocolVersion, Type: kind, ItemID: itemID, ExpectedRevision: &c.Revision, Actor: "user", MaxActive: s.Config.DeepWork.MaxActive, CreatedAt: time.Now().UTC()}
+	command := coordinator.ManifestCommand{ID: id(), ProtocolVersion: coordinator.ProtocolVersion, Type: kind, ItemID: itemID, ExpectedRevision: &c.Revision, MaxActive: s.Config.DeepWork.MaxActive, CreatedAt: time.Now().UTC()}
+	origin := model.ActingOrigin(ctx)
+	command.Actor, command.For, command.Cause = origin.Actor, origin.For, origin.Cause
 	patch(&command)
 	return s.Local.ExecuteManifestCommand(ctx, command)
 }
@@ -451,7 +454,7 @@ func (s *Server) UpdateItem(ctx context.Context, req *connect.Request[v1.UpdateI
 		edit.PreviousDescriptionDigest = coordinator.DescriptionDigest(old)
 		edit.DescriptionDigest = coordinator.DescriptionDigest(*r.Description)
 	}
-	result, err := s.Local.EditItem(ctx, coordinator.EditItemRequest{Command: coordinator.ManifestCommand{ID: id(), ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandEdit, ItemID: r.ItemId, ExpectedRevision: &c.Revision, Actor: "user", Edit: edit, CreatedAt: time.Now().UTC()}, Description: r.Description})
+	result, err := s.Local.EditItem(ctx, coordinator.EditItemRequest{Command: coordinator.ManifestCommand{ID: id(), ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandEdit, ItemID: r.ItemId, ExpectedRevision: &c.Revision, Actor: model.ActorFrom(ctx), For: model.ActingOrigin(ctx).For, Edit: edit, CreatedAt: time.Now().UTC()}, Description: r.Description})
 	if err != nil {
 		if after, readErr := s.canonical(ctx, r.ItemId, 0); readErr == nil && !reflect.DeepEqual(after.Manifest, c.Manifest) {
 			return nil, partial(err, r.ItemId, "updated item")
@@ -573,7 +576,7 @@ func (s *Server) MarkRead(ctx context.Context, req *connect.Request[v1.MarkReadR
 		if observation.Activity != nil && observation.Activity.LastReadAt != nil && !at.After(observation.Activity.LastReadAt.AsTime()) {
 			return response(&v1.MarkReadResponse{}, nil)
 		}
-		err = s.App.Store.AppendEvent(ctx, req.Msg.ItemId, model.NewEvent(at, "attention.read", "user", map[string]any{"at": at, "history_leaf_id": req.Msg.HistoryLeafId}))
+		err = s.App.Store.AppendEvent(ctx, req.Msg.ItemId, model.NewEventFrom(ctx, at, "attention.read", map[string]any{"at": at, "history_leaf_id": req.Msg.HistoryLeafId}))
 		return response(&v1.MarkReadResponse{}, err)
 	}
 	if !observation.Unread && observation.Activity != nil && observation.Activity.LastReadAt != nil {
@@ -631,7 +634,7 @@ func (s *Server) ListItemEvents(ctx context.Context, req *connect.Request[v1.Lis
 		out.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(end)))
 	}
 	for _, e := range events[offset:end] {
-		out.Events = append(out.Events, &v1.ItemEvent{Id: e.ID, Type: e.Type, Actor: e.Actor, Time: stamp(e.Timestamp), PayloadJson: string(e.Payload)})
+		out.Events = append(out.Events, &v1.ItemEvent{Id: e.ID, Type: e.Type, Actor: e.Actor, ForUser: e.For, Cause: e.Cause, Time: stamp(e.Timestamp), PayloadJson: string(e.Payload)})
 	}
 	return response(out, nil)
 }

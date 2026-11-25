@@ -37,7 +37,7 @@ func TestManifestCommandRPCCommits(t *testing.T) {
 		t.Fatal(err)
 	}
 	deep := true
-	result, err := client.ExecuteManifestCommand(ctx, ManifestCommand{ID: "rpc-deep", ProtocolVersion: ProtocolVersion, Type: CommandDeepWorkSet, ItemID: importTestID, ExpectedRevision: &canonical.Revision, Actor: "user", DeepWork: &deep, CreatedAt: time.Now().UTC()})
+	result, err := client.ExecuteManifestCommand(ctx, ManifestCommand{ID: "rpc-deep", ProtocolVersion: ProtocolVersion, Type: CommandDeepWorkSet, ItemID: importTestID, ExpectedRevision: &canonical.Revision, Actor: model.OperatorUser, DeepWork: &deep, CreatedAt: time.Now().UTC()})
 	if err != nil || !result.Changed || !result.Manifest.DeepWork {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}

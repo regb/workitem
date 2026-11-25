@@ -97,7 +97,7 @@ func (s *Server) AcquireControl(ctx context.Context, req *connect.Request[v1.Acq
 			return nil, precondition("workspace setup is running or failed; wait for it or retry it")
 		}
 		who := caller(ctx)
-		job := s.startJobKey("acquire_control", "acquire_control:"+request.ClientID, m.ID, "", func(ctx context.Context, j *jobRun) error {
+		job := s.startJobKey(ctx, "acquire_control", "acquire_control:"+request.ClientID, m.ID, "", func(ctx context.Context, j *jobRun) error {
 			ctx = context.WithValue(ctx, identityKey{}, who)
 			unlock := s.lock(m.ID)
 			defer unlock()

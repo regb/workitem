@@ -19,7 +19,7 @@ func (f *binaryFixture) cliControlCompatibility(item string) {
 	if err := os.WriteFile(file, []byte("legacy file prompt"), 0600); err != nil {
 		f.t.Fatal(err)
 	}
-	f.run("agent", "control", "send", "--item", item, "--actor", "smoke", "--file", file)
+	f.run("agent", "control", "send", "--item", item, "--file", file)
 	f.historyReady(item, 6)
 	f.idle(item)
 	f.run("agent", "control", "send", "--item", item, "--follow-up", "legacy followup")
@@ -27,7 +27,7 @@ func (f *binaryFixture) cliControlCompatibility(item string) {
 	f.idle(item)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	command := exec.CommandContext(ctx, f.wi, "agent", "control", "send", "--item", item, "--stdin", "--actor", "stdin-smoke")
+	command := exec.CommandContext(ctx, f.wi, "agent", "control", "send", "--item", item, "--stdin")
 	command.Env = f.env
 	command.Dir = f.root
 	command.Stdin = strings.NewReader("legacy stdin prompt")
@@ -43,7 +43,7 @@ func (f *binaryFixture) cliControlCompatibility(item string) {
 	f.run("agent", "control", "send", "--item", item, "--image", image)
 	f.historyReady(item, 12)
 	f.idle(item)
-	f.run("agent", "control", "abort", "--item", item, "--actor", "smoke")
+	f.run("agent", "control", "abort", "--item", item)
 	f.run("agent", "monitor", item, "--limit", "1")
 	f.run("agent", "monitor", item, "--limit", "1", "--json")
 }

@@ -162,7 +162,7 @@ func (s *coordinatorStore) CreateItem(ctx context.Context, manifest model.Manife
 	if err != nil {
 		return err
 	}
-	request := coordinator.CreateItemRequest{Command: coordinator.CreateItemCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Manifest: manifest, DescriptionDigest: coordinator.DescriptionDigest(""), Actor: "user", CreatedAt: manifest.CreatedAt}}
+	request := coordinator.CreateItemRequest{Command: coordinator.CreateItemCommand{ID: commandID, ProtocolVersion: coordinator.ProtocolVersion, Manifest: manifest, DescriptionDigest: coordinator.DescriptionDigest(""), Actor: model.ActorFrom(ctx), For: model.ActingOrigin(ctx).For, Cause: model.ActingOrigin(ctx).Cause, CreatedAt: manifest.CreatedAt}}
 	requestCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	_, err = s.client.CreateItem(requestCtx, request)
 	cancel()
@@ -217,7 +217,8 @@ func (s *coordinatorStore) mutateManifest(ctx context.Context, command coordinat
 		return model.Manifest{}, coordinator.ManifestCommandResult{}, err
 	}
 	command.ID = id
-	command.Actor = "user"
+	origin := model.ActingOrigin(ctx)
+	command.Actor, command.For, command.Cause = origin.Actor, origin.For, origin.Cause
 	command.ProtocolVersion = coordinator.ProtocolVersion
 	for attempt := 0; attempt < 8; attempt++ {
 		requestCtx, cancel := context.WithTimeout(ctx, 5*time.Second)

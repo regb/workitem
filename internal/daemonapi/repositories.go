@@ -64,7 +64,7 @@ func (s *Server) AddRepository(ctx context.Context, req *connect.Request[v1.AddR
 	if r.Source == "" || (!filepath.IsAbs(r.Source) && !strings.Contains(r.Source, ":")) {
 		return nil, invalid("source must be a Git URL or absolute path")
 	}
-	job := s.startJobKey("add_repository", "add_repository:"+r.Name, "", "", func(ctx context.Context, j *jobRun) error {
+	job := s.startJobKey(ctx, "add_repository", "add_repository:"+r.Name, "", "", func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(":repositories")
 		defer unlock()
 		added, err := s.onboardRepository(ctx, repositoryOnboarding{Name: r.Name, Source: r.Source, Branch: r.Branch, Local: r.Local, Upstream: r.UpstreamUrl, UpstreamBranch: r.UpstreamBranch})
@@ -144,7 +144,7 @@ func (s *Server) SyncRepository(ctx context.Context, req *connect.Request[v1.Syn
 	if _, err := s.repo(ctx, r.RepositoryId); err != nil {
 		return nil, rpcError(err)
 	}
-	job := s.startJobKey("sync_repository", "sync_repository:"+syncMode, "", r.RepositoryId, func(ctx context.Context, j *jobRun) error {
+	job := s.startJobKey(ctx, "sync_repository", "sync_repository:"+syncMode, "", r.RepositoryId, func(ctx context.Context, j *jobRun) error {
 		request := coordinator.RepositorySyncRequest{Selector: r.RepositoryId, Mode: syncMode, ConfirmReset: r.Confirm}
 		if syncMode == "reset" {
 			status, err := s.Local.RepositoryStatus(ctx, coordinator.RepositoryStatusRequest{Selector: r.RepositoryId, Fetch: true})
@@ -165,7 +165,7 @@ func (s *Server) IntegrateItem(ctx context.Context, req *connect.Request[v1.Inte
 	// The item's own agent may merge from inside its turn: its credential
 	// proves it is that item's current runtime.
 	byOwnAgent := caller(ctx).principal == principal{kind: credential.Item, itemID: req.Msg.ItemId}
-	job := s.startJobKey("integrate_item", "integrate_item:"+req.Msg.TargetBranch+fmt.Sprint(req.Msg.Local, req.Msg.Rebase)+req.Msg.Message, req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
+	job := s.startJobKey(ctx, "integrate_item", "integrate_item:"+req.Msg.TargetBranch+fmt.Sprint(req.Msg.Local, req.Msg.Rebase)+req.Msg.Message, req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(req.Msg.ItemId)
 		defer unlock()
 		result, err := s.App.MergeWorkItem(ctx, app.MergeOptions{Selector: req.Msg.ItemId, Target: req.Msg.TargetBranch, Local: req.Msg.Local, Rebase: req.Msg.Rebase, Message: req.Msg.Message, ByOwnAgent: byOwnAgent})

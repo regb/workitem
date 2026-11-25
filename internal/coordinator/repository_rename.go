@@ -94,7 +94,7 @@ func (d *Database) RenameRepository(command RenameRepositoryCommand) (RenameRepo
 				return err
 			}
 			payload, _ := json.Marshal(map[string]any{"repository_id": repo.ID, "previous_name": command.PreviousName, "name": repo.Name})
-			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: "repository.renamed", Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload})
+			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: "repository.renamed", Timestamp: command.CreatedAt.UTC(), Actor: model.OperatorUser, CausationID: command.ID, Payload: payload})
 			if err != nil {
 				return err
 			}

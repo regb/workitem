@@ -112,7 +112,7 @@ func (s *Server) repositoryFact(repoID, eventType string, value any, updates ...
 	now := time.Now().UTC()
 	s.domainMu.Lock()
 	defer s.domainMu.Unlock()
-	_, err = s.database.Commit(Command{ID: id, ProtocolVersion: ProtocolVersion, Type: eventType, Actor: "user", ReceivedAt: now, Payload: payload}, []PendingEvent{{ID: id + ":0", Type: eventType, Timestamp: now, Actor: "user", Payload: payload}}, updates)
+	_, err = s.database.Commit(Command{ID: id, ProtocolVersion: ProtocolVersion, Type: eventType, Actor: model.OperatorUser, ReceivedAt: now, Payload: payload}, []PendingEvent{{ID: id + ":0", Type: eventType, Timestamp: now, Actor: model.OperatorUser, Payload: payload}}, updates)
 	return err
 }
 

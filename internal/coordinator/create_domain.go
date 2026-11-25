@@ -24,6 +24,8 @@ type CreateItemCommand struct {
 	Manifest          model.Manifest `json:"manifest"`
 	DescriptionDigest string         `json:"description_digest"`
 	Actor             string         `json:"actor"`
+	For               string         `json:"for,omitempty"`
+	Cause             string         `json:"cause,omitempty"`
 	CreatedAt         time.Time      `json:"created_at"`
 }
 
@@ -52,22 +54,21 @@ func DescriptionDigest(description string) string {
 }
 
 func (d *Database) ExecuteCreateItemCommand(command CreateItemCommand) (CreateItemResult, error) {
-	return d.executeCreateItemCommand(command, "user")
+	return d.executeCreateItemCommand(command)
 }
 
-func (d *Database) executeCreateItemCommand(command CreateItemCommand, actor string) (CreateItemResult, error) {
+func (d *Database) executeCreateItemCommand(command CreateItemCommand) (CreateItemResult, error) {
 	if compactIdentifier(command.ID, 200) != command.ID || command.ID == "" {
 		return CreateItemResult{}, errors.New("command id is invalid")
 	}
 	if command.ProtocolVersion != ProtocolVersion {
 		return CreateItemResult{}, fmt.Errorf("unsupported command protocol %d", command.ProtocolVersion)
 	}
-	if command.Actor == "" {
-		command.Actor = actor
+	origin, err := commandOrigin(command.Actor, command.For, command.Cause)
+	if err != nil {
+		return CreateItemResult{}, err
 	}
-	if command.Actor != actor {
-		return CreateItemResult{}, fmt.Errorf("item creation requires %s actor", actor)
-	}
+	command.Actor, command.For, command.Cause = origin.Actor, origin.For, origin.Cause
 	digestBytes, digestErr := hex.DecodeString(command.DescriptionDigest)
 	if digestErr != nil || len(digestBytes) != sha256.Size {
 		return CreateItemResult{}, errors.New("description digest is invalid")
@@ -124,7 +125,7 @@ func (d *Database) executeCreateItemCommand(command CreateItemCommand, actor str
 		meta := tx.Bucket(bucketMeta)
 		sequence := decodeUint64(meta.Get(keyGlobalSequence)) + 1
 		eventID := domainEventID(command.ID, 0)
-		event := DomainEvent{Sequence: sequence, ID: eventID, ItemID: normalized.ID, ItemRevision: 1, Type: "work_item.created", Timestamp: command.CreatedAt.UTC(), Actor: command.Actor, CausationID: command.ID, Payload: payload}
+		event := DomainEvent{Sequence: sequence, ID: eventID, ItemID: normalized.ID, ItemRevision: 1, Type: "work_item.created", Timestamp: command.CreatedAt.UTC(), Actor: command.Actor, For: command.For, Cause: command.Cause, CausationID: command.ID, Payload: payload}
 		encodedEvent, err := json.Marshal(event)
 		if err != nil {
 			return err

@@ -213,7 +213,7 @@ func (s *Service) Close(ctx context.Context, opts contract.ResolveOptions) (Clos
 	if err := s.store.RemoveTerminalRuntime(ctx, m.ID); err != nil {
 		res.Warnings = append(res.Warnings, "could not remove terminal handle cache: "+err.Error())
 	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(s.now(), "terminal.closed", "user", map[string]any{"session": res.Session}))
+	_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, s.now(), "terminal.closed", map[string]any{"session": res.Session}))
 	return res, nil
 }
 

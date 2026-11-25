@@ -68,14 +68,14 @@ func BenchmarkWaitAndActionabilityQueue100(b *testing.B) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		command := ManifestCommand{ID: fmt.Sprintf("bench-wait-%d", i), ProtocolVersion: ProtocolVersion, Type: CommandBlockerAdd, ItemID: itemID, ExpectedRevision: &canonical.Revision, Actor: "user", Blockers: []model.Blocker{{Kind: model.BlockerExternal, Event: "waiting"}}, CreatedAt: now.Add(time.Duration(i) * time.Millisecond)}
+		command := ManifestCommand{ID: fmt.Sprintf("bench-wait-%d", i), ProtocolVersion: ProtocolVersion, Type: CommandBlockerAdd, ItemID: itemID, ExpectedRevision: &canonical.Revision, Actor: model.OperatorUser, Blockers: []model.Blocker{{Kind: model.BlockerExternal, Event: "waiting"}}, CreatedAt: now.Add(time.Duration(i) * time.Millisecond)}
 		result, err := db.ExecuteManifestCommandWithQueue(command, ActionabilityQueueOptions{})
 		if err != nil || len(result.Queue.Candidates) != 99 {
 			b.Fatalf("candidates=%d err=%v", len(result.Queue.Candidates), err)
 		}
 		b.StopTimer()
 		waitingRevision := result.Command.Revision
-		_, err = db.ExecuteManifestCommand(ManifestCommand{ID: fmt.Sprintf("bench-working-%d", i), ProtocolVersion: ProtocolVersion, Type: CommandBlockerClear, ItemID: itemID, ExpectedRevision: &waitingRevision, Actor: "user", CreatedAt: now.Add(time.Duration(i)*time.Millisecond + time.Microsecond)})
+		_, err = db.ExecuteManifestCommand(ManifestCommand{ID: fmt.Sprintf("bench-working-%d", i), ProtocolVersion: ProtocolVersion, Type: CommandBlockerClear, ItemID: itemID, ExpectedRevision: &waitingRevision, Actor: model.OperatorUser, CreatedAt: now.Add(time.Duration(i)*time.Millisecond + time.Microsecond)})
 		if err != nil {
 			b.Fatal(err)
 		}

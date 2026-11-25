@@ -105,7 +105,7 @@ func (d *Database) RegisterRepository(command RegisterRepositoryCommand) (Regist
 			return err
 		}
 		payload, _ := json.Marshal(map[string]any{"repository_id": r.ID, "name": r.Name, "integration_branch": r.IntegrationBranch})
-		sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: "repository.onboarded", Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload})
+		sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: "repository.onboarded", Timestamp: command.CreatedAt.UTC(), Actor: model.OperatorUser, CausationID: command.ID, Payload: payload})
 		if err != nil {
 			return err
 		}

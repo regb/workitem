@@ -371,7 +371,7 @@ func (a *App) saveAgentSettings(ctx context.Context, id string, overrides map[st
 	if err := a.Store.SaveManifest(ctx, m); err != nil {
 		return err
 	}
-	return a.Store.AppendEvent(ctx, m.ID, model.NewEvent(m.UpdatedAt, "agent.settings_changed", "user", map[string]any{"settings": sortedKeys(overrides)}))
+	return a.Store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, m.UpdatedAt, "agent.settings_changed", map[string]any{"settings": sortedKeys(overrides)}))
 }
 
 // adoptReportedSettings makes reported setting values the item's own. At

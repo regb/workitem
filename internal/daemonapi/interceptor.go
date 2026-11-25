@@ -4,6 +4,7 @@ import (
 	"connectrpc.com/connect"
 	"context"
 	"errors"
+	"github.com/regb/workitem/internal/model"
 )
 
 type apiInterceptor struct{ s *Server }
@@ -25,6 +26,7 @@ func (i apiInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) 
 			return connect.NewError(connect.CodePermissionDenied, errors.New("the web endpoint does not allow this stream"))
 		}
 		who := callerIdentity(principal, conn.RequestHeader())
-		return rpcError(next(context.WithValue(ctx, identityKey{}, who), conn))
+		ctx = model.WithOrigin(context.WithValue(ctx, identityKey{}, who), model.Origin{Actor: principal.String()})
+		return rpcError(next(ctx, conn))
 	}
 }

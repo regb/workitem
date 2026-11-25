@@ -127,11 +127,11 @@ func (s *Server) lock(id string) func() {
 }
 
 // identity is who a call is from: the principal its credential proves, the
-// client and its kind, the actor of a control command, and, from wi web, the
-// signed-in user it vouches for (label).
+// client and its kind, and, from wi web, the signed-in user it vouches for
+// (label).
 type identity struct {
-	principal                    principal
-	client, holder, actor, label string
+	principal             principal
+	client, holder, label string
 }
 
 // LabelHeader carries the user wi web's proxy authenticated, such as a
@@ -150,7 +150,7 @@ func webLabel(who principal, header http.Header) string {
 
 // callerIdentity reads who a call is from, once its credential is checked.
 func callerIdentity(who principal, header http.Header) identity {
-	value := identity{principal: who, client: header.Get(ClientHeader), holder: header.Get(HolderHeader), actor: header.Get(ControlActorHeader), label: webLabel(who, header)}
+	value := identity{principal: who, client: header.Get(ClientHeader), holder: header.Get(HolderHeader), label: webLabel(who, header)}
 	if value.client == "" {
 		value.client = "cli"
 	}
@@ -160,14 +160,8 @@ func callerIdentity(who principal, header http.Header) identity {
 	return value
 }
 
-const ControlActorHeader = "Wi-Control-Actor"
-
-func controlActor(ctx context.Context) string {
-	if actor := caller(ctx).actor; actor != "" {
-		return actor
-	}
-	return "operator"
-}
+// controlActor is who a control command is from: the caller's principal.
+func controlActor(ctx context.Context) string { return model.ActorFrom(ctx) }
 
 type identityKey struct{}
 
@@ -182,10 +176,8 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 			}
 			s.noteActivity()
 			caller := callerIdentity(who, req.Header())
-			if len(caller.actor) > 128 || !utf8.ValidString(caller.actor) || strings.IndexFunc(caller.actor, unicode.IsControl) >= 0 {
-				return nil, invalid("invalid control actor")
-			}
 			ctx = context.WithValue(ctx, identityKey{}, caller)
+			ctx = model.WithOrigin(ctx, model.Origin{Actor: who.String()})
 			if who.web() && !webAllowed(req.Spec().Procedure) {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("the web endpoint does not allow this operation"))
 			}

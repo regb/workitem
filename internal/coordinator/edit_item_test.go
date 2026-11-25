@@ -53,7 +53,7 @@ func editRequest(t *testing.T, s *Server, id string, edit MetadataEdit, descript
 		edit.DescriptionDigest = DescriptionDigest(*description)
 		edit.PreviousDescriptionDigest = DescriptionDigest(current)
 	}
-	return EditItemRequest{Command: ManifestCommand{ID: id, ProtocolVersion: ProtocolVersion, Type: CommandEdit, ItemID: importTestID, ExpectedRevision: &canonical.Revision, Actor: "user", Edit: &edit, CreatedAt: time.Now().UTC()}, Description: description}
+	return EditItemRequest{Command: ManifestCommand{ID: id, ProtocolVersion: ProtocolVersion, Type: CommandEdit, ItemID: importTestID, ExpectedRevision: &canonical.Revision, Actor: model.OperatorUser, Edit: &edit, CreatedAt: time.Now().UTC()}, Description: description}
 }
 
 func TestEditItemCommitsCombinedPatchAndReplays(t *testing.T) {

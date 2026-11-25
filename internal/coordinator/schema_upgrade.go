@@ -191,7 +191,7 @@ func upgradeSchema5To6(tx *bolt.Tx, now time.Time) error {
 			}
 			continue
 		}
-		if _, _, err := commitManifestEvents(tx, manifest, "schema-upgrade-6-"+manifest.ID, "wi", now, pending); err != nil {
+		if _, _, err := commitManifestEvents(tx, manifest, "schema-upgrade-6-"+manifest.ID, model.Origin{Actor: model.SystemActor}, now, pending); err != nil {
 			return err
 		}
 	}

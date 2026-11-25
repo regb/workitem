@@ -54,7 +54,7 @@ func (s *Service) restoreArchived(ctx context.Context, m model.Manifest) (StateT
 	if err := s.store.SaveManifest(ctx, m); err != nil {
 		return StateTransitionResult{}, err
 	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "work_item.state_set", "user", map[string]any{"previous_state": previous, "new_state": m.State, "slug": slug, "workspace_unchanged": true}))
+	_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "work_item.state_set", map[string]any{"previous_state": previous, "new_state": m.State, "slug": slug, "workspace_unchanged": true}))
 	return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Changed: true, Manifest: m}, nil
 }
 
@@ -72,7 +72,7 @@ func (s *Service) closeState(ctx context.Context, opts contract.ResolveOptions, 
 	if err := s.store.SaveManifest(ctx, m); err != nil {
 		return StateTransitionResult{}, err
 	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "work_item.state_set", "user", map[string]any{"previous_state": previous, "new_state": m.State, "previous_slug": previousSlug, "resolution": resolution, "workspace_unchanged": true}))
+	_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "work_item.state_set", map[string]any{"previous_state": previous, "new_state": m.State, "previous_slug": previousSlug, "resolution": resolution, "workspace_unchanged": true}))
 	return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Changed: true, Manifest: m}, nil
 }
 
@@ -110,9 +110,9 @@ func (s *Service) TransitionState(ctx context.Context, opts contract.ResolveOpti
 		data["workspace_unchanged"] = true
 	}
 	if force && m.DeepWork && previous == model.StateBacklog {
-		_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "deep_work_limit.overridden", "user", data))
+		_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "deep_work_limit.overridden", data))
 	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, eventType, "user", data))
+	_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, eventType, data))
 	return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Changed: true, Manifest: m, DeepWork: m.DeepWork, Capacity: &capacity}, nil
 }
 
@@ -153,7 +153,7 @@ func (s *Service) SetDeepWork(ctx context.Context, opts contract.ResolveOptions,
 	if deep {
 		eventType = "deep_work.set"
 	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(m.UpdatedAt, eventType, "user", map[string]any{"deep_work": deep}))
+	_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, m.UpdatedAt, eventType, map[string]any{"deep_work": deep}))
 	capacity = s.DeepWorkCapacity(maxActive)
 	return DeepWorkResult{WorkItemID: m.ID, DeepWork: m.DeepWork, Changed: true, Capacity: &capacity, Manifest: m}, nil
 }
@@ -175,7 +175,7 @@ func (s *Service) AddLabels(ctx context.Context, opts contract.ResolveOptions, l
 		return LabelResult{}, err
 	}
 	for _, label := range changed {
-		_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(m.UpdatedAt, "label.added", "user", map[string]any{"label": label}))
+		_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, m.UpdatedAt, "label.added", map[string]any{"label": label}))
 	}
 	return LabelResult{WorkItemID: m.ID, Labels: m.Labels, Changed: changed, Manifest: m}, nil
 }
@@ -197,7 +197,7 @@ func (s *Service) RemoveLabels(ctx context.Context, opts contract.ResolveOptions
 		return LabelResult{}, err
 	}
 	for _, label := range changed {
-		_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(m.UpdatedAt, "label.removed", "user", map[string]any{"label": label}))
+		_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, m.UpdatedAt, "label.removed", map[string]any{"label": label}))
 	}
 	return LabelResult{WorkItemID: m.ID, Labels: m.Labels, Changed: changed, Manifest: m}, nil
 }

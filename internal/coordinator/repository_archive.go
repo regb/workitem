@@ -81,7 +81,7 @@ func (d *Database) SetRepositoryArchived(command SetRepositoryArchivedCommand) (
 			if repo.Archived {
 				eventType = "repository.archived"
 			}
-			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: eventType, Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload})
+			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: eventType, Timestamp: command.CreatedAt.UTC(), Actor: model.OperatorUser, CausationID: command.ID, Payload: payload})
 			if err != nil {
 				return err
 			}

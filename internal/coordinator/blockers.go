@@ -350,7 +350,7 @@ func (d *Database) SweepBlockers(now time.Time) (int, error) {
 			// The global sequence makes repeated sweeps at one instant distinct.
 			sequence := decodeUint64(tx.Bucket(bucketMeta).Get(keyGlobalSequence))
 			causation := fmt.Sprintf("blocker-sweep-%s-%d-%d", manifest.ID, now.UnixNano(), sequence)
-			if _, _, err := commitManifestEvents(tx, manifest, causation, "wi", now, pending); err != nil {
+			if _, _, err := commitManifestEvents(tx, manifest, causation, model.Origin{Actor: model.SystemActor}, now, pending); err != nil {
 				return err
 			}
 			cleared += len(pending)
@@ -365,7 +365,7 @@ func (d *Database) SweepBlockers(now time.Time) (int, error) {
 
 // commitManifestEvents appends compact domain events for one item, advances
 // its revision, and stores the updated manifest projection in tx.
-func commitManifestEvents(tx *bolt.Tx, manifest model.Manifest, causationID, actor string, createdAt time.Time, pending []commandEvent) ([]DomainEvent, uint64, error) {
+func commitManifestEvents(tx *bolt.Tx, manifest model.Manifest, causationID string, origin model.Origin, createdAt time.Time, pending []commandEvent) ([]DomainEvent, uint64, error) {
 	meta, events, eventIDs, revisions := tx.Bucket(bucketMeta), tx.Bucket(bucketEvents), tx.Bucket(bucketEventIDs), tx.Bucket(bucketRevisions)
 	projection := tx.Bucket(bucketProjections).Bucket([]byte(ManifestProjection))
 	sequence := decodeUint64(meta.Get(keyGlobalSequence))
@@ -378,7 +378,7 @@ func commitManifestEvents(tx *bolt.Tx, manifest model.Manifest, causationID, act
 		if eventIDs.Get([]byte(eventID)) != nil {
 			return nil, 0, fmt.Errorf("duplicate event id %s", eventID)
 		}
-		event := DomainEvent{Sequence: sequence, ID: eventID, ItemID: manifest.ID, ItemRevision: revision, Type: item.Type, Timestamp: createdAt.UTC(), Actor: actor, CausationID: causationID, Payload: item.Payload}
+		event := DomainEvent{Sequence: sequence, ID: eventID, ItemID: manifest.ID, ItemRevision: revision, Type: item.Type, Timestamp: createdAt.UTC(), Actor: origin.Actor, For: origin.For, Cause: origin.Cause, CausationID: causationID, Payload: item.Payload}
 		encoded, err := json.Marshal(event)
 		if err != nil {
 			return nil, 0, err

@@ -2,6 +2,7 @@ package daemonapi
 
 import (
 	"context"
+	"github.com/regb/workitem/internal/model"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -23,7 +24,7 @@ func TestTheDaemonTakesControlForItsOwnSendsAndGivesItBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A context with no caller, as the scheduler's.
-	own, done := f.api.actOnItself(context.Background(), id, scheduleClient, "schedule")
+	own, done := f.api.actOnItself(context.Background(), id, scheduleClient, "schedule", model.Origin{Actor: model.OperatorUser, Cause: "schedule:s1"})
 	lease, err := f.api.controlLeaseStarting(own, id, "", true, false)
 	if err != nil {
 		t.Fatalf("control for the daemon's own send: %v", err)
@@ -41,7 +42,7 @@ func TestTheDaemonTakesControlForItsOwnSendsAndGivesItBack(t *testing.T) {
 	if _, err := f.clients.Control.AcquireControl(ctx, acquire); err != nil {
 		t.Fatal(err)
 	}
-	own, done = f.api.actOnItself(context.Background(), id, followUpClient, "follow-up")
+	own, done = f.api.actOnItself(context.Background(), id, followUpClient, "follow-up", model.Origin{Actor: model.OperatorUser, Cause: "follow-up:f1"})
 	if lease, err := f.api.controlLeaseStarting(own, id, "", true, false); err != nil || lease.ClientID != "tab" {
 		t.Fatalf("follow-up displaced the controller: %+v %v", lease, err)
 	}

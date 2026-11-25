@@ -119,7 +119,8 @@ const scheduleClient = "wi-schedule"
 // when the item cannot be created, and when its start finishes, so a run
 // whose prompt never reached the agent says why.
 func (s *Server) fireSchedule(ctx context.Context, value model.Schedule, at time.Time, key string) (string, error) {
-	ctx, done := s.actOnItself(ctx, "", scheduleClient, "schedule")
+	// A schedule's run is its owner's standing instruction, delivered later.
+	ctx, done := s.actOnItself(ctx, "", scheduleClient, "schedule", model.Origin{Actor: model.OperatorUser, Cause: "schedule:" + value.ID})
 	repoName := value.RepositoryID
 	if repo, err := s.repo(ctx, value.RepositoryID); err == nil {
 		repoName = repo.Name

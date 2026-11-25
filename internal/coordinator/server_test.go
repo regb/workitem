@@ -66,7 +66,7 @@ func TestServerStatusAndShutdown(t *testing.T) {
 		t.Fatalf("actionability snapshot = %+v, err = %v", snapshot, err)
 	}
 	revision := uint64(0)
-	_, err = client.ExecuteManifestCommandWithQueue(ctx, ManifestCommandQueueRequest{Command: ManifestCommand{ID: "invalid-queue", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: importTestID, ExpectedRevision: &revision, Actor: "user", TargetState: model.StateActive, CreatedAt: time.Now().UTC()}})
+	_, err = client.ExecuteManifestCommandWithQueue(ctx, ManifestCommandQueueRequest{Command: ManifestCommand{ID: "invalid-queue", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: importTestID, ExpectedRevision: &revision, Actor: model.OperatorUser, TargetState: model.StateActive, CreatedAt: time.Now().UTC()}})
 	if err == nil || !strings.Contains(err.Error(), "requires adding a blocker") {
 		t.Fatalf("invalid manifest queue command err=%v", err)
 	}

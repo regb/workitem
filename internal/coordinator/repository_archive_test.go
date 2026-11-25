@@ -99,7 +99,7 @@ func TestRepositoryArchiveFencesCreationButNotExistingItems(t *testing.T) {
 	now := time.Now().UTC()
 	makeCreate := func(id string) CreateItemCommand {
 		m := model.NewManifest(id, model.IDDerivedSlug(id), "Task", nil, false, now, model.Repository{ID: importTestID, CreatedFromCommit: strings.Repeat("a", 40)}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, "wi/task-"+id))
-		return CreateItemCommand{ID: "create:" + id, ProtocolVersion: ProtocolVersion, Manifest: m, DescriptionDigest: DescriptionDigest(""), Actor: "user", CreatedAt: now}
+		return CreateItemCommand{ID: "create:" + id, ProtocolVersion: ProtocolVersion, Manifest: m, DescriptionDigest: DescriptionDigest(""), Actor: model.OperatorUser, CreatedAt: now}
 	}
 	firstID, _ := model.NewID()
 	first := makeCreate(firstID)
@@ -119,7 +119,7 @@ func TestRepositoryArchiveFencesCreationButNotExistingItems(t *testing.T) {
 	if _, err := db.ExecuteCreateItemCommand(second); err == nil || !strings.Contains(err.Error(), "archived") {
 		t.Fatalf("new item err=%v", err)
 	}
-	transition := ManifestCommand{ID: "existing:start", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: firstID, ExpectedRevision: &created.Revision, Actor: "user", TargetState: model.StateActive, CreatedAt: now}
+	transition := ManifestCommand{ID: "existing:start", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: firstID, ExpectedRevision: &created.Revision, Actor: model.OperatorUser, TargetState: model.StateActive, CreatedAt: now}
 	working, err := db.ExecuteManifestCommand(transition)
 	if err != nil || working.Manifest.State != model.StateActive {
 		t.Fatalf("existing transition=%+v err=%v", working, err)
@@ -134,7 +134,7 @@ func TestRepositoryArchiveFencesCreationButNotExistingItems(t *testing.T) {
 	if _, err := db.SetRepositoryArchived(archiveTestCommand("restore", true, false)); err != nil {
 		t.Fatal(err)
 	}
-	second.Actor = "user"
+	second.Actor = model.OperatorUser
 	if _, err := db.ExecuteCreateItemCommand(second); err != nil {
 		t.Fatal(err)
 	}

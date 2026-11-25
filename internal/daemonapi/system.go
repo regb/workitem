@@ -212,7 +212,7 @@ func (s *Server) Shutdown(ctx context.Context, req *connect.Request[v1.ShutdownR
 	if s.Config.Daemon.Managed {
 		return nil, precondition(coordinator.ManagedDaemonMessage)
 	}
-	job := s.startJob("shutdown", "", "", func(ctx context.Context, j *jobRun) error {
+	job := s.startJob(ctx, "shutdown", "", "", func(ctx context.Context, j *jobRun) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

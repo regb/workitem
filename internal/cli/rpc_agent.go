@@ -436,7 +436,6 @@ func rpcControl(ctx context.Context, args []string, cfg Config, jsonOut bool) er
 	selected := fs.String("item", "", "item")
 	fromStdin := fs.Bool("stdin", false, "read stdin")
 	file := fs.String("file", "", "read file")
-	actor := fs.String("actor", "", "control source")
 	followUp := fs.Bool("follow-up", false, "deliver after the current turn settles")
 	confirm := fs.Bool("confirm", false, "confirm takeover")
 	planToken := fs.String("plan-token", "", "observed plan token")
@@ -523,7 +522,6 @@ func rpcControl(ctx context.Context, args []string, cfg Config, jsonOut bool) er
 			return errors.New("no control lease")
 		}
 		request := rpcRequest(cfg, &v1.AbortTurnRequest{ItemId: id, LeaseId: lease.Control.Lease.Id})
-		request.Header().Set("Wi-Control-Actor", *actor)
 		value, err := cfg.API.Agents.AbortTurn(ctx, request)
 		if err != nil {
 			return err
@@ -531,7 +529,6 @@ func rpcControl(ctx context.Context, args []string, cfg Config, jsonOut bool) er
 		return rpcEmit(cfg, jsonOut, value.Msg)
 	case "shutdown":
 		request := rpcRequest(cfg, &v1.StopAgentRequest{ItemId: id, ConfirmAttachedTerminal: *confirm})
-		request.Header().Set("Wi-Control-Actor", *actor)
 		value, err := cfg.API.Agents.StopAgent(ctx, request)
 		if err != nil {
 			return err
@@ -552,7 +549,6 @@ func rpcControl(ctx context.Context, args []string, cfg Config, jsonOut bool) er
 		*clientMessage = newCommandID()
 	}
 	request := rpcRequest(cfg, &v1.SendMessageRequest{ItemId: id, Text: message, Images: images, Delivery: delivery, RequireOnline: true, ClientMessageId: *clientMessage, StartMode: v1.AgentMode_AGENT_MODE_HEADLESS})
-	request.Header().Set("Wi-Control-Actor", *actor)
 	value, err := cfg.API.Agents.SendMessage(ctx, request)
 	if err != nil {
 		return err

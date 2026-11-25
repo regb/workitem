@@ -126,7 +126,7 @@ func (s *Server) blockOnUsage(ctx context.Context, m model.Manifest, observation
 	if err != nil {
 		return
 	}
-	command := coordinator.ManifestCommand{ID: "usage-limit-" + m.ID + "-" + strconv.FormatInt(failedAt.UnixNano(), 10), ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandBlockerAdd, ItemID: m.ID, ExpectedRevision: &revision.Revision, Actor: "user", Blockers: []model.Blocker{blocker}, CreatedAt: now}
+	command := coordinator.ManifestCommand{ID: "usage-limit-" + m.ID + "-" + strconv.FormatInt(failedAt.UnixNano(), 10), ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandBlockerAdd, ItemID: m.ID, ExpectedRevision: &revision.Revision, Actor: model.SystemActor, Blockers: []model.Blocker{blocker}, CreatedAt: now}
 	if _, err := s.Local.ExecuteManifestCommand(ctx, command); err != nil && !strings.Contains(err.Error(), "already used") && !strings.Contains(err.Error(), "revision conflict") {
 		fmt.Fprintf(os.Stderr, "wi: set usage blocker on %s: %v\n", m.ID, err)
 	}
@@ -174,7 +174,7 @@ func (s *Server) clearUsageBlocker(ctx context.Context, m model.Manifest, blocke
 	if err != nil {
 		return
 	}
-	command := coordinator.ManifestCommand{ID: "usage-clear-" + blocker.ID, ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandBlockerClear, ItemID: m.ID, ExpectedRevision: &revision.Revision, Actor: "user", BlockerID: blocker.ID, ClearCause: cause, CreatedAt: now}
+	command := coordinator.ManifestCommand{ID: "usage-clear-" + blocker.ID, ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandBlockerClear, ItemID: m.ID, ExpectedRevision: &revision.Revision, Actor: model.SystemActor, BlockerID: blocker.ID, ClearCause: cause, CreatedAt: now}
 	if _, err := s.Local.ExecuteManifestCommand(ctx, command); err != nil && !strings.Contains(err.Error(), "revision conflict") && !strings.Contains(err.Error(), "has no blocker") {
 		fmt.Fprintf(os.Stderr, "wi: clear usage blocker on %s: %v\n", m.ID, err)
 	}
@@ -203,7 +203,7 @@ func (s *Server) sendFollowUps(ctx context.Context, m model.Manifest, observatio
 		if err != nil {
 			return
 		}
-		command := coordinator.ManifestCommand{ID: "follow-up-" + followUp.ID, ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandFollowUpDone, ItemID: m.ID, ExpectedRevision: &revision.Revision, Actor: "user", FollowUpID: followUp.ID, FollowUpOutcome: outcome, Reason: reason, CreatedAt: time.Now().UTC()}
+		command := coordinator.ManifestCommand{ID: "follow-up-" + followUp.ID, ProtocolVersion: coordinator.ProtocolVersion, Type: coordinator.CommandFollowUpDone, ItemID: m.ID, ExpectedRevision: &revision.Revision, Actor: model.SystemActor, FollowUpID: followUp.ID, FollowUpOutcome: outcome, Reason: reason, CreatedAt: time.Now().UTC()}
 		if _, err := s.Local.ExecuteManifestCommand(ctx, command); err != nil {
 			fmt.Fprintf(os.Stderr, "wi: record follow-up %s of %s: %v\n", followUp.ID, m.ID, err)
 			return
@@ -216,7 +216,7 @@ func (s *Server) sendFollowUps(ctx context.Context, m model.Manifest, observatio
 // holds control, if one does, so a follow-up never displaces it. The message
 // ID makes a repeated attempt deliver it once.
 func (s *Server) sendFollowUp(ctx context.Context, itemID string, followUp model.FollowUp) error {
-	ctx, done := s.actOnItself(ctx, itemID, followUpClient, "follow-up")
+	ctx, done := s.actOnItself(ctx, itemID, followUpClient, "follow-up", model.Origin{Actor: model.OperatorUser, Cause: "follow-up:" + followUp.ID})
 	sent, err := s.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: itemID, Text: followUp.Message, ClientMessageId: "follow-up-" + followUp.ID}))
 	var job *v1.Job
 	if err == nil {

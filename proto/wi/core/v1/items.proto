@@ -433,10 +433,18 @@ message DeferItemResponse {}
 message ItemEvent {
   string id = 1;
   string type = 2;
+  // actor is who did it: a principal ("user:operator", "item:<id>"), or
+  // "wi" for what the daemon observed or did on its own.
   string actor = 3;
   google.protobuf.Timestamp time = 4;
   // payload is the event's facts as JSON, by event type.
   string payload_json = 5;
+  // for_user is the user the actor acted for: itself for a user, the end of
+  // an item's owner chain for an item's agent.
+  string for_user = 6;
+  // cause is what led to it when not a caller's own request, such as
+  // "schedule:<id>" or "follow-up:<id>".
+  string cause = 7;
 }
 
 message ListItemEventsRequest {

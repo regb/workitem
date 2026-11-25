@@ -244,7 +244,7 @@ func (d *Database) SetRepositorySetting(command SetRepositorySettingCommand, reg
 			}
 			// Values may contain secrets. History records the fact, never their contents.
 			payload, _ := json.Marshal(map[string]any{"repository_id": repo.ID, "namespace": command.Namespace, "key": command.Key, "unset": command.Unset, "revision": settings.Revision})
-			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: "repository.setting_changed", Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload})
+			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: "repository.setting_changed", Timestamp: command.CreatedAt.UTC(), Actor: model.OperatorUser, CausationID: command.ID, Payload: payload})
 			if err != nil {
 				return err
 			}

@@ -118,7 +118,7 @@ func (a *App) SetAgentProfile(ctx context.Context, opts ResolveOptions, profile 
 	if err := a.Store.SaveManifest(ctx, m); err != nil {
 		return model.Manifest{}, err
 	}
-	if err := a.Store.AppendEvent(ctx, m.ID, model.NewEvent(m.UpdatedAt, "agent.profile_changed", "user", map[string]any{"from": previous, "to": name, "settings": changed})); err != nil {
+	if err := a.Store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, m.UpdatedAt, "agent.profile_changed", map[string]any{"from": previous, "to": name, "settings": changed})); err != nil {
 		return m, err
 	}
 	return m, nil

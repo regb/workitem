@@ -4,7 +4,6 @@ import (
 	"connectrpc.com/connect"
 	"context"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
-	"strings"
 	"testing"
 )
 
@@ -24,7 +23,6 @@ func TestExplicitControlDoesNotStartOfflineAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := connect.NewRequest(&v1.SendMessageRequest{ItemId: id, Text: "must not start", RequireOnline: true})
-	req.Header().Set(ControlActorHeader, "test")
 	_, err = f.clients.Agents.SendMessage(ctx, req)
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatal(err)
@@ -32,10 +30,5 @@ func TestExplicitControlDoesNotStartOfflineAgent(t *testing.T) {
 	item, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 	if err != nil || item.Msg.Item.Conversation != nil {
 		t.Fatalf("created conversation: %v %v", item, err)
-	}
-	req.Header().Set(ControlActorHeader, strings.Repeat("x", 129))
-	_, err = f.clients.Agents.SendMessage(ctx, req)
-	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("invalid actor: %v", err)
 	}
 }

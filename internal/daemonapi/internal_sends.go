@@ -4,18 +4,20 @@ import (
 	"context"
 
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/model"
 )
 
 // actOnItself is the identity the daemon acts under when it sends on its
-// own, for a schedule's run or a usage follow-up. It acts for the client
+// own, for a schedule's run or a follow-up. It acts as the user the work is
+// for, with what caused it recorded (origin), and for the client
 // that holds the item's control, if one does, so it never displaces it;
 // otherwise as its own client, a command-line holder, since a request has
 // none. The returned done gives back control taken as its own client, once
 // the job the send started, if any, has finished: no client then finds the
 // item controlled by the daemon.
-func (s *Server) actOnItself(ctx context.Context, itemID, client, actor string) (context.Context, func(job *v1.Job)) {
-	who := identity{client: client, holder: model.LeaseHolderCLI, actor: actor, label: actor}
+func (s *Server) actOnItself(ctx context.Context, itemID, client, label string, origin model.Origin) (context.Context, func(job *v1.Job)) {
+	who := identity{principal: principal{kind: credential.Operator}, client: client, holder: model.LeaseHolderCLI, label: label}
 	if itemID != "" {
 		if lease, err := s.Local.Lease(ctx, itemID); err == nil && lease != nil {
 			who.client, who.holder = lease.ClientID, lease.Holder
@@ -48,7 +50,7 @@ func (s *Server) actOnItself(ctx context.Context, itemID, client, actor string) 
 			release()
 		}()
 	}
-	return context.WithValue(ctx, identityKey{}, who), done
+	return model.WithOrigin(context.WithValue(ctx, identityKey{}, who), origin), done
 }
 
 // jobOutcome waits for a job to finish and returns it, or nil when it is

@@ -46,7 +46,7 @@ func (a *App) Shelve(ctx context.Context, opts ResolveOptions, force bool) (Stat
 		return StateTransitionResult{}, err
 	}
 	data := map[string]any{"previous_state": prevState, "new_state": m.State, "workspace_closed": workspaceChanged, "forced": force}
-	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(now, "work_item.shelved", "user", data))
+	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "work_item.shelved", data))
 	cap := a.DeepWorkCapacity()
 	return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Changed: true, Manifest: m, DeepWork: m.DeepWork, Capacity: &cap, Warnings: workspaceWarnings}, nil
 }
@@ -122,7 +122,7 @@ func (a *App) commitChangesForClose(ctx context.Context, m model.Manifest, opts 
 	}
 	if commit != "" {
 		branch := expectedCheckoutBranch(m)
-		_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "workspace.changes_committed", "user", map[string]any{"commit": commit, "branch": branch}))
+		_ = a.Store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, a.now(), "workspace.changes_committed", map[string]any{"commit": commit, "branch": branch}))
 		warnings = append(warnings, fmt.Sprintf("committed uncommitted changes to %s as %.12s", branch, commit))
 	}
 	removed, err = a.ensureCheckoutReleasable(ctx, m)
@@ -154,7 +154,7 @@ func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, re
 		m.UpdatedAt = now
 		saveErr = a.Store.SaveManifest(ctx, m)
 		if saveErr == nil {
-			_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(now, "workspace.released", "user", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "state": m.State}))
+			_ = a.Store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "workspace.released", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "state": m.State}))
 		}
 	}
 	m.State = model.StateClosed
@@ -177,7 +177,7 @@ func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, re
 		}
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: retained.State, Changed: retained.State != prevState, Manifest: retained, Warnings: warnings}, fmt.Errorf("workspace cleanup completed, but closed state could not be saved: %w", saveErr)
 	}
-	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(now, "work_item.closed", "user", map[string]any{"previous_state": prevState, "new_state": m.State, "resolution": resolution, "previous_slug": previousSlug, "workspace_closed": workspaceChanged, "forced": force}))
+	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "work_item.closed", map[string]any{"previous_state": prevState, "new_state": m.State, "resolution": resolution, "previous_slug": previousSlug, "workspace_closed": workspaceChanged, "forced": force}))
 	warnings = append(warnings, workspaceWarnings...)
 	if deferredSession != "" {
 		if err := a.Tmux.KillSessionAsync(ctx, deferredSession); err != nil {

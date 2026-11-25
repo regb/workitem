@@ -33,7 +33,7 @@ func TestRecordDeferPreservesManifestAndEventContract(t *testing.T) {
 	if !result.DeferredAt.Equal(now) {
 		t.Fatalf("last deferred = %v", result.DeferredAt)
 	}
-	if len(store.events) != 1 || store.events[0].Type != "attention.deferred" || store.events[0].Actor != "user" {
+	if len(store.events) != 1 || store.events[0].Type != "attention.deferred" || store.events[0].Actor != model.OperatorUser {
 		t.Fatalf("events = %+v", store.events)
 	}
 	if got, ok := store.events[0].Data["deferred_at"].(time.Time); !ok || !got.Equal(now) {

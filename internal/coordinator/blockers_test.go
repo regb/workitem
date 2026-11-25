@@ -44,7 +44,7 @@ func runCommand(t *testing.T, db *Database, command ManifestCommand) (ManifestCo
 	if err != nil {
 		t.Fatal(err)
 	}
-	command.ProtocolVersion, command.ExpectedRevision, command.Actor = ProtocolVersion, &canonical.Revision, "user"
+	command.ProtocolVersion, command.ExpectedRevision, command.Actor = ProtocolVersion, &canonical.Revision, model.OperatorUser
 	return db.ExecuteManifestCommand(command)
 }
 

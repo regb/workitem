@@ -1,6 +1,7 @@
 package coordinator
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -39,6 +40,8 @@ type ManifestCommand struct {
 	ItemID           string          `json:"item_id"`
 	ExpectedRevision *uint64         `json:"expected_revision"`
 	Actor            string          `json:"actor"`
+	For              string          `json:"for,omitempty"`
+	Cause            string          `json:"cause,omitempty"`
 	Labels           []string        `json:"labels,omitempty"`
 	DeepWork         *bool           `json:"deep_work,omitempty"`
 	TargetState      string          `json:"target_state,omitempty"`
@@ -129,6 +132,19 @@ type pendingNativeWrite struct {
 	PreviousDescriptionDigest string         `json:"previous_description_digest,omitempty"`
 }
 
+// commandOrigin completes and checks who a command is from: a principal, or
+// wi acting on its own; an absent actor is the operator.
+func commandOrigin(actor, forUser, cause string) (model.Origin, error) {
+	origin := model.Origin{Actor: actor, For: forUser, Cause: cause}
+	if origin.Actor == model.SystemActor {
+		return origin, nil
+	}
+	if err := origin.Validate(); err != nil {
+		return model.Origin{}, err
+	}
+	return model.ActingOrigin(model.WithOrigin(context.Background(), origin)), nil
+}
+
 func (d *Database) CanonicalManifest(itemID string) (CanonicalManifest, error) {
 	if !model.ValidID(itemID) {
 		return CanonicalManifest{}, fmt.Errorf("invalid work item id %q", itemID)
@@ -171,18 +187,17 @@ func (d *Database) executeManifestCommand(command ManifestCommand, queueOptions 
 	if command.ProtocolVersion != ProtocolVersion {
 		return ManifestCommandResult{}, ActionabilityQueueResult{}, fmt.Errorf("unsupported command protocol %d", command.ProtocolVersion)
 	}
-	if command.Actor == "" {
-		command.Actor = "user"
+	origin, err := commandOrigin(command.Actor, command.For, command.Cause)
+	if err != nil {
+		return ManifestCommandResult{}, ActionabilityQueueResult{}, err
 	}
-	if command.Actor != "user" {
-		return ManifestCommandResult{}, ActionabilityQueueResult{}, errors.New("manifest commands require user actor")
-	}
+	command.Actor, command.For, command.Cause = origin.Actor, origin.For, origin.Cause
 	if command.CreatedAt.IsZero() {
 		command.CreatedAt = time.Now().UTC()
 	}
 	var result ManifestCommandResult
 	var queue ActionabilityQueueResult
-	err := d.db.Update(func(tx *bolt.Tx) error {
+	err = d.db.Update(func(tx *bolt.Tx) error {
 		outcomes := tx.Bucket(bucketDomainCommands)
 		if encoded := outcomes.Get([]byte(command.ID)); encoded != nil {
 			var outcome domainCommandOutcome
@@ -235,7 +250,7 @@ func (d *Database) executeManifestCommand(command ManifestCommand, queueOptions 
 		}
 		result = ManifestCommandResult{CommandID: command.ID, Manifest: manifest, Revision: revision, Changed: changed, Events: []DomainEvent{}, CommittedAt: time.Now().UTC()}
 		if changed {
-			events, newRevision, err := commitManifestEvents(tx, manifest, command.ID, command.Actor, command.CreatedAt, pendingEvents)
+			events, newRevision, err := commitManifestEvents(tx, manifest, command.ID, model.Origin{Actor: command.Actor, For: command.For, Cause: command.Cause}, command.CreatedAt, pendingEvents)
 			if err != nil {
 				return err
 			}

@@ -104,7 +104,7 @@ func (s *Server) EnsureWorkspace(ctx context.Context, req *connect.Request[v1.En
 		_, err = s.App.SetupWorkspace(ctx, resolve(req.Msg.ItemId), false)
 		return response(out, err)
 	}
-	out.Job = s.startJob("setup_workspace", req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
+	out.Job = s.startJob(ctx, "setup_workspace", req.Msg.ItemId, "", func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(req.Msg.ItemId)
 		defer unlock()
 		if _, err := s.requireActive(ctx, req.Msg.ItemId); err != nil {
@@ -127,7 +127,7 @@ func (s *Server) SetupWorkspace(ctx context.Context, req *connect.Request[v1.Set
 	if err := s.requireStopped(ctx, m.ID); err != nil {
 		return nil, err
 	}
-	job := s.startJob("setup_workspace", m.ID, "", func(ctx context.Context, j *jobRun) error {
+	job := s.startJob(ctx, "setup_workspace", m.ID, "", func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(m.ID)
 		defer unlock()
 		current, err := s.requireActive(ctx, m.ID)

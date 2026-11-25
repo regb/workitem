@@ -73,22 +73,26 @@ type PendingEvent struct {
 }
 
 type DomainEvent struct {
-	Sequence     uint64          `json:"sequence"`
-	ID           string          `json:"id"`
-	ItemID       string          `json:"item_id,omitempty"`
-	ItemRevision uint64          `json:"item_revision,omitempty"`
-	Type         string          `json:"type"`
-	Timestamp    time.Time       `json:"timestamp"`
-	Actor        string          `json:"actor"`
-	CausationID  string          `json:"causation_id"`
-	Payload      json.RawMessage `json:"payload,omitempty"`
+	Sequence     uint64    `json:"sequence"`
+	ID           string    `json:"id"`
+	ItemID       string    `json:"item_id,omitempty"`
+	ItemRevision uint64    `json:"item_revision,omitempty"`
+	Type         string    `json:"type"`
+	Timestamp    time.Time `json:"timestamp"`
+	Actor        string    `json:"actor"`
+	// For and Cause complete the actor: the user it acted for, and what led
+	// to it (see model.Origin).
+	For         string          `json:"for,omitempty"`
+	Cause       string          `json:"cause,omitempty"`
+	CausationID string          `json:"causation_id"`
+	Payload     json.RawMessage `json:"payload,omitempty"`
 }
 
 // toModelEvent adapts a compact domain event to the public model.Event
 // used by durable-item views. Compact payloads are surfaced as event data when
 // they decode to an object.
 func (e DomainEvent) toModelEvent() model.Event {
-	event := model.Event{Time: e.Timestamp, Type: e.Type, Actor: e.Actor}
+	event := model.Event{Time: e.Timestamp, Type: e.Type, Actor: e.Actor, For: e.For, Cause: e.Cause}
 	if len(e.Payload) > 0 {
 		var data map[string]any
 		if json.Unmarshal(e.Payload, &data) == nil {

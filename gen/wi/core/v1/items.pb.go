@@ -2669,10 +2669,18 @@ type ItemEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	Type  string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// actor is who did it: a principal ("user:operator", "item:<id>"), or
+	// "wi" for what the daemon observed or did on its own.
 	Actor string                 `protobuf:"bytes,3,opt,name=actor,proto3" json:"actor,omitempty"`
 	Time  *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=time,proto3" json:"time,omitempty"`
 	// payload is the event's facts as JSON, by event type.
-	PayloadJson   string `protobuf:"bytes,5,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
+	PayloadJson string `protobuf:"bytes,5,opt,name=payload_json,json=payloadJson,proto3" json:"payload_json,omitempty"`
+	// for_user is the user the actor acted for: itself for a user, the end of
+	// an item's owner chain for an item's agent.
+	ForUser string `protobuf:"bytes,6,opt,name=for_user,json=forUser,proto3" json:"for_user,omitempty"`
+	// cause is what led to it when not a caller's own request, such as
+	// "schedule:<id>" or "follow-up:<id>".
+	Cause         string `protobuf:"bytes,7,opt,name=cause,proto3" json:"cause,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2738,6 +2746,20 @@ func (x *ItemEvent) GetTime() *timestamppb.Timestamp {
 func (x *ItemEvent) GetPayloadJson() string {
 	if x != nil {
 		return x.PayloadJson
+	}
+	return ""
+}
+
+func (x *ItemEvent) GetForUser() string {
+	if x != nil {
+		return x.ForUser
+	}
+	return ""
+}
+
+func (x *ItemEvent) GetCause() string {
+	if x != nil {
+		return x.Cause
 	}
 	return ""
 }
@@ -3981,13 +4003,15 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\x10MarkReadResponse\"+\n" +
 	"\x10DeferItemRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"\x13\n" +
-	"\x11DeferItemResponse\"\x98\x01\n" +
+	"\x11DeferItemResponse\"\xc9\x01\n" +
 	"\tItemEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x14\n" +
 	"\x05actor\x18\x03 \x01(\tR\x05actor\x12.\n" +
 	"\x04time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12!\n" +
-	"\fpayload_json\x18\x05 \x01(\tR\vpayloadJson\"l\n" +
+	"\fpayload_json\x18\x05 \x01(\tR\vpayloadJson\x12\x19\n" +
+	"\bfor_user\x18\x06 \x01(\tR\aforUser\x12\x14\n" +
+	"\x05cause\x18\a \x01(\tR\x05cause\"l\n" +
 	"\x15ListItemEventsRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\rR\bpageSize\x12\x1d\n" +

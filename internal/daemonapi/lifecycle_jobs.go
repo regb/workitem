@@ -26,7 +26,7 @@ func (s *Server) ShelveItem(ctx context.Context, req *connect.Request[v1.ShelveI
 	if runtime.Online && s.App.AgentBusy(ctx, value.Id) {
 		return nil, precondition("agent is busy")
 	}
-	job := s.startJob("shelve_item", value.Id, value.Repository.Id, func(ctx context.Context, j *jobRun) error {
+	job := s.startJob(ctx, "shelve_item", value.Id, value.Repository.Id, func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(value.Id)
 		defer unlock()
 		j.phase("shelving item")
@@ -60,7 +60,7 @@ func (s *Server) CloseItem(ctx context.Context, req *connect.Request[v1.CloseIte
 	if !req.Msg.Force && runtime.Online && s.App.AgentBusy(ctx, value.Id) {
 		return nil, precondition("agent is busy")
 	}
-	job := s.startJobKey("close_item", "close_item:"+req.Msg.Resolution.String(), value.Id, value.Repository.Id, func(ctx context.Context, j *jobRun) error {
+	job := s.startJobKey(ctx, "close_item", "close_item:"+req.Msg.Resolution.String(), value.Id, value.Repository.Id, func(ctx context.Context, j *jobRun) error {
 		unlock := s.lock(value.Id)
 		defer unlock()
 		j.phase("closing item")

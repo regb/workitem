@@ -478,7 +478,7 @@ func (a *App) captureMergeInput(ctx context.Context, opts MergeOptions) (mergeIn
 }
 
 func (a *App) appendMergeEvent(ctx context.Context, itemID, eventType string, data map[string]any, res *MergeResult) {
-	if err := a.Store.AppendEvent(ctx, itemID, model.NewEvent(a.now(), eventType, "user", data)); err != nil {
+	if err := a.Store.AppendEvent(ctx, itemID, model.NewEventFrom(ctx, a.now(), eventType, data)); err != nil {
 		res.Warnings = append(res.Warnings, "could not append "+eventType+" event: "+err.Error())
 	}
 }

@@ -171,6 +171,10 @@ func ReadEditDescription(native interface{ ItemDir(string) string }, itemID stri
 
 // committedEdit detects replay before filesystem preconditions or staging.
 func (d *Database) committedEdit(command ManifestCommand) (bool, error) {
+	// The stored command's origin was completed when it ran; compare alike.
+	if origin, err := commandOrigin(command.Actor, command.For, command.Cause); err == nil {
+		command.Actor, command.For, command.Cause = origin.Actor, origin.For, origin.Cause
+	}
 	found := false
 	err := d.db.View(func(tx *bolt.Tx) error {
 		encoded := tx.Bucket(bucketDomainCommands).Get([]byte(command.ID))

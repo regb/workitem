@@ -43,7 +43,7 @@ func (s *Server) startItem(ctx context.Context, itemID string, options *v1.Start
 			key = id()
 		}
 	}
-	job := s.startJobKey("start_item", "start_item:"+key, itemID, "", func(ctx context.Context, j *jobRun) error {
+	job := s.startJobKey(ctx, "start_item", "start_item:"+key, itemID, "", func(ctx context.Context, j *jobRun) error {
 		ctx = context.WithValue(ctx, identityKey{}, who)
 		unlock := s.lock(itemID)
 		defer unlock()

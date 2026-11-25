@@ -102,16 +102,23 @@ func (d *Database) ExecuteStoreCommand(command StoreCommand, payload json.RawMes
 			return err
 		}
 		eventTimestamp := command.CreatedAt.UTC()
+		origin := model.Origin{Actor: model.SystemActor}
 		if command.Operation == StoreEventAppend {
 			var appended model.Event
-			if json.Unmarshal(payload, &appended) == nil && !appended.Time.IsZero() {
-				eventTimestamp = appended.Time.UTC()
+			if json.Unmarshal(payload, &appended) == nil {
+				if !appended.Time.IsZero() {
+					eventTimestamp = appended.Time.UTC()
+				}
+				// An event names who did what it records.
+				if recorded, err := commandOrigin(appended.Actor, appended.For, appended.Cause); err == nil && appended.Actor != "" {
+					origin = recorded
+				}
 			}
 		}
 		sequence := decodeUint64(tx.Bucket(bucketMeta).Get(keyGlobalSequence)) + 1
 		revision++
 		eventID := domainEventID(command.ID, 0)
-		event := DomainEvent{Sequence: sequence, ID: eventID, ItemID: command.ItemID, ItemRevision: revision, Type: eventType, Timestamp: eventTimestamp, Actor: "wi", CausationID: command.ID, Payload: compactPayload}
+		event := DomainEvent{Sequence: sequence, ID: eventID, ItemID: command.ItemID, ItemRevision: revision, Type: eventType, Timestamp: eventTimestamp, Actor: origin.Actor, For: origin.For, Cause: origin.Cause, CausationID: command.ID, Payload: compactPayload}
 		encodedEvent, err := json.Marshal(event)
 		if err != nil {
 			return err

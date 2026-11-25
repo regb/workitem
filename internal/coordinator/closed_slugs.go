@@ -54,7 +54,7 @@ func (d *Database) RecoverClosedSlugs(now time.Time) (int, error) {
 			}
 			current.ClosedSlug = slug
 			payload, _ := json.Marshal(map[string]any{"closed_slug": slug})
-			_, _, err = commitManifestEvents(tx, current, "closed-slug-"+manifest.ID, "wi", now.UTC(), []commandEvent{{Type: "work_item.closed_slug_recorded", Payload: payload}})
+			_, _, err = commitManifestEvents(tx, current, "closed-slug-"+manifest.ID, model.Origin{Actor: model.SystemActor}, now.UTC(), []commandEvent{{Type: "work_item.closed_slug_recorded", Payload: payload}})
 			return err
 		})
 		if err != nil {

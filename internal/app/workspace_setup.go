@@ -188,7 +188,7 @@ func (a *App) setupClaimNow(ctx context.Context, m model.Manifest, rerun bool) (
 		return result, err
 	}
 	event := map[string]any{"claim_id": claim.ID, "claim_generation": claim.Generation, "status": run.Status, "duration_ms": finished.Sub(now).Milliseconds()}
-	if err := a.Store.AppendEvent(ctx, m.ID, model.NewEvent(finished, "workspace.setup_finished", "user", event)); err != nil {
+	if err := a.Store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, finished, "workspace.setup_finished", event)); err != nil {
 		result.Warnings = append(result.Warnings, "could not record workspace.setup_finished: "+err.Error())
 	}
 	if setupErr != nil {

@@ -747,11 +747,10 @@ var helpDocs = map[string]helpDoc{
 	},
 	"agent control": {
 		Summary:     "Submit a low-level command to the owning agent runtime",
-		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--actor <name>] [--image <path>] [--stdin | --file <path> | <message...>]", "wi agent control <abort|shutdown> [--item <selector>] [--actor <name>]"},
+		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--image <path>] [--stdin | --file <path> | <message...>]", "wi agent control <abort|shutdown> [--item <selector>]"},
 		Description: []string{"Submits directly to runtime control without consulting derived busy/idle status. Send defaults to the driver's steering delivery; --follow-up waits until the current run settles."},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
-			{"--actor <name>", "Record the control source/actor."},
 			{"--stdin", "Read the message from standard input."},
 			{"--file <path>", "Read the message from a file."},
 			{"--image <path>", "Attach an image; repeatable, up to four files and 8 MiB total. Text is optional with images."},
@@ -760,20 +759,20 @@ var helpDocs = map[string]helpDoc{
 	},
 	"agent control send": {
 		Summary:     "Send input with explicit delivery semantics",
-		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--actor <name>] [--image <path>] [--stdin | --file <path> | <message...>]"},
+		Usage:       []string{"wi agent control send [--follow-up] [--item <selector>] [--image <path>] [--stdin | --file <path> | <message...>]"},
 		Description: []string{"Defaults to the driver's steering delivery; while idle, start a turn. --follow-up delivers only after the current run fully settles. Image attachments require an image-capable runtime."},
-		Options:     []helpOption{{"--follow-up", "Wait until the current run fully settles."}, {"--item <selector>", "Select an item explicitly."}, {"--actor <name>", "Record the control source/actor."}, {"--stdin", "Read the message from standard input."}, {"--file <path>", "Read the message from a file."}, {"--image <path>", "Attach an image; repeatable, up to four files and 8 MiB total. Text is optional with images."}},
+		Options:     []helpOption{{"--follow-up", "Wait until the current run fully settles."}, {"--item <selector>", "Select an item explicitly."}, {"--stdin", "Read the message from standard input."}, {"--file <path>", "Read the message from a file."}, {"--image <path>", "Attach an image; repeatable, up to four files and 8 MiB total. Text is optional with images."}},
 	},
 	"agent control abort": {
 		Summary: "Abort current agent work",
-		Usage:   []string{"wi agent control abort [--item <selector>] [--actor <name>]"},
-		Options: []helpOption{{"--item <selector>", "Select an item explicitly."}, {"--actor <name>", "Record the control source/actor."}},
+		Usage:   []string{"wi agent control abort [--item <selector>]"},
+		Options: []helpOption{{"--item <selector>", "Select an item explicitly."}},
 	},
 	"agent control shutdown": {
 		Summary:     "Request low-level runtime shutdown",
-		Usage:       []string{"wi agent control shutdown [--item <selector>] [--actor <name>]"},
+		Usage:       []string{"wi agent control shutdown [--item <selector>]"},
 		Description: []string{"Prefer `wi agent runtime stop`, which performs busy-state safety checks before using this primitive."},
-		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}, {"--actor <name>", "Record the control source/actor."}},
+		Options:     []helpOption{{"--item <selector>", "Select an item explicitly."}},
 	},
 	"agent runtime": {
 		Summary:     "Inspect or ensure the primary agent runtime",

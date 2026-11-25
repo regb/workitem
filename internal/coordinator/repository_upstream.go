@@ -93,7 +93,7 @@ func (d *Database) recordRepositoryUpstream(command SetRepositoryUpstreamCommand
 		if result.Changed {
 			payload, _ := json.Marshal(map[string]any{"repository_id": repo.ID, "name": repo.Name, "upstream": observed})
 			eventType := "repository.upstream_changed"
-			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: eventType, Timestamp: command.CreatedAt.UTC(), Actor: "user", CausationID: command.ID, Payload: payload})
+			sequence, err := appendDomainEventTx(tx, DomainEvent{ID: domainEventID(command.ID, 0), Type: eventType, Timestamp: command.CreatedAt.UTC(), Actor: model.OperatorUser, CausationID: command.ID, Payload: payload})
 			if err != nil {
 				return err
 			}

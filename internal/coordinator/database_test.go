@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"encoding/json"
+	"github.com/regb/workitem/internal/model"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,7 +19,7 @@ func TestDatabaseCommitIsAtomicAndIdempotent(t *testing.T) {
 	defer db.Close()
 	revision := uint64(0)
 	command := Command{ID: "command-1", ProtocolVersion: 1, Type: "item.created", ItemID: "item-1", ExpectedRevision: &revision, ReceivedAt: time.Now()}
-	event := PendingEvent{ID: "event-1", ItemID: "item-1", Type: "item.created", Timestamp: time.Now(), Actor: "user", Payload: json.RawMessage(`{"title":"Test"}`)}
+	event := PendingEvent{ID: "event-1", ItemID: "item-1", Type: "item.created", Timestamp: time.Now(), Actor: model.OperatorUser, Payload: json.RawMessage(`{"title":"Test"}`)}
 	projection := map[string]any{"id": "item-1", "state": "backlog"}
 	encoded, _ := json.Marshal(projection)
 	first, err := db.Commit(command, []PendingEvent{event}, []ProjectionUpdate{{Projection: "items", Key: "item-1", Value: encoded}})

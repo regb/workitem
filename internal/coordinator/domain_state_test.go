@@ -36,7 +36,7 @@ func TestStateSetCommandEnforcesCapacityAndAllocatesRestoreSlug(t *testing.T) {
 		t.Fatal(err)
 	}
 	canonical, _ := db.CanonicalManifest(candidate.ID)
-	working := ManifestCommand{ID: "state-working", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &canonical.Revision, Actor: "user", TargetState: model.StateActive, EventType: "work_item.started", MaxActive: 1, CreatedAt: now.Add(time.Second)}
+	working := ManifestCommand{ID: "state-working", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &canonical.Revision, Actor: model.OperatorUser, TargetState: model.StateActive, EventType: "work_item.started", MaxActive: 1, CreatedAt: now.Add(time.Second)}
 	if _, err := db.ExecuteManifestCommand(working); err == nil || !strings.Contains(err.Error(), "limit reached") {
 		t.Fatalf("expected capacity error, got %v", err)
 	}
@@ -50,7 +50,7 @@ func TestStateSetCommandEnforcesCapacityAndAllocatesRestoreSlug(t *testing.T) {
 		t.Fatalf("forced result=%+v err=%v", result, err)
 	}
 	archiveRevision := result.Revision
-	archive, err := db.ExecuteManifestCommand(ManifestCommand{ID: "state-archive", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &archiveRevision, Actor: "user", TargetState: model.StateClosed, MaxActive: 1, CreatedAt: now.Add(2 * time.Second)})
+	archive, err := db.ExecuteManifestCommand(ManifestCommand{ID: "state-archive", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &archiveRevision, Actor: model.OperatorUser, TargetState: model.StateClosed, MaxActive: 1, CreatedAt: now.Add(2 * time.Second)})
 	if err != nil || archive.Manifest.State != model.StateClosed || archive.Manifest.Slug != "" {
 		t.Fatalf("archive=%+v err=%v", archive, err)
 	}
@@ -58,7 +58,7 @@ func TestStateSetCommandEnforcesCapacityAndAllocatesRestoreSlug(t *testing.T) {
 	// unique canonical alias in the same transaction.
 	activeCanonical, _ := db.CanonicalManifest(activeID)
 	renameRevision := activeCanonical.Revision
-	if _, err := db.ExecuteManifestCommand(ManifestCommand{ID: "active-archive", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: activeID, ExpectedRevision: &renameRevision, Actor: "user", TargetState: model.StateClosed, CreatedAt: now.Add(3 * time.Second)}); err != nil {
+	if _, err := db.ExecuteManifestCommand(ManifestCommand{ID: "active-archive", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: activeID, ExpectedRevision: &renameRevision, Actor: model.OperatorUser, TargetState: model.StateClosed, CreatedAt: now.Add(3 * time.Second)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := MaterializeNativeWrites(context.Background(), db, native); err != nil {
@@ -68,11 +68,11 @@ func TestStateSetCommandEnforcesCapacityAndAllocatesRestoreSlug(t *testing.T) {
 	// so re-seeding from disk cannot clobber the candidate's committed state.
 	holderID := "01KZYHGDCECSFS4BJ2SNTQP49X"
 	holder := model.NewManifest(holderID, "domain", "Holder", nil, false, now, model.Repository{}, model.Checkout{})
-	if _, err := db.ExecuteCreateItemCommand(CreateItemCommand{ID: "holder-create", ProtocolVersion: ProtocolVersion, Manifest: holder, DescriptionDigest: DescriptionDigest(""), Actor: "user", CreatedAt: now}); err != nil {
+	if _, err := db.ExecuteCreateItemCommand(CreateItemCommand{ID: "holder-create", ProtocolVersion: ProtocolVersion, Manifest: holder, DescriptionDigest: DescriptionDigest(""), Actor: model.OperatorUser, CreatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
 	restoreRevision := archive.Revision
-	restored, err := db.ExecuteManifestCommand(ManifestCommand{ID: "state-restore", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &restoreRevision, Actor: "user", TargetState: model.StateBacklog, CreatedAt: now.Add(4 * time.Second)})
+	restored, err := db.ExecuteManifestCommand(ManifestCommand{ID: "state-restore", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: candidate.ID, ExpectedRevision: &restoreRevision, Actor: model.OperatorUser, TargetState: model.StateBacklog, CreatedAt: now.Add(4 * time.Second)})
 	if err != nil || restored.Manifest.State != model.StateBacklog || restored.Manifest.Slug != "domain-2" {
 		t.Fatalf("restore=%+v err=%v", restored, err)
 	}
@@ -116,7 +116,7 @@ func TestWaitCommandComputesAndStoresResultingQueueAtomically(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	command := ManifestCommand{ID: "wait-and-queue", ProtocolVersion: ProtocolVersion, Type: CommandBlockerAdd, ItemID: ids[0], ExpectedRevision: &canonical.Revision, Actor: "user", Blockers: []model.Blocker{{Kind: model.BlockerExternal, Event: "review"}}, CreatedAt: now.Add(5 * time.Minute)}
+	command := ManifestCommand{ID: "wait-and-queue", ProtocolVersion: ProtocolVersion, Type: CommandBlockerAdd, ItemID: ids[0], ExpectedRevision: &canonical.Revision, Actor: model.OperatorUser, Blockers: []model.Blocker{{Kind: model.BlockerExternal, Event: "review"}}, CreatedAt: now.Add(5 * time.Minute)}
 	result, err := db.ExecuteManifestCommandWithQueue(command, ActionabilityQueueOptions{})
 	if err != nil || result.Command.Manifest.State != model.StateActive || len(result.Command.Manifest.Blockers) != 1 || result.Queue.Strategy != "recent-request" || len(result.Queue.Candidates) != 2 || result.Queue.Candidates[0].Manifest.ID != ids[2] || result.Queue.Candidates[1].Manifest.ID != ids[1] || !result.Selection.Found || result.Selection.WorkItemID != ids[2] || result.Selection.CurrentInQueue {
 		t.Fatalf("result=%+v err=%v", result, err)

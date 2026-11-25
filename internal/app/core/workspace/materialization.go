@@ -119,7 +119,7 @@ func (s *Service) CheckoutRemove(ctx context.Context, opts contract.ResolveOptio
 	if err := s.store.SaveManifest(ctx, m); err != nil {
 		return CheckoutRemoveResult{}, err
 	}
-	if err := s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "checkout.released", "user", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "path": previousPath, "last_head": released.LastHead, "slot": released.Slot})); err != nil {
+	if err := s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "checkout.released", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "path": previousPath, "last_head": released.LastHead, "slot": released.Slot})); err != nil {
 		warnings = append(warnings, "could not append checkout.released event: "+err.Error())
 	}
 	return CheckoutRemoveResult{WorkItemID: m.ID, Checkout: m.Checkout, LastHead: released.LastHead, Dirty: released.Dirty, Manifest: m, Warnings: warnings}, nil
@@ -258,7 +258,7 @@ func (s *Service) Release(ctx context.Context, opts contract.ResolveOptions) (Re
 		if err := s.store.SaveManifest(ctx, closed); err != nil {
 			return ReleaseResult{}, err
 		}
-		_ = s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "workspace.released", "user", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "state": m.State}))
+		_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "workspace.released", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "state": m.State}))
 	}
 	return ReleaseResult{WorkItemID: m.ID, Changed: hadCheckout, Manifest: closed, Warnings: released.Warnings}, nil
 }

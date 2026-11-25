@@ -121,7 +121,7 @@ func TestControlSendFlagsAndAbortActor(t *testing.T) {
 		stdin, text   string
 		follow, image bool
 	}{
-		{name: "text", args: []string{"--actor", "automation", "hello", "world"}, text: "hello world"},
+		{name: "text", args: []string{"hello", "world"}, text: "hello world"},
 		{name: "literal", args: []string{"--", "--not-a-flag"}, text: "--not-a-flag"},
 		{name: "file", args: []string{"--file", file}, text: "file message"},
 		{name: "stdin", args: []string{"--stdin"}, stdin: "stdin message\n", text: "stdin message"},
@@ -138,13 +138,15 @@ func TestControlSendFlagsAndAbortActor(t *testing.T) {
 			if test.image && (len(sent.Images) != 1 || !bytes.Equal(sent.Images[0].Data, imageData)) {
 				t.Fatal(sent)
 			}
-			if test.name == "text" && actor != "automation" {
+			// The daemon records who sent it from the credential; the
+			// client names no actor.
+			if actor != "" {
 				t.Fatal(actor)
 			}
 		})
 	}
-	f.run(t, "agent", "control", "abort", "--actor", "automation", "--json")
-	if !aborted || actor != "automation" {
+	f.run(t, "agent", "control", "abort", "--json")
+	if !aborted || actor != "" {
 		t.Fatalf("abort: %t %q", aborted, actor)
 	}
 	for _, args := range [][]string{{"send", "--stdin", "text"}, {"abort", "text"}, {"abort", "--image", image}, {"send", "--file", file, "text"}, {"monitor", "--limit", "-1"}} {

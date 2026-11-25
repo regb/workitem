@@ -161,7 +161,7 @@ func (d *Database) ChangeAgentProfile(command ChangeAgentProfileCommand) (model.
 		}
 		result = profiles
 		payload, _ := json.Marshal(map[string]any{"profile": name, "change": action, "revision": profiles.Revision})
-		_, err = appendDomainEventTx(tx, DomainEvent{ID: fmt.Sprintf("agent-profiles-%d", profiles.Revision), Type: "agent_profile.changed", Timestamp: time.Now().UTC(), Actor: "user", Payload: payload})
+		_, err = appendDomainEventTx(tx, DomainEvent{ID: fmt.Sprintf("agent-profiles-%d", profiles.Revision), Type: "agent_profile.changed", Timestamp: time.Now().UTC(), Actor: model.OperatorUser, Payload: payload})
 		return err
 	})
 	return result, err

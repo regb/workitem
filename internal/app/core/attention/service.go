@@ -57,7 +57,7 @@ func (s *Service) recordMarker(ctx context.Context, opts contract.ResolveOptions
 		return model.Manifest{}, time.Time{}, err
 	}
 	now := s.now()
-	if err := s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, eventType, "user", map[string]any{"at": now})); err != nil {
+	if err := s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, eventType, map[string]any{"at": now})); err != nil {
 		return model.Manifest{}, time.Time{}, err
 	}
 	return m, now, nil
@@ -72,7 +72,7 @@ func (s *Service) RecordDefer(ctx context.Context, opts contract.ResolveOptions)
 		return DeferResult{}, &StateError{WorkItemID: m.ID, State: m.State}
 	}
 	now := s.now()
-	if err := s.store.AppendEvent(ctx, m.ID, model.NewEvent(now, "attention.deferred", "user", map[string]any{"deferred_at": now})); err != nil {
+	if err := s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "attention.deferred", map[string]any{"deferred_at": now})); err != nil {
 		return DeferResult{}, err
 	}
 	return DeferResult{

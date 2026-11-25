@@ -29,7 +29,7 @@ func TestTitleCommandOnlyChangesMetadataAndIsIdempotent(t *testing.T) {
 		t.Fatal(err)
 	}
 	before, _ := db.CanonicalManifest(m.ID)
-	cmd := ManifestCommand{ID: "generated-title", ProtocolVersion: ProtocolVersion, Type: CommandTitleSet, ItemID: m.ID, ExpectedRevision: &before.Revision, Title: "Fix authentication tests", Actor: "user", CreatedAt: time.Now().UTC()}
+	cmd := ManifestCommand{ID: "generated-title", ProtocolVersion: ProtocolVersion, Type: CommandTitleSet, ItemID: m.ID, ExpectedRevision: &before.Revision, Title: "Fix authentication tests", Actor: model.OperatorUser, CreatedAt: time.Now().UTC()}
 	result, err := db.ExecuteManifestCommand(cmd)
 	if err != nil || !result.Changed || result.Manifest.Title != cmd.Title || len(result.Events) != 1 {
 		t.Fatalf("result=%+v err=%v", result, err)

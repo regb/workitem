@@ -25,7 +25,7 @@ func TestCreateItemCommandKeepsDescriptionOutOfDatabaseAndMaterializesNativeItem
 	description := "private-description-sentinel-7b9f"
 	now := time.Now().UTC()
 	manifest := model.NewManifest(importTestID, "created", "Created", []string{"backend"}, false, now, model.Repository{RootAtCreation: "/repo", GitCommonDir: "/repo/.git", CreatedFromCommit: strings.Repeat("a", 40)}, model.Checkout{Specification: model.CheckoutSpecification{Kind: model.WorkspaceKindManagedSlot, Branch: model.ItemBranchName("created", importTestID)}})
-	command := CreateItemCommand{ID: "create-command", ProtocolVersion: ProtocolVersion, Manifest: manifest, DescriptionDigest: DescriptionDigest(description), Actor: "user", CreatedAt: now}
+	command := CreateItemCommand{ID: "create-command", ProtocolVersion: ProtocolVersion, Manifest: manifest, DescriptionDigest: DescriptionDigest(description), Actor: model.OperatorUser, CreatedAt: now}
 	if err := StageDescription(db, command.ID, description); err != nil {
 		t.Fatal(err)
 	}
@@ -110,7 +110,7 @@ func TestCreateItemCommandRejectsCanonicalClaimCollision(t *testing.T) {
 	}
 	newID := "01KZYHGDCECSFS4BJ2SNTQP49W"
 	candidate := model.NewManifest(newID, "collision", "Candidate", nil, false, now, model.Repository{}, model.Checkout{})
-	_, err = db.ExecuteCreateItemCommand(CreateItemCommand{ID: "collision-command", ProtocolVersion: ProtocolVersion, Manifest: candidate, DescriptionDigest: DescriptionDigest(""), Actor: "user", CreatedAt: now})
+	_, err = db.ExecuteCreateItemCommand(CreateItemCommand{ID: "collision-command", ProtocolVersion: ProtocolVersion, Manifest: candidate, DescriptionDigest: DescriptionDigest(""), Actor: model.OperatorUser, CreatedAt: now})
 	if err == nil || !strings.Contains(err.Error(), "slug") {
 		t.Fatalf("expected slug collision, got %v", err)
 	}

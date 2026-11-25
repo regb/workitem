@@ -32,7 +32,7 @@ func TestManifestCommandCommitsAtomicallyAndIdempotently(t *testing.T) {
 	if err != nil || canonical.Revision != 1 {
 		t.Fatalf("canonical=%+v err=%v", canonical, err)
 	}
-	command := ManifestCommand{ID: "command-labels", ProtocolVersion: ProtocolVersion, Type: CommandLabelsAdd, ItemID: itemID, ExpectedRevision: &canonical.Revision, Actor: "user", Labels: []string{"backend", "urgent"}, CreatedAt: now.Add(time.Second)}
+	command := ManifestCommand{ID: "command-labels", ProtocolVersion: ProtocolVersion, Type: CommandLabelsAdd, ItemID: itemID, ExpectedRevision: &canonical.Revision, Actor: model.OperatorUser, Labels: []string{"backend", "urgent"}, CreatedAt: now.Add(time.Second)}
 	result, err := db.ExecuteManifestCommand(command)
 	if err != nil || !result.Changed || result.Revision != 3 || len(result.Events) != 2 || !model.HasLabel(result.Manifest.Labels, "backend") {
 		t.Fatalf("result=%+v err=%v", result, err)
