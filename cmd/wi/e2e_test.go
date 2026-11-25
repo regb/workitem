@@ -46,6 +46,15 @@ func newBinaryFixture(t *testing.T) *binaryFixture {
 		cmd.Env = f.env
 		cmd.Dir = root
 		_ = cmd.Run()
+		// The fixture's own tmux server, which TUI agents started, outlives
+		// the daemon; left running, each run keeps its terminals until the
+		// machine has none. Its socket is the fixture's alone.
+		if f.env != nil {
+			socket := filepath.Join(root, "tmux", fmt.Sprintf("tmux-%d", os.Getuid()), "default")
+			tmux := exec.Command("tmux", "-S", socket, "kill-server")
+			tmux.Env = f.env
+			_ = tmux.Run()
+		}
 		time.Sleep(150 * time.Millisecond)
 		_ = os.RemoveAll(root)
 	})
