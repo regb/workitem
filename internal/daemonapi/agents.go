@@ -335,7 +335,7 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 		if envelope, err = s.messageEnvelope(ctx, r.ItemId, receipt.Sender); err != nil {
 			return err
 		}
-		envelope.Marker, envelope.Hops = receipt.Marker, receipt.Hops
+		envelope.Marker = receipt.Marker
 	}
 	text := r.Text
 	if envelope.Marker != "" {
@@ -345,7 +345,7 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 	if r.ClientMessageId != "" {
 		commandID = messageCommandID(r.ItemId, r.ClientMessageId)
 		if !pending {
-			receipt = coordinator.APIMessageReceipt{ItemID: r.ItemId, MessageID: r.ClientMessageId, RuntimeID: runtime.Runtime.ID, Generation: current.Generation, CreatedAt: time.Now().UTC(), Sender: sender, Hops: envelope.Hops, Marker: envelope.Marker}
+			receipt = coordinator.APIMessageReceipt{ItemID: r.ItemId, MessageID: r.ClientMessageId, RuntimeID: runtime.Runtime.ID, Generation: current.Generation, CreatedAt: time.Now().UTC(), Sender: sender, Marker: envelope.Marker}
 		}
 		if receipt.RuntimeID != runtime.Runtime.ID {
 			return aborted("message delivery belongs to another runtime")
@@ -387,9 +387,7 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 
 // messageEnvelope says how a message from sender reaches itemID's agent: as
 // typed when a person sent it, or the item's own agent; wrapped when another
-// item's agent did, naming it and how it relates to the item. A sender
-// whose messages have gone back and forth between agents too long without a
-// person is refused, and the item is marked unread for its user.
+// item's agent did, naming it and how it relates to the item.
 func (s *Server) messageEnvelope(ctx context.Context, itemID, sender string) (model.Envelope, error) {
 	from := model.PrincipalItem(sender)
 	if from == "" || from == itemID {
@@ -410,33 +408,7 @@ func (s *Server) messageEnvelope(ctx context.Context, itemID, sender string) (mo
 	case source.Manifest.Owner == model.ItemPrincipal(itemID):
 		relation = model.RelationDelegation
 	}
-	hops := s.turnHops(from) + 1
-	if hops > model.MaxAgentHops {
-		// The user hears of it on the item of theirs the chain belongs to.
-		visible := target.Manifest
-		if chain := model.OwnerChain(target.Manifest, s.manifestLookup(ctx)); len(chain) > 0 {
-			visible = chain[len(chain)-1]
-		}
-		_, _ = s.App.MarkUnread(ctx, resolve(visible.ID))
-		return model.Envelope{}, precondition(fmt.Sprintf("agents have exchanged %d messages without a person; a person's message to %s resets this", hops-1, from))
-	}
-	if sent, err := s.Core.Database().APIMessagesFrom(itemID, sender, time.Now().Add(-time.Hour)); err == nil && sent >= model.MaxAgentMessagesPerHour {
-		return model.Envelope{}, connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("%s sent %s %d messages in the last hour; wait, or ask the user", sender, itemID, sent))
-	}
-	return model.Envelope{Marker: model.NewEnvelopeMarker(), From: sender, Title: source.Manifest.Title, Relation: relation, Hops: hops}, nil
-}
-
-// turnHops is how many agent messages led to the item's current turn: those
-// of the last message sent to it, unless a person prompted it since.
-func (s *Server) turnHops(itemID string) int {
-	receipt, found, err := s.Core.Database().LatestAPIMessage(itemID)
-	if err != nil || !found {
-		return 0
-	}
-	if activity, err := s.Core.Database().AttentionActivity(itemID); err == nil && activity.Activity.LastRequestedAt != nil && activity.Activity.LastRequestedAt.After(receipt.CreatedAt.Add(10*time.Second)) {
-		return 0
-	}
-	return receipt.Hops
+	return model.Envelope{Marker: model.NewEnvelopeMarker(), From: sender, Title: source.Manifest.Title, Relation: relation}, nil
 }
 
 func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {

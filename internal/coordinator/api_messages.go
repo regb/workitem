@@ -27,9 +27,6 @@ type APIMessageReceipt struct {
 	// Sender is who sent it, as the daemon verified: a user, or another
 	// item's agent.
 	Sender string `json:"sender,omitempty"`
-	// Hops counts the agent messages that led to it since a person's; a
-	// person's message has none.
-	Hops int `json:"hops,omitempty"`
 	// Marker is the envelope's, when the message reached the agent wrapped.
 	Marker string `json:"marker,omitempty"`
 }
@@ -63,7 +60,7 @@ func (d *Database) RecordAPIMessage(value APIMessageReceipt) error {
 			}
 			value.Accepted = value.Accepted || old.Accepted
 			if value.Marker == "" {
-				value.Sender, value.Hops, value.Marker = old.Sender, old.Hops, old.Marker
+				value.Sender, value.Marker = old.Sender, old.Marker
 			}
 		}
 		data, err := json.Marshal(value)
@@ -81,43 +78,4 @@ func (d *Database) ForgetAPIMessage(itemID, messageID string) error {
 		}
 		return bucket.Delete([]byte(apiMessageKey(itemID, messageID)))
 	})
-}
-
-// LatestAPIMessage is the last message sent to an item through the API.
-func (d *Database) LatestAPIMessage(itemID string) (APIMessageReceipt, bool, error) {
-	raw, err := d.ListProjection(apiMessagesProjection)
-	if err != nil {
-		return APIMessageReceipt{}, false, err
-	}
-	var latest APIMessageReceipt
-	found := false
-	for _, data := range raw {
-		var value APIMessageReceipt
-		if err := json.Unmarshal(data, &value); err != nil {
-			return APIMessageReceipt{}, false, err
-		}
-		if value.ItemID == itemID && (!found || value.CreatedAt.After(latest.CreatedAt)) {
-			latest, found = value, true
-		}
-	}
-	return latest, found, nil
-}
-
-// APIMessagesFrom counts the messages sender sent an item since a time.
-func (d *Database) APIMessagesFrom(itemID, sender string, since time.Time) (int, error) {
-	raw, err := d.ListProjection(apiMessagesProjection)
-	if err != nil {
-		return 0, err
-	}
-	count := 0
-	for _, data := range raw {
-		var value APIMessageReceipt
-		if err := json.Unmarshal(data, &value); err != nil {
-			return 0, err
-		}
-		if value.ItemID == itemID && value.Sender == sender && !value.CreatedAt.Before(since) {
-			count++
-		}
-	}
-	return count, nil
 }

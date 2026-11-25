@@ -38,7 +38,7 @@ func TestAgentsAskEachOtherThroughWiSend(t *testing.T) {
 	}
 	// The test agent echoes what it received: the envelope wi wrote.
 	answer := string(out)
-	if !strings.Contains(answer, "Echo: <wi-message-") || !strings.Contains(answer, `from="item:`+asker.Item.Id+`"`) || !strings.Contains(answer, `title="Asker"`) || !strings.Contains(answer, `hops="1"`) || !strings.Contains(answer, "Do the checks pass?") {
+	if !strings.Contains(answer, "Echo: <wi-message-") || !strings.Contains(answer, `from="item:`+asker.Item.Id+`"`) || !strings.Contains(answer, `title="Asker"`) || !strings.Contains(answer, "Do the checks pass?") {
 		t.Fatalf("answer: %s", answer)
 	}
 	history, err := f.clients.Agents.GetHistory(ctx, connect.NewRequest(&v1.GetHistoryRequest{ItemId: answerer.Item.Id}))

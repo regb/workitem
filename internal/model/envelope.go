@@ -8,19 +8,11 @@ import (
 )
 
 // A message from another item's agent reaches an agent wrapped in an
-// envelope wi writes: who sent it, how that sender relates to the receiving
-// item, and how many agent messages led to it. The tag carries a random
+// envelope wi writes: who sent it, and how that sender relates to the
+// receiving item. The tag carries a random
 // marker, so text inside cannot close it or forge another, and any tag-like
 // text in the body is neutralized. The receiving agent is told, in its
 // system prompt, to trust the envelope and weigh what is inside.
-
-// MaxAgentHops bounds how many messages agents send one another without a
-// person's message in between; a person's message resets the count.
-const MaxAgentHops = 8
-
-// MaxAgentMessagesPerHour bounds how many messages one item's agent sends
-// another item in an hour, however they are spread across turns.
-const MaxAgentMessagesPerHour = 30
 
 // Relations of a sending item to the receiving one.
 const (
@@ -41,7 +33,6 @@ type Envelope struct {
 	Marker string
 	// From is the sending principal; Title the sending item's title.
 	From, Title, Relation string
-	Hops                  int
 }
 
 func (e Envelope) tag() string { return "wi-message-" + e.Marker }
@@ -50,7 +41,7 @@ func (e Envelope) tag() string { return "wi-message-" + e.Marker }
 func (e Envelope) Wrap(text string) string {
 	body := strings.NewReplacer("<wi-message", "<wi_message", "</wi-message", "</wi_message").Replace(text)
 	title := strings.NewReplacer(`"`, "'", "\n", " ", "\r", " ").Replace(e.Title)
-	return fmt.Sprintf("<%s from=%q title=%q relation=%q hops=\"%d\">\n%s\n</%s>", e.tag(), e.From, title, e.Relation, e.Hops, body, e.tag())
+	return fmt.Sprintf("<%s from=%q title=%q relation=%q>\n%s\n</%s>", e.tag(), e.From, title, e.Relation, body, e.tag())
 }
 
 // Unwrap returns the text a message wrapped by this envelope carried, or the
