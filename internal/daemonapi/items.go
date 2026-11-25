@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -237,7 +238,7 @@ func (s *Server) GetItem(ctx context.Context, req *connect.Request[v1.GetItemReq
 	return response(out, err)
 }
 func (s *Server) summary(ctx context.Context, m model.Manifest) *v1.ItemSummary {
-	return &v1.ItemSummary{Id: m.ID, Slug: m.Slug, Title: m.Title, State: state(m.State), Resolution: resolution(m.Resolution), Labels: m.Labels, DeepWork: m.DeepWork, RepositoryId: m.Repository.ID, Blockers: blockers(m.Blockers), Observation: s.observation(ctx, m), Priority: m.Priority, Pinned: m.Pinned, SnoozedUntil: optionalStamp(m.SnoozedUntil), UpdatedAt: stamp(m.UpdatedAt)}
+	return &v1.ItemSummary{Id: m.ID, Slug: m.Slug, Title: m.Title, State: state(m.State), Resolution: resolution(m.Resolution), Labels: m.Labels, DeepWork: m.DeepWork, RepositoryId: m.Repository.ID, Blockers: blockers(m.Blockers), Observation: s.observation(ctx, m), Priority: m.Priority, Pinned: m.Pinned, SnoozedUntil: optionalStamp(m.SnoozedUntil), UpdatedAt: stamp(m.UpdatedAt), Owner: m.OwnerPrincipal()}
 }
 func allowedState(states []v1.ItemState, m model.Manifest, defaults bool) bool {
 	if len(states) == 0 {
@@ -298,6 +299,10 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 	out := &v1.ListItemsResponse{Items: []*v1.ItemSummary{}}
 	for _, m := range manifests {
 		if !allowedState(r.States, m, true) || !labelMatch(r.LabelRules, m.Labels) {
+			continue
+		}
+		// Items an item owns are its agent's to follow up, not its user's.
+		if r.Owner != "" && m.OwnerPrincipal() != r.Owner || r.Owner == "" && m.Delegated() {
 			continue
 		}
 		if len(r.RepositoryIds) > 0 {
@@ -502,6 +507,9 @@ func (s *Server) SetItemState(ctx context.Context, req *connect.Request[v1.SetIt
 		if after, readErr := s.canonical(ctx, r.ItemId, 0); readErr == nil && after.Manifest.State == stateName(r.State) {
 			return nil, partial(err, r.ItemId, "changed item state")
 		}
+	}
+	if err == nil && r.State == v1.ItemState_ITEM_STATE_CLOSED {
+		s.returnDelegations(r.ItemId)
 	}
 	return response(&v1.SetItemStateResponse{Item: item(result.Manifest, result.Revision)}, err)
 }
@@ -770,4 +778,20 @@ func listSection(row *v1.ItemSummary) v1.ListSection {
 		return v1.ListSection_LIST_SECTION_IN_PROGRESS
 	}
 	return v1.ListSection_LIST_SECTION_NEEDS_ATTENTION
+}
+
+// TakeOwnership gives an item to the user calling: a person takes work an
+// agent delegated. An item's agent cannot take items; it creates its own.
+func (s *Server) TakeOwnership(ctx context.Context, req *connect.Request[v1.TakeOwnershipRequest]) (*connect.Response[v1.TakeOwnershipResponse], error) {
+	who := caller(ctx).principal
+	if who.item() {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("an item's agent cannot take ownership of items"))
+	}
+	result, err := s.command(ctx, req.Msg.ItemId, coordinator.CommandOwnerSet, req.Msg.ExpectedRevision, func(c *coordinator.ManifestCommand) {
+		c.Owner = who.String()
+	})
+	if err != nil {
+		return nil, rpcError(err)
+	}
+	return response(&v1.TakeOwnershipResponse{Item: item(result.Manifest, result.Revision)}, nil)
 }

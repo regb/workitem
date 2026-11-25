@@ -48,4 +48,6 @@ message GetItemViewResponse {
   // ordered by it, so a client keeps the newest when several arrive.
   google.protobuf.Timestamp read_at = 9;
   repeated string warnings = 10;
+  // proposals are the items this item's agent proposed, newest first.
+  repeated Proposal proposals = 11;
 }

@@ -2,7 +2,7 @@ package daemonapi
 
 import "github.com/regb/workitem/gen/wi/core/v1/corev1connect"
 
-// The web-adapter listener serves wi web, and through it the browser. It may
+// wi web's credential serves the browser. It may
 // call only what is listed here: exposing a call to browsers is a reviewed
 // line, never a side effect of adding it to the API. A test requires every
 // procedure to be in exactly one of webProcedures and webRefused. The
@@ -38,6 +38,10 @@ var webProcedures = map[string]bool{
 	corev1connect.ControlServiceRenewControlProcedure:                true,
 	corev1connect.EventServiceWatchChangesProcedure:                  true,
 	corev1connect.EventServiceWatchProcedure:                         true,
+	corev1connect.ItemServiceTakeOwnershipProcedure:                  true,
+	corev1connect.ItemServiceListProposalsProcedure:                  true,
+	corev1connect.ItemServiceFileProposalProcedure:                   true,
+	corev1connect.ItemServiceDismissProposalProcedure:                true,
 	corev1connect.ItemServiceAddBlockerProcedure:                     true,
 	corev1connect.ItemServiceAddNoteProcedure:                        true,
 	corev1connect.ItemServiceAttachProcedure:                         true,
@@ -109,6 +113,7 @@ var webRefused = map[string]string{
 	corev1connect.AgentServiceStartAgentProcedure:                  "plumbing or operator command the page does not use",
 	corev1connect.AgentServiceStopAgentProcedure:                   "plumbing or operator command the page does not use",
 	corev1connect.ItemServiceDeferItemProcedure:                    "plumbing or operator command the page does not use",
+	corev1connect.ItemServiceProposeItemProcedure:                  "agents propose; the page files and dismisses",
 	corev1connect.ItemServiceDeleteItemProcedure:                   "irreversible",
 	corev1connect.ItemServiceListItemEventsProcedure:               "plumbing or operator command the page does not use",
 	corev1connect.ItemServiceResolveItemProcedure:                  "plumbing or operator command the page does not use",

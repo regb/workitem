@@ -93,7 +93,7 @@ func ActingOrigin(ctx context.Context) Origin {
 	if origin.Actor == "" {
 		origin.Actor = OperatorUser
 	}
-	if origin.For == "" {
+	if origin.For == "" && origin.Actor != SystemActor {
 		if PrincipalItem(origin.Actor) == "" {
 			origin.For = origin.Actor
 		} else {

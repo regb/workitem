@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +78,14 @@ func (d *Database) executeCreateItemCommand(command CreateItemCommand) (CreateIt
 	if err != nil {
 		return CreateItemResult{}, err
 	}
+	// An item is its creator's: an item's agent delegates the work it
+	// creates, unless the creation names another owner (a filed proposal).
+	if normalized.Owner == "" && command.Actor != model.SystemActor {
+		normalized.Owner = command.Actor
+	}
+	if normalized.Owner != "" && !model.ValidPrincipal(normalized.Owner) {
+		return CreateItemResult{}, fmt.Errorf("invalid owner %q", normalized.Owner)
+	}
 	command.Manifest = normalized
 	if command.CreatedAt.IsZero() {
 		command.CreatedAt = normalized.CreatedAt
@@ -119,6 +128,9 @@ func (d *Database) executeCreateItemCommand(command CreateItemCommand) (CreateIt
 			return err
 		}
 		if err := validateCanonicalCreateClaims(normalized, manifests); err != nil {
+			return err
+		}
+		if err := validateDelegation(normalized, manifests); err != nil {
 			return err
 		}
 		payload, _ := json.Marshal(map[string]any{"title": normalized.Title, "slug": normalized.Slug, "workspace_kind": normalized.Checkout.Specification.Kind})
@@ -274,6 +286,38 @@ func CleanupOrphanedStages(database *Database) error {
 func validateCreateDescription(command CreateItemCommand, description string) error {
 	if DescriptionDigest(description) != strings.ToLower(command.DescriptionDigest) {
 		return errors.New("description digest does not match command")
+	}
+	return nil
+}
+
+// MaxOpenDelegations bounds the unfinished items one item's agent may have
+// delegated, so an agent creating items in a loop stops.
+const MaxOpenDelegations = 8
+
+// validateDelegation refuses an item owned by an item that is closed,
+// missing, or already has its share of unfinished delegations.
+func validateDelegation(created model.Manifest, manifests []model.Manifest) error {
+	owner := model.PrincipalItem(created.Owner)
+	if owner == "" {
+		return nil
+	}
+	open, found := 0, false
+	for _, m := range manifests {
+		if m.ID == owner {
+			found = true
+			if m.State == model.StateClosed {
+				return fmt.Errorf("work item %s is closed and cannot own new items", owner)
+			}
+		}
+		if m.Owner == created.Owner && m.State != model.StateClosed {
+			open++
+		}
+	}
+	if !found {
+		return fmt.Errorf("owner work item %s not found", owner)
+	}
+	if open >= MaxOpenDelegations {
+		return apperr.Exhaustedf("item %s already has %d unfinished delegated items; finish or close some first", owner, open)
 	}
 	return nil
 }

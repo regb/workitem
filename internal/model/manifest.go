@@ -60,7 +60,22 @@ type Manifest struct {
 	// FollowUps are messages from cleared blockers, waiting to be sent to the
 	// agent once the item no longer waits.
 	FollowUps []FollowUp `json:"follow_ups,omitempty"`
+	// Owner is who the item is for: a user, or the item whose agent created
+	// it to delegate work. Empty is the operator, as for items created
+	// before owners were recorded.
+	Owner string `json:"owner,omitempty"`
 }
+
+// OwnerPrincipal is the item's owner, the operator when none is recorded.
+func (m Manifest) OwnerPrincipal() string {
+	if m.Owner == "" {
+		return OperatorUser
+	}
+	return m.Owner
+}
+
+// Delegated reports an item another item owns.
+func (m Manifest) Delegated() bool { return PrincipalItem(m.Owner) != "" }
 
 func (m Manifest) TerminalSessionName() string {
 	return TerminalSessionName(m.ID)

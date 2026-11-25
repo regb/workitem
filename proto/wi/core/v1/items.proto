@@ -45,6 +45,10 @@ service ItemService {
   // DeferItem records that the operator put a ready item off, so rankings
   // can move it behind other candidates until something new happens.
   rpc DeferItem(DeferItemRequest) returns (DeferItemResponse);
+  // TakeOwnership makes the caller the item's owner: a person takes an item
+  // an agent delegated, detaching it from that agent's item. Only a user
+  // may take ownership, of an item they own through its owner chain.
+  rpc TakeOwnership(TakeOwnershipRequest) returns (TakeOwnershipResponse);
   // ListItemEvents reads the item's append-only history.
   rpc ListItemEvents(ListItemEventsRequest) returns (ListItemEventsResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
@@ -66,6 +70,19 @@ service ItemService {
   rpc ReadAttachment(ReadAttachmentRequest) returns (stream ReadAttachmentResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ProposeItem asks the item's user to file an item: an agent records work
+  // its conversation found, for the user to own. Nothing is created until a
+  // user files it; it returns at once.
+  rpc ProposeItem(ProposeItemRequest) returns (ProposeItemResponse);
+  // ListProposals reads proposals, newest first.
+  rpc ListProposals(ListProposalsRequest) returns (ListProposalsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // FileProposal creates the proposed item as the user filing it, who owns
+  // it, with any edits the user made. Only a user may file.
+  rpc FileProposal(FileProposalRequest) returns (FileProposalResponse);
+  // DismissProposal declines a proposal. Only a user may dismiss.
+  rpc DismissProposal(DismissProposalRequest) returns (DismissProposalResponse);
 }
 
 // Item is a work item's durable record.
@@ -101,6 +118,10 @@ message Item {
   // follow_ups are messages from cleared blockers that the daemon sends once
   // the item no longer waits.
   repeated FollowUp follow_ups = 22;
+  // owner is who the item is for: a user ("user:operator"), or the item
+  // whose agent delegated it ("item:<id>"). The owning item's agent follows
+  // it up; it is not in its user's work list.
+  string owner = 23;
 }
 
 // Checkout is where the item's work happens: its branch and, while active,
@@ -243,6 +264,8 @@ message ItemSummary {
   // section is where the built-in work list shows the item, set when the
   // list is in attention order. Every client shows the same section.
   ListSection section = 16;
+  // owner is as Item.owner.
+  string owner = 17;
 }
 
 // ListSection is a section of the built-in work list. A waiting item stays
@@ -345,6 +368,10 @@ message ListItemsRequest {
   uint32 page_size = 7;
   // Offset-based, best-effort under concurrent changes; later pages may shift.
   string page_token = 8;
+  // owner lists only the items this principal owns, such as an item's
+  // delegations ("item:<id>"). Without it the list leaves out items owned by
+  // items: their owner follows them up.
+  string owner = 9;
 }
 
 message ListItemsResponse {
@@ -428,6 +455,15 @@ message DeferItemRequest {
 }
 
 message DeferItemResponse {}
+
+message TakeOwnershipRequest {
+  string item_id = 1;
+  uint32 expected_revision = 2;
+}
+
+message TakeOwnershipResponse {
+  Item item = 1;
+}
 
 // ItemEvent is one fact of an item's append-only history.
 message ItemEvent {
@@ -559,4 +595,83 @@ message ReadAttachmentResponse {
   // attachment is set on the first message only.
   Attachment attachment = 1;
   bytes chunk = 2;
+}
+
+// Proposal is an item an agent asked its user to file.
+message Proposal {
+  string id = 1;
+  // item_id is the item whose conversation proposed it.
+  string item_id = 2;
+  // proposer is the principal that proposed it, "item:<id>".
+  string proposer = 3;
+  // repository_id is the proposing item's repository, where it is filed.
+  string repository_id = 4;
+  string title = 5;
+  string description = 6;
+  repeated string labels = 7;
+  ProposalState state = 8;
+  google.protobuf.Timestamp created_at = 9;
+  // filed_item_id is the item filing created.
+  string filed_item_id = 10;
+  // decided_by and decided_at say who filed or dismissed it, and when.
+  string decided_by = 11;
+  google.protobuf.Timestamp decided_at = 12;
+  // reason is why it was dismissed, when given.
+  string reason = 13;
+}
+
+enum ProposalState {
+  PROPOSAL_STATE_UNSPECIFIED = 0;
+  PROPOSAL_STATE_PENDING = 1;
+  PROPOSAL_STATE_FILED = 2;
+  PROPOSAL_STATE_DISMISSED = 3;
+}
+
+message ProposeItemRequest {
+  // item_id is the proposing item; an item's agent may propose only from
+  // its own item.
+  string item_id = 1;
+  string title = 2;
+  string description = 3;
+  repeated string labels = 4;
+  // request_id makes a retried proposal record it once.
+  string request_id = 5;
+}
+
+message ProposeItemResponse {
+  Proposal proposal = 1;
+}
+
+message ListProposalsRequest {
+  // item_id narrows to one item's proposals; empty lists every item's.
+  string item_id = 1;
+  // pending_only leaves out filed and dismissed proposals.
+  bool pending_only = 2;
+}
+
+message ListProposalsResponse {
+  repeated Proposal proposals = 1;
+}
+
+message FileProposalRequest {
+  string proposal_id = 1;
+  // title, description and labels replace the proposed ones when set.
+  string title = 2;
+  string description = 3;
+  bool replace_labels = 4;
+  repeated string labels = 5;
+}
+
+message FileProposalResponse {
+  Proposal proposal = 1;
+  Item item = 2;
+}
+
+message DismissProposalRequest {
+  string proposal_id = 1;
+  string reason = 2;
+}
+
+message DismissProposalResponse {
+  Proposal proposal = 1;
 }

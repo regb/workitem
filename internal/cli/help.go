@@ -191,10 +191,11 @@ var helpDocs = map[string]helpDoc{
 	},
 	"new": {
 		Summary: "Create a durable work item",
-		Usage:   []string{"wi new --title <text> [options]", "wi new --untitled [options]"},
+		Usage:   []string{"wi new --title <text> [options]", "wi new --untitled [options]", "wi new --propose --title <text> [--desc-file <path>] [--label <label>] [--item <selector>]"},
 		Description: []string{
 			"Normally creates a work item in backlog. Durable metadata and DESCRIPTION.md are written immediately; no terminal session, conversation or agent process is started. Creation runs in the daemon through the API. Items begin with an absent managed-slot checkout. Select a registered repository with --repo NAME, or inherit the current item’s repository. Without --base, the immutable starting commit comes from the registered integration branch, with no fallback to HEAD. When the repository has an upstream and repo.follow_upstream is fast-forward (the default), the branch is first fetched and fast-forwarded like wi repo sync; if that fails or the histories diverged, the item starts from the local branch with a warning. An explicit --base never fetches.",
 			"With --start, the item moves to active and an unattached agent receives the global agent.startup_message through runtime control. --prompt supplies that message and implies --start; it never changes DESCRIPTION.md. --desc-file remains the durable task description. TUI mode is the default: it creates the normal tmux runtime for later entry but does not switch or attach the caller. Use --agent-mode headless for an explicitly headless runtime. If startup or delivery fails, the command reports the durable partial outcome instead of deleting the item.",
+			"Run by an item's agent, wi new delegates: the new item is owned by the agent's item, which follows it up, and is left out of your list (see wi own). With --propose it creates nothing: it asks the item's user to file the item, from the proposing item (--item, or the current one), and returns at once. The user files it, as their own and with any edits, or dismisses it (wi proposal). Use --propose when asked to file something for the user, and plain wi new to split your own work.",
 			"Use --desc-file for a backlog item's self-contained multiline description. Labels are repeatable and augment defaults from user config and WI_ITEM_DEFAULT_LABELS; use --no-default-labels to opt out. Deep work is a built-in attribute, not a label.",
 		},
 		Options: []helpOption{
@@ -212,6 +213,8 @@ var helpDocs = map[string]helpDoc{
 			{"--no-default-labels", "Do not inherit user or repository default labels."},
 			{"--deep", "Mark the item as deep work."},
 			{"--repo <name>", "Select a registered repository; overrides the current item’s repository."},
+			{"--propose", "Ask the item's user to file the item instead of creating it; takes --title, --desc-file and --label."},
+			{"--item <selector>", "With --propose, the proposing item; defaults to the current item."},
 			{"--base <revision>", "Use a named branch, tag, or commit from the owned store. ^ selects integration. HEAD, @, - and contextual expressions resolve in the current claimed worktree, or fail if context is missing or the repository differs."},
 		},
 		Environment: []helpOption{{"WI_ITEM_DEFAULT_LABELS", "Comma-separated additive default labels."}, {"WI_API_SOCKET", "Use the daemon's socket mounted at this absolute path, as in a sandbox; the daemon is never started from it."}, {"WI_ITEM_CREDENTIAL_FILE", "Set by wi in an agent's environment: calls act as that item's agent."}},
@@ -245,6 +248,7 @@ var helpDocs = map[string]helpDoc{
 			{"--all", "Show open and closed items."},
 			{"--ids", "Show ID prefixes in active text output."},
 			{"--no-agent", "Skip live agent/worktree inspection."},
+			{"--delegated-by <item>", "List the items that item's agent delegated, which the default list leaves out."},
 		},
 		Environment: []helpOption{
 			{"WI_LIST_LABELS", "Comma-separated label rules overlaid on config; e.g. +team,-blocked or !,+personal."},
@@ -274,6 +278,18 @@ var helpDocs = map[string]helpDoc{
 			{"--no-deep", "Clear deep work; cannot be combined with --deep."},
 		},
 		Examples: []string{`wi edit --title "Clarified objective"`, `wi edit --item auth --desc-file task.md --label backend`, `wi edit --no-deep auth`, `wi edit auth`},
+	},
+	"proposal": {
+		Summary:     "List, file or dismiss items agents proposed",
+		Usage:       []string{"wi proposal [list] [--item <selector>] [--all]", "wi proposal file <id> [--title <text>] [--desc-file <path>] [--label <label>]", "wi proposal dismiss <id> [--reason <text>]"},
+		Description: []string{"An agent proposes an item with wi new --propose when asked to file something for you: nothing exists until you file it. Filing creates it as yours, with your edits; the title, description and labels you give replace the proposed ones. list shows pending proposals, from every item or one; --all includes filed and dismissed ones. Only you file or dismiss; an agent cannot."},
+		SeeAlso:     []string{"new", "own"},
+	},
+	"own": {
+		Summary:     "Take an item an agent delegated",
+		Usage:       []string{"wi own [--item <selector>]"},
+		Description: []string{"Items an agent creates are delegated: owned by its item, followed up by that agent, and left out of your list. Taking one makes it yours, detached from that agent; it then appears in your list like any of your items. Closing an item gives you back the unfinished items it delegated. An agent cannot take items."},
+		SeeAlso:     []string{"list"},
 	},
 	"show": {
 		Summary:     "Show durable task context and metadata",
@@ -823,7 +839,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"search", "Find items by text"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}, {"reopen", "Reopen closed work"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
-	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
+	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"own", "Take an item an agent delegated"}, {"proposal", "File or dismiss items agents proposed"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Agent and checkout:")
 	printCommandRows(w, [][2]string{{"review", "Inspect and capture retained code revisions"}, {"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})

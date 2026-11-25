@@ -67,6 +67,7 @@ func (s *Server) CloseItem(ctx context.Context, req *connect.Request[v1.CloseIte
 		result, err := s.closeItem(ctx, req)
 		if err == nil {
 			j.change(func(v *v1.Job) { v.Warnings = result.Msg.Warnings })
+			s.returnDelegations(value.Id)
 		}
 		return err
 	})

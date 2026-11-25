@@ -48,6 +48,20 @@ wi agent monitor --content --item fix-stale-runtime-ownership
 
 Keep corrections within the original objective in this item. File independent discoveries as new backlog items, then finish and close the original rather than growing it indefinitely.
 
+## When an agent creates items
+
+Agents create items in two ways, and the words you use tell them which:
+
+- **File** ("file an item for this", "log it for later"): the agent proposes the item with `wi new --propose`. Nothing is created yet: the proposal waits for you, in the conversation and in `wi proposal list`. Filing it (`wi proposal file ID`, optionally with your own title, description or labels) creates it as yours; `wi proposal dismiss ID` declines it. The agent is not interrupted either way.
+- **Delegate** ("hand this off", "split this into items"): the agent creates the item itself with `wi new`, to follow up on as part of its own work.
+
+An item an agent creates is its item's, not yours: the agent delegated it, and follows it up. It is left out of your list and attention queue; `wi list --delegated-by ITEM` shows what an item delegated. An item may have at most eight unfinished delegations.
+
+- **Take one over**: `wi own --item ITEM` makes a delegated item yours, detached from the agent; it then appears in your list.
+- **When the delegating item closes**, its unfinished delegations come back to you, marked unread.
+
+Each item's history records who did what: you (`user:operator`), an item's agent (`item:<id>`), or wi on its own, and what caused it, such as a schedule (`wi events --item ITEM`).
+
 ## Agent authority
 
 An agent's `wi` commands act as its item, not as you. Each time an agent starts, the daemon gives it a credential, in the file `WI_ITEM_CREDENTIAL_FILE` names in its environment, and every call the agent and its tools make presents it. The credential stops working when that agent stops or is replaced; `wi` then fails rather than acting as you. Your own commands, including those in an item's shell windows, act as you.

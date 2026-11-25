@@ -167,6 +167,15 @@ type identityKey struct{}
 
 func caller(ctx context.Context) identity { v, _ := ctx.Value(identityKey{}).(identity); return v }
 
+// optionalItem are the calls whose item_id may be empty: ReleaseControl
+// names its item by lease_id instead, and the lists narrow to an item only
+// when given one.
+var optionalItem = map[string]bool{
+	corev1connect.ControlServiceReleaseControlProcedure: true,
+	corev1connect.JobServiceListJobsProcedure:           true,
+	corev1connect.ItemServiceListProposalsProcedure:     true,
+}
+
 func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -196,9 +205,8 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 					}
 				}
 				field := ref.Descriptor().Fields().ByName("item_id")
-				// ReleaseControl names its item by lease_id or item_id.
-				optional := field != nil && req.Spec().Procedure == corev1connect.ControlServiceReleaseControlProcedure && ref.Get(field).String() == ""
-				if field != nil && field.Kind() == protoreflect.StringKind && !strings.Contains(req.Spec().Procedure, "/ListJobs") && !optional {
+				optional := field != nil && optionalItem[req.Spec().Procedure] && ref.Get(field).String() == ""
+				if field != nil && field.Kind() == protoreflect.StringKind && !optional {
 					id := ref.Get(field).String()
 					if !model.ValidID(id) {
 						return nil, invalid("valid item_id is required")
@@ -395,7 +403,7 @@ func blockers(values []model.Blocker) []*v1.Blocker {
 	return out
 }
 func item(m model.Manifest, revision uint64) *v1.Item {
-	result := &v1.Item{Id: m.ID, Slug: m.Slug, Title: m.Title, State: state(m.State), Resolution: resolution(m.Resolution), Labels: m.Labels, DeepWork: m.DeepWork, Repository: &v1.RepositoryRef{Id: m.Repository.ID, Name: m.Repository.Name}, CreatedFromCommit: m.Repository.CreatedFromCommit, Checkout: checkout(m.Checkout), AgentProfile: m.Agent, AgentSettings: m.AgentSettings, Blockers: blockers(m.Blockers), CreatedAt: stamp(m.CreatedAt), UpdatedAt: stamp(m.UpdatedAt), StateChangedAt: stamp(m.StateChangedAt), Revision: uint32(revision), Priority: m.Priority, Pinned: m.Pinned, SnoozedUntil: optionalStamp(m.SnoozedUntil)}
+	result := &v1.Item{Id: m.ID, Slug: m.Slug, Title: m.Title, State: state(m.State), Resolution: resolution(m.Resolution), Labels: m.Labels, DeepWork: m.DeepWork, Repository: &v1.RepositoryRef{Id: m.Repository.ID, Name: m.Repository.Name}, CreatedFromCommit: m.Repository.CreatedFromCommit, Checkout: checkout(m.Checkout), AgentProfile: m.Agent, AgentSettings: m.AgentSettings, Blockers: blockers(m.Blockers), CreatedAt: stamp(m.CreatedAt), UpdatedAt: stamp(m.UpdatedAt), StateChangedAt: stamp(m.StateChangedAt), Revision: uint32(revision), Priority: m.Priority, Pinned: m.Pinned, SnoozedUntil: optionalStamp(m.SnoozedUntil), Owner: m.OwnerPrincipal()}
 	if m.PrimaryConversation != nil {
 		result.Conversation = &v1.ConversationRef{Id: m.PrimaryConversation.ID, Driver: m.PrimaryConversation.Driver}
 	}

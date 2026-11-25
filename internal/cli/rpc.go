@@ -216,6 +216,24 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = rpcSearch(ctx, args[1:], cfg, jsonOut)
 	case "edit":
 		err = rpcEdit(ctx, args[1:], cfg, jsonOut)
+	case "proposal", "proposals":
+		err = rpcProposal(ctx, args[1:], cfg, jsonOut)
+	case "own":
+		id, e := rpcItemArgs(ctx, cfg, "own", args[1:])
+		if e != nil {
+			err = e
+			break
+		}
+		value, e := cfg.API.Items.TakeOwnership(ctx, rpcRequest(cfg, &v1.TakeOwnershipRequest{ItemId: id}))
+		if e != nil {
+			err = e
+			break
+		}
+		if jsonOut {
+			err = rpcEmit(cfg, true, value.Msg)
+			break
+		}
+		fmt.Fprintf(cfg.Stdout, "%s is yours now\n", value.Msg.Item.Id)
 	case "events":
 		id, e := rpcItemArgs(ctx, cfg, "events", args[1:])
 		if e != nil {
@@ -336,6 +354,8 @@ func rpcNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	reasoning := fs.String("reasoning", "", "reasoning")
 	deep := fs.Bool("deep", false, "deep work")
 	noDefaults := fs.Bool("no-default-labels", false, "no default labels")
+	propose := fs.Bool("propose", false, "propose the item to its user instead of creating it")
+	from := fs.String("item", "", "proposing item")
 	var labels repeatFlag
 	fs.Var(&labels, "label", "label")
 	if err := rpcParse(fs, args); err != nil {
@@ -343,6 +363,15 @@ func rpcNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	}
 	if fs.NArg() != 0 {
 		return usageErr{errors.New("new accepts flags only")}
+	}
+	if *propose {
+		if *start || *prompt != "" || *repo != "" || *base != "" || *profile != "" || *slug != "" || *deep || *modelName != "" || *reasoning != "" || *untitled {
+			return usageErr{errors.New("--propose takes a title, a description and labels; the user filing it chooses the rest")}
+		}
+		return rpcPropose(ctx, cfg, *from, *title, *description, labels, jsonOut)
+	}
+	if *from != "" {
+		return usageErr{errors.New("--item names the proposing item, with --propose")}
 	}
 	if *untitled && *title != "" {
 		return usageErr{errors.New("--untitled and --title conflict")}
@@ -440,6 +469,7 @@ func rpcList(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	noAgent := fs.Bool("no-agent", false, "omit agent and worktree inspection")
 	inspect := fs.Bool("inspect", false, "refresh observations")
 	repo := fs.String("repo", "", "repository")
+	delegatedBy := fs.String("delegated-by", "", "items an item delegated")
 	var labels repeatFlag
 	fs.Var(&labels, "label", "label filter")
 	if err := rpcParse(fs, args); err != nil {
@@ -480,6 +510,13 @@ func rpcList(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 			return err
 		}
 		r.RepositoryIds = []string{id}
+	}
+	if *delegatedBy != "" {
+		id, err := rpcSelect(ctx, cfg, *delegatedBy)
+		if err != nil {
+			return err
+		}
+		r.Owner = "item:" + id
 	}
 	defaults := []string{}
 	if cfg.GlobalConfig != nil {

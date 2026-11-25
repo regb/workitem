@@ -31,6 +31,8 @@ const (
 	CommandBlockerClear = "item.blocker.clear"
 	// CommandFollowUpDone records that a follow-up was sent or dropped.
 	CommandFollowUpDone = "item.follow_up.done"
+	// CommandOwnerSet gives an item another owner.
+	CommandOwnerSet = "item.owner.set"
 )
 
 type ManifestCommand struct {
@@ -46,6 +48,7 @@ type ManifestCommand struct {
 	DeepWork         *bool           `json:"deep_work,omitempty"`
 	TargetState      string          `json:"target_state,omitempty"`
 	Title            string          `json:"title,omitempty"`
+	Owner            string          `json:"owner,omitempty"`
 	Edit             *MetadataEdit   `json:"edit,omitempty"`
 	EventType        string          `json:"event_type,omitempty"`
 	Force            bool            `json:"force,omitempty"`
@@ -332,6 +335,19 @@ func applyManifestCommand(command ManifestCommand, manifest *model.Manifest, all
 			}
 		}
 		appendEvent("work_item.edited", data)
+	case CommandOwnerSet:
+		owner := strings.TrimSpace(command.Owner)
+		if !model.ValidPrincipal(owner) {
+			return nil, false, fmt.Errorf("invalid owner %q", command.Owner)
+		}
+		if owner == model.ItemPrincipal(manifest.ID) {
+			return nil, false, fmt.Errorf("an item cannot own itself")
+		}
+		if owner == manifest.OwnerPrincipal() {
+			return pending, false, nil
+		}
+		appendEvent("work_item.owner_set", map[string]any{"from": manifest.OwnerPrincipal(), "to": owner})
+		manifest.Owner = owner
 	case CommandTitleSet:
 		title := strings.TrimSpace(command.Title)
 		if title == "" || len(title) > 512 || !utf8.ValidString(title) || strings.IndexFunc(title, unicode.IsControl) >= 0 {
@@ -462,7 +478,8 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 	projected := map[string]ActionabilityQueueCandidate{}
 	candidates := []priority.Candidate{}
 	for _, manifest := range manifests {
-		if manifest.State != model.StateActive || !matchesCanonicalLabels(manifest.Labels, options.LabelRules) || observationsBucket == nil {
+		// A delegated item's owner, another item's agent, follows it up.
+		if manifest.State != model.StateActive || manifest.Delegated() || !matchesCanonicalLabels(manifest.Labels, options.LabelRules) || observationsBucket == nil {
 			continue
 		}
 		encoded := observationsBucket.Get([]byte(manifest.ID))

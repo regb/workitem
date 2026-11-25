@@ -223,6 +223,9 @@ func renderItem(w io.Writer, item *v1.Item, description string) error {
 	if item.Resolution != 0 {
 		fmt.Fprintln(w, "Resolution:", apiview.Resolution(item.Resolution))
 	}
+	if item.Owner != "" && item.Owner != "user:operator" {
+		fmt.Fprintln(w, "Owner:", item.Owner)
+	}
 	if description != "" {
 		fmt.Fprintln(w, "Description:", description)
 	}
