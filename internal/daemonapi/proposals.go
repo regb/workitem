@@ -58,6 +58,9 @@ func (s *Server) ProposeItem(ctx context.Context, req *connect.Request[v1.Propos
 		return nil, rpcError(err)
 	}
 	if created {
+		// The user is asked in the item's conversation: it needs their
+		// attention until they file or dismiss it.
+		_, _ = s.App.MarkUnread(ctx, resolve(r.ItemId))
 		_ = s.App.Store.AppendEvent(ctx, r.ItemId, model.NewEventFrom(ctx, saved.CreatedAt, "proposal.created", map[string]any{"proposal_id": saved.ID, "title": saved.Title}))
 	}
 	s.Core.Database().NotifyItems(r.ItemId)

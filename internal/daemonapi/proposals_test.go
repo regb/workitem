@@ -51,6 +51,10 @@ func TestAgentsProposeAndUsersFile(t *testing.T) {
 	if first.Proposer != model.ItemPrincipal(source) || first.State != v1.ProposalState_PROPOSAL_STATE_PENDING || first.RepositoryId != repo {
 		t.Fatalf("proposal: %v", first)
 	}
+	// The user is asked in the proposing item, which now needs them.
+	if shown, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: source})); err != nil || !shown.Msg.Observation.Unread {
+		t.Fatalf("the proposing item is not unread: %v %v", shown, err)
+	}
 	listed, err := f.clients.Items.ListProposals(ctx, connect.NewRequest(&v1.ListProposalsRequest{PendingOnly: true}))
 	if err != nil || len(listed.Msg.Proposals) != 2 {
 		t.Fatalf("pending: %v %v", listed, err)
