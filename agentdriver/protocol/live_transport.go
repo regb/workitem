@@ -3,6 +3,8 @@ package driverprotocol
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -359,19 +361,35 @@ func listenRuntimeSocket(path string) (net.Listener, error) {
 	if path == "" {
 		return nil, fmt.Errorf("runtime socket path is required")
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	// Callers treat the socket path's existence as readiness, but bind creates
+	// the file before listen accepts connections. Bind and listen under a
+	// private name, then rename the ready socket into place (replacing any
+	// stale one), so a dial never meets a bound socket that refuses it.
+	// The temporary name is no longer than runtime socket names, which keeps
+	// it within the platform's socket path limit.
+	suffix := make([]byte, 4)
+	if _, err := rand.Read(suffix); err != nil {
 		return nil, err
 	}
-	listener, err := net.Listen("unix", path)
+	pending := filepath.Join(dir, "."+hex.EncodeToString(suffix))
+	listener, err := net.Listen("unix", pending)
 	if err != nil {
 		return nil, err
 	}
-	if err := os.Chmod(path, 0o600); err != nil {
+	// The socket leaves the pending name; its owner removes the final path.
+	listener.(*net.UnixListener).SetUnlinkOnClose(false)
+	if err := os.Chmod(pending, 0o600); err != nil {
 		listener.Close()
-		_ = os.Remove(path)
+		_ = os.Remove(pending)
+		return nil, err
+	}
+	if err := os.Rename(pending, path); err != nil {
+		listener.Close()
+		_ = os.Remove(pending)
 		return nil, err
 	}
 	return listener, nil

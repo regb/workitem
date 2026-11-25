@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -112,4 +113,68 @@ func TestEventTransportReportsRejection(t *testing.T) {
 	if err := <-done; err == nil || err.Error() != "wrong owner" {
 		t.Fatalf("err=%v", err)
 	}
+}
+
+// Clients treat a runtime socket's path as readiness: once it exists, a dial
+// must reach a listening socket rather than one that is only bound.
+func TestRuntimeSocketPathAppearsOnlyWhenListening(t *testing.T) {
+	dir := t.TempDir()
+	for attempt := 0; attempt < 200; attempt++ {
+		path := filepath.Join(dir, "control.sock")
+		dialed := make(chan error, 1)
+		go func() {
+			for {
+				if _, err := os.Stat(path); err == nil {
+					conn, err := net.Dial("unix", path)
+					if err == nil {
+						_ = conn.Close()
+					}
+					dialed <- err
+					return
+				}
+			}
+		}()
+		server, err := ListenControl(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := <-dialed; err != nil {
+			t.Fatalf("attempt %d: socket path existed before it accepted connections: %v", attempt, err)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode()&os.ModeSocket == 0 || info.Mode().Perm() != 0o600 {
+			t.Fatalf("socket mode = %v", info.Mode())
+		}
+		_ = server.Close()
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("closed socket remains: %v", err)
+		}
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("pending socket names left behind: %v", entries)
+	}
+}
+
+func TestRuntimeSocketReplacesStalePath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.sock")
+	if err := os.WriteFile(path, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	server, err := ListenEvents(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	conn, err := net.Dial("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.Close()
 }
