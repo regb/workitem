@@ -215,9 +215,14 @@ The table in code is the reference; this summary groups it.
 mode and its selection options are removed; live content and the change feed
 cover monitoring. No `WatchAgentEvents` RPC is planned by this revision.
 
-Agents have item credentials, but what an item's agent may do is not yet
-limited per item: access lists come next (see the design attached to the
-survey item on agent roles).
+What an item's agent may call is decided in `internal/daemonapi/access.go`:
+calls on an item need a level on it (view, message, control, integrate,
+manage), which the agent has on its own item and its delegations and
+otherwise from access entries (`ItemService.ListAccess`, `GrantAccess`,
+`RevokeAccess`); some calls are a person's only; the rest are open to every
+item. A test requires every procedure to be classified. Lists and search show
+an agent only the items it may view. Refusals carry an `AccessDenied`
+detail.
 
 A gated terminal relay, structured native-agent questions/permissions and
 a separately versioned executable-hook protocol also remain future work.

@@ -83,6 +83,17 @@ service ItemService {
   rpc FileProposal(FileProposalRequest) returns (FileProposalResponse);
   // DismissProposal declines a proposal. Only a user may dismiss.
   rpc DismissProposal(DismissProposalRequest) returns (DismissProposalResponse);
+  // ListAccess lists what items' agents may do to other items. An item's
+  // agent may always manage its own item and the items it delegated.
+  rpc ListAccess(ListAccessRequest) returns (ListAccessResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // GrantAccess lets an item's agent, or every item's, act on an item or on
+  // every item, up to a level. Granting again replaces the level. Only a
+  // user may change access.
+  rpc GrantAccess(GrantAccessRequest) returns (GrantAccessResponse);
+  // RevokeAccess removes an entry, including the default one.
+  rpc RevokeAccess(RevokeAccessRequest) returns (RevokeAccessResponse);
 }
 
 // Item is a work item's durable record.
@@ -674,4 +685,65 @@ message DismissProposalRequest {
 
 message DismissProposalResponse {
   Proposal proposal = 1;
+}
+
+// AccessLevel is what an item's agent may do to an item; each level
+// includes the ones before it.
+enum AccessLevel {
+  ACCESS_LEVEL_UNSPECIFIED = 0;
+  // VIEW reads the item: record, conversation, notes, review, checkout files.
+  ACCESS_LEVEL_VIEW = 1;
+  // MESSAGE also messages its agent and adds notes, attachments, blockers and
+  // review comments.
+  ACCESS_LEVEL_MESSAGE = 2;
+  // CONTROL also drives its agent and checkout, edits and shelves it.
+  ACCESS_LEVEL_CONTROL = 3;
+  // INTEGRATE also captures and approves its revisions and merges it.
+  ACCESS_LEVEL_INTEGRATE = 4;
+  // MANAGE also closes and reopens it.
+  ACCESS_LEVEL_MANAGE = 5;
+}
+
+// AccessEntry grants a subject a level on an item.
+message AccessEntry {
+  string id = 1;
+  // subject is "item:<id>", or "item:*" for every item's agent.
+  string subject = 2;
+  // item_id is the item it grants on, or "*" for every item.
+  string item_id = 3;
+  AccessLevel level = 4;
+  string granted_by = 5;
+  google.protobuf.Timestamp granted_at = 6;
+}
+
+message ListAccessRequest {}
+
+message ListAccessResponse {
+  repeated AccessEntry entries = 1;
+}
+
+message GrantAccessRequest {
+  string subject = 1;
+  // on_item_id is the item, or "*" for every item.
+  string on_item_id = 2;
+  AccessLevel level = 3;
+}
+
+message GrantAccessResponse {
+  AccessEntry entry = 1;
+}
+
+message RevokeAccessRequest {
+  string entry_id = 1;
+}
+
+message RevokeAccessResponse {}
+
+// AccessDenied details a PERMISSION_DENIED for an item's agent: the level it
+// needed on the item, which a user can grant.
+message AccessDenied {
+  string subject = 1;
+  string item_id = 2;
+  AccessLevel needed = 3;
+  AccessLevel has = 4;
 }

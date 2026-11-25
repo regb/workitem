@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/gen/wi/core/v1/corev1connect"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -25,6 +26,9 @@ var (
 // jobs, an item's live content and heartbeats. Each part runs on its own;
 // the first to fail ends the stream, and the client reconnects.
 func (s *Server) Watch(ctx context.Context, req *connect.Request[v1.WatchRequest], stream *connect.ServerStream[v1.WatchResponse]) error {
+	if err := s.authorize(ctx, corev1connect.EventServiceWatchProcedure, requestItem(req.Msg)); err != nil {
+		return err
+	}
 	if req.Msg.ItemId != "" {
 		if _, err := s.canonical(ctx, req.Msg.ItemId, 0); err != nil {
 			return rpcError(err)

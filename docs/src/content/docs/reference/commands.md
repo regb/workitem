@@ -82,6 +82,7 @@ Use a JSON parser rather than matching serialized whitespace. An active item can
 | `wi edit` | Edit title, description, labels, and deep work together; open an editor when no edit flags are supplied |
 | `wi events` | Read append-only item history |
 | `wi own` | Take an item an agent delegated; it becomes yours and appears in your list |
+| `wi access [list\|grant\|revoke]` | Say what items' agents may do to other items |
 | `wi proposal [list\|file\|dismiss]` | List the items agents proposed with `wi new --propose`, file one as yours, or dismiss it |
 | `wi note` / `wi notes` | Add to or read the item's log of short progress notes |
 | `wi attach` / `wi attachments` / `wi attachment cat` | Attach a file to the item, list attachments, print one |

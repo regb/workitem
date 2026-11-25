@@ -216,6 +216,8 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = rpcSearch(ctx, args[1:], cfg, jsonOut)
 	case "edit":
 		err = rpcEdit(ctx, args[1:], cfg, jsonOut)
+	case "access":
+		err = rpcAccess(ctx, args[1:], cfg, jsonOut)
 	case "proposal", "proposals":
 		err = rpcProposal(ctx, args[1:], cfg, jsonOut)
 	case "own":

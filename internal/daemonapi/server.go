@@ -167,6 +167,23 @@ type identityKey struct{}
 
 func caller(ctx context.Context) identity { v, _ := ctx.Value(identityKey{}).(identity); return v }
 
+// requestItem is the item a request names, when it names a valid one.
+func requestItem(message any) string {
+	msg, ok := message.(proto.Message)
+	if !ok {
+		return ""
+	}
+	ref := msg.ProtoReflect()
+	field := ref.Descriptor().Fields().ByName("item_id")
+	if field == nil || field.Kind() != protoreflect.StringKind {
+		return ""
+	}
+	if id := ref.Get(field).String(); model.ValidID(id) {
+		return id
+	}
+	return ""
+}
+
 // optionalItem are the calls whose item_id may be empty: ReleaseControl
 // names its item by lease_id instead, and the lists narrow to an item only
 // when given one.
@@ -189,6 +206,9 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 			ctx = model.WithOrigin(ctx, model.Origin{Actor: who.String()})
 			if who.web() && !webAllowed(req.Spec().Procedure) {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("the web endpoint does not allow this operation"))
+			}
+			if err := s.authorize(ctx, req.Spec().Procedure, requestItem(req.Any())); err != nil {
+				return nil, err
 			}
 			method := req.Spec().Procedure[strings.LastIndex(req.Spec().Procedure, "/")+1:]
 			readOnly := strings.HasPrefix(method, "Get") || strings.HasPrefix(method, "List") || strings.HasPrefix(method, "Search") || strings.HasPrefix(method, "Resolve") || method == "SuggestTitle"

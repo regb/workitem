@@ -209,7 +209,7 @@ func (d *Database) initialize() error {
 				return err
 			}
 		}
-		return nil
+		return ensureDefaultAccess(tx)
 	})
 }
 

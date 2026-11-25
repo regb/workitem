@@ -17,6 +17,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/gen/wi/core/v1/corev1connect"
 	"github.com/regb/workitem/internal/app"
 	view "github.com/regb/workitem/internal/app/view"
 	"github.com/regb/workitem/internal/coordinator"
@@ -296,8 +297,15 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 			ranks[c.Manifest.ID] = i + 1
 		}
 	}
+	visible, err := s.visibleTo(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := &v1.ListItemsResponse{Items: []*v1.ItemSummary{}}
 	for _, m := range manifests {
+		if !visible(m) {
+			continue
+		}
 		if !allowedState(r.States, m, true) || !labelMatch(r.LabelRules, m.Labels) {
 			continue
 		}
@@ -403,6 +411,10 @@ func (s *Server) SearchItems(ctx context.Context, req *connect.Request[v1.Search
 		}
 		return extra
 	})
+	visible, err := s.visibleTo(ctx)
+	if err != nil {
+		return nil, err
+	}
 	out := &v1.SearchItemsResponse{Hits: []*v1.SearchHit{}}
 	limit := req.Msg.Limit
 	if limit == 0 {
@@ -413,7 +425,7 @@ func (s *Server) SearchItems(ctx context.Context, req *connect.Request[v1.Search
 		if err != nil {
 			return nil, rpcError(err)
 		}
-		if !allowedState(req.Msg.States, m, false) {
+		if !allowedState(req.Msg.States, m, false) || !visible(m) {
 			continue
 		}
 		out.Total++
@@ -720,6 +732,9 @@ func (s *Server) ListNotes(ctx context.Context, req *connect.Request[v1.ListNote
 	return response(out, err)
 }
 func (s *Server) ReadAttachment(ctx context.Context, req *connect.Request[v1.ReadAttachmentRequest], stream *connect.ServerStream[v1.ReadAttachmentResponse]) error {
+	if err := s.authorize(ctx, corev1connect.ItemServiceReadAttachmentProcedure, requestItem(req.Msg)); err != nil {
+		return err
+	}
 	notes, err := s.ListNotes(ctx, connect.NewRequest(&v1.ListNotesRequest{ItemId: req.Msg.ItemId}))
 	if err != nil {
 		return err

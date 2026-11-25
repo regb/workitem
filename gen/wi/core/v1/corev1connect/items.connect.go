@@ -85,6 +85,13 @@ const (
 	// ItemServiceDismissProposalProcedure is the fully-qualified name of the ItemService's
 	// DismissProposal RPC.
 	ItemServiceDismissProposalProcedure = "/wi.core.v1.ItemService/DismissProposal"
+	// ItemServiceListAccessProcedure is the fully-qualified name of the ItemService's ListAccess RPC.
+	ItemServiceListAccessProcedure = "/wi.core.v1.ItemService/ListAccess"
+	// ItemServiceGrantAccessProcedure is the fully-qualified name of the ItemService's GrantAccess RPC.
+	ItemServiceGrantAccessProcedure = "/wi.core.v1.ItemService/GrantAccess"
+	// ItemServiceRevokeAccessProcedure is the fully-qualified name of the ItemService's RevokeAccess
+	// RPC.
+	ItemServiceRevokeAccessProcedure = "/wi.core.v1.ItemService/RevokeAccess"
 )
 
 // ItemServiceClient is a client for the wi.core.v1.ItemService service.
@@ -145,6 +152,15 @@ type ItemServiceClient interface {
 	FileProposal(context.Context, *connect.Request[v1.FileProposalRequest]) (*connect.Response[v1.FileProposalResponse], error)
 	// DismissProposal declines a proposal. Only a user may dismiss.
 	DismissProposal(context.Context, *connect.Request[v1.DismissProposalRequest]) (*connect.Response[v1.DismissProposalResponse], error)
+	// ListAccess lists what items' agents may do to other items. An item's
+	// agent may always manage its own item and the items it delegated.
+	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
+	// GrantAccess lets an item's agent, or every item's, act on an item or on
+	// every item, up to a level. Granting again replaces the level. Only a
+	// user may change access.
+	GrantAccess(context.Context, *connect.Request[v1.GrantAccessRequest]) (*connect.Response[v1.GrantAccessResponse], error)
+	// RevokeAccess removes an entry, including the default one.
+	RevokeAccess(context.Context, *connect.Request[v1.RevokeAccessRequest]) (*connect.Response[v1.RevokeAccessResponse], error)
 }
 
 // NewItemServiceClient constructs a client for the wi.core.v1.ItemService service. By default, it
@@ -298,6 +314,25 @@ func NewItemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(itemServiceMethods.ByName("DismissProposal")),
 			connect.WithClientOptions(opts...),
 		),
+		listAccess: connect.NewClient[v1.ListAccessRequest, v1.ListAccessResponse](
+			httpClient,
+			baseURL+ItemServiceListAccessProcedure,
+			connect.WithSchema(itemServiceMethods.ByName("ListAccess")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		grantAccess: connect.NewClient[v1.GrantAccessRequest, v1.GrantAccessResponse](
+			httpClient,
+			baseURL+ItemServiceGrantAccessProcedure,
+			connect.WithSchema(itemServiceMethods.ByName("GrantAccess")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeAccess: connect.NewClient[v1.RevokeAccessRequest, v1.RevokeAccessResponse](
+			httpClient,
+			baseURL+ItemServiceRevokeAccessProcedure,
+			connect.WithSchema(itemServiceMethods.ByName("RevokeAccess")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -325,6 +360,9 @@ type itemServiceClient struct {
 	listProposals   *connect.Client[v1.ListProposalsRequest, v1.ListProposalsResponse]
 	fileProposal    *connect.Client[v1.FileProposalRequest, v1.FileProposalResponse]
 	dismissProposal *connect.Client[v1.DismissProposalRequest, v1.DismissProposalResponse]
+	listAccess      *connect.Client[v1.ListAccessRequest, v1.ListAccessResponse]
+	grantAccess     *connect.Client[v1.GrantAccessRequest, v1.GrantAccessResponse]
+	revokeAccess    *connect.Client[v1.RevokeAccessRequest, v1.RevokeAccessResponse]
 }
 
 // CreateItem calls wi.core.v1.ItemService.CreateItem.
@@ -437,6 +475,21 @@ func (c *itemServiceClient) DismissProposal(ctx context.Context, req *connect.Re
 	return c.dismissProposal.CallUnary(ctx, req)
 }
 
+// ListAccess calls wi.core.v1.ItemService.ListAccess.
+func (c *itemServiceClient) ListAccess(ctx context.Context, req *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error) {
+	return c.listAccess.CallUnary(ctx, req)
+}
+
+// GrantAccess calls wi.core.v1.ItemService.GrantAccess.
+func (c *itemServiceClient) GrantAccess(ctx context.Context, req *connect.Request[v1.GrantAccessRequest]) (*connect.Response[v1.GrantAccessResponse], error) {
+	return c.grantAccess.CallUnary(ctx, req)
+}
+
+// RevokeAccess calls wi.core.v1.ItemService.RevokeAccess.
+func (c *itemServiceClient) RevokeAccess(ctx context.Context, req *connect.Request[v1.RevokeAccessRequest]) (*connect.Response[v1.RevokeAccessResponse], error) {
+	return c.revokeAccess.CallUnary(ctx, req)
+}
+
 // ItemServiceHandler is an implementation of the wi.core.v1.ItemService service.
 type ItemServiceHandler interface {
 	// CreateItem saves a new item to the backlog.
@@ -495,6 +548,15 @@ type ItemServiceHandler interface {
 	FileProposal(context.Context, *connect.Request[v1.FileProposalRequest]) (*connect.Response[v1.FileProposalResponse], error)
 	// DismissProposal declines a proposal. Only a user may dismiss.
 	DismissProposal(context.Context, *connect.Request[v1.DismissProposalRequest]) (*connect.Response[v1.DismissProposalResponse], error)
+	// ListAccess lists what items' agents may do to other items. An item's
+	// agent may always manage its own item and the items it delegated.
+	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
+	// GrantAccess lets an item's agent, or every item's, act on an item or on
+	// every item, up to a level. Granting again replaces the level. Only a
+	// user may change access.
+	GrantAccess(context.Context, *connect.Request[v1.GrantAccessRequest]) (*connect.Response[v1.GrantAccessResponse], error)
+	// RevokeAccess removes an entry, including the default one.
+	RevokeAccess(context.Context, *connect.Request[v1.RevokeAccessRequest]) (*connect.Response[v1.RevokeAccessResponse], error)
 }
 
 // NewItemServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -644,6 +706,25 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(itemServiceMethods.ByName("DismissProposal")),
 		connect.WithHandlerOptions(opts...),
 	)
+	itemServiceListAccessHandler := connect.NewUnaryHandler(
+		ItemServiceListAccessProcedure,
+		svc.ListAccess,
+		connect.WithSchema(itemServiceMethods.ByName("ListAccess")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	itemServiceGrantAccessHandler := connect.NewUnaryHandler(
+		ItemServiceGrantAccessProcedure,
+		svc.GrantAccess,
+		connect.WithSchema(itemServiceMethods.ByName("GrantAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	itemServiceRevokeAccessHandler := connect.NewUnaryHandler(
+		ItemServiceRevokeAccessProcedure,
+		svc.RevokeAccess,
+		connect.WithSchema(itemServiceMethods.ByName("RevokeAccess")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/wi.core.v1.ItemService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ItemServiceCreateItemProcedure:
@@ -690,6 +771,12 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 			itemServiceFileProposalHandler.ServeHTTP(w, r)
 		case ItemServiceDismissProposalProcedure:
 			itemServiceDismissProposalHandler.ServeHTTP(w, r)
+		case ItemServiceListAccessProcedure:
+			itemServiceListAccessHandler.ServeHTTP(w, r)
+		case ItemServiceGrantAccessProcedure:
+			itemServiceGrantAccessHandler.ServeHTTP(w, r)
+		case ItemServiceRevokeAccessProcedure:
+			itemServiceRevokeAccessHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -785,4 +872,16 @@ func (UnimplementedItemServiceHandler) FileProposal(context.Context, *connect.Re
 
 func (UnimplementedItemServiceHandler) DismissProposal(context.Context, *connect.Request[v1.DismissProposalRequest]) (*connect.Response[v1.DismissProposalResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.DismissProposal is not implemented"))
+}
+
+func (UnimplementedItemServiceHandler) ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.ListAccess is not implemented"))
+}
+
+func (UnimplementedItemServiceHandler) GrantAccess(context.Context, *connect.Request[v1.GrantAccessRequest]) (*connect.Response[v1.GrantAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.GrantAccess is not implemented"))
+}
+
+func (UnimplementedItemServiceHandler) RevokeAccess(context.Context, *connect.Request[v1.RevokeAccessRequest]) (*connect.Response[v1.RevokeAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.RevokeAccess is not implemented"))
 }

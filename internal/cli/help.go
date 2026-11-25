@@ -279,6 +279,17 @@ var helpDocs = map[string]helpDoc{
 		},
 		Examples: []string{`wi edit --title "Clarified objective"`, `wi edit --item auth --desc-file task.md --label backend`, `wi edit --no-deep auth`, `wi edit auth`},
 	},
+	"access": {
+		Summary: "Say what items' agents may do to other items",
+		Usage:   []string{"wi access [list]", "wi access grant (--item <selector> | --every-item) (--on <selector> | --everything) --level <level>", "wi access revoke <entry-id>"},
+		Description: []string{
+			"An item's agent may always manage its own item and the items it delegated. What it may do to other items is what these entries grant: to one item's agent or every item's, on one item or every item, up to a level. Each level includes the ones before it: view (read the item, its conversation, notes, review and checkout files), message (send its agent messages; add notes, attachments, blockers and review comments), control (drive its agent and checkout, edit it, shelve it), integrate (capture and approve its revisions, merge it), manage (close and reopen it).",
+			"Every installation starts with one entry, every item's agent may manage every item, which keeps what agents could do before access lists. Revoke it, and grant what you mean, to limit them. Granting again replaces an entry's level. Deleting items, taking ownership, filing proposals, changing access, repositories, profiles and schedules, and stopping the daemon are yours only.",
+			"A refused agent is told which level it lacks and the command to grant it.",
+		},
+		Examples: []string{"wi access", "wi access revoke default-every-item", "wi access grant --every-item --everything --level view", "wi access grant --item reviewer --on parser-fix --level integrate"},
+		SeeAlso:  []string{"own", "proposal"},
+	},
 	"proposal": {
 		Summary:     "List, file or dismiss items agents proposed",
 		Usage:       []string{"wi proposal [list] [--item <selector>] [--all]", "wi proposal file <id> [--title <text>] [--desc-file <path>] [--label <label>]", "wi proposal dismiss <id> [--reason <text>]"},
@@ -839,7 +850,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"search", "Find items by text"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}, {"reopen", "Reopen closed work"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
-	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"own", "Take an item an agent delegated"}, {"proposal", "File or dismiss items agents proposed"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
+	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"own", "Take an item an agent delegated"}, {"proposal", "File or dismiss items agents proposed"}, {"access", "Say what items' agents may do to other items"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Agent and checkout:")
 	printCommandRows(w, [][2]string{{"review", "Inspect and capture retained code revisions"}, {"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})
