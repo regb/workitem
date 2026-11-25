@@ -2393,6 +2393,10 @@ type ConversationMessage struct {
 	// usage_provider names whose quota ran out, when the error reports a
 	// usage limit, as GetUsage names providers.
 	UsageProvider string `protobuf:"bytes,15,opt,name=usage_provider,json=usageProvider,proto3" json:"usage_provider,omitempty"`
+	// sender is who sent a message a client sent through wi: a user, or
+	// another item's agent ("item:<id>"). A message from another item's agent
+	// reached the agent in an envelope; its text here is without it.
+	Sender string `protobuf:"bytes,16,opt,name=sender,proto3" json:"sender,omitempty"`
 	// aborted marks where the operator stopped a reply.
 	Aborted bool `protobuf:"varint,12,opt,name=aborted,proto3" json:"aborted,omitempty"`
 	// client_message_id is the ID the message was sent with (SendMessage's
@@ -2492,6 +2496,13 @@ func (x *ConversationMessage) GetError() bool {
 func (x *ConversationMessage) GetUsageProvider() string {
 	if x != nil {
 		return x.UsageProvider
+	}
+	return ""
+}
+
+func (x *ConversationMessage) GetSender() string {
+	if x != nil {
+		return x.Sender
 	}
 	return ""
 }
@@ -4672,7 +4683,7 @@ const file_wi_core_v1_agents_proto_rawDesc = "" +
 	"\x04kind\"B\n" +
 	"\aSummary\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12#\n" +
-	"\rtokens_before\x18\x02 \x01(\rR\ftokensBefore\"\xe8\x03\n" +
+	"\rtokens_before\x18\x02 \x01(\rR\ftokensBefore\"\x80\x04\n" +
 	"\x13ConversationMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -4684,7 +4695,8 @@ const file_wi_core_v1_agents_proto_rawDesc = "" +
 	"\bsubagent\x18\n" +
 	" \x01(\v2\x17.wi.core.v1.SubagentRefR\bsubagent\x12\x14\n" +
 	"\x05error\x18\v \x01(\bR\x05error\x12%\n" +
-	"\x0eusage_provider\x18\x0f \x01(\tR\rusageProvider\x12\x18\n" +
+	"\x0eusage_provider\x18\x0f \x01(\tR\rusageProvider\x12\x16\n" +
+	"\x06sender\x18\x10 \x01(\tR\x06sender\x12\x18\n" +
 	"\aaborted\x18\f \x01(\bR\aaborted\x12*\n" +
 	"\x11client_message_id\x18\r \x01(\tR\x0fclientMessageIdJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\x04textR\x05toolsR\x06imagesR\treasoning\"]\n" +
 	"\x11GetHistoryRequest\x12\x17\n" +

@@ -399,6 +399,10 @@ message ConversationMessage {
   // usage_provider names whose quota ran out, when the error reports a
   // usage limit, as GetUsage names providers.
   string usage_provider = 15;
+  // sender is who sent a message a client sent through wi: a user, or
+  // another item's agent ("item:<id>"). A message from another item's agent
+  // reached the agent in an envelope; its text here is without it.
+  string sender = 16;
   // aborted marks where the operator stopped a reply.
   bool aborted = 12;
   // client_message_id is the ID the message was sent with (SendMessage's

@@ -279,6 +279,13 @@ var helpDocs = map[string]helpDoc{
 		},
 		Examples: []string{`wi edit --title "Clarified objective"`, `wi edit --item auth --desc-file task.md --label backend`, `wi edit --no-deep auth`, `wi edit auth`},
 	},
+	"send": {
+		Summary:     "Say something to an item's agent, and optionally wait for its answer",
+		Usage:       []string{"wi send <item> [--wait] [--timeout <duration>] [--follow-up] [--file <path> | --stdin | <message...>]"},
+		Description: []string{"Sends the message as the dashboard does: a running agent that is busy is steered, an idle one starts a turn, and an item with no agent running starts one, headless, with the message. With --wait the command waits for the turn the message started to settle and prints the agent's last reply: another item's agent asking gets the answer as the command's result. Run by an item's agent, the message reaches the other agent in an envelope naming the sender; you are identified automatically. A chain of messages between agents without a person stops after eight."},
+		Examples:    []string{`wi send parser-fix --wait "Do the checks pass?"`, `wi send reviewer --follow-up --file notes.md`},
+		SeeAlso:     []string{"agent", "access"},
+	},
 	"access": {
 		Summary: "Say what items' agents may do to other items",
 		Usage:   []string{"wi access [list]", "wi access grant (--item <selector> | --every-item) (--on <selector> | --everything) --level <level>", "wi access revoke <entry-id>"},
@@ -850,7 +857,7 @@ func printUsage(w io.Writer) {
 	printCommandRows(w, [][2]string{{"new", "Create a work item"}, {"list", "List work"}, {"show", "Show an item"}, {"search", "Find items by text"}, {"start", "Start backlog work"}, {"switch", "Open active work"}, {"next", "Open the next item needing attention"}, {"resume", "Ensure an active item's agent"}, {"wait", "Make an item wait"}, {"pick", "Choose an item and print its ID"}, {"blocker", "Edit an item's blockers"}, {"shelve", "Return active work to backlog"}, {"close", "Close work with a resolution"}, {"reopen", "Reopen closed work"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Metadata and history:")
-	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"own", "Take an item an agent delegated"}, {"proposal", "File or dismiss items agents proposed"}, {"access", "Say what items' agents may do to other items"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
+	printCommandRows(w, [][2]string{{"state", "Inspect or set lifecycle state"}, {"edit", "Edit title, description, labels, and deep work"}, {"events", "Show item history"}, {"own", "Take an item an agent delegated"}, {"send", "Say something to an item's agent"}, {"proposal", "File or dismiss items agents proposed"}, {"access", "Say what items' agents may do to other items"}, {"note", "Add a note to an item's log"}, {"notes", "Show an item's notes"}, {"attach", "Attach a file to an item"}, {"attachments", "List an item's attachments"}, {"attention", "Inspect, defer, or mark attention read"}})
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Agent and checkout:")
 	printCommandRows(w, [][2]string{{"review", "Inspect and capture retained code revisions"}, {"workspace", "Inspect or manage the worktree"}, {"terminal", "Inspect or manage tmux access"}, {"agent", "Inspect or control the primary agent"}})

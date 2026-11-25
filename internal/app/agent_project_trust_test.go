@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,7 +131,7 @@ func TestAgentProjectTrustRequiresVerifiedRegisteredManagedWorktree(t *testing.T
 					called := false
 					application.RunAgentDriver = func(_ context.Context, _ string, _ []string, request driverprotocol.LaunchRequest, _ []string, onReady func(driverprotocol.Ready) error) error {
 						called = true
-						if request.AppendSystemPrompt != application.AgentConfig.AppendSystemPrompt {
+						if !strings.HasPrefix(request.AppendSystemPrompt, application.AgentConfig.AppendSystemPrompt+"\n\nYou are the agent of wi work item") {
 							t.Fatal("launch lost system prompt")
 						}
 						if !request.ProjectTrusted || request.Runtime.Mode != driverprotocol.Mode(runtimeMode) {

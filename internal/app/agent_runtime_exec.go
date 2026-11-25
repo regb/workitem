@@ -86,7 +86,7 @@ func (a *App) AgentExec(ctx context.Context, itemID, conversationID, runtimeID s
 		if manifest.PrimaryConversation != nil {
 			format = manifest.PrimaryConversation.Format
 		}
-		request := driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: definition.Driver, Agent: agentName, Config: configJSON, Skills: a.agentSkills(ctx, manifest.Repository.ID), AppendSystemPrompt: a.AgentConfig.AppendSystemPrompt, ProjectTrusted: projectTrusted, Runtime: driverprotocol.Runtime{ID: spec.RuntimeID, WorkItemID: spec.WorkItemID, Mode: driverprotocol.Mode(spec.Mode), CWD: spec.CWD, ControlSocketPath: spec.ControlSocketPath, EventSocketPath: spec.EventSocketPath, LogPath: spec.LogPath}, Conversation: driverprotocol.Conversation{ID: conversationID, Locator: spec.ConversationLocator, Format: format}, Environment: environment}
+		request := driverprotocol.LaunchRequest{ProtocolVersion: driverprotocol.Version, Driver: definition.Driver, Agent: agentName, Config: configJSON, Skills: a.agentSkills(ctx, manifest.Repository.ID), AppendSystemPrompt: appendSystemPrompt(a.AgentConfig.AppendSystemPrompt, manifest), ProjectTrusted: projectTrusted, Runtime: driverprotocol.Runtime{ID: spec.RuntimeID, WorkItemID: spec.WorkItemID, Mode: driverprotocol.Mode(spec.Mode), CWD: spec.CWD, ControlSocketPath: spec.ControlSocketPath, EventSocketPath: spec.EventSocketPath, LogPath: spec.LogPath}, Conversation: driverprotocol.Conversation{ID: conversationID, Locator: spec.ConversationLocator, Format: format}, Environment: environment}
 		runErr := a.RunAgentDriver(ctx, driverPath, driverArgs, request, driverProcessEnvironment(os.Environ()), func(ready driverprotocol.Ready) error {
 			runtime, err := a.Store.LoadAgentRuntime(spec.WorkItemID)
 			if err != nil {

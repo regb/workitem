@@ -259,6 +259,12 @@ func agentBusy(err error) bool {
 }
 
 func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
+	sender := model.ActorFrom(ctx)
+	// What another item's agent sends is recorded, so its envelope is kept
+	// for retries and its history entry can name its sender.
+	if r.ClientMessageId == "" && model.PrincipalItem(sender) != "" {
+		r.ClientMessageId = "agent-" + id()
+	}
 	var receipt coordinator.APIMessageReceipt
 	pending := false
 	if r.ClientMessageId != "" {
@@ -320,11 +326,26 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 	if runtime.Runtime == nil {
 		return precondition("agent stopped before delivery")
 	}
+	envelope := model.Envelope{Marker: receipt.Marker}
+	if !pending {
+		if envelope, err = s.messageEnvelope(ctx, r.ItemId, sender); err != nil {
+			return err
+		}
+	} else if receipt.Marker != "" {
+		if envelope, err = s.messageEnvelope(ctx, r.ItemId, receipt.Sender); err != nil {
+			return err
+		}
+		envelope.Marker, envelope.Hops = receipt.Marker, receipt.Hops
+	}
+	text := r.Text
+	if envelope.Marker != "" {
+		text = envelope.Wrap(text)
+	}
 	commandID := ""
 	if r.ClientMessageId != "" {
 		commandID = messageCommandID(r.ItemId, r.ClientMessageId)
 		if !pending {
-			receipt = coordinator.APIMessageReceipt{ItemID: r.ItemId, MessageID: r.ClientMessageId, RuntimeID: runtime.Runtime.ID, Generation: current.Generation, CreatedAt: time.Now().UTC()}
+			receipt = coordinator.APIMessageReceipt{ItemID: r.ItemId, MessageID: r.ClientMessageId, RuntimeID: runtime.Runtime.ID, Generation: current.Generation, CreatedAt: time.Now().UTC(), Sender: sender, Hops: envelope.Hops, Marker: envelope.Marker}
 		}
 		if receipt.RuntimeID != runtime.Runtime.ID {
 			return aborted("message delivery belongs to another runtime")
@@ -339,7 +360,7 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 		return err
 	}
 	nativeConfirmation := m.PrimaryConversation != nil && m.PrimaryConversation.Driver == "claude"
-	result, err := s.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: resolve(r.ItemId), CommandType: delivery, Message: r.Text, Images: images, Actor: controlActor(ctx), RequestID: r.ClientMessageId, CommandID: commandID, ExpectedRuntimeID: runtime.Runtime.ID, RequireIdle: delivery == "prompt" && runtime.Runtime.Capabilities.IdleGuard, ControllerHolder: lease.Holder, ControllerClientID: lease.ClientID, ControllerLeaseID: lease.ID})
+	result, err := s.App.AgentControl(ctx, app.AgentControlOptions{ResolveOptions: resolve(r.ItemId), CommandType: delivery, Message: text, Images: images, Actor: controlActor(ctx), RequestID: r.ClientMessageId, CommandID: commandID, ExpectedRuntimeID: runtime.Runtime.ID, RequireIdle: delivery == "prompt" && runtime.Runtime.Capabilities.IdleGuard, ControllerHolder: lease.Holder, ControllerClientID: lease.ClientID, ControllerLeaseID: lease.ID})
 	// A follow-up is deliberately scheduled after the current turn. The
 	// driver's acknowledgement accepts that queue entry; waiting for native
 	// submission here would turn a healthy, long-running turn into an error.
@@ -363,6 +384,53 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 	}
 	return err
 }
+
+// messageEnvelope says how a message from sender reaches itemID's agent: as
+// typed when a person sent it, or the item's own agent; wrapped when another
+// item's agent did, naming it and how it relates to the item. A sender
+// whose messages have gone back and forth between agents too long without a
+// person is refused, and the item is marked unread for its user.
+func (s *Server) messageEnvelope(ctx context.Context, itemID, sender string) (model.Envelope, error) {
+	from := model.PrincipalItem(sender)
+	if from == "" || from == itemID {
+		return model.Envelope{}, nil
+	}
+	source, err := s.canonical(ctx, from, 0)
+	if err != nil {
+		return model.Envelope{}, err
+	}
+	target, err := s.canonical(ctx, itemID, 0)
+	if err != nil {
+		return model.Envelope{}, err
+	}
+	relation := model.RelationOther
+	switch {
+	case target.Manifest.Owner == sender:
+		relation = model.RelationOwner
+	case source.Manifest.Owner == model.ItemPrincipal(itemID):
+		relation = model.RelationDelegation
+	}
+	hops := s.turnHops(from) + 1
+	if hops > model.MaxAgentHops {
+		_, _ = s.App.MarkUnread(ctx, resolve(itemID))
+		return model.Envelope{}, precondition(fmt.Sprintf("agents have exchanged %d messages without a person; a person's message to %s resets this", hops-1, from))
+	}
+	return model.Envelope{Marker: model.NewEnvelopeMarker(), From: sender, Title: source.Manifest.Title, Relation: relation, Hops: hops}, nil
+}
+
+// turnHops is how many agent messages led to the item's current turn: those
+// of the last message sent to it, unless a person prompted it since.
+func (s *Server) turnHops(itemID string) int {
+	receipt, found, err := s.Core.Database().LatestAPIMessage(itemID)
+	if err != nil || !found {
+		return 0
+	}
+	if activity, err := s.Core.Database().AttentionActivity(itemID); err == nil && activity.Activity.LastRequestedAt != nil && activity.Activity.LastRequestedAt.After(receipt.CreatedAt.Add(10*time.Second)) {
+		return 0
+	}
+	return receipt.Hops
+}
+
 func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error) {
 	r := req.Msg
 	if len(r.ClientMessageId) > 200 || strings.TrimSpace(r.ClientMessageId) != r.ClientMessageId {
@@ -637,6 +705,23 @@ func (s *Server) linkPrompts(itemID string, messages []*v1.ConversationMessage) 
 			if request, ok := requests[id]; ok {
 				m.ClientMessageId = request
 				break
+			}
+		}
+		if m.ClientMessageId == "" {
+			continue
+		}
+		receipt, found, err := s.Core.Database().APIMessage(itemID, m.ClientMessageId)
+		if err != nil || !found {
+			continue
+		}
+		m.Sender = receipt.Sender
+		if receipt.Marker == "" {
+			continue
+		}
+		envelope := model.Envelope{Marker: receipt.Marker}
+		for _, part := range m.Parts {
+			if text, ok := part.Kind.(*v1.Part_Text); ok {
+				text.Text, _ = envelope.Unwrap(text.Text)
 			}
 		}
 	}

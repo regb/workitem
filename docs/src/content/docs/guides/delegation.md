@@ -60,6 +60,14 @@ An item an agent creates is its item's, not yours: the agent delegated it, and f
 - **Take one over**: `wi own --item ITEM` makes a delegated item yours, detached from the agent; it then appears in your list.
 - **When the delegating item closes**, its unfinished delegations come back to you, marked unread.
 
+Agents talk to each other with `wi send`:
+
+```bash
+wi send parser-fix --wait "Do the checks pass?"
+```
+
+The message reaches the other agent as the dashboard would send it, starting the agent when it is not running. With `--wait` the command waits for the turn it started to settle and prints the agent's last reply, so an agent asking another gets the answer as the command's result. A message from another item's agent arrives in an envelope wi writes, naming the sending item, how it relates (the item that delegated this one, one this one delegated, or another), and how many agent messages led to it; every agent is told to trust the envelope and to weigh what is inside, not to take it as your instructions. The conversation shows the message without the envelope, marked as from that item. A chain of messages between agents stops after eight without a message from you; yours resets it.
+
 Each item's history records who did what: you (`user:operator`), an item's agent (`item:<id>`), or wi on its own, and what caused it, such as a schedule (`wi events --item ITEM`).
 
 ## Agent authority
