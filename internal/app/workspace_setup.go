@@ -124,19 +124,34 @@ func (a *App) setupClaim(ctx context.Context, m model.Manifest, rerun bool) (Set
 		err    error
 	}
 	done := make(chan outcome, 1)
+	locked := make(chan struct{})
 	go func() {
-		result, err := a.setupClaimNow(context.WithoutCancel(ctx), m, rerun)
+		result, err := a.setupClaimLocked(context.WithoutCancel(ctx), m, rerun, func() { close(locked) })
 		done <- outcome{result, err}
 	}()
 	select {
 	case finished := <-done:
 		return finished.result, finished.err
 	case <-ctx.Done():
+	}
+	// The caller is told setup continues only once it holds the setup lock:
+	// whoever then waits for setup (WaitWorkspaceSetup) waits for this run,
+	// rather than finding none started yet.
+	select {
+	case <-locked:
 		return SetupResult{WorkItemID: m.ID, Warnings: []string{}}, ErrSetupContinues
+	case finished := <-done:
+		return finished.result, finished.err
 	}
 }
 
 func (a *App) setupClaimNow(ctx context.Context, m model.Manifest, rerun bool) (SetupResult, error) {
+	return a.setupClaimLocked(ctx, m, rerun, nil)
+}
+
+// setupClaimLocked sets the claim up under the item's setup lock, calling
+// onLocked once it holds it.
+func (a *App) setupClaimLocked(ctx context.Context, m model.Manifest, rerun bool, onLocked func()) (SetupResult, error) {
 	result := SetupResult{WorkItemID: m.ID, Warnings: []string{}}
 	claim := m.Checkout.Claim
 	if claim == nil || claim.Path == "" {
@@ -150,6 +165,9 @@ func (a *App) setupClaimNow(ctx context.Context, m model.Manifest, rerun bool) (
 		return result, err
 	}
 	defer lock.Release()
+	if onLocked != nil {
+		onLocked()
+	}
 	previous, _ := a.readSetupRun(m.ID)
 	if previous.Ready(claim.ID) && !rerun {
 		result.Run = previous
