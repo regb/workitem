@@ -15,7 +15,7 @@ import (
 )
 
 func codeRevision(r reviewcore.Revision) *v1.CodeRevision {
-	out := &v1.CodeRevision{Id: r.ID, CaptureId: r.CaptureID, Commit: r.Commit, Tree: r.Tree, ObservedHead: r.Head, ObservedBranch: r.Branch, DetachedHead: r.Detached, BaseCommit: r.Base, Ref: r.Ref, CreatedAt: stamp(r.CreatedAt), Trigger: r.Trigger}
+	out := &v1.CodeRevision{Id: r.ID, CaptureId: r.CaptureID, Commit: r.Commit, Tree: r.Tree, ObservedHead: r.Head, ObservedBranch: r.Branch, DetachedHead: r.Detached, BaseCommit: r.Base, Ref: r.Ref, CreatedAt: stamp(r.CreatedAt), Trigger: revisionTrigger(r.Trigger)}
 	for _, e := range r.Excluded {
 		out.Excluded = append(out.Excluded, &v1.RevisionExclusion{Path: e.Path, Reason: e.Reason})
 	}
@@ -93,7 +93,7 @@ func (s *Server) GetRevisionReview(ctx context.Context, req *connect.Request[v1.
 	}
 	out := &v1.GetReviewResponse{Revision: &v1.ReviewRevision{Version: version, BaseCommit: base, HeadCommit: head}, Branch: branch, IntegrationBranch: m.Manifest.Repository.IntegrationBranch, Truncated: truncated}
 	for _, f := range files {
-		out.Files = append(out.Files, &v1.ReviewFile{Path: f.Path, Change: f.Change})
+		out.Files = append(out.Files, &v1.ReviewFile{Path: f.Path, Change: fileChange(f.Change)})
 	}
 	return response(&v1.GetRevisionReviewResponse{Review: out}, nil)
 }

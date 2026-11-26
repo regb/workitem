@@ -85,7 +85,7 @@ func TestReviewCheckpointCLI(t *testing.T) {
 		t.Fatal("retry recaptured files")
 	}
 	f.json(&threads, "review", "thread", "t1", "--item", id)
-	if threads.Threads[0].Status != "addressed" {
+	if threads.Threads[0].Status != v1.ThreadStatus_THREAD_STATUS_ADDRESSED {
 		t.Fatal("agent resolved reviewer concern")
 	}
 }

@@ -11,16 +11,16 @@ import (
 )
 
 func reviewAnchor(a reviewcore.Anchor) *v1.ReviewAnchor {
-	return &v1.ReviewAnchor{RevisionId: a.Revision, FromRevisionId: a.FromRevision, Path: a.Path, Side: a.Side, StartLine: a.StartLine, EndLine: a.EndLine, BlobSha256: a.BlobSHA256}
+	return &v1.ReviewAnchor{RevisionId: a.Revision, FromRevisionId: a.FromRevision, Path: a.Path, Side: reviewSide(a.Side), StartLine: a.StartLine, EndLine: a.EndLine, BlobSha256: a.BlobSHA256}
 }
 func coreAnchor(a *v1.ReviewAnchor) reviewcore.Anchor {
 	if a == nil {
 		return reviewcore.Anchor{}
 	}
-	return reviewcore.Anchor{Revision: a.RevisionId, FromRevision: a.FromRevisionId, Path: a.Path, Side: a.Side, StartLine: a.StartLine, EndLine: a.EndLine, BlobSHA256: a.BlobSha256}
+	return reviewcore.Anchor{Revision: a.RevisionId, FromRevision: a.FromRevisionId, Path: a.Path, Side: coreSide(a.Side), StartLine: a.StartLine, EndLine: a.EndLine, BlobSHA256: a.BlobSha256}
 }
 func reviewDraft(d reviewcore.Draft) *v1.ReviewDraft {
-	return &v1.ReviewDraft{Id: d.ID, ThreadId: d.Thread, Anchor: reviewAnchor(d.Anchor), Body: d.Body, Resolution: d.Resolution}
+	return &v1.ReviewDraft{Id: d.ID, ThreadId: d.Thread, Anchor: reviewAnchor(d.Anchor), Body: d.Body, Resolution: threadResolution(d.Resolution)}
 }
 func reviewRound(q reviewcore.Round) *v1.ReviewRound {
 	out := &v1.ReviewRound{Id: q.ID, RevisionId: q.Revision, FromRevisionId: q.FromRevision, MessageIds: q.Messages, CreatedAt: stamp(q.CreatedAt), CommandId: q.CommandID}
@@ -43,9 +43,9 @@ func (s *Server) GetReviewThreads(ctx context.Context, req *connect.Request[v1.G
 	}
 	out := &v1.GetReviewThreadsResponse{Version: uint32(state.Version)}
 	for _, t := range state.Threads {
-		thread := &v1.ReviewThread{Id: t.ID, Anchor: reviewAnchor(t.Anchor), Status: t.Status()}
+		thread := &v1.ReviewThread{Id: t.ID, Anchor: reviewAnchor(t.Anchor), Status: threadStatus(t.Status())}
 		for _, m := range t.Messages {
-			thread.Messages = append(thread.Messages, &v1.ReviewMessage{Id: m.ID, Role: m.Role, Body: m.Body, RevisionId: m.Revision, RoundId: m.Round, Addressed: m.Addressed, Resolution: m.Resolution, CreatedAt: stamp(m.CreatedAt)})
+			thread.Messages = append(thread.Messages, &v1.ReviewMessage{Id: m.ID, Role: reviewRole(m.Role), Body: m.Body, RevisionId: m.Revision, RoundId: m.Round, Addressed: m.Addressed, Resolution: threadResolution(m.Resolution), CreatedAt: stamp(m.CreatedAt)})
 		}
 		out.Threads = append(out.Threads, thread)
 	}
@@ -71,7 +71,7 @@ func (s *Server) SaveReviewDraft(ctx context.Context, req *connect.Request[v1.Sa
 		return nil, invalid("review draft required")
 	}
 	d := r.Draft
-	out, err := s.App.MutateReview(ctx, app.ReviewMutationOptions{ResolveOptions: resolve(r.ItemId), ExpectedVersion: uint64(r.ExpectedVersion), Mutation: reviewcore.Mutation{OperationID: r.OperationId, Kind: "save_draft", Draft: reviewcore.Draft{ID: d.Id, Thread: d.ThreadId, Anchor: coreAnchor(d.Anchor), Body: d.Body, Resolution: d.Resolution}}})
+	out, err := s.App.MutateReview(ctx, app.ReviewMutationOptions{ResolveOptions: resolve(r.ItemId), ExpectedVersion: uint64(r.ExpectedVersion), Mutation: reviewcore.Mutation{OperationID: r.OperationId, Kind: "save_draft", Draft: reviewcore.Draft{ID: d.Id, Thread: d.ThreadId, Anchor: coreAnchor(d.Anchor), Body: d.Body, Resolution: coreResolution(d.Resolution)}}})
 	if err != nil {
 		return nil, checkpointError(err)
 	}

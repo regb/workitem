@@ -213,7 +213,7 @@ func TestClaudeStartupDelivery(t *testing.T) {
 						t.Fatal(err)
 					}
 					if len(revisions.Msg.Revisions) > 0 {
-						if revisions.Msg.Revisions[0].Trigger != "settled" || revisions.Msg.Revisions[0].BaseCommit != revisions.Msg.Revisions[0].ObservedHead {
+						if revisions.Msg.Revisions[0].Trigger != v1.RevisionTrigger_REVISION_TRIGGER_SETTLED || revisions.Msg.Revisions[0].BaseCommit != revisions.Msg.Revisions[0].ObservedHead {
 							t.Fatal("wrong settlement capture base", revisions.Msg)
 						}
 						break

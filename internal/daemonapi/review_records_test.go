@@ -42,7 +42,7 @@ func TestReviewRecordsPublishAtomicallyWithoutGitMetadataOrNotificationOutbox(t 
 	if r.Msg.Revision.BaseCommit != r.Msg.Revision.ObservedHead || r.Msg.Revision.Id != "r1" {
 		t.Fatal("first observed HEAD was not pinned as review base")
 	}
-	draft, err := f.Clients.Reviews.SaveReviewDraft(ctx, connect.NewRequest(&v1.SaveReviewDraftRequest{ItemId: item, OperationId: "draft", Draft: &v1.ReviewDraft{Anchor: &v1.ReviewAnchor{RevisionId: "r1", Path: "example.txt", Side: "new", StartLine: 1}, Body: "private reviewer comment text"}}))
+	draft, err := f.Clients.Reviews.SaveReviewDraft(ctx, connect.NewRequest(&v1.SaveReviewDraftRequest{ItemId: item, OperationId: "draft", Draft: &v1.ReviewDraft{Anchor: &v1.ReviewAnchor{RevisionId: "r1", Path: "example.txt", Side: v1.ReviewSide_REVIEW_SIDE_NEW, StartLine: 1}, Body: "private reviewer comment text"}}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestReviewRecordsPublishAtomicallyWithoutGitMetadataOrNotificationOutbox(t 
 	if strings.Contains(string(body), "private reviewer comment text") || strings.Contains(string(body), "Fixed on new revision") {
 		t.Fatal("compact event leaked item content")
 	}
-	if _, err := f.Clients.Reviews.SetReviewIntent(ctx, connect.NewRequest(&v1.SetReviewIntentRequest{ItemId: item, OperationId: "approve", RevisionId: "r2", Kind: "approve"})); err != nil {
+	if _, err := f.Clients.Reviews.SetReviewIntent(ctx, connect.NewRequest(&v1.SetReviewIntentRequest{ItemId: item, OperationId: "approve", RevisionId: "r2", Kind: v1.ApprovalKind_APPROVAL_KIND_APPROVE})); err != nil {
 		t.Fatal("unresolved concern blocked optional approval", err)
 	}
 }

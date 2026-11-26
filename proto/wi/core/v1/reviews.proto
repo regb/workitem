@@ -92,6 +92,80 @@ message RevisionExclusion {
 }
 
 // CodeRevision is an immutable snapshot of a checkout.
+// RevisionTrigger is what captured a revision.
+enum RevisionTrigger {
+  REVISION_TRIGGER_UNSPECIFIED = 0;
+  // SETTLED is the end of an agent's turn.
+  REVISION_TRIGGER_SETTLED = 1;
+  REVISION_TRIGGER_MANUAL = 2;
+  // REPLY is an agent's reply to review threads.
+  REVISION_TRIGGER_REPLY = 3;
+  // MERGE is the input to a merge.
+  REVISION_TRIGGER_MERGE = 4;
+}
+
+// ReviewSide is a side of a comparison.
+enum ReviewSide {
+  REVIEW_SIDE_UNSPECIFIED = 0;
+  REVIEW_SIDE_OLD = 1;
+  REVIEW_SIDE_NEW = 2;
+}
+
+// ReviewRole is who wrote a review message.
+enum ReviewRole {
+  REVIEW_ROLE_UNSPECIFIED = 0;
+  REVIEW_ROLE_REVIEWER = 1;
+  REVIEW_ROLE_AGENT = 2;
+}
+
+// ThreadResolution is what a reviewer's message does to its thread.
+enum ThreadResolution {
+  THREAD_RESOLUTION_UNSPECIFIED = 0;
+  // OPEN reopens the thread.
+  THREAD_RESOLUTION_OPEN = 1;
+  THREAD_RESOLUTION_RESOLVED = 2;
+  THREAD_RESOLUTION_WITHDRAWN = 3;
+}
+
+// ThreadStatus is where a review thread stands.
+enum ThreadStatus {
+  THREAD_STATUS_UNSPECIFIED = 0;
+  THREAD_STATUS_OPEN = 1;
+  // ADDRESSED means the agent claims a revision addresses it; the reviewer
+  // has not resolved it.
+  THREAD_STATUS_ADDRESSED = 2;
+  THREAD_STATUS_RESOLVED = 3;
+  THREAD_STATUS_WITHDRAWN = 4;
+}
+
+// ApprovalKind is what a reviewer says of a revision as a whole.
+enum ApprovalKind {
+  APPROVAL_KIND_UNSPECIFIED = 0;
+  APPROVAL_KIND_APPROVE = 1;
+  APPROVAL_KIND_WITHDRAW_APPROVAL = 2;
+  APPROVAL_KIND_REQUEST_REVIEW = 3;
+  APPROVAL_KIND_REQUEST_CHANGES = 4;
+}
+
+// FileChange is how a file differs in a comparison.
+enum FileChange {
+  FILE_CHANGE_UNSPECIFIED = 0;
+  FILE_CHANGE_ADDED = 1;
+  FILE_CHANGE_MODIFIED = 2;
+  FILE_CHANGE_DELETED = 3;
+  FILE_CHANGE_CONFLICTED = 4;
+}
+
+// BranchKind is what a branch in a commit history is to the item.
+enum BranchKind {
+  BRANCH_KIND_UNSPECIFIED = 0;
+  // ITEM is the item's own branch.
+  BRANCH_KIND_ITEM = 1;
+  BRANCH_KIND_INTEGRATION = 2;
+  // REMOTE is the integration branch's upstream, as last fetched.
+  BRANCH_KIND_REMOTE = 3;
+}
+
 message CodeRevision {
   // id is the item-scoped alias, such as r3.
   string id = 1;
@@ -106,8 +180,7 @@ message CodeRevision {
   // ref is the private ref that keeps the snapshot.
   string ref = 8;
   google.protobuf.Timestamp created_at = 9;
-  // trigger is settled (after an agent turn), manual, reply or merge.
-  string trigger = 10;
+  RevisionTrigger trigger = 10;
   // excluded lists files left out of the snapshot, with why.
   repeated RevisionExclusion excluded = 11;
   bool detached_head = 12;
@@ -119,8 +192,7 @@ message ReviewAnchor {
   string revision_id = 1;
   string from_revision_id = 2;
   string path = 3;
-  // side is old or new.
-  string side = 4;
+  ReviewSide side = 4;
   uint32 start_line = 5;
   uint32 end_line = 6;
   string blob_sha256 = 7;
@@ -128,23 +200,21 @@ message ReviewAnchor {
 
 message ReviewMessage {
   string id = 1;
-  // role is reviewer or agent.
-  string role = 2;
+  ReviewRole role = 2;
   string body = 3;
   string revision_id = 4;
   string round_id = 5;
   // addressed is the agent's claim that the revision addresses the thread.
   bool addressed = 6;
-  // resolution is a reviewer's open, resolved or withdrawn.
-  string resolution = 7;
+  // resolution is what a reviewer's message did to the thread, if anything.
+  ThreadResolution resolution = 7;
   google.protobuf.Timestamp created_at = 8;
 }
 
 message ReviewThread {
   string id = 1;
   ReviewAnchor anchor = 2;
-  // status is open, addressed, resolved or withdrawn.
-  string status = 3;
+  ThreadStatus status = 3;
   repeated ReviewMessage messages = 4;
 }
 
@@ -165,14 +235,15 @@ message ReviewDraft {
   string thread_id = 2;
   ReviewAnchor anchor = 3;
   string body = 4;
-  string resolution = 5;
+  // resolution resolves, withdraws or reopens the thread with the message;
+  // unspecified leaves it as it is.
+  ThreadResolution resolution = 5;
 }
 
 message ReviewApproval {
   string id = 1;
   string revision_id = 2;
-  // kind is approve, withdraw_approval, request_review or request_changes.
-  string kind = 3;
+  ApprovalKind kind = 3;
   string message = 4;
   google.protobuf.Timestamp created_at = 5;
 }
@@ -233,6 +304,8 @@ message GetRevisionPatchRequest {
 
 message GetRevisionPatchResponse {
   string patch = 1;
+  // version identifies the comparison's content, not the review records:
+  // pass it as GetRevisionReviewFileRequest.expected_version.
   string version = 2;
 }
 
@@ -351,7 +424,7 @@ message SetReviewIntentRequest {
   string item_id = 1;
   string operation_id = 2;
   string revision_id = 3;
-  string kind = 4;
+  ApprovalKind kind = 4;
   string message = 5;
   uint32 expected_version = 6;
 }
@@ -398,6 +471,9 @@ message GetReviewRequest {
 // ReviewRevision identifies resolved commits and, for working files, the
 // owning claim. It is not an atomic snapshot of externally edited files.
 message ReviewRevision {
+  // version identifies the comparison's content, unlike the review records'
+  // uint32 versions, which fence their mutations: pass it as
+  // GetReviewFileRequest.expected_version.
   string version = 1;
   string base_commit = 2;
   string head_commit = 3;
@@ -408,8 +484,9 @@ message ReviewRevision {
 
 message ReviewFile {
   string path = 1;
-  // added, modified, deleted, or conflicted. Renames appear as delete/add.
-  string change = 2;
+  // change is how the file differs; a rename appears as a deletion and an
+  // addition.
+  FileChange change = 2;
 }
 
 message GetReviewResponse {
@@ -449,7 +526,7 @@ message ReviewCommit {
   string sha = 1;
   string subject = 2;
   string author = 3;
-  string authored_at = 4;
+  google.protobuf.Timestamp authored_at = 4;
   repeated string parent_shas = 5;
 }
 
@@ -457,8 +534,7 @@ message ReviewBranch {
   string name = 1;
   // Empty when this branch has no locally available commit.
   string sha = 2;
-  // item, integration, or remote.
-  string kind = 3;
+  BranchKind kind = 3;
 }
 
 message ListReviewCommitsResponse {

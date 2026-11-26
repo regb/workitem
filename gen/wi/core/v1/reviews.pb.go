@@ -22,6 +22,445 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// CodeRevision is an immutable snapshot of a checkout.
+// RevisionTrigger is what captured a revision.
+type RevisionTrigger int32
+
+const (
+	RevisionTrigger_REVISION_TRIGGER_UNSPECIFIED RevisionTrigger = 0
+	// SETTLED is the end of an agent's turn.
+	RevisionTrigger_REVISION_TRIGGER_SETTLED RevisionTrigger = 1
+	RevisionTrigger_REVISION_TRIGGER_MANUAL  RevisionTrigger = 2
+	// REPLY is an agent's reply to review threads.
+	RevisionTrigger_REVISION_TRIGGER_REPLY RevisionTrigger = 3
+	// MERGE is the input to a merge.
+	RevisionTrigger_REVISION_TRIGGER_MERGE RevisionTrigger = 4
+)
+
+// Enum value maps for RevisionTrigger.
+var (
+	RevisionTrigger_name = map[int32]string{
+		0: "REVISION_TRIGGER_UNSPECIFIED",
+		1: "REVISION_TRIGGER_SETTLED",
+		2: "REVISION_TRIGGER_MANUAL",
+		3: "REVISION_TRIGGER_REPLY",
+		4: "REVISION_TRIGGER_MERGE",
+	}
+	RevisionTrigger_value = map[string]int32{
+		"REVISION_TRIGGER_UNSPECIFIED": 0,
+		"REVISION_TRIGGER_SETTLED":     1,
+		"REVISION_TRIGGER_MANUAL":      2,
+		"REVISION_TRIGGER_REPLY":       3,
+		"REVISION_TRIGGER_MERGE":       4,
+	}
+)
+
+func (x RevisionTrigger) Enum() *RevisionTrigger {
+	p := new(RevisionTrigger)
+	*p = x
+	return p
+}
+
+func (x RevisionTrigger) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (RevisionTrigger) Descriptor() protoreflect.EnumDescriptor {
+	return file_wi_core_v1_reviews_proto_enumTypes[0].Descriptor()
+}
+
+func (RevisionTrigger) Type() protoreflect.EnumType {
+	return &file_wi_core_v1_reviews_proto_enumTypes[0]
+}
+
+func (x RevisionTrigger) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use RevisionTrigger.Descriptor instead.
+func (RevisionTrigger) EnumDescriptor() ([]byte, []int) {
+	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{0}
+}
+
+// ReviewSide is a side of a comparison.
+type ReviewSide int32
+
+const (
+	ReviewSide_REVIEW_SIDE_UNSPECIFIED ReviewSide = 0
+	ReviewSide_REVIEW_SIDE_OLD         ReviewSide = 1
+	ReviewSide_REVIEW_SIDE_NEW         ReviewSide = 2
+)
+
+// Enum value maps for ReviewSide.
+var (
+	ReviewSide_name = map[int32]string{
+		0: "REVIEW_SIDE_UNSPECIFIED",
+		1: "REVIEW_SIDE_OLD",
+		2: "REVIEW_SIDE_NEW",
+	}
+	ReviewSide_value = map[string]int32{
+		"REVIEW_SIDE_UNSPECIFIED": 0,
+		"REVIEW_SIDE_OLD":         1,
+		"REVIEW_SIDE_NEW":         2,
+	}
+)
+
+func (x ReviewSide) Enum() *ReviewSide {
+	p := new(ReviewSide)
+	*p = x
+	return p
+}
+
+func (x ReviewSide) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ReviewSide) Descriptor() protoreflect.EnumDescriptor {
+	return file_wi_core_v1_reviews_proto_enumTypes[1].Descriptor()
+}
+
+func (ReviewSide) Type() protoreflect.EnumType {
+	return &file_wi_core_v1_reviews_proto_enumTypes[1]
+}
+
+func (x ReviewSide) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ReviewSide.Descriptor instead.
+func (ReviewSide) EnumDescriptor() ([]byte, []int) {
+	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{1}
+}
+
+// ReviewRole is who wrote a review message.
+type ReviewRole int32
+
+const (
+	ReviewRole_REVIEW_ROLE_UNSPECIFIED ReviewRole = 0
+	ReviewRole_REVIEW_ROLE_REVIEWER    ReviewRole = 1
+	ReviewRole_REVIEW_ROLE_AGENT       ReviewRole = 2
+)
+
+// Enum value maps for ReviewRole.
+var (
+	ReviewRole_name = map[int32]string{
+		0: "REVIEW_ROLE_UNSPECIFIED",
+		1: "REVIEW_ROLE_REVIEWER",
+		2: "REVIEW_ROLE_AGENT",
+	}
+	ReviewRole_value = map[string]int32{
+		"REVIEW_ROLE_UNSPECIFIED": 0,
+		"REVIEW_ROLE_REVIEWER":    1,
+		"REVIEW_ROLE_AGENT":       2,
+	}
+)
+
+func (x ReviewRole) Enum() *ReviewRole {
+	p := new(ReviewRole)
+	*p = x
+	return p
+}
+
+func (x ReviewRole) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ReviewRole) Descriptor() protoreflect.EnumDescriptor {
+	return file_wi_core_v1_reviews_proto_enumTypes[2].Descriptor()
+}
+
+func (ReviewRole) Type() protoreflect.EnumType {
+	return &file_wi_core_v1_reviews_proto_enumTypes[2]
+}
+
+func (x ReviewRole) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ReviewRole.Descriptor instead.
+func (ReviewRole) EnumDescriptor() ([]byte, []int) {
+	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{2}
+}
+
+// ThreadResolution is what a reviewer's message does to its thread.
+type ThreadResolution int32
+
+const (
+	ThreadResolution_THREAD_RESOLUTION_UNSPECIFIED ThreadResolution = 0
+	// OPEN reopens the thread.
+	ThreadResolution_THREAD_RESOLUTION_OPEN      ThreadResolution = 1
+	ThreadResolution_THREAD_RESOLUTION_RESOLVED  ThreadResolution = 2
+	ThreadResolution_THREAD_RESOLUTION_WITHDRAWN ThreadResolution = 3
+)
+
+// Enum value maps for ThreadResolution.
+var (
+	ThreadResolution_name = map[int32]string{
+		0: "THREAD_RESOLUTION_UNSPECIFIED",
+		1: "THREAD_RESOLUTION_OPEN",
+		2: "THREAD_RESOLUTION_RESOLVED",
+		3: "THREAD_RESOLUTION_WITHDRAWN",
+	}
+	ThreadResolution_value = map[string]int32{
+		"THREAD_RESOLUTION_UNSPECIFIED": 0,
+		"THREAD_RESOLUTION_OPEN":        1,
+		"THREAD_RESOLUTION_RESOLVED":    2,
+		"THREAD_RESOLUTION_WITHDRAWN":   3,
+	}
+)
+
+func (x ThreadResolution) Enum() *ThreadResolution {
+	p := new(ThreadResolution)
+	*p = x
+	return p
+}
+
+func (x ThreadResolution) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ThreadResolution) Descriptor() protoreflect.EnumDescriptor {
+	return file_wi_core_v1_reviews_proto_enumTypes[3].Descriptor()
+}
+
+func (ThreadResolution) Type() protoreflect.EnumType {
+	return &file_wi_core_v1_reviews_proto_enumTypes[3]
+}
+
+func (x ThreadResolution) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ThreadResolution.Descriptor instead.
+func (ThreadResolution) EnumDescriptor() ([]byte, []int) {
+	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{3}
+}
+
+// ThreadStatus is where a review thread stands.
+type ThreadStatus int32
+
+const (
+	ThreadStatus_THREAD_STATUS_UNSPECIFIED ThreadStatus = 0
+	ThreadStatus_THREAD_STATUS_OPEN        ThreadStatus = 1
+	// ADDRESSED means the agent claims a revision addresses it; the reviewer
+	// has not resolved it.
+	ThreadStatus_THREAD_STATUS_ADDRESSED ThreadStatus = 2
+	ThreadStatus_THREAD_STATUS_RESOLVED  ThreadStatus = 3
+	ThreadStatus_THREAD_STATUS_WITHDRAWN ThreadStatus = 4
+)
+
+// Enum value maps for ThreadStatus.
+var (
+	ThreadStatus_name = map[int32]string{
+		0: "THREAD_STATUS_UNSPECIFIED",
+		1: "THREAD_STATUS_OPEN",
+		2: "THREAD_STATUS_ADDRESSED",
+		3: "THREAD_STATUS_RESOLVED",
+		4: "THREAD_STATUS_WITHDRAWN",
+	}
+	ThreadStatus_value = map[string]int32{
+		"THREAD_STATUS_UNSPECIFIED": 0,
+		"THREAD_STATUS_OPEN":        1,
+		"THREAD_STATUS_ADDRESSED":   2,
+		"THREAD_STATUS_RESOLVED":    3,
+		"THREAD_STATUS_WITHDRAWN":   4,
+	}
+)
+
+func (x ThreadStatus) Enum() *ThreadStatus {
+	p := new(ThreadStatus)
+	*p = x
+	return p
+}
+
+func (x ThreadStatus) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ThreadStatus) Descriptor() protoreflect.EnumDescriptor {
+	return file_wi_core_v1_reviews_proto_enumTypes[4].Descriptor()
+}
+
+func (ThreadStatus) Type() protoreflect.EnumType {
+	return &file_wi_core_v1_reviews_proto_enumTypes[4]
+}
+
+func (x ThreadStatus) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ThreadStatus.Descriptor instead.
+func (ThreadStatus) EnumDescriptor() ([]byte, []int) {
+	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{4}
+}
+
+// ApprovalKind is what a reviewer says of a revision as a whole.
+type ApprovalKind int32
+
+const (
+	ApprovalKind_APPROVAL_KIND_UNSPECIFIED       ApprovalKind = 0
+	ApprovalKind_APPROVAL_KIND_APPROVE           ApprovalKind = 1
+	ApprovalKind_APPROVAL_KIND_WITHDRAW_APPROVAL ApprovalKind = 2
+	ApprovalKind_APPROVAL_KIND_REQUEST_REVIEW    ApprovalKind = 3
+	ApprovalKind_APPROVAL_KIND_REQUEST_CHANGES   ApprovalKind = 4
+)
+
+// Enum value maps for ApprovalKind.
+var (
+	ApprovalKind_name = map[int32]string{
+		0: "APPROVAL_KIND_UNSPECIFIED",
+		1: "APPROVAL_KIND_APPROVE",
+		2: "APPROVAL_KIND_WITHDRAW_APPROVAL",
+		3: "APPROVAL_KIND_REQUEST_REVIEW",
+		4: "APPROVAL_KIND_REQUEST_CHANGES",
+	}
+	ApprovalKind_value = map[string]int32{
+		"APPROVAL_KIND_UNSPECIFIED":       0,
+		"APPROVAL_KIND_APPROVE":           1,
+		"APPROVAL_KIND_WITHDRAW_APPROVAL": 2,
+		"APPROVAL_KIND_REQUEST_REVIEW":    3,
+		"APPROVAL_KIND_REQUEST_CHANGES":   4,
+	}
+)
+
+func (x ApprovalKind) Enum() *ApprovalKind {
+	p := new(ApprovalKind)
+	*p = x
+	return p
+}
+
+func (x ApprovalKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ApprovalKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_wi_core_v1_reviews_proto_enumTypes[5].Descriptor()
+}
+
+func (ApprovalKind) Type() protoreflect.EnumType {
+	return &file_wi_core_v1_reviews_proto_enumTypes[5]
+}
+
+func (x ApprovalKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ApprovalKind.Descriptor instead.
+func (ApprovalKind) EnumDescriptor() ([]byte, []int) {
+	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{5}
+}
+
+// FileChange is how a file differs in a comparison.
+type FileChange int32
+
+const (
+	FileChange_FILE_CHANGE_UNSPECIFIED FileChange = 0
+	FileChange_FILE_CHANGE_ADDED       FileChange = 1
+	FileChange_FILE_CHANGE_MODIFIED    FileChange = 2
+	FileChange_FILE_CHANGE_DELETED     FileChange = 3
+	FileChange_FILE_CHANGE_CONFLICTED  FileChange = 4
+)
+
+// Enum value maps for FileChange.
+var (
+	FileChange_name = map[int32]string{
+		0: "FILE_CHANGE_UNSPECIFIED",
+		1: "FILE_CHANGE_ADDED",
+		2: "FILE_CHANGE_MODIFIED",
+		3: "FILE_CHANGE_DELETED",
+		4: "FILE_CHANGE_CONFLICTED",
+	}
+	FileChange_value = map[string]int32{
+		"FILE_CHANGE_UNSPECIFIED": 0,
+		"FILE_CHANGE_ADDED":       1,
+		"FILE_CHANGE_MODIFIED":    2,
+		"FILE_CHANGE_DELETED":     3,
+		"FILE_CHANGE_CONFLICTED":  4,
+	}
+)
+
+func (x FileChange) Enum() *FileChange {
+	p := new(FileChange)
+	*p = x
+	return p
+}
+
+func (x FileChange) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (FileChange) Descriptor() protoreflect.EnumDescriptor {
+	return file_wi_core_v1_reviews_proto_enumTypes[6].Descriptor()
+}
+
+func (FileChange) Type() protoreflect.EnumType {
+	return &file_wi_core_v1_reviews_proto_enumTypes[6]
+}
+
+func (x FileChange) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use FileChange.Descriptor instead.
+func (FileChange) EnumDescriptor() ([]byte, []int) {
+	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{6}
+}
+
+// BranchKind is what a branch in a commit history is to the item.
+type BranchKind int32
+
+const (
+	BranchKind_BRANCH_KIND_UNSPECIFIED BranchKind = 0
+	// ITEM is the item's own branch.
+	BranchKind_BRANCH_KIND_ITEM        BranchKind = 1
+	BranchKind_BRANCH_KIND_INTEGRATION BranchKind = 2
+	// REMOTE is the integration branch's upstream, as last fetched.
+	BranchKind_BRANCH_KIND_REMOTE BranchKind = 3
+)
+
+// Enum value maps for BranchKind.
+var (
+	BranchKind_name = map[int32]string{
+		0: "BRANCH_KIND_UNSPECIFIED",
+		1: "BRANCH_KIND_ITEM",
+		2: "BRANCH_KIND_INTEGRATION",
+		3: "BRANCH_KIND_REMOTE",
+	}
+	BranchKind_value = map[string]int32{
+		"BRANCH_KIND_UNSPECIFIED": 0,
+		"BRANCH_KIND_ITEM":        1,
+		"BRANCH_KIND_INTEGRATION": 2,
+		"BRANCH_KIND_REMOTE":      3,
+	}
+)
+
+func (x BranchKind) Enum() *BranchKind {
+	p := new(BranchKind)
+	*p = x
+	return p
+}
+
+func (x BranchKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (BranchKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_wi_core_v1_reviews_proto_enumTypes[7].Descriptor()
+}
+
+func (BranchKind) Type() protoreflect.EnumType {
+	return &file_wi_core_v1_reviews_proto_enumTypes[7]
+}
+
+func (x BranchKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use BranchKind.Descriptor instead.
+func (BranchKind) EnumDescriptor() ([]byte, []int) {
+	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{7}
+}
+
 type ReviewComparison int32
 
 const (
@@ -70,11 +509,11 @@ func (x ReviewComparison) String() string {
 }
 
 func (ReviewComparison) Descriptor() protoreflect.EnumDescriptor {
-	return file_wi_core_v1_reviews_proto_enumTypes[0].Descriptor()
+	return file_wi_core_v1_reviews_proto_enumTypes[8].Descriptor()
 }
 
 func (ReviewComparison) Type() protoreflect.EnumType {
-	return &file_wi_core_v1_reviews_proto_enumTypes[0]
+	return &file_wi_core_v1_reviews_proto_enumTypes[8]
 }
 
 func (x ReviewComparison) Number() protoreflect.EnumNumber {
@@ -83,7 +522,7 @@ func (x ReviewComparison) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReviewComparison.Descriptor instead.
 func (ReviewComparison) EnumDescriptor() ([]byte, []int) {
-	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{0}
+	return file_wi_core_v1_reviews_proto_rawDescGZIP(), []int{8}
 }
 
 // CaptureGap records a capture that failed; history shows the gap.
@@ -199,7 +638,6 @@ func (x *RevisionExclusion) GetReason() string {
 	return ""
 }
 
-// CodeRevision is an immutable snapshot of a checkout.
 type CodeRevision struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// id is the item-scoped alias, such as r3.
@@ -215,8 +653,7 @@ type CodeRevision struct {
 	// ref is the private ref that keeps the snapshot.
 	Ref       string                 `protobuf:"bytes,8,opt,name=ref,proto3" json:"ref,omitempty"`
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	// trigger is settled (after an agent turn), manual, reply or merge.
-	Trigger string `protobuf:"bytes,10,opt,name=trigger,proto3" json:"trigger,omitempty"`
+	Trigger   RevisionTrigger        `protobuf:"varint,10,opt,name=trigger,proto3,enum=wi.core.v1.RevisionTrigger" json:"trigger,omitempty"`
 	// excluded lists files left out of the snapshot, with why.
 	Excluded      []*RevisionExclusion `protobuf:"bytes,11,rep,name=excluded,proto3" json:"excluded,omitempty"`
 	DetachedHead  bool                 `protobuf:"varint,12,opt,name=detached_head,json=detachedHead,proto3" json:"detached_head,omitempty"`
@@ -317,11 +754,11 @@ func (x *CodeRevision) GetCreatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *CodeRevision) GetTrigger() string {
+func (x *CodeRevision) GetTrigger() RevisionTrigger {
 	if x != nil {
 		return x.Trigger
 	}
-	return ""
+	return RevisionTrigger_REVISION_TRIGGER_UNSPECIFIED
 }
 
 func (x *CodeRevision) GetExcluded() []*RevisionExclusion {
@@ -345,13 +782,12 @@ type ReviewAnchor struct {
 	RevisionId     string                 `protobuf:"bytes,1,opt,name=revision_id,json=revisionId,proto3" json:"revision_id,omitempty"`
 	FromRevisionId string                 `protobuf:"bytes,2,opt,name=from_revision_id,json=fromRevisionId,proto3" json:"from_revision_id,omitempty"`
 	Path           string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
-	// side is old or new.
-	Side          string `protobuf:"bytes,4,opt,name=side,proto3" json:"side,omitempty"`
-	StartLine     uint32 `protobuf:"varint,5,opt,name=start_line,json=startLine,proto3" json:"start_line,omitempty"`
-	EndLine       uint32 `protobuf:"varint,6,opt,name=end_line,json=endLine,proto3" json:"end_line,omitempty"`
-	BlobSha256    string `protobuf:"bytes,7,opt,name=blob_sha256,json=blobSha256,proto3" json:"blob_sha256,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Side           ReviewSide             `protobuf:"varint,4,opt,name=side,proto3,enum=wi.core.v1.ReviewSide" json:"side,omitempty"`
+	StartLine      uint32                 `protobuf:"varint,5,opt,name=start_line,json=startLine,proto3" json:"start_line,omitempty"`
+	EndLine        uint32                 `protobuf:"varint,6,opt,name=end_line,json=endLine,proto3" json:"end_line,omitempty"`
+	BlobSha256     string                 `protobuf:"bytes,7,opt,name=blob_sha256,json=blobSha256,proto3" json:"blob_sha256,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ReviewAnchor) Reset() {
@@ -405,11 +841,11 @@ func (x *ReviewAnchor) GetPath() string {
 	return ""
 }
 
-func (x *ReviewAnchor) GetSide() string {
+func (x *ReviewAnchor) GetSide() ReviewSide {
 	if x != nil {
 		return x.Side
 	}
-	return ""
+	return ReviewSide_REVIEW_SIDE_UNSPECIFIED
 }
 
 func (x *ReviewAnchor) GetStartLine() uint32 {
@@ -434,17 +870,16 @@ func (x *ReviewAnchor) GetBlobSha256() string {
 }
 
 type ReviewMessage struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// role is reviewer or agent.
-	Role       string `protobuf:"bytes,2,opt,name=role,proto3" json:"role,omitempty"`
-	Body       string `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
-	RevisionId string `protobuf:"bytes,4,opt,name=revision_id,json=revisionId,proto3" json:"revision_id,omitempty"`
-	RoundId    string `protobuf:"bytes,5,opt,name=round_id,json=roundId,proto3" json:"round_id,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Role       ReviewRole             `protobuf:"varint,2,opt,name=role,proto3,enum=wi.core.v1.ReviewRole" json:"role,omitempty"`
+	Body       string                 `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
+	RevisionId string                 `protobuf:"bytes,4,opt,name=revision_id,json=revisionId,proto3" json:"revision_id,omitempty"`
+	RoundId    string                 `protobuf:"bytes,5,opt,name=round_id,json=roundId,proto3" json:"round_id,omitempty"`
 	// addressed is the agent's claim that the revision addresses the thread.
 	Addressed bool `protobuf:"varint,6,opt,name=addressed,proto3" json:"addressed,omitempty"`
-	// resolution is a reviewer's open, resolved or withdrawn.
-	Resolution    string                 `protobuf:"bytes,7,opt,name=resolution,proto3" json:"resolution,omitempty"`
+	// resolution is what a reviewer's message did to the thread, if anything.
+	Resolution    ThreadResolution       `protobuf:"varint,7,opt,name=resolution,proto3,enum=wi.core.v1.ThreadResolution" json:"resolution,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -487,11 +922,11 @@ func (x *ReviewMessage) GetId() string {
 	return ""
 }
 
-func (x *ReviewMessage) GetRole() string {
+func (x *ReviewMessage) GetRole() ReviewRole {
 	if x != nil {
 		return x.Role
 	}
-	return ""
+	return ReviewRole_REVIEW_ROLE_UNSPECIFIED
 }
 
 func (x *ReviewMessage) GetBody() string {
@@ -522,11 +957,11 @@ func (x *ReviewMessage) GetAddressed() bool {
 	return false
 }
 
-func (x *ReviewMessage) GetResolution() string {
+func (x *ReviewMessage) GetResolution() ThreadResolution {
 	if x != nil {
 		return x.Resolution
 	}
-	return ""
+	return ThreadResolution_THREAD_RESOLUTION_UNSPECIFIED
 }
 
 func (x *ReviewMessage) GetCreatedAt() *timestamppb.Timestamp {
@@ -537,12 +972,11 @@ func (x *ReviewMessage) GetCreatedAt() *timestamppb.Timestamp {
 }
 
 type ReviewThread struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	Id     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Anchor *ReviewAnchor          `protobuf:"bytes,2,opt,name=anchor,proto3" json:"anchor,omitempty"`
-	// status is open, addressed, resolved or withdrawn.
-	Status        string           `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
-	Messages      []*ReviewMessage `protobuf:"bytes,4,rep,name=messages,proto3" json:"messages,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Anchor        *ReviewAnchor          `protobuf:"bytes,2,opt,name=anchor,proto3" json:"anchor,omitempty"`
+	Status        ThreadStatus           `protobuf:"varint,3,opt,name=status,proto3,enum=wi.core.v1.ThreadStatus" json:"status,omitempty"`
+	Messages      []*ReviewMessage       `protobuf:"bytes,4,rep,name=messages,proto3" json:"messages,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -591,11 +1025,11 @@ func (x *ReviewThread) GetAnchor() *ReviewAnchor {
 	return nil
 }
 
-func (x *ReviewThread) GetStatus() string {
+func (x *ReviewThread) GetStatus() ThreadStatus {
 	if x != nil {
 		return x.Status
 	}
-	return ""
+	return ThreadStatus_THREAD_STATUS_UNSPECIFIED
 }
 
 func (x *ReviewThread) GetMessages() []*ReviewMessage {
@@ -702,10 +1136,12 @@ type ReviewDraft struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// thread_id answers an existing thread; empty starts one at anchor.
-	ThreadId      string        `protobuf:"bytes,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
-	Anchor        *ReviewAnchor `protobuf:"bytes,3,opt,name=anchor,proto3" json:"anchor,omitempty"`
-	Body          string        `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
-	Resolution    string        `protobuf:"bytes,5,opt,name=resolution,proto3" json:"resolution,omitempty"`
+	ThreadId string        `protobuf:"bytes,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	Anchor   *ReviewAnchor `protobuf:"bytes,3,opt,name=anchor,proto3" json:"anchor,omitempty"`
+	Body     string        `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
+	// resolution resolves, withdraws or reopens the thread with the message;
+	// unspecified leaves it as it is.
+	Resolution    ThreadResolution `protobuf:"varint,5,opt,name=resolution,proto3,enum=wi.core.v1.ThreadResolution" json:"resolution,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -768,19 +1204,18 @@ func (x *ReviewDraft) GetBody() string {
 	return ""
 }
 
-func (x *ReviewDraft) GetResolution() string {
+func (x *ReviewDraft) GetResolution() ThreadResolution {
 	if x != nil {
 		return x.Resolution
 	}
-	return ""
+	return ThreadResolution_THREAD_RESOLUTION_UNSPECIFIED
 }
 
 type ReviewApproval struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Id         string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	RevisionId string                 `protobuf:"bytes,2,opt,name=revision_id,json=revisionId,proto3" json:"revision_id,omitempty"`
-	// kind is approve, withdraw_approval, request_review or request_changes.
-	Kind          string                 `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	RevisionId    string                 `protobuf:"bytes,2,opt,name=revision_id,json=revisionId,proto3" json:"revision_id,omitempty"`
+	Kind          ApprovalKind           `protobuf:"varint,3,opt,name=kind,proto3,enum=wi.core.v1.ApprovalKind" json:"kind,omitempty"`
 	Message       string                 `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -831,11 +1266,11 @@ func (x *ReviewApproval) GetRevisionId() string {
 	return ""
 }
 
-func (x *ReviewApproval) GetKind() string {
+func (x *ReviewApproval) GetKind() ApprovalKind {
 	if x != nil {
 		return x.Kind
 	}
-	return ""
+	return ApprovalKind_APPROVAL_KIND_UNSPECIFIED
 }
 
 func (x *ReviewApproval) GetMessage() string {
@@ -1346,9 +1781,11 @@ func (x *GetRevisionPatchRequest) GetPath() string {
 }
 
 type GetRevisionPatchResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Patch         string                 `protobuf:"bytes,1,opt,name=patch,proto3" json:"patch,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Patch string                 `protobuf:"bytes,1,opt,name=patch,proto3" json:"patch,omitempty"`
+	// version identifies the comparison's content, not the review records:
+	// pass it as GetRevisionReviewFileRequest.expected_version.
+	Version       string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2471,7 +2908,7 @@ type SetReviewIntentRequest struct {
 	ItemId          string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	OperationId     string                 `protobuf:"bytes,2,opt,name=operation_id,json=operationId,proto3" json:"operation_id,omitempty"`
 	RevisionId      string                 `protobuf:"bytes,3,opt,name=revision_id,json=revisionId,proto3" json:"revision_id,omitempty"`
-	Kind            string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	Kind            ApprovalKind           `protobuf:"varint,4,opt,name=kind,proto3,enum=wi.core.v1.ApprovalKind" json:"kind,omitempty"`
 	Message         string                 `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
 	ExpectedVersion uint32                 `protobuf:"varint,6,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
@@ -2529,11 +2966,11 @@ func (x *SetReviewIntentRequest) GetRevisionId() string {
 	return ""
 }
 
-func (x *SetReviewIntentRequest) GetKind() string {
+func (x *SetReviewIntentRequest) GetKind() ApprovalKind {
 	if x != nil {
 		return x.Kind
 	}
-	return ""
+	return ApprovalKind_APPROVAL_KIND_UNSPECIFIED
 }
 
 func (x *SetReviewIntentRequest) GetMessage() string {
@@ -2772,13 +3209,16 @@ func (x *GetReviewRequest) GetBaseCommit() string {
 // ReviewRevision identifies resolved commits and, for working files, the
 // owning claim. It is not an atomic snapshot of externally edited files.
 type ReviewRevision struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Version         string                 `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-	BaseCommit      string                 `protobuf:"bytes,2,opt,name=base_commit,json=baseCommit,proto3" json:"base_commit,omitempty"`
-	HeadCommit      string                 `protobuf:"bytes,3,opt,name=head_commit,json=headCommit,proto3" json:"head_commit,omitempty"`
-	ClaimId         string                 `protobuf:"bytes,4,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
-	ClaimGeneration uint32                 `protobuf:"varint,5,opt,name=claim_generation,json=claimGeneration,proto3" json:"claim_generation,omitempty"`
-	WorkingTree     bool                   `protobuf:"varint,6,opt,name=working_tree,json=workingTree,proto3" json:"working_tree,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// version identifies the comparison's content, unlike the review records'
+	// uint32 versions, which fence their mutations: pass it as
+	// GetReviewFileRequest.expected_version.
+	Version         string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+	BaseCommit      string `protobuf:"bytes,2,opt,name=base_commit,json=baseCommit,proto3" json:"base_commit,omitempty"`
+	HeadCommit      string `protobuf:"bytes,3,opt,name=head_commit,json=headCommit,proto3" json:"head_commit,omitempty"`
+	ClaimId         string `protobuf:"bytes,4,opt,name=claim_id,json=claimId,proto3" json:"claim_id,omitempty"`
+	ClaimGeneration uint32 `protobuf:"varint,5,opt,name=claim_generation,json=claimGeneration,proto3" json:"claim_generation,omitempty"`
+	WorkingTree     bool   `protobuf:"varint,6,opt,name=working_tree,json=workingTree,proto3" json:"working_tree,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2858,8 +3298,9 @@ func (x *ReviewRevision) GetWorkingTree() bool {
 type ReviewFile struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Path  string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	// added, modified, deleted, or conflicted. Renames appear as delete/add.
-	Change        string `protobuf:"bytes,2,opt,name=change,proto3" json:"change,omitempty"`
+	// change is how the file differs; a rename appears as a deletion and an
+	// addition.
+	Change        FileChange `protobuf:"varint,2,opt,name=change,proto3,enum=wi.core.v1.FileChange" json:"change,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2901,11 +3342,11 @@ func (x *ReviewFile) GetPath() string {
 	return ""
 }
 
-func (x *ReviewFile) GetChange() string {
+func (x *ReviewFile) GetChange() FileChange {
 	if x != nil {
 		return x.Change
 	}
-	return ""
+	return FileChange_FILE_CHANGE_UNSPECIFIED
 }
 
 type GetReviewResponse struct {
@@ -3190,7 +3631,7 @@ type ReviewCommit struct {
 	Sha           string                 `protobuf:"bytes,1,opt,name=sha,proto3" json:"sha,omitempty"`
 	Subject       string                 `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
 	Author        string                 `protobuf:"bytes,3,opt,name=author,proto3" json:"author,omitempty"`
-	AuthoredAt    string                 `protobuf:"bytes,4,opt,name=authored_at,json=authoredAt,proto3" json:"authored_at,omitempty"`
+	AuthoredAt    *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=authored_at,json=authoredAt,proto3" json:"authored_at,omitempty"`
 	ParentShas    []string               `protobuf:"bytes,5,rep,name=parent_shas,json=parentShas,proto3" json:"parent_shas,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3247,11 +3688,11 @@ func (x *ReviewCommit) GetAuthor() string {
 	return ""
 }
 
-func (x *ReviewCommit) GetAuthoredAt() string {
+func (x *ReviewCommit) GetAuthoredAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.AuthoredAt
 	}
-	return ""
+	return nil
 }
 
 func (x *ReviewCommit) GetParentShas() []string {
@@ -3265,9 +3706,8 @@ type ReviewBranch struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// Empty when this branch has no locally available commit.
-	Sha string `protobuf:"bytes,2,opt,name=sha,proto3" json:"sha,omitempty"`
-	// item, integration, or remote.
-	Kind          string `protobuf:"bytes,3,opt,name=kind,proto3" json:"kind,omitempty"`
+	Sha           string     `protobuf:"bytes,2,opt,name=sha,proto3" json:"sha,omitempty"`
+	Kind          BranchKind `protobuf:"varint,3,opt,name=kind,proto3,enum=wi.core.v1.BranchKind" json:"kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3316,11 +3756,11 @@ func (x *ReviewBranch) GetSha() string {
 	return ""
 }
 
-func (x *ReviewBranch) GetKind() string {
+func (x *ReviewBranch) GetKind() BranchKind {
 	if x != nil {
 		return x.Kind
 	}
-	return ""
+	return BranchKind_BRANCH_KIND_UNSPECIFIED
 }
 
 type ListReviewCommitsResponse struct {
@@ -3405,7 +3845,7 @@ const file_wi_core_v1_reviews_proto_rawDesc = "" +
 	"created_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"?\n" +
 	"\x11RevisionExclusion\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
-	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x9f\x03\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xbc\x03\n" +
 	"\fCodeRevision\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -3418,39 +3858,39 @@ const file_wi_core_v1_reviews_proto_rawDesc = "" +
 	"baseCommit\x12\x10\n" +
 	"\x03ref\x18\b \x01(\tR\x03ref\x129\n" +
 	"\n" +
-	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x18\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x125\n" +
 	"\atrigger\x18\n" +
-	" \x01(\tR\atrigger\x129\n" +
+	" \x01(\x0e2\x1b.wi.core.v1.RevisionTriggerR\atrigger\x129\n" +
 	"\bexcluded\x18\v \x03(\v2\x1d.wi.core.v1.RevisionExclusionR\bexcluded\x12#\n" +
-	"\rdetached_head\x18\f \x01(\bR\fdetachedHead\"\xdc\x01\n" +
+	"\rdetached_head\x18\f \x01(\bR\fdetachedHead\"\xf4\x01\n" +
 	"\fReviewAnchor\x12\x1f\n" +
 	"\vrevision_id\x18\x01 \x01(\tR\n" +
 	"revisionId\x12(\n" +
 	"\x10from_revision_id\x18\x02 \x01(\tR\x0efromRevisionId\x12\x12\n" +
-	"\x04path\x18\x03 \x01(\tR\x04path\x12\x12\n" +
-	"\x04side\x18\x04 \x01(\tR\x04side\x12\x1d\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x12*\n" +
+	"\x04side\x18\x04 \x01(\x0e2\x16.wi.core.v1.ReviewSideR\x04side\x12\x1d\n" +
 	"\n" +
 	"start_line\x18\x05 \x01(\rR\tstartLine\x12\x19\n" +
 	"\bend_line\x18\x06 \x01(\rR\aendLine\x12\x1f\n" +
 	"\vblob_sha256\x18\a \x01(\tR\n" +
-	"blobSha256\"\xfc\x01\n" +
+	"blobSha256\"\xb2\x02\n" +
 	"\rReviewMessage\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04role\x18\x02 \x01(\tR\x04role\x12\x12\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
+	"\x04role\x18\x02 \x01(\x0e2\x16.wi.core.v1.ReviewRoleR\x04role\x12\x12\n" +
 	"\x04body\x18\x03 \x01(\tR\x04body\x12\x1f\n" +
 	"\vrevision_id\x18\x04 \x01(\tR\n" +
 	"revisionId\x12\x19\n" +
 	"\bround_id\x18\x05 \x01(\tR\aroundId\x12\x1c\n" +
-	"\taddressed\x18\x06 \x01(\bR\taddressed\x12\x1e\n" +
+	"\taddressed\x18\x06 \x01(\bR\taddressed\x12<\n" +
 	"\n" +
-	"resolution\x18\a \x01(\tR\n" +
+	"resolution\x18\a \x01(\x0e2\x1c.wi.core.v1.ThreadResolutionR\n" +
 	"resolution\x129\n" +
 	"\n" +
-	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\x9f\x01\n" +
+	"created_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xb9\x01\n" +
 	"\fReviewThread\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x120\n" +
-	"\x06anchor\x18\x02 \x01(\v2\x18.wi.core.v1.ReviewAnchorR\x06anchor\x12\x16\n" +
-	"\x06status\x18\x03 \x01(\tR\x06status\x125\n" +
+	"\x06anchor\x18\x02 \x01(\v2\x18.wi.core.v1.ReviewAnchorR\x06anchor\x120\n" +
+	"\x06status\x18\x03 \x01(\x0e2\x18.wi.core.v1.ThreadStatusR\x06status\x125\n" +
 	"\bmessages\x18\x04 \x03(\v2\x19.wi.core.v1.ReviewMessageR\bmessages\"\xa0\x02\n" +
 	"\vReviewRound\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
@@ -3464,20 +3904,20 @@ const file_wi_core_v1_reviews_proto_rawDesc = "" +
 	"\vnotified_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"notifiedAt\x12\x1d\n" +
 	"\n" +
-	"command_id\x18\a \x01(\tR\tcommandId\"\xa0\x01\n" +
+	"command_id\x18\a \x01(\tR\tcommandId\"\xbe\x01\n" +
 	"\vReviewDraft\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tthread_id\x18\x02 \x01(\tR\bthreadId\x120\n" +
 	"\x06anchor\x18\x03 \x01(\v2\x18.wi.core.v1.ReviewAnchorR\x06anchor\x12\x12\n" +
-	"\x04body\x18\x04 \x01(\tR\x04body\x12\x1e\n" +
+	"\x04body\x18\x04 \x01(\tR\x04body\x12<\n" +
 	"\n" +
-	"resolution\x18\x05 \x01(\tR\n" +
-	"resolution\"\xaa\x01\n" +
+	"resolution\x18\x05 \x01(\x0e2\x1c.wi.core.v1.ThreadResolutionR\n" +
+	"resolution\"\xc4\x01\n" +
 	"\x0eReviewApproval\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
 	"\vrevision_id\x18\x02 \x01(\tR\n" +
-	"revisionId\x12\x12\n" +
-	"\x04kind\x18\x03 \x01(\tR\x04kind\x12\x18\n" +
+	"revisionId\x12,\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x18.wi.core.v1.ApprovalKindR\x04kind\x12\x18\n" +
 	"\amessage\x18\x04 \x01(\tR\amessage\x129\n" +
 	"\n" +
 	"created_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xe2\x01\n" +
@@ -3600,13 +4040,13 @@ const file_wi_core_v1_reviews_proto_rawDesc = "" +
 	"\x17GetReviewIntentResponse\x128\n" +
 	"\tapprovals\x18\x01 \x03(\v2\x1a.wi.core.v1.ReviewApprovalR\tapprovals\x12\x1a\n" +
 	"\bapproved\x18\x02 \x01(\bR\bapproved\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\rR\aversion\"\xce\x01\n" +
+	"\aversion\x18\x03 \x01(\rR\aversion\"\xe8\x01\n" +
 	"\x16SetReviewIntentRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12!\n" +
 	"\foperation_id\x18\x02 \x01(\tR\voperationId\x12\x1f\n" +
 	"\vrevision_id\x18\x03 \x01(\tR\n" +
-	"revisionId\x12\x12\n" +
-	"\x04kind\x18\x04 \x01(\tR\x04kind\x12\x18\n" +
+	"revisionId\x12,\n" +
+	"\x04kind\x18\x04 \x01(\x0e2\x18.wi.core.v1.ApprovalKindR\x04kind\x12\x18\n" +
 	"\amessage\x18\x05 \x01(\tR\amessage\x12)\n" +
 	"\x10expected_version\x18\x06 \x01(\rR\x0fexpectedVersion\"M\n" +
 	"\x17SetReviewIntentResponse\x122\n" +
@@ -3633,11 +4073,11 @@ const file_wi_core_v1_reviews_proto_rawDesc = "" +
 	"headCommit\x12\x19\n" +
 	"\bclaim_id\x18\x04 \x01(\tR\aclaimId\x12)\n" +
 	"\x10claim_generation\x18\x05 \x01(\rR\x0fclaimGeneration\x12!\n" +
-	"\fworking_tree\x18\x06 \x01(\bR\vworkingTree\"8\n" +
+	"\fworking_tree\x18\x06 \x01(\bR\vworkingTree\"P\n" +
 	"\n" +
 	"ReviewFile\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x12\x16\n" +
-	"\x06change\x18\x02 \x01(\tR\x06change\"\xde\x01\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12.\n" +
+	"\x06change\x18\x02 \x01(\x0e2\x16.wi.core.v1.FileChangeR\x06change\"\xde\x01\n" +
 	"\x11GetReviewResponse\x126\n" +
 	"\brevision\x18\x01 \x01(\v2\x1a.wi.core.v1.ReviewRevisionR\brevision\x12,\n" +
 	"\x05files\x18\x02 \x03(\v2\x16.wi.core.v1.ReviewFileR\x05files\x12\x1c\n" +
@@ -3660,24 +4100,70 @@ const file_wi_core_v1_reviews_proto_rawDesc = "" +
 	"\bnew_file\x18\x03 \x01(\v2\x16.wi.core.v1.SourceFileR\anewFile\"\\\n" +
 	"\x18ListReviewCommitsRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12'\n" +
-	"\x0finclude_context\x18\x02 \x01(\bR\x0eincludeContext\"\x94\x01\n" +
+	"\x0finclude_context\x18\x02 \x01(\bR\x0eincludeContext\"\xb0\x01\n" +
 	"\fReviewCommit\x12\x10\n" +
 	"\x03sha\x18\x01 \x01(\tR\x03sha\x12\x18\n" +
 	"\asubject\x18\x02 \x01(\tR\asubject\x12\x16\n" +
-	"\x06author\x18\x03 \x01(\tR\x06author\x12\x1f\n" +
-	"\vauthored_at\x18\x04 \x01(\tR\n" +
+	"\x06author\x18\x03 \x01(\tR\x06author\x12;\n" +
+	"\vauthored_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"authoredAt\x12\x1f\n" +
 	"\vparent_shas\x18\x05 \x03(\tR\n" +
-	"parentShas\"H\n" +
+	"parentShas\"`\n" +
 	"\fReviewBranch\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
-	"\x03sha\x18\x02 \x01(\tR\x03sha\x12\x12\n" +
-	"\x04kind\x18\x03 \x01(\tR\x04kind\"\xbf\x01\n" +
+	"\x03sha\x18\x02 \x01(\tR\x03sha\x12*\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x16.wi.core.v1.BranchKindR\x04kind\"\xbf\x01\n" +
 	"\x19ListReviewCommitsResponse\x122\n" +
 	"\acommits\x18\x01 \x03(\v2\x18.wi.core.v1.ReviewCommitR\acommits\x12\x1c\n" +
 	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x124\n" +
 	"\bbranches\x18\x03 \x03(\v2\x18.wi.core.v1.ReviewBranchR\bbranches\x12\x1a\n" +
-	"\bwarnings\x18\x04 \x03(\tR\bwarnings*\xd6\x01\n" +
+	"\bwarnings\x18\x04 \x03(\tR\bwarnings*\xa6\x01\n" +
+	"\x0fRevisionTrigger\x12 \n" +
+	"\x1cREVISION_TRIGGER_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18REVISION_TRIGGER_SETTLED\x10\x01\x12\x1b\n" +
+	"\x17REVISION_TRIGGER_MANUAL\x10\x02\x12\x1a\n" +
+	"\x16REVISION_TRIGGER_REPLY\x10\x03\x12\x1a\n" +
+	"\x16REVISION_TRIGGER_MERGE\x10\x04*S\n" +
+	"\n" +
+	"ReviewSide\x12\x1b\n" +
+	"\x17REVIEW_SIDE_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fREVIEW_SIDE_OLD\x10\x01\x12\x13\n" +
+	"\x0fREVIEW_SIDE_NEW\x10\x02*Z\n" +
+	"\n" +
+	"ReviewRole\x12\x1b\n" +
+	"\x17REVIEW_ROLE_UNSPECIFIED\x10\x00\x12\x18\n" +
+	"\x14REVIEW_ROLE_REVIEWER\x10\x01\x12\x15\n" +
+	"\x11REVIEW_ROLE_AGENT\x10\x02*\x92\x01\n" +
+	"\x10ThreadResolution\x12!\n" +
+	"\x1dTHREAD_RESOLUTION_UNSPECIFIED\x10\x00\x12\x1a\n" +
+	"\x16THREAD_RESOLUTION_OPEN\x10\x01\x12\x1e\n" +
+	"\x1aTHREAD_RESOLUTION_RESOLVED\x10\x02\x12\x1f\n" +
+	"\x1bTHREAD_RESOLUTION_WITHDRAWN\x10\x03*\x9b\x01\n" +
+	"\fThreadStatus\x12\x1d\n" +
+	"\x19THREAD_STATUS_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12THREAD_STATUS_OPEN\x10\x01\x12\x1b\n" +
+	"\x17THREAD_STATUS_ADDRESSED\x10\x02\x12\x1a\n" +
+	"\x16THREAD_STATUS_RESOLVED\x10\x03\x12\x1b\n" +
+	"\x17THREAD_STATUS_WITHDRAWN\x10\x04*\xb2\x01\n" +
+	"\fApprovalKind\x12\x1d\n" +
+	"\x19APPROVAL_KIND_UNSPECIFIED\x10\x00\x12\x19\n" +
+	"\x15APPROVAL_KIND_APPROVE\x10\x01\x12#\n" +
+	"\x1fAPPROVAL_KIND_WITHDRAW_APPROVAL\x10\x02\x12 \n" +
+	"\x1cAPPROVAL_KIND_REQUEST_REVIEW\x10\x03\x12!\n" +
+	"\x1dAPPROVAL_KIND_REQUEST_CHANGES\x10\x04*\x8f\x01\n" +
+	"\n" +
+	"FileChange\x12\x1b\n" +
+	"\x17FILE_CHANGE_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11FILE_CHANGE_ADDED\x10\x01\x12\x18\n" +
+	"\x14FILE_CHANGE_MODIFIED\x10\x02\x12\x17\n" +
+	"\x13FILE_CHANGE_DELETED\x10\x03\x12\x1a\n" +
+	"\x16FILE_CHANGE_CONFLICTED\x10\x04*t\n" +
+	"\n" +
+	"BranchKind\x12\x1b\n" +
+	"\x17BRANCH_KIND_UNSPECIFIED\x10\x00\x12\x14\n" +
+	"\x10BRANCH_KIND_ITEM\x10\x01\x12\x1b\n" +
+	"\x17BRANCH_KIND_INTEGRATION\x10\x02\x12\x16\n" +
+	"\x12BRANCH_KIND_REMOTE\x10\x03*\xd6\x01\n" +
 	"\x10ReviewComparison\x12!\n" +
 	"\x1dREVIEW_COMPARISON_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16REVIEW_COMPARISON_ITEM\x10\x01\x12\x1f\n" +
@@ -3716,144 +4202,163 @@ func file_wi_core_v1_reviews_proto_rawDescGZIP() []byte {
 	return file_wi_core_v1_reviews_proto_rawDescData
 }
 
-var file_wi_core_v1_reviews_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_wi_core_v1_reviews_proto_enumTypes = make([]protoimpl.EnumInfo, 9)
 var file_wi_core_v1_reviews_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
 var file_wi_core_v1_reviews_proto_goTypes = []any{
-	(ReviewComparison)(0),                 // 0: wi.core.v1.ReviewComparison
-	(*CaptureGap)(nil),                    // 1: wi.core.v1.CaptureGap
-	(*RevisionExclusion)(nil),             // 2: wi.core.v1.RevisionExclusion
-	(*CodeRevision)(nil),                  // 3: wi.core.v1.CodeRevision
-	(*ReviewAnchor)(nil),                  // 4: wi.core.v1.ReviewAnchor
-	(*ReviewMessage)(nil),                 // 5: wi.core.v1.ReviewMessage
-	(*ReviewThread)(nil),                  // 6: wi.core.v1.ReviewThread
-	(*ReviewRound)(nil),                   // 7: wi.core.v1.ReviewRound
-	(*ReviewDraft)(nil),                   // 8: wi.core.v1.ReviewDraft
-	(*ReviewApproval)(nil),                // 9: wi.core.v1.ReviewApproval
-	(*ReviewMerge)(nil),                   // 10: wi.core.v1.ReviewMerge
-	(*ListReviewRevisionsRequest)(nil),    // 11: wi.core.v1.ListReviewRevisionsRequest
-	(*ListReviewRevisionsResponse)(nil),   // 12: wi.core.v1.ListReviewRevisionsResponse
-	(*CaptureReviewRevisionRequest)(nil),  // 13: wi.core.v1.CaptureReviewRevisionRequest
-	(*CaptureReviewRevisionResponse)(nil), // 14: wi.core.v1.CaptureReviewRevisionResponse
-	(*GetRevisionReviewRequest)(nil),      // 15: wi.core.v1.GetRevisionReviewRequest
-	(*GetRevisionReviewResponse)(nil),     // 16: wi.core.v1.GetRevisionReviewResponse
-	(*GetRevisionPatchRequest)(nil),       // 17: wi.core.v1.GetRevisionPatchRequest
-	(*GetRevisionPatchResponse)(nil),      // 18: wi.core.v1.GetRevisionPatchResponse
-	(*GetRevisionReviewFileRequest)(nil),  // 19: wi.core.v1.GetRevisionReviewFileRequest
-	(*GetRevisionReviewFileResponse)(nil), // 20: wi.core.v1.GetRevisionReviewFileResponse
-	(*GetReviewThreadsRequest)(nil),       // 21: wi.core.v1.GetReviewThreadsRequest
-	(*GetReviewThreadsResponse)(nil),      // 22: wi.core.v1.GetReviewThreadsResponse
-	(*GetReviewDraftsRequest)(nil),        // 23: wi.core.v1.GetReviewDraftsRequest
-	(*GetReviewDraftsResponse)(nil),       // 24: wi.core.v1.GetReviewDraftsResponse
-	(*SaveReviewDraftRequest)(nil),        // 25: wi.core.v1.SaveReviewDraftRequest
-	(*DeleteReviewDraftsRequest)(nil),     // 26: wi.core.v1.DeleteReviewDraftsRequest
-	(*PublishReviewRoundRequest)(nil),     // 27: wi.core.v1.PublishReviewRoundRequest
-	(*ReviewReply)(nil),                   // 28: wi.core.v1.ReviewReply
-	(*ReplyReviewThreadsRequest)(nil),     // 29: wi.core.v1.ReplyReviewThreadsRequest
-	(*ReviewMutation)(nil),                // 30: wi.core.v1.ReviewMutation
-	(*SaveReviewDraftResponse)(nil),       // 31: wi.core.v1.SaveReviewDraftResponse
-	(*DeleteReviewDraftsResponse)(nil),    // 32: wi.core.v1.DeleteReviewDraftsResponse
-	(*PublishReviewRoundResponse)(nil),    // 33: wi.core.v1.PublishReviewRoundResponse
-	(*ReplyReviewThreadsResponse)(nil),    // 34: wi.core.v1.ReplyReviewThreadsResponse
-	(*GetReviewIntentRequest)(nil),        // 35: wi.core.v1.GetReviewIntentRequest
-	(*GetReviewIntentResponse)(nil),       // 36: wi.core.v1.GetReviewIntentResponse
-	(*SetReviewIntentRequest)(nil),        // 37: wi.core.v1.SetReviewIntentRequest
-	(*SetReviewIntentResponse)(nil),       // 38: wi.core.v1.SetReviewIntentResponse
-	(*NotifyReviewRoundRequest)(nil),      // 39: wi.core.v1.NotifyReviewRoundRequest
-	(*NotifyReviewRoundResponse)(nil),     // 40: wi.core.v1.NotifyReviewRoundResponse
-	(*GetReviewRequest)(nil),              // 41: wi.core.v1.GetReviewRequest
-	(*ReviewRevision)(nil),                // 42: wi.core.v1.ReviewRevision
-	(*ReviewFile)(nil),                    // 43: wi.core.v1.ReviewFile
-	(*GetReviewResponse)(nil),             // 44: wi.core.v1.GetReviewResponse
-	(*GetReviewFileRequest)(nil),          // 45: wi.core.v1.GetReviewFileRequest
-	(*GetReviewFileResponse)(nil),         // 46: wi.core.v1.GetReviewFileResponse
-	(*ListReviewCommitsRequest)(nil),      // 47: wi.core.v1.ListReviewCommitsRequest
-	(*ReviewCommit)(nil),                  // 48: wi.core.v1.ReviewCommit
-	(*ReviewBranch)(nil),                  // 49: wi.core.v1.ReviewBranch
-	(*ListReviewCommitsResponse)(nil),     // 50: wi.core.v1.ListReviewCommitsResponse
-	(*timestamppb.Timestamp)(nil),         // 51: google.protobuf.Timestamp
-	(*SourceFile)(nil),                    // 52: wi.core.v1.SourceFile
+	(RevisionTrigger)(0),                  // 0: wi.core.v1.RevisionTrigger
+	(ReviewSide)(0),                       // 1: wi.core.v1.ReviewSide
+	(ReviewRole)(0),                       // 2: wi.core.v1.ReviewRole
+	(ThreadResolution)(0),                 // 3: wi.core.v1.ThreadResolution
+	(ThreadStatus)(0),                     // 4: wi.core.v1.ThreadStatus
+	(ApprovalKind)(0),                     // 5: wi.core.v1.ApprovalKind
+	(FileChange)(0),                       // 6: wi.core.v1.FileChange
+	(BranchKind)(0),                       // 7: wi.core.v1.BranchKind
+	(ReviewComparison)(0),                 // 8: wi.core.v1.ReviewComparison
+	(*CaptureGap)(nil),                    // 9: wi.core.v1.CaptureGap
+	(*RevisionExclusion)(nil),             // 10: wi.core.v1.RevisionExclusion
+	(*CodeRevision)(nil),                  // 11: wi.core.v1.CodeRevision
+	(*ReviewAnchor)(nil),                  // 12: wi.core.v1.ReviewAnchor
+	(*ReviewMessage)(nil),                 // 13: wi.core.v1.ReviewMessage
+	(*ReviewThread)(nil),                  // 14: wi.core.v1.ReviewThread
+	(*ReviewRound)(nil),                   // 15: wi.core.v1.ReviewRound
+	(*ReviewDraft)(nil),                   // 16: wi.core.v1.ReviewDraft
+	(*ReviewApproval)(nil),                // 17: wi.core.v1.ReviewApproval
+	(*ReviewMerge)(nil),                   // 18: wi.core.v1.ReviewMerge
+	(*ListReviewRevisionsRequest)(nil),    // 19: wi.core.v1.ListReviewRevisionsRequest
+	(*ListReviewRevisionsResponse)(nil),   // 20: wi.core.v1.ListReviewRevisionsResponse
+	(*CaptureReviewRevisionRequest)(nil),  // 21: wi.core.v1.CaptureReviewRevisionRequest
+	(*CaptureReviewRevisionResponse)(nil), // 22: wi.core.v1.CaptureReviewRevisionResponse
+	(*GetRevisionReviewRequest)(nil),      // 23: wi.core.v1.GetRevisionReviewRequest
+	(*GetRevisionReviewResponse)(nil),     // 24: wi.core.v1.GetRevisionReviewResponse
+	(*GetRevisionPatchRequest)(nil),       // 25: wi.core.v1.GetRevisionPatchRequest
+	(*GetRevisionPatchResponse)(nil),      // 26: wi.core.v1.GetRevisionPatchResponse
+	(*GetRevisionReviewFileRequest)(nil),  // 27: wi.core.v1.GetRevisionReviewFileRequest
+	(*GetRevisionReviewFileResponse)(nil), // 28: wi.core.v1.GetRevisionReviewFileResponse
+	(*GetReviewThreadsRequest)(nil),       // 29: wi.core.v1.GetReviewThreadsRequest
+	(*GetReviewThreadsResponse)(nil),      // 30: wi.core.v1.GetReviewThreadsResponse
+	(*GetReviewDraftsRequest)(nil),        // 31: wi.core.v1.GetReviewDraftsRequest
+	(*GetReviewDraftsResponse)(nil),       // 32: wi.core.v1.GetReviewDraftsResponse
+	(*SaveReviewDraftRequest)(nil),        // 33: wi.core.v1.SaveReviewDraftRequest
+	(*DeleteReviewDraftsRequest)(nil),     // 34: wi.core.v1.DeleteReviewDraftsRequest
+	(*PublishReviewRoundRequest)(nil),     // 35: wi.core.v1.PublishReviewRoundRequest
+	(*ReviewReply)(nil),                   // 36: wi.core.v1.ReviewReply
+	(*ReplyReviewThreadsRequest)(nil),     // 37: wi.core.v1.ReplyReviewThreadsRequest
+	(*ReviewMutation)(nil),                // 38: wi.core.v1.ReviewMutation
+	(*SaveReviewDraftResponse)(nil),       // 39: wi.core.v1.SaveReviewDraftResponse
+	(*DeleteReviewDraftsResponse)(nil),    // 40: wi.core.v1.DeleteReviewDraftsResponse
+	(*PublishReviewRoundResponse)(nil),    // 41: wi.core.v1.PublishReviewRoundResponse
+	(*ReplyReviewThreadsResponse)(nil),    // 42: wi.core.v1.ReplyReviewThreadsResponse
+	(*GetReviewIntentRequest)(nil),        // 43: wi.core.v1.GetReviewIntentRequest
+	(*GetReviewIntentResponse)(nil),       // 44: wi.core.v1.GetReviewIntentResponse
+	(*SetReviewIntentRequest)(nil),        // 45: wi.core.v1.SetReviewIntentRequest
+	(*SetReviewIntentResponse)(nil),       // 46: wi.core.v1.SetReviewIntentResponse
+	(*NotifyReviewRoundRequest)(nil),      // 47: wi.core.v1.NotifyReviewRoundRequest
+	(*NotifyReviewRoundResponse)(nil),     // 48: wi.core.v1.NotifyReviewRoundResponse
+	(*GetReviewRequest)(nil),              // 49: wi.core.v1.GetReviewRequest
+	(*ReviewRevision)(nil),                // 50: wi.core.v1.ReviewRevision
+	(*ReviewFile)(nil),                    // 51: wi.core.v1.ReviewFile
+	(*GetReviewResponse)(nil),             // 52: wi.core.v1.GetReviewResponse
+	(*GetReviewFileRequest)(nil),          // 53: wi.core.v1.GetReviewFileRequest
+	(*GetReviewFileResponse)(nil),         // 54: wi.core.v1.GetReviewFileResponse
+	(*ListReviewCommitsRequest)(nil),      // 55: wi.core.v1.ListReviewCommitsRequest
+	(*ReviewCommit)(nil),                  // 56: wi.core.v1.ReviewCommit
+	(*ReviewBranch)(nil),                  // 57: wi.core.v1.ReviewBranch
+	(*ListReviewCommitsResponse)(nil),     // 58: wi.core.v1.ListReviewCommitsResponse
+	(*timestamppb.Timestamp)(nil),         // 59: google.protobuf.Timestamp
+	(*SourceFile)(nil),                    // 60: wi.core.v1.SourceFile
 }
 var file_wi_core_v1_reviews_proto_depIdxs = []int32{
-	51, // 0: wi.core.v1.CaptureGap.created_at:type_name -> google.protobuf.Timestamp
-	51, // 1: wi.core.v1.CodeRevision.created_at:type_name -> google.protobuf.Timestamp
-	2,  // 2: wi.core.v1.CodeRevision.excluded:type_name -> wi.core.v1.RevisionExclusion
-	51, // 3: wi.core.v1.ReviewMessage.created_at:type_name -> google.protobuf.Timestamp
-	4,  // 4: wi.core.v1.ReviewThread.anchor:type_name -> wi.core.v1.ReviewAnchor
-	5,  // 5: wi.core.v1.ReviewThread.messages:type_name -> wi.core.v1.ReviewMessage
-	51, // 6: wi.core.v1.ReviewRound.created_at:type_name -> google.protobuf.Timestamp
-	51, // 7: wi.core.v1.ReviewRound.notified_at:type_name -> google.protobuf.Timestamp
-	4,  // 8: wi.core.v1.ReviewDraft.anchor:type_name -> wi.core.v1.ReviewAnchor
-	51, // 9: wi.core.v1.ReviewApproval.created_at:type_name -> google.protobuf.Timestamp
-	51, // 10: wi.core.v1.ReviewMerge.created_at:type_name -> google.protobuf.Timestamp
-	3,  // 11: wi.core.v1.ListReviewRevisionsResponse.revisions:type_name -> wi.core.v1.CodeRevision
-	1,  // 12: wi.core.v1.ListReviewRevisionsResponse.capture_gaps:type_name -> wi.core.v1.CaptureGap
-	10, // 13: wi.core.v1.ListReviewRevisionsResponse.merges:type_name -> wi.core.v1.ReviewMerge
-	3,  // 14: wi.core.v1.CaptureReviewRevisionResponse.revision:type_name -> wi.core.v1.CodeRevision
-	44, // 15: wi.core.v1.GetRevisionReviewResponse.review:type_name -> wi.core.v1.GetReviewResponse
-	15, // 16: wi.core.v1.GetRevisionPatchRequest.comparison:type_name -> wi.core.v1.GetRevisionReviewRequest
-	15, // 17: wi.core.v1.GetRevisionReviewFileRequest.comparison:type_name -> wi.core.v1.GetRevisionReviewRequest
-	46, // 18: wi.core.v1.GetRevisionReviewFileResponse.file:type_name -> wi.core.v1.GetReviewFileResponse
-	6,  // 19: wi.core.v1.GetReviewThreadsResponse.threads:type_name -> wi.core.v1.ReviewThread
-	7,  // 20: wi.core.v1.GetReviewThreadsResponse.rounds:type_name -> wi.core.v1.ReviewRound
-	8,  // 21: wi.core.v1.GetReviewDraftsResponse.drafts:type_name -> wi.core.v1.ReviewDraft
-	8,  // 22: wi.core.v1.SaveReviewDraftRequest.draft:type_name -> wi.core.v1.ReviewDraft
-	28, // 23: wi.core.v1.ReplyReviewThreadsRequest.replies:type_name -> wi.core.v1.ReviewReply
-	3,  // 24: wi.core.v1.ReviewMutation.captured_revision:type_name -> wi.core.v1.CodeRevision
-	30, // 25: wi.core.v1.SaveReviewDraftResponse.result:type_name -> wi.core.v1.ReviewMutation
-	30, // 26: wi.core.v1.DeleteReviewDraftsResponse.result:type_name -> wi.core.v1.ReviewMutation
-	30, // 27: wi.core.v1.PublishReviewRoundResponse.result:type_name -> wi.core.v1.ReviewMutation
-	30, // 28: wi.core.v1.ReplyReviewThreadsResponse.result:type_name -> wi.core.v1.ReviewMutation
-	9,  // 29: wi.core.v1.GetReviewIntentResponse.approvals:type_name -> wi.core.v1.ReviewApproval
-	30, // 30: wi.core.v1.SetReviewIntentResponse.result:type_name -> wi.core.v1.ReviewMutation
-	7,  // 31: wi.core.v1.NotifyReviewRoundResponse.round:type_name -> wi.core.v1.ReviewRound
-	0,  // 32: wi.core.v1.GetReviewRequest.comparison:type_name -> wi.core.v1.ReviewComparison
-	42, // 33: wi.core.v1.GetReviewResponse.revision:type_name -> wi.core.v1.ReviewRevision
-	43, // 34: wi.core.v1.GetReviewResponse.files:type_name -> wi.core.v1.ReviewFile
-	0,  // 35: wi.core.v1.GetReviewFileRequest.comparison:type_name -> wi.core.v1.ReviewComparison
-	42, // 36: wi.core.v1.GetReviewFileResponse.revision:type_name -> wi.core.v1.ReviewRevision
-	52, // 37: wi.core.v1.GetReviewFileResponse.old_file:type_name -> wi.core.v1.SourceFile
-	52, // 38: wi.core.v1.GetReviewFileResponse.new_file:type_name -> wi.core.v1.SourceFile
-	48, // 39: wi.core.v1.ListReviewCommitsResponse.commits:type_name -> wi.core.v1.ReviewCommit
-	49, // 40: wi.core.v1.ListReviewCommitsResponse.branches:type_name -> wi.core.v1.ReviewBranch
-	11, // 41: wi.core.v1.ReviewService.ListReviewRevisions:input_type -> wi.core.v1.ListReviewRevisionsRequest
-	13, // 42: wi.core.v1.ReviewService.CaptureReviewRevision:input_type -> wi.core.v1.CaptureReviewRevisionRequest
-	15, // 43: wi.core.v1.ReviewService.GetRevisionReview:input_type -> wi.core.v1.GetRevisionReviewRequest
-	17, // 44: wi.core.v1.ReviewService.GetRevisionPatch:input_type -> wi.core.v1.GetRevisionPatchRequest
-	19, // 45: wi.core.v1.ReviewService.GetRevisionReviewFile:input_type -> wi.core.v1.GetRevisionReviewFileRequest
-	21, // 46: wi.core.v1.ReviewService.GetReviewThreads:input_type -> wi.core.v1.GetReviewThreadsRequest
-	23, // 47: wi.core.v1.ReviewService.GetReviewDrafts:input_type -> wi.core.v1.GetReviewDraftsRequest
-	25, // 48: wi.core.v1.ReviewService.SaveReviewDraft:input_type -> wi.core.v1.SaveReviewDraftRequest
-	26, // 49: wi.core.v1.ReviewService.DeleteReviewDrafts:input_type -> wi.core.v1.DeleteReviewDraftsRequest
-	27, // 50: wi.core.v1.ReviewService.PublishReviewRound:input_type -> wi.core.v1.PublishReviewRoundRequest
-	29, // 51: wi.core.v1.ReviewService.ReplyReviewThreads:input_type -> wi.core.v1.ReplyReviewThreadsRequest
-	35, // 52: wi.core.v1.ReviewService.GetReviewIntent:input_type -> wi.core.v1.GetReviewIntentRequest
-	37, // 53: wi.core.v1.ReviewService.SetReviewIntent:input_type -> wi.core.v1.SetReviewIntentRequest
-	39, // 54: wi.core.v1.ReviewService.NotifyReviewRound:input_type -> wi.core.v1.NotifyReviewRoundRequest
-	41, // 55: wi.core.v1.ReviewService.GetReview:input_type -> wi.core.v1.GetReviewRequest
-	45, // 56: wi.core.v1.ReviewService.GetReviewFile:input_type -> wi.core.v1.GetReviewFileRequest
-	47, // 57: wi.core.v1.ReviewService.ListReviewCommits:input_type -> wi.core.v1.ListReviewCommitsRequest
-	12, // 58: wi.core.v1.ReviewService.ListReviewRevisions:output_type -> wi.core.v1.ListReviewRevisionsResponse
-	14, // 59: wi.core.v1.ReviewService.CaptureReviewRevision:output_type -> wi.core.v1.CaptureReviewRevisionResponse
-	16, // 60: wi.core.v1.ReviewService.GetRevisionReview:output_type -> wi.core.v1.GetRevisionReviewResponse
-	18, // 61: wi.core.v1.ReviewService.GetRevisionPatch:output_type -> wi.core.v1.GetRevisionPatchResponse
-	20, // 62: wi.core.v1.ReviewService.GetRevisionReviewFile:output_type -> wi.core.v1.GetRevisionReviewFileResponse
-	22, // 63: wi.core.v1.ReviewService.GetReviewThreads:output_type -> wi.core.v1.GetReviewThreadsResponse
-	24, // 64: wi.core.v1.ReviewService.GetReviewDrafts:output_type -> wi.core.v1.GetReviewDraftsResponse
-	31, // 65: wi.core.v1.ReviewService.SaveReviewDraft:output_type -> wi.core.v1.SaveReviewDraftResponse
-	32, // 66: wi.core.v1.ReviewService.DeleteReviewDrafts:output_type -> wi.core.v1.DeleteReviewDraftsResponse
-	33, // 67: wi.core.v1.ReviewService.PublishReviewRound:output_type -> wi.core.v1.PublishReviewRoundResponse
-	34, // 68: wi.core.v1.ReviewService.ReplyReviewThreads:output_type -> wi.core.v1.ReplyReviewThreadsResponse
-	36, // 69: wi.core.v1.ReviewService.GetReviewIntent:output_type -> wi.core.v1.GetReviewIntentResponse
-	38, // 70: wi.core.v1.ReviewService.SetReviewIntent:output_type -> wi.core.v1.SetReviewIntentResponse
-	40, // 71: wi.core.v1.ReviewService.NotifyReviewRound:output_type -> wi.core.v1.NotifyReviewRoundResponse
-	44, // 72: wi.core.v1.ReviewService.GetReview:output_type -> wi.core.v1.GetReviewResponse
-	46, // 73: wi.core.v1.ReviewService.GetReviewFile:output_type -> wi.core.v1.GetReviewFileResponse
-	50, // 74: wi.core.v1.ReviewService.ListReviewCommits:output_type -> wi.core.v1.ListReviewCommitsResponse
-	58, // [58:75] is the sub-list for method output_type
-	41, // [41:58] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	59, // 0: wi.core.v1.CaptureGap.created_at:type_name -> google.protobuf.Timestamp
+	59, // 1: wi.core.v1.CodeRevision.created_at:type_name -> google.protobuf.Timestamp
+	0,  // 2: wi.core.v1.CodeRevision.trigger:type_name -> wi.core.v1.RevisionTrigger
+	10, // 3: wi.core.v1.CodeRevision.excluded:type_name -> wi.core.v1.RevisionExclusion
+	1,  // 4: wi.core.v1.ReviewAnchor.side:type_name -> wi.core.v1.ReviewSide
+	2,  // 5: wi.core.v1.ReviewMessage.role:type_name -> wi.core.v1.ReviewRole
+	3,  // 6: wi.core.v1.ReviewMessage.resolution:type_name -> wi.core.v1.ThreadResolution
+	59, // 7: wi.core.v1.ReviewMessage.created_at:type_name -> google.protobuf.Timestamp
+	12, // 8: wi.core.v1.ReviewThread.anchor:type_name -> wi.core.v1.ReviewAnchor
+	4,  // 9: wi.core.v1.ReviewThread.status:type_name -> wi.core.v1.ThreadStatus
+	13, // 10: wi.core.v1.ReviewThread.messages:type_name -> wi.core.v1.ReviewMessage
+	59, // 11: wi.core.v1.ReviewRound.created_at:type_name -> google.protobuf.Timestamp
+	59, // 12: wi.core.v1.ReviewRound.notified_at:type_name -> google.protobuf.Timestamp
+	12, // 13: wi.core.v1.ReviewDraft.anchor:type_name -> wi.core.v1.ReviewAnchor
+	3,  // 14: wi.core.v1.ReviewDraft.resolution:type_name -> wi.core.v1.ThreadResolution
+	5,  // 15: wi.core.v1.ReviewApproval.kind:type_name -> wi.core.v1.ApprovalKind
+	59, // 16: wi.core.v1.ReviewApproval.created_at:type_name -> google.protobuf.Timestamp
+	59, // 17: wi.core.v1.ReviewMerge.created_at:type_name -> google.protobuf.Timestamp
+	11, // 18: wi.core.v1.ListReviewRevisionsResponse.revisions:type_name -> wi.core.v1.CodeRevision
+	9,  // 19: wi.core.v1.ListReviewRevisionsResponse.capture_gaps:type_name -> wi.core.v1.CaptureGap
+	18, // 20: wi.core.v1.ListReviewRevisionsResponse.merges:type_name -> wi.core.v1.ReviewMerge
+	11, // 21: wi.core.v1.CaptureReviewRevisionResponse.revision:type_name -> wi.core.v1.CodeRevision
+	52, // 22: wi.core.v1.GetRevisionReviewResponse.review:type_name -> wi.core.v1.GetReviewResponse
+	23, // 23: wi.core.v1.GetRevisionPatchRequest.comparison:type_name -> wi.core.v1.GetRevisionReviewRequest
+	23, // 24: wi.core.v1.GetRevisionReviewFileRequest.comparison:type_name -> wi.core.v1.GetRevisionReviewRequest
+	54, // 25: wi.core.v1.GetRevisionReviewFileResponse.file:type_name -> wi.core.v1.GetReviewFileResponse
+	14, // 26: wi.core.v1.GetReviewThreadsResponse.threads:type_name -> wi.core.v1.ReviewThread
+	15, // 27: wi.core.v1.GetReviewThreadsResponse.rounds:type_name -> wi.core.v1.ReviewRound
+	16, // 28: wi.core.v1.GetReviewDraftsResponse.drafts:type_name -> wi.core.v1.ReviewDraft
+	16, // 29: wi.core.v1.SaveReviewDraftRequest.draft:type_name -> wi.core.v1.ReviewDraft
+	36, // 30: wi.core.v1.ReplyReviewThreadsRequest.replies:type_name -> wi.core.v1.ReviewReply
+	11, // 31: wi.core.v1.ReviewMutation.captured_revision:type_name -> wi.core.v1.CodeRevision
+	38, // 32: wi.core.v1.SaveReviewDraftResponse.result:type_name -> wi.core.v1.ReviewMutation
+	38, // 33: wi.core.v1.DeleteReviewDraftsResponse.result:type_name -> wi.core.v1.ReviewMutation
+	38, // 34: wi.core.v1.PublishReviewRoundResponse.result:type_name -> wi.core.v1.ReviewMutation
+	38, // 35: wi.core.v1.ReplyReviewThreadsResponse.result:type_name -> wi.core.v1.ReviewMutation
+	17, // 36: wi.core.v1.GetReviewIntentResponse.approvals:type_name -> wi.core.v1.ReviewApproval
+	5,  // 37: wi.core.v1.SetReviewIntentRequest.kind:type_name -> wi.core.v1.ApprovalKind
+	38, // 38: wi.core.v1.SetReviewIntentResponse.result:type_name -> wi.core.v1.ReviewMutation
+	15, // 39: wi.core.v1.NotifyReviewRoundResponse.round:type_name -> wi.core.v1.ReviewRound
+	8,  // 40: wi.core.v1.GetReviewRequest.comparison:type_name -> wi.core.v1.ReviewComparison
+	6,  // 41: wi.core.v1.ReviewFile.change:type_name -> wi.core.v1.FileChange
+	50, // 42: wi.core.v1.GetReviewResponse.revision:type_name -> wi.core.v1.ReviewRevision
+	51, // 43: wi.core.v1.GetReviewResponse.files:type_name -> wi.core.v1.ReviewFile
+	8,  // 44: wi.core.v1.GetReviewFileRequest.comparison:type_name -> wi.core.v1.ReviewComparison
+	50, // 45: wi.core.v1.GetReviewFileResponse.revision:type_name -> wi.core.v1.ReviewRevision
+	60, // 46: wi.core.v1.GetReviewFileResponse.old_file:type_name -> wi.core.v1.SourceFile
+	60, // 47: wi.core.v1.GetReviewFileResponse.new_file:type_name -> wi.core.v1.SourceFile
+	59, // 48: wi.core.v1.ReviewCommit.authored_at:type_name -> google.protobuf.Timestamp
+	7,  // 49: wi.core.v1.ReviewBranch.kind:type_name -> wi.core.v1.BranchKind
+	56, // 50: wi.core.v1.ListReviewCommitsResponse.commits:type_name -> wi.core.v1.ReviewCommit
+	57, // 51: wi.core.v1.ListReviewCommitsResponse.branches:type_name -> wi.core.v1.ReviewBranch
+	19, // 52: wi.core.v1.ReviewService.ListReviewRevisions:input_type -> wi.core.v1.ListReviewRevisionsRequest
+	21, // 53: wi.core.v1.ReviewService.CaptureReviewRevision:input_type -> wi.core.v1.CaptureReviewRevisionRequest
+	23, // 54: wi.core.v1.ReviewService.GetRevisionReview:input_type -> wi.core.v1.GetRevisionReviewRequest
+	25, // 55: wi.core.v1.ReviewService.GetRevisionPatch:input_type -> wi.core.v1.GetRevisionPatchRequest
+	27, // 56: wi.core.v1.ReviewService.GetRevisionReviewFile:input_type -> wi.core.v1.GetRevisionReviewFileRequest
+	29, // 57: wi.core.v1.ReviewService.GetReviewThreads:input_type -> wi.core.v1.GetReviewThreadsRequest
+	31, // 58: wi.core.v1.ReviewService.GetReviewDrafts:input_type -> wi.core.v1.GetReviewDraftsRequest
+	33, // 59: wi.core.v1.ReviewService.SaveReviewDraft:input_type -> wi.core.v1.SaveReviewDraftRequest
+	34, // 60: wi.core.v1.ReviewService.DeleteReviewDrafts:input_type -> wi.core.v1.DeleteReviewDraftsRequest
+	35, // 61: wi.core.v1.ReviewService.PublishReviewRound:input_type -> wi.core.v1.PublishReviewRoundRequest
+	37, // 62: wi.core.v1.ReviewService.ReplyReviewThreads:input_type -> wi.core.v1.ReplyReviewThreadsRequest
+	43, // 63: wi.core.v1.ReviewService.GetReviewIntent:input_type -> wi.core.v1.GetReviewIntentRequest
+	45, // 64: wi.core.v1.ReviewService.SetReviewIntent:input_type -> wi.core.v1.SetReviewIntentRequest
+	47, // 65: wi.core.v1.ReviewService.NotifyReviewRound:input_type -> wi.core.v1.NotifyReviewRoundRequest
+	49, // 66: wi.core.v1.ReviewService.GetReview:input_type -> wi.core.v1.GetReviewRequest
+	53, // 67: wi.core.v1.ReviewService.GetReviewFile:input_type -> wi.core.v1.GetReviewFileRequest
+	55, // 68: wi.core.v1.ReviewService.ListReviewCommits:input_type -> wi.core.v1.ListReviewCommitsRequest
+	20, // 69: wi.core.v1.ReviewService.ListReviewRevisions:output_type -> wi.core.v1.ListReviewRevisionsResponse
+	22, // 70: wi.core.v1.ReviewService.CaptureReviewRevision:output_type -> wi.core.v1.CaptureReviewRevisionResponse
+	24, // 71: wi.core.v1.ReviewService.GetRevisionReview:output_type -> wi.core.v1.GetRevisionReviewResponse
+	26, // 72: wi.core.v1.ReviewService.GetRevisionPatch:output_type -> wi.core.v1.GetRevisionPatchResponse
+	28, // 73: wi.core.v1.ReviewService.GetRevisionReviewFile:output_type -> wi.core.v1.GetRevisionReviewFileResponse
+	30, // 74: wi.core.v1.ReviewService.GetReviewThreads:output_type -> wi.core.v1.GetReviewThreadsResponse
+	32, // 75: wi.core.v1.ReviewService.GetReviewDrafts:output_type -> wi.core.v1.GetReviewDraftsResponse
+	39, // 76: wi.core.v1.ReviewService.SaveReviewDraft:output_type -> wi.core.v1.SaveReviewDraftResponse
+	40, // 77: wi.core.v1.ReviewService.DeleteReviewDrafts:output_type -> wi.core.v1.DeleteReviewDraftsResponse
+	41, // 78: wi.core.v1.ReviewService.PublishReviewRound:output_type -> wi.core.v1.PublishReviewRoundResponse
+	42, // 79: wi.core.v1.ReviewService.ReplyReviewThreads:output_type -> wi.core.v1.ReplyReviewThreadsResponse
+	44, // 80: wi.core.v1.ReviewService.GetReviewIntent:output_type -> wi.core.v1.GetReviewIntentResponse
+	46, // 81: wi.core.v1.ReviewService.SetReviewIntent:output_type -> wi.core.v1.SetReviewIntentResponse
+	48, // 82: wi.core.v1.ReviewService.NotifyReviewRound:output_type -> wi.core.v1.NotifyReviewRoundResponse
+	52, // 83: wi.core.v1.ReviewService.GetReview:output_type -> wi.core.v1.GetReviewResponse
+	54, // 84: wi.core.v1.ReviewService.GetReviewFile:output_type -> wi.core.v1.GetReviewFileResponse
+	58, // 85: wi.core.v1.ReviewService.ListReviewCommits:output_type -> wi.core.v1.ListReviewCommitsResponse
+	69, // [69:86] is the sub-list for method output_type
+	52, // [52:69] is the sub-list for method input_type
+	52, // [52:52] is the sub-list for extension type_name
+	52, // [52:52] is the sub-list for extension extendee
+	0,  // [0:52] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_reviews_proto_init() }
@@ -3867,7 +4372,7 @@ func file_wi_core_v1_reviews_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_reviews_proto_rawDesc), len(file_wi_core_v1_reviews_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      9,
 			NumMessages:   50,
 			NumExtensions: 0,
 			NumServices:   1,

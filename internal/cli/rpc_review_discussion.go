@@ -52,7 +52,7 @@ func rpcReviewDiscussion(ctx context.Context, command string, args []string, cfg
 		}
 		kept := out.Msg.Threads[:0]
 		for _, t := range out.Msg.Threads {
-			if selected != "" && t.Id != selected || *unresolved && (t.Status == "resolved" || t.Status == "withdrawn") {
+			if selected != "" && t.Id != selected || *unresolved && (t.Status == v1.ThreadStatus_THREAD_STATUS_RESOLVED || t.Status == v1.ThreadStatus_THREAD_STATUS_WITHDRAWN) {
 				continue
 			}
 			kept = append(kept, t)
@@ -76,7 +76,14 @@ func rpcReviewDiscussion(ctx context.Context, command string, args []string, cfg
 	anchor := &v1.ReviewAnchor{RevisionId: *revision, FromRevisionId: *from}
 	if *path != "" {
 		anchor.Path = *path
-		anchor.Side = *side
+		switch *side {
+		case "old":
+			anchor.Side = v1.ReviewSide_REVIEW_SIDE_OLD
+		case "new":
+			anchor.Side = v1.ReviewSide_REVIEW_SIDE_NEW
+		default:
+			return usageErr{fmt.Errorf("--side is old or new, not %q", *side)}
+		}
 		anchor.StartLine = uint32(*line)
 		anchor.EndLine = uint32(*end)
 	}
@@ -113,7 +120,7 @@ func rpcReviewDiscussion(ctx context.Context, command string, args []string, cfg
 		if !found {
 			return errors.New("thread not found")
 		}
-		resolution := map[string]string{"resolve": "resolved", "reopen": "open", "withdraw": "withdrawn"}[command]
+		resolution := map[string]v1.ThreadResolution{"resolve": v1.ThreadResolution_THREAD_RESOLUTION_RESOLVED, "reopen": v1.ThreadResolution_THREAD_RESOLUTION_OPEN, "withdraw": v1.ThreadResolution_THREAD_RESOLUTION_WITHDRAWN}[command]
 		d, err := cfg.API.Reviews.SaveReviewDraft(ctx, rpcRequest(cfg, &v1.SaveReviewDraftRequest{ItemId: id, OperationId: *operation + "-draft", Draft: &v1.ReviewDraft{ThreadId: fs.Arg(0), Anchor: anchor, Body: *message, Resolution: resolution}}))
 		if err != nil {
 			return err

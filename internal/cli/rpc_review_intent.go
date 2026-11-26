@@ -47,9 +47,9 @@ func rpcReviewIntent(ctx context.Context, command string, args []string, cfg Con
 		}
 		return rpcEmit(cfg, jsonOut, out.Msg)
 	}
-	kinds := map[string]string{"approve": "approve", "request-review": "request_review", "request-changes": "request_changes", "withdraw-approval": "withdraw_approval"}
+	kinds := map[string]v1.ApprovalKind{"approve": v1.ApprovalKind_APPROVAL_KIND_APPROVE, "request-review": v1.ApprovalKind_APPROVAL_KIND_REQUEST_REVIEW, "request-changes": v1.ApprovalKind_APPROVAL_KIND_REQUEST_CHANGES, "withdraw-approval": v1.ApprovalKind_APPROVAL_KIND_WITHDRAW_APPROVAL}
 	kind := kinds[command]
-	if kind == "" {
+	if kind == 0 {
 		return fmt.Errorf("unknown review intent %q", command)
 	}
 	out, err := cfg.API.Reviews.SetReviewIntent(ctx, rpcRequest(cfg, &v1.SetReviewIntentRequest{ItemId: id, OperationId: *operation, RevisionId: selection, Kind: kind, Message: *message}))

@@ -1,7 +1,10 @@
 package daemonapi
 
 import (
+	"time"
+
 	"context"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
@@ -32,7 +35,7 @@ func (s *Server) GetReview(ctx context.Context, req *connect.Request[v1.GetRevie
 	}
 	out := &v1.GetReviewResponse{Revision: reviewRevision(value.Revision), Truncated: value.Truncated, Branch: value.Branch, IntegrationBranch: value.IntegrationBranch}
 	for _, f := range value.Files {
-		out.Files = append(out.Files, &v1.ReviewFile{Path: f.Path, Change: f.Change})
+		out.Files = append(out.Files, &v1.ReviewFile{Path: f.Path, Change: fileChange(f.Change)})
 	}
 	return response(out, nil)
 }
@@ -58,7 +61,7 @@ func (s *Server) ListReviewCommits(ctx context.Context, req *connect.Request[v1.
 		}
 		commits, out.Truncated, out.Warnings = graph.Commits, graph.Truncated, graph.Warnings
 		for _, branch := range graph.Branches {
-			out.Branches = append(out.Branches, &v1.ReviewBranch{Name: branch.Name, Sha: branch.SHA, Kind: branch.Kind})
+			out.Branches = append(out.Branches, &v1.ReviewBranch{Name: branch.Name, Sha: branch.SHA, Kind: branchKind(branch.Kind)})
 		}
 	} else {
 		var err error
@@ -68,7 +71,17 @@ func (s *Server) ListReviewCommits(ctx context.Context, req *connect.Request[v1.
 		}
 	}
 	for _, c := range commits {
-		out.Commits = append(out.Commits, &v1.ReviewCommit{Sha: c.SHA, Subject: c.Subject, Author: c.Author, AuthoredAt: c.AuthoredAt, ParentShas: c.Parents})
+		out.Commits = append(out.Commits, &v1.ReviewCommit{Sha: c.SHA, Subject: c.Subject, Author: c.Author, AuthoredAt: authoredAt(c.AuthoredAt), ParentShas: c.Parents})
 	}
 	return response(out, nil)
+}
+
+// authoredAt reads the strict ISO 8601 date git gives a commit's author;
+// nil when it does not parse.
+func authoredAt(value string) *timestamppb.Timestamp {
+	at, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		return nil
+	}
+	return timestamppb.New(at)
 }
