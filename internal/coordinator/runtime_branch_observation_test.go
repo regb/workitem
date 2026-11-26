@@ -120,19 +120,6 @@ func TestNativeBranchObservationCannotHealRuntimeInfrastructureFailure(t *testin
 	}
 }
 
-func TestNativeObservationRetainsWorkspaceClaimFence(t *testing.T) {
-	db, _ := attentionTestDatabase(t)
-	owner := model.AgentRuntime{ID: "owner", WorkItemID: importTestID, WorkspaceClaimID: "superseded", WorkspaceClaimGeneration: 1}
-	data, _ := json.Marshal(owner)
-	if err := db.UpdateProjections([]ProjectionUpdate{{Projection: RuntimeOwnershipProjection, Key: importTestID, Value: data}}); err != nil {
-		t.Fatal(err)
-	}
-	event := RuntimeSemanticEvent{ID: "tree-stale-claim", RuntimeID: "owner", WorkItemID: importTestID, Type: agent.EventRuntimeStatus, Readiness: "ready", AgentState: "idle", LeafID: "leaf", Timestamp: time.Now().UTC()}
-	if _, err := IngestRuntimeEvent(context.Background(), db, event); err == nil {
-		t.Fatal("native snapshot bypassed the workspace generation fence")
-	}
-}
-
 func TestAFailedBranchKeepsAKnownFailureReason(t *testing.T) {
 	db, root := attentionTestDatabase(t)
 	seedRuntimeOwner(t, db, importTestID, "owner")

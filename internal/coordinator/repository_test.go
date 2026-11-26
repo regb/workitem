@@ -4,7 +4,6 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
-	"sync"
 	"testing"
 	"time"
 
@@ -55,11 +54,7 @@ func TestRepositoryRegistrationRequiresItsGitStore(t *testing.T) {
 }
 
 func TestRepositoryRegistrationIsAtomicAndIdempotent(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	command := repositoryTestCommand(importTestID, "fleet")
 	first, err := db.RegisterRepository(command)
 	if err != nil {
@@ -88,33 +83,15 @@ func TestRepositoryRegistrationIsAtomicAndIdempotent(t *testing.T) {
 }
 
 func TestRepositoryNamesAreUniqueUnderConcurrentRegistration(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	results := make(chan error, 8)
-	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
+	db, _ := itemDatabase(t)
+	oneWinner(t, 8, func(int) error {
 		id, err := model.NewID()
 		if err != nil {
-			t.Fatal(err)
+			return err
 		}
-		command := repositoryTestCommand(id, "same-name")
-		wg.Add(1)
-		go func() { defer wg.Done(); _, err := db.RegisterRepository(command); results <- err }()
-	}
-	wg.Wait()
-	close(results)
-	successes := 0
-	for err := range results {
-		if err == nil {
-			successes++
-		}
-	}
-	if successes != 1 {
-		t.Fatalf("successful registrations=%d", successes)
-	}
+		_, err = db.RegisterRepository(repositoryTestCommand(id, "same-name"))
+		return err
+	})
 	repositories, err := db.ListRepositories()
 	if err != nil || len(repositories) != 1 {
 		t.Fatalf("repositories=%+v error=%v", repositories, err)
@@ -122,11 +99,7 @@ func TestRepositoryNamesAreUniqueUnderConcurrentRegistration(t *testing.T) {
 }
 
 func TestMalformedRepositoryCommandsLeaveNoRecords(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	for _, change := range []func(*RegisterRepositoryCommand){func(c *RegisterRepositoryCommand) { c.Repository.ID = "../escape" }, func(c *RegisterRepositoryCommand) { c.Repository.Name = "../escape" }, func(c *RegisterRepositoryCommand) { c.Repository.IntegrationBranch = "main.lock" }, func(c *RegisterRepositoryCommand) {
 		c.Repository.Name = "--invalid-name"
 	}, func(c *RegisterRepositoryCommand) { c.ProtocolVersion++ }, func(c *RegisterRepositoryCommand) { c.CreatedAt = time.Time{} }} {

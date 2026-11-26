@@ -3,9 +3,7 @@ package coordinator
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -101,11 +99,7 @@ func TestRepositorySettingsAreDurableIdempotentAndFollowIdentity(t *testing.T) {
 	}
 }
 func TestSettingsValidateAtWriterAndKeepValuesOutOfHistory(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	registry := settingsRegistry(t)
 	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
 		t.Fatal(err)
@@ -147,46 +141,15 @@ func TestSettingsValidateAtWriterAndKeepValuesOutOfHistory(t *testing.T) {
 	}
 }
 func TestConcurrentSettingWritersUseRevisionFencing(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-		t.Fatal(err)
-	}
+	db := registeredDatabase(t, "project")
 	registry := settingsRegistry(t)
-	var wg sync.WaitGroup
-	results := make(chan error, 2)
-	for _, id := range []string{"one", "two"} {
-		wg.Add(1)
-		go func(id string) {
-			defer wg.Done()
-			_, err := db.SetRepositorySetting(settingCommand(id, 0, "trust", json.RawMessage(`"always"`)), registry)
-			results <- err
-		}(id)
-	}
-	wg.Wait()
-	close(results)
-	success := 0
-	for err := range results {
-		if err == nil {
-			success++
-		}
-	}
-	if success != 1 {
-		t.Fatal("lost revision fence", success)
-	}
+	oneWinner(t, 2, func(i int) error {
+		_, err := db.SetRepositorySetting(settingCommand([]string{"one", "two"}[i], 0, "trust", json.RawMessage(`"always"`)), registry)
+		return err
+	})
 }
 func TestRepositorySettingsAggregateLimitIsAtomic(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-		t.Fatal(err)
-	}
+	db := registeredDatabase(t, "project")
 	definition := options.Definition{Name: "sample"}
 	for i := 0; i < 9; i++ {
 		definition.Options = append(definition.Options, options.Option{Name: string(rune('a' + i)), Type: "string", Default: "", Repository: true})
@@ -213,14 +176,7 @@ func TestRepositorySettingsAggregateLimitIsAtomic(t *testing.T) {
 }
 
 func TestSettingsTransactionRollsBackOnHistoryFailure(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-		t.Fatal(err)
-	}
+	db := registeredDatabase(t, "project")
 	command := settingCommand("interrupted", 0, "trust", json.RawMessage(`"always"`))
 	eventID := domainEventID(command.ID, 0)
 	if err := db.db.Update(func(tx *bolt.Tx) error { return tx.Bucket(bucketEventIDs).Put([]byte(eventID), encodeUint64(99)) }); err != nil {
@@ -241,14 +197,7 @@ func TestSettingsTransactionRollsBackOnHistoryFailure(t *testing.T) {
 	}
 }
 func TestMalformedRepositorySettingsDoNotFallBackToDefaults(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-		t.Fatal(err)
-	}
+	db := registeredDatabase(t, "project")
 	for _, raw := range []string{`{`, `{"repository_id":"wrong","revision":1,"namespaces":{}}`, `{"repository_id":"` + importTestID + `","revision":0,"namespaces":{}}`, `{"repository_id":"` + importTestID + `","revision":1,"namespaces":{"plugins.direnv":null}}`} {
 		if err := db.db.Update(func(tx *bolt.Tx) error {
 			bucket, err := tx.Bucket(bucketProjections).CreateBucketIfNotExists([]byte(RepositorySettingsProjection))
@@ -275,14 +224,6 @@ func TestSchema8MovesRepositorySettingsToPluginNamespaces(t *testing.T) {
 		{"collision", `{"extensions.direnv":{"trust":"\"always\""},"plugins.direnv":{"load":"false"}}`, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
-			db, err := OpenDatabase(root)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-				t.Fatal(err)
-			}
 			var namespaces map[string]map[string]string
 			if err := json.Unmarshal([]byte(tc.namespaces), &namespaces); err != nil {
 				t.Fatal(err)
@@ -295,34 +236,28 @@ func TestSchema8MovesRepositorySettingsToPluginNamespaces(t *testing.T) {
 				}
 			}
 			legacy, _ := json.Marshal(map[string]any{"repository_id": importTestID, "revision": 3, "namespaces": stored})
-			if err := db.db.Update(func(tx *bolt.Tx) error {
-				bucket, err := tx.Bucket(bucketProjections).CreateBucketIfNotExists([]byte(RepositorySettingsProjection))
-				if err != nil {
-					return err
+			root := legacySchema(t, 7, func(db *Database) {
+				if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
+					t.Fatal(err)
 				}
-				if err := bucket.Put([]byte(importTestID), legacy); err != nil {
-					return err
+				if err := db.db.Update(func(tx *bolt.Tx) error {
+					bucket, err := tx.Bucket(bucketProjections).CreateBucketIfNotExists([]byte(RepositorySettingsProjection))
+					if err != nil {
+						return err
+					}
+					return bucket.Put([]byte(importTestID), legacy)
+				}); err != nil {
+					t.Fatal(err)
 				}
-				return tx.Bucket(bucketMeta).Put(keySchemaVersion, encodeUint64(7))
-			}); err != nil {
-				t.Fatal(err)
-			}
-			db.Close()
-			upgraded, err := OpenDatabase(root)
+			})
 			if tc.fails {
-				if err == nil {
+				if upgraded, err := OpenDatabase(root); err == nil {
 					upgraded.Close()
 					t.Fatal("colliding namespaces were merged silently")
 				}
 				return
 			}
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer upgraded.Close()
-			if _, err := os.Stat(DatabasePath(root) + ".schema-7.bak"); err != nil {
-				t.Fatalf("pre-upgrade backup missing: %v", err)
-			}
+			upgraded := upgradedDatabase(t, root, 7)
 			settings, err := upgraded.RepositorySettings(importTestID)
 			if err != nil {
 				t.Fatal(err)

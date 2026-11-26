@@ -11,11 +11,7 @@ import (
 )
 
 func TestRuntimeEventsAndObservationsAreFencedByWorkspaceClaim(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	now := time.Now().UTC()
 	owner := model.AgentRuntime{ID: "runtime-1", WorkItemID: importTestID, WorkspaceClaimID: "claim-1", WorkspaceClaimGeneration: 1}
 	ownerBytes, _ := json.Marshal(owner)

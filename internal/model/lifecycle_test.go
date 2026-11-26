@@ -99,3 +99,23 @@ func TestBlockerShortPrefersLabelThenCompactCondition(t *testing.T) {
 		t.Fatal("long label accepted")
 	}
 }
+
+func TestBlockerFollowUpIsValidated(t *testing.T) {
+	now := time.Now().UTC()
+	self, other := "01KZYHGDCECSFS4BJ2SNTQP49V", "01KZYHGDCECSFS4BJ2SNTQP49W"
+	long := strings.Repeat("x", MaxFollowUpLength+1)
+	for _, blocker := range []Blocker{
+		{Kind: BlockerExternal, Event: "x", FollowUp: long},
+		{Kind: BlockerExternal, Event: "x", FollowUp: "a\x00b"},
+		{Kind: BlockerExternal, Event: "x", Provider: "claude"},
+		{Kind: BlockerUsage, Provider: "two words"},
+		{Kind: BlockerUsage, ItemID: self},
+	} {
+		if err := ValidateBlocker(blocker, other, now); err == nil {
+			t.Fatalf("accepted %+v", blocker)
+		}
+	}
+	if err := ValidateBlocker(Blocker{Kind: BlockerUsage, FollowUp: "multi\nline"}, self, now); err != nil {
+		t.Fatal(err)
+	}
+}

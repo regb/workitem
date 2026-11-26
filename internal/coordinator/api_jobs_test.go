@@ -7,11 +7,7 @@ import (
 )
 
 func TestJobHistoryBoundsFinishedButKeepsAllUnfinished(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	for i := 0; i < APIJobHistoryLimit+5; i++ {
 		if err := db.SaveAPIJob(fmt.Sprint(i), []byte(fmt.Sprint(i)), time.Unix(int64(i+1), 0)); err != nil {
 			t.Fatal(err)

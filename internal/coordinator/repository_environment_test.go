@@ -10,14 +10,7 @@ import (
 )
 
 func TestRepositoryEnvironmentKeepsValuesOutOfHistory(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-		t.Fatal(err)
-	}
+	db := registeredDatabase(t, "project")
 	empty, err := db.RepositoryEnvironment("project")
 	if err != nil || empty.Environment.Revision != 0 || len(empty.Environment.Vars) != 0 {
 		t.Fatal(empty, err)

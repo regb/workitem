@@ -2,14 +2,11 @@ package coordinator
 
 import (
 	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/regb/workitem/internal/model"
-	"github.com/regb/workitem/internal/store"
-	bolt "go.etcd.io/bbolt"
 )
 
 func runCommand(t *testing.T, db *Database, command ManifestCommand) (ManifestCommandResult, error) {
@@ -200,75 +197,6 @@ func mustJSON(t *testing.T, value any) []byte {
 	return encoded
 }
 
-func TestSchemaFiveUpgradeReplacesWaitingWithBlockerAndKeepsBackup(t *testing.T) {
-	root := t.TempDir()
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	legacy := map[string]string{importTestID: "working", "01KZYHGDCECSFS4BJ2SNTQP49W": "waiting", "01KZYHGDCECSFS4BJ2SNTQP49X": "archived", "01KZYHGDCECSFS4BJ2SNTQP49Y": "backlog"}
-	if err := db.db.Update(func(tx *bolt.Tx) error {
-		bucket := tx.Bucket(bucketProjections).Bucket([]byte(ManifestProjection))
-		for id, state := range legacy {
-			manifest := model.NewManifest(id, "legacy-"+state, "Legacy", nil, false, now, model.Repository{}, model.Checkout{})
-			if state == "archived" {
-				manifest.Slug = ""
-			}
-			encoded, _ := json.Marshal(manifest)
-			var fields map[string]any
-			_ = json.Unmarshal(encoded, &fields)
-			fields["state"] = state
-			encoded, _ = json.Marshal(fields)
-			if err := bucket.Put([]byte(id), encoded); err != nil {
-				return err
-			}
-		}
-		return tx.Bucket(bucketMeta).Put(keySchemaVersion, encodeUint64(5))
-	}); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-
-	upgraded, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer upgraded.Close()
-	if _, err := os.Stat(DatabasePath(root) + ".schema-5.bak"); err != nil {
-		t.Fatalf("pre-upgrade backup missing: %v", err)
-	}
-	want := map[string]string{importTestID: model.StateActive, "01KZYHGDCECSFS4BJ2SNTQP49W": model.StateActive, "01KZYHGDCECSFS4BJ2SNTQP49X": model.StateClosed, "01KZYHGDCECSFS4BJ2SNTQP49Y": model.StateBacklog}
-	for id, state := range want {
-		canonical, err := upgraded.CanonicalManifest(id)
-		if err != nil || canonical.Manifest.State != state {
-			t.Fatalf("%s state=%q err=%v", id, canonical.Manifest.State, err)
-		}
-		if _, err := store.NormalizeManifest(canonical.Manifest); err != nil {
-			t.Fatalf("%s invalid after upgrade: %v", id, err)
-		}
-		if state == model.StateClosed {
-			continue
-		}
-		var activity AttentionActivity
-		if found, err := upgraded.ReadProjection(AttentionActivityProjection, id, &activity); err != nil || !found || activity.LastReadAt == nil {
-			t.Fatalf("%s activity=%+v found=%v err=%v", id, activity, found, err)
-		}
-		events, err := upgraded.ListItemEvents(id)
-		if err != nil || len(events) == 0 || events[len(events)-1].Type != "attention.read" {
-			t.Fatalf("%s upgrade events=%+v err=%v", id, events, err)
-		}
-	}
-	waiting, _ := upgraded.CanonicalManifest("01KZYHGDCECSFS4BJ2SNTQP49W")
-	if len(waiting.Manifest.Blockers) != 1 || waiting.Manifest.Blockers[0].ID != MigratedWaitingBlockerID || waiting.Manifest.Blockers[0].Kind != model.BlockerExternal {
-		t.Fatalf("waiting item blockers = %+v", waiting.Manifest.Blockers)
-	}
-	status, _ := upgraded.Status()
-	if status.SchemaVersion != SchemaVersion {
-		t.Fatalf("schema = %d", status.SchemaVersion)
-	}
-}
-
 func TestWaitAddsSeveralBlockersAtomicallyWithMetadata(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	a, b := importTestID, "01KZYHGDCECSFS4BJ2SNTQP49W"
@@ -306,57 +234,6 @@ func TestWaitAddsSeveralBlockersAtomicallyWithMetadata(t *testing.T) {
 	}
 	if _, err := runCommand(t, db, ManifestCommand{ID: "bad-meta", Type: CommandBlockerAdd, ItemID: a, Blockers: []model.Blocker{{Kind: model.BlockerExternal, Event: "x", Meta: map[string]string{"Bad Key": "x"}}}, CreatedAt: now}); err == nil {
 		t.Fatal("invalid metadata key accepted")
-	}
-}
-
-func TestSchemaSixUpgradeTurnsReasonsIntoEventNames(t *testing.T) {
-	root := t.TempDir()
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	manifest := model.NewManifest(importTestID, "legacy", "Legacy", nil, false, now, model.Repository{}, model.Checkout{})
-	manifest.State = model.StateActive
-	encoded, _ := json.Marshal(manifest)
-	var fields map[string]any
-	_ = json.Unmarshal(encoded, &fields)
-	until := now.Add(time.Hour)
-	fields["blockers"] = []map[string]any{
-		{"id": "bwaiting", "kind": "external", "reason": "Waiting (migrated from the former waiting state)", "created_at": now},
-		{"id": "b1", "kind": "external", "reason": "API review", "created_at": now},
-		{"id": "b2", "kind": "time", "until": until, "reason": "freeze", "created_at": now},
-	}
-	encoded, _ = json.Marshal(fields)
-	if err := db.db.Update(func(tx *bolt.Tx) error {
-		if err := tx.Bucket(bucketProjections).Bucket([]byte(ManifestProjection)).Put([]byte(importTestID), encoded); err != nil {
-			return err
-		}
-		return tx.Bucket(bucketMeta).Put(keySchemaVersion, encodeUint64(6))
-	}); err != nil {
-		t.Fatal(err)
-	}
-	db.Close()
-	upgraded, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer upgraded.Close()
-	if _, err := os.Stat(DatabasePath(root) + ".schema-6.bak"); err != nil {
-		t.Fatalf("pre-upgrade backup missing: %v", err)
-	}
-	canonical, err := upgraded.CanonicalManifest(importTestID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	blockers := canonical.Manifest.Blockers
-	if len(blockers) != 3 || blockers[0].Event != MigratedWaitingEvent || blockers[1].Event != "API review" || blockers[2].Event != "" || blockers[2].Until == nil {
-		t.Fatalf("blockers = %+v", blockers)
-	}
-	for _, blocker := range blockers {
-		if err := model.ValidateBlocker(blocker, importTestID, now.Add(-time.Minute)); err != nil {
-			t.Fatalf("%+v invalid after upgrade: %v", blocker, err)
-		}
 	}
 }
 

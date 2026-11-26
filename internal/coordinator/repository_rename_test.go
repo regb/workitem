@@ -3,7 +3,6 @@ package coordinator
 import (
 	"encoding/json"
 	"reflect"
-	"sync"
 	"testing"
 	"time"
 
@@ -16,11 +15,7 @@ func renameTestCommand(id, previous, name string) RenameRepositoryCommand {
 }
 
 func TestRepositoryRenamePreservesIdentityAndIsIdempotent(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	registered, err := db.RegisterRepository(repositoryTestCommand(importTestID, "fleet"))
 	if err != nil {
 		t.Fatal(err)
@@ -85,11 +80,7 @@ func TestRepositoryRenamePreservesIdentityAndIsIdempotent(t *testing.T) {
 }
 
 func TestRepositoryRenameRejectsInvalidAndConflictingCommands(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	registration := repositoryTestCommand(importTestID, "fleet")
 	if _, err := db.RegisterRepository(registration); err != nil {
 		t.Fatal(err)
@@ -134,11 +125,7 @@ func TestRepositoryRenameRejectsInvalidAndConflictingCommands(t *testing.T) {
 }
 
 func TestConcurrentRepositoryRenamesEnforceUniqueness(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	ids := []string{importTestID}
 	other, err := model.NewID()
 	if err != nil {
@@ -151,23 +138,10 @@ func TestConcurrentRepositoryRenamesEnforceUniqueness(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	var wg sync.WaitGroup
-	results := make(chan error, 2)
-	for i, id := range ids {
+	oneWinner(t, len(ids), func(i int) error {
 		c := renameTestCommand(names[i], names[i], "shared")
-		c.RepositoryID = id
-		wg.Add(1)
-		go func() { defer wg.Done(); _, err := db.RenameRepository(c); results <- err }()
-	}
-	wg.Wait()
-	close(results)
-	successes := 0
-	for err := range results {
-		if err == nil {
-			successes++
-		}
-	}
-	if successes != 1 {
-		t.Fatalf("successes=%d", successes)
-	}
+		c.RepositoryID = ids[i]
+		_, err := db.RenameRepository(c)
+		return err
+	})
 }

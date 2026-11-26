@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -88,14 +87,7 @@ func TestRepositoryArchiveRestoreDurableAndIdempotent(t *testing.T) {
 }
 
 func TestRepositoryArchiveFencesCreationButNotExistingItems(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-		t.Fatal(err)
-	}
+	db := registeredDatabase(t, "project")
 	now := time.Now().UTC()
 	makeCreate := func(id string) CreateItemCommand {
 		m := model.NewManifest(id, model.IDDerivedSlug(id), "Task", nil, false, now, model.Repository{ID: importTestID, CreatedFromCommit: strings.Repeat("a", 40)}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, "wi/task-"+id))
@@ -141,11 +133,7 @@ func TestRepositoryArchiveFencesCreationButNotExistingItems(t *testing.T) {
 }
 
 func TestRepositoryArchiveRejectsMalformedConflictingAndStaleCommands(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	registration := repositoryTestCommand(importTestID, "project")
 	if _, err := db.RegisterRepository(registration); err != nil {
 		t.Fatal(err)
@@ -180,30 +168,9 @@ func TestRepositoryArchiveRejectsMalformedConflictingAndStaleCommands(t *testing
 }
 
 func TestConcurrentRepositoryArchivesHaveOneWinner(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, "project")); err != nil {
-		t.Fatal(err)
-	}
-	var wg sync.WaitGroup
-	results := make(chan error, 2)
-	for _, id := range []string{"one", "two"} {
-		command := archiveTestCommand(id, false, true)
-		wg.Add(1)
-		go func() { defer wg.Done(); _, err := db.SetRepositoryArchived(command); results <- err }()
-	}
-	wg.Wait()
-	close(results)
-	successes := 0
-	for err := range results {
-		if err == nil {
-			successes++
-		}
-	}
-	if successes != 1 {
-		t.Fatalf("successes=%d", successes)
-	}
+	db := registeredDatabase(t, "project")
+	oneWinner(t, 2, func(i int) error {
+		_, err := db.SetRepositoryArchived(archiveTestCommand([]string{"one", "two"}[i], false, true))
+		return err
+	})
 }

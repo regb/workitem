@@ -4,19 +4,13 @@ import (
 	"encoding/json"
 	"github.com/regb/workitem/internal/model"
 	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
-	bolt "go.etcd.io/bbolt"
 )
 
 func TestDatabaseCommitIsAtomicAndIdempotent(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	revision := uint64(0)
 	command := Command{ID: "command-1", ProtocolVersion: 1, Type: "item.created", ItemID: "item-1", ExpectedRevision: &revision, ReceivedAt: time.Now()}
 	event := PendingEvent{ID: "event-1", ItemID: "item-1", Type: "item.created", Timestamp: time.Now(), Actor: model.OperatorUser, Payload: json.RawMessage(`{"title":"Test"}`)}
@@ -48,40 +42,15 @@ func TestDatabaseCommitIsAtomicAndIdempotent(t *testing.T) {
 }
 
 func TestDatabaseRejectsPreReleaseSchema(t *testing.T) {
-	root := t.TempDir()
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	raw, err := bolt.Open(filepath.Join(root, DatabaseFile), 0o600, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := raw.Update(func(tx *bolt.Tx) error {
-		return tx.Bucket(bucketMeta).Put(keySchemaVersion, encodeUint64(4))
-	}); err != nil {
-		raw.Close()
-		t.Fatal(err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := OpenDatabase(root); err == nil {
+	if _, err := OpenDatabase(legacySchema(t, 4, nil)); err == nil {
 		t.Fatal("older pre-release schema was accepted")
 	}
 }
 
 func TestDatabaseRejectsRevisionConflictWithoutPartialWrites(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	wrong := uint64(4)
-	_, err = db.Commit(Command{ID: "conflict", Type: "item.changed", ItemID: "item-1", ExpectedRevision: &wrong}, []PendingEvent{{ID: "event", ItemID: "item-1", Type: "item.changed"}}, []ProjectionUpdate{{Projection: "items", Key: "item-1", Value: json.RawMessage(`{"bad":true}`)}})
+	_, err := db.Commit(Command{ID: "conflict", Type: "item.changed", ItemID: "item-1", ExpectedRevision: &wrong}, []PendingEvent{{ID: "event", ItemID: "item-1", Type: "item.changed"}}, []ProjectionUpdate{{Projection: "items", Key: "item-1", Value: json.RawMessage(`{"bad":true}`)}})
 	if err == nil {
 		t.Fatal("expected revision conflict")
 	}

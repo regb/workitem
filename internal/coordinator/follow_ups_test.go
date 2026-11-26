@@ -175,22 +175,3 @@ func TestUsageBlockerIsSingleAndClearedForUsageOrByPrompt(t *testing.T) {
 		t.Fatalf("prompted usage blocker = %+v", payload)
 	}
 }
-
-func TestBlockerFollowUpIsValidated(t *testing.T) {
-	now := time.Now().UTC()
-	long := strings.Repeat("x", model.MaxFollowUpLength+1)
-	for _, blocker := range []model.Blocker{
-		{Kind: model.BlockerExternal, Event: "x", FollowUp: long},
-		{Kind: model.BlockerExternal, Event: "x", FollowUp: "a\x00b"},
-		{Kind: model.BlockerExternal, Event: "x", Provider: "claude"},
-		{Kind: model.BlockerUsage, Provider: "two words"},
-		{Kind: model.BlockerUsage, ItemID: importTestID},
-	} {
-		if err := model.ValidateBlocker(blocker, "01KZYHGDCECSFS4BJ2SNTQP49W", now); err == nil {
-			t.Fatalf("accepted %+v", blocker)
-		}
-	}
-	if err := model.ValidateBlocker(model.Blocker{Kind: model.BlockerUsage, FollowUp: "multi\nline"}, importTestID, now); err != nil {
-		t.Fatal(err)
-	}
-}

@@ -11,11 +11,7 @@ import (
 )
 
 func TestSchedulesAreStoredEditedAndAdvancedOnce(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	now := time.Date(2026, 11, 19, 8, 0, 0, 0, time.Local)
 	created, err := db.PutSchedule(model.Schedule{RepositoryID: "r", Cron: "0 9 * * *", Prompt: "p", AgentProfile: "a", Labels: []string{"ci"}, Enabled: true}, 0, now)
 	if err != nil {
@@ -68,11 +64,7 @@ func TestSchedulesAreStoredEditedAndAdvancedOnce(t *testing.T) {
 }
 
 func TestScheduleAndProfileWritesWakeChangeReaders(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	before, _ := db.ChangesSnapshot("", 0)
 	revision := before.Revision
 	advanced := func(what string) {

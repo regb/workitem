@@ -2,7 +2,9 @@ package coordinator
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,27 +12,62 @@ import (
 	"testing"
 	"time"
 
+	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/store"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/sys/unix"
 )
 
-// Keep the fixture snapshot in the exact format tx.WriteTo publishes, rather
-// than copying unused space from the database's allocation.
-func legacyBackupFixture(t *testing.T) (string, []byte) {
+// legacySchema returns a data root whose database is at schema version, after
+// mutate wrote the state an older build left.
+func legacySchema(t *testing.T, version uint64, mutate func(*Database)) string {
 	t.Helper()
 	root := t.TempDir()
 	db, err := OpenDatabase(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.db.Update(func(tx *bolt.Tx) error { return tx.Bucket(bucketMeta).Put(keySchemaVersion, encodeUint64(5)) }); err != nil {
-		t.Fatal(err)
+	if mutate != nil {
+		mutate(db)
 	}
-	var snapshot bytes.Buffer
-	if err := db.db.View(func(tx *bolt.Tx) error { _, err := tx.WriteTo(&snapshot); return err }); err != nil {
+	if err := db.db.Update(func(tx *bolt.Tx) error { return tx.Bucket(bucketMeta).Put(keySchemaVersion, encodeUint64(version)) }); err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// upgradedDatabase opens a legacy root, which upgrades it, and checks the
+// upgrade kept a backup of the old database.
+func upgradedDatabase(t *testing.T, root string, from uint64) *Database {
+	t.Helper()
+	db, err := OpenDatabase(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := os.Stat(fmt.Sprintf("%s.schema-%d.bak", DatabasePath(root), from)); err != nil {
+		t.Fatalf("pre-upgrade backup missing: %v", err)
+	}
+	return db
+}
+
+// Keep the fixture snapshot in the exact format tx.WriteTo publishes, rather
+// than copying unused space from the database's allocation.
+func legacyBackupFixture(t *testing.T) (string, []byte) {
+	t.Helper()
+	root := legacySchema(t, 5, nil)
+	raw, err := bolt.Open(DatabasePath(root), 0o600, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot bytes.Buffer
+	if err := raw.View(func(tx *bolt.Tx) error { _, err := tx.WriteTo(&snapshot); return err }); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
 		t.Fatal(err)
 	}
 	return root, snapshot.Bytes()
@@ -214,5 +251,98 @@ func TestSchemaBackupPublicationIsAtomicAndDoesNotOverwrite(t *testing.T) {
 				t.Fatal("temporary files leaked", temps, err)
 			}
 		})
+	}
+}
+
+// manifestFields is the stored form of manifest, to edit as an older build
+// wrote it.
+func manifestFields(t *testing.T, manifest model.Manifest) map[string]any {
+	t.Helper()
+	encoded, _ := json.Marshal(manifest)
+	var fields map[string]any
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatal(err)
+	}
+	return fields
+}
+
+func putLegacyManifest(t *testing.T, db *Database, id string, fields map[string]any) {
+	t.Helper()
+	encoded, _ := json.Marshal(fields)
+	if err := db.db.Update(func(tx *bolt.Tx) error {
+		return tx.Bucket(bucketProjections).Bucket([]byte(ManifestProjection)).Put([]byte(id), encoded)
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSchemaFiveUpgradeReplacesWaitingWithBlockerAndKeepsBackup(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	legacy := map[string]string{importTestID: "working", "01KZYHGDCECSFS4BJ2SNTQP49W": "waiting", "01KZYHGDCECSFS4BJ2SNTQP49X": "archived", "01KZYHGDCECSFS4BJ2SNTQP49Y": "backlog"}
+	root := legacySchema(t, 5, func(db *Database) {
+		for id, state := range legacy {
+			manifest := model.NewManifest(id, "legacy-"+state, "Legacy", nil, false, now, model.Repository{}, model.Checkout{})
+			if state == "archived" {
+				manifest.Slug = ""
+			}
+			fields := manifestFields(t, manifest)
+			fields["state"] = state
+			putLegacyManifest(t, db, id, fields)
+		}
+	})
+	upgraded := upgradedDatabase(t, root, 5)
+	want := map[string]string{importTestID: model.StateActive, "01KZYHGDCECSFS4BJ2SNTQP49W": model.StateActive, "01KZYHGDCECSFS4BJ2SNTQP49X": model.StateClosed, "01KZYHGDCECSFS4BJ2SNTQP49Y": model.StateBacklog}
+	for id, state := range want {
+		canonical, err := upgraded.CanonicalManifest(id)
+		if err != nil || canonical.Manifest.State != state {
+			t.Fatalf("%s state=%q err=%v", id, canonical.Manifest.State, err)
+		}
+		if _, err := store.NormalizeManifest(canonical.Manifest); err != nil {
+			t.Fatalf("%s invalid after upgrade: %v", id, err)
+		}
+		if state == model.StateClosed {
+			continue
+		}
+		var activity AttentionActivity
+		if found, err := upgraded.ReadProjection(AttentionActivityProjection, id, &activity); err != nil || !found || activity.LastReadAt == nil {
+			t.Fatalf("%s activity=%+v found=%v err=%v", id, activity, found, err)
+		}
+		events, err := upgraded.ListItemEvents(id)
+		if err != nil || len(events) == 0 || events[len(events)-1].Type != "attention.read" {
+			t.Fatalf("%s upgrade events=%+v err=%v", id, events, err)
+		}
+	}
+	waiting, _ := upgraded.CanonicalManifest("01KZYHGDCECSFS4BJ2SNTQP49W")
+	if len(waiting.Manifest.Blockers) != 1 || waiting.Manifest.Blockers[0].ID != MigratedWaitingBlockerID || waiting.Manifest.Blockers[0].Kind != model.BlockerExternal {
+		t.Fatalf("waiting item blockers = %+v", waiting.Manifest.Blockers)
+	}
+	status, _ := upgraded.Status()
+	if status.SchemaVersion != SchemaVersion {
+		t.Fatalf("schema = %d", status.SchemaVersion)
+	}
+}
+
+func TestSchemaSixUpgradeTurnsReasonsIntoEventNames(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	fields := manifestFields(t, testManifest(importTestID, "legacy", "Legacy", now))
+	until := now.Add(time.Hour)
+	fields["blockers"] = []map[string]any{
+		{"id": "bwaiting", "kind": "external", "reason": "Waiting (migrated from the former waiting state)", "created_at": now},
+		{"id": "b1", "kind": "external", "reason": "API review", "created_at": now},
+		{"id": "b2", "kind": "time", "until": until, "reason": "freeze", "created_at": now},
+	}
+	upgraded := upgradedDatabase(t, legacySchema(t, 6, func(db *Database) { putLegacyManifest(t, db, importTestID, fields) }), 6)
+	canonical, err := upgraded.CanonicalManifest(importTestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockers := canonical.Manifest.Blockers
+	if len(blockers) != 3 || blockers[0].Event != MigratedWaitingEvent || blockers[1].Event != "API review" || blockers[2].Event != "" || blockers[2].Until == nil {
+		t.Fatalf("blockers = %+v", blockers)
+	}
+	for _, blocker := range blockers {
+		if err := model.ValidateBlocker(blocker, importTestID, now.Add(-time.Minute)); err != nil {
+			t.Fatalf("%+v invalid after upgrade: %v", blocker, err)
+		}
 	}
 }

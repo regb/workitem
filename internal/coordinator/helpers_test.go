@@ -110,3 +110,14 @@ func saveRuntimeOwner(t *testing.T, db *Database, runtime model.AgentRuntime) {
 		t.Fatal(err)
 	}
 }
+
+// registeredDatabase opens an empty database with repository importTestID
+// registered under name.
+func registeredDatabase(t *testing.T, name string) *Database {
+	t.Helper()
+	db, _ := itemDatabase(t)
+	if _, err := db.RegisterRepository(repositoryTestCommand(importTestID, name)); err != nil {
+		t.Fatal(err)
+	}
+	return db
+}

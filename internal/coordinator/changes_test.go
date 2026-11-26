@@ -46,11 +46,7 @@ func TestChangeLogReportsChangedItemsAndWakesWaiters(t *testing.T) {
 }
 
 func TestCommitsRecordTheirItems(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	start, _ := db.changes.since("", 0)
 	if _, err := db.Commit(Command{ID: "c1", Type: "test", ItemID: importTestID, ReceivedAt: time.Now()}, []PendingEvent{{ID: "e1", ItemID: importTestID, Type: "test.event", Timestamp: time.Now()}}, nil); err != nil {
 		t.Fatal(err)

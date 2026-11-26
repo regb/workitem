@@ -9,11 +9,7 @@ import (
 )
 
 func TestAgentProfilesKeepADefault(t *testing.T) {
-	db, err := OpenDatabase(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := itemDatabase(t)
 	executable := filepath.Join(t.TempDir(), "pi")
 	if err := os.WriteFile(executable, []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
