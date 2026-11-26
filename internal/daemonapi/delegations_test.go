@@ -36,7 +36,7 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	setState(v1.ItemState_ITEM_STATE_ACTIVE)
 	agent, _ := f.agentClients(t, parentID)
 	delegated := []string{}
-	for i := 0; i < coordinator.MaxOpenDelegations; i++ {
+	for i := 0; i < 3; i++ {
 		child, err := agent.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: fmt.Sprintf("child %d", i)}))
 		if err != nil {
 			t.Fatal(err)
@@ -45,9 +45,6 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 			t.Fatalf("delegated item owned by %q", child.Msg.Item.Owner)
 		}
 		delegated = append(delegated, child.Msg.Item.Id)
-	}
-	if _, err := agent.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "one too many"})); connect.CodeOf(err) != connect.CodeResourceExhausted {
-		t.Fatalf("delegation cap: %v", err)
 	}
 	list := func(owner string) map[string]bool {
 		t.Helper()

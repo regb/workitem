@@ -73,7 +73,7 @@ You act as your work item: every `wi` command you run is recorded as done by it,
   wi new --propose --title "Item title" --desc-file DESC_FILE
   ```
 
-- **Delegate** ("hand this off", "split this into items", "have another agent do X"): the item is yours. It is created at once, owned by your item, and kept out of the user's list: you follow it up. An item may have at most eight unfinished delegations.
+- **Delegate** ("hand this off", "split this into items", "have another agent do X"): the item is yours. It is created at once, owned by your item, and kept out of the user's list: you follow it up.
 
   ```bash
   wi new --title "Item title" --desc-file DESC_FILE

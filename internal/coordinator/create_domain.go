@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/regb/workitem/internal/apperr"
 	"os"
 	"path/filepath"
 	"strings"
@@ -290,18 +289,14 @@ func validateCreateDescription(command CreateItemCommand, description string) er
 	return nil
 }
 
-// MaxOpenDelegations bounds the unfinished items one item's agent may have
-// delegated, so an agent creating items in a loop stops.
-const MaxOpenDelegations = 8
-
-// validateDelegation refuses an item owned by an item that is closed,
-// missing, or already has its share of unfinished delegations.
+// validateDelegation refuses an item owned by an item that is closed or
+// missing.
 func validateDelegation(created model.Manifest, manifests []model.Manifest) error {
 	owner := model.PrincipalItem(created.Owner)
 	if owner == "" {
 		return nil
 	}
-	open, found := 0, false
+	found := false
 	for _, m := range manifests {
 		if m.ID == owner {
 			found = true
@@ -309,15 +304,9 @@ func validateDelegation(created model.Manifest, manifests []model.Manifest) erro
 				return fmt.Errorf("work item %s is closed and cannot own new items", owner)
 			}
 		}
-		if m.Owner == created.Owner && m.State != model.StateClosed {
-			open++
-		}
 	}
 	if !found {
 		return fmt.Errorf("owner work item %s not found", owner)
-	}
-	if open >= MaxOpenDelegations {
-		return apperr.Exhaustedf("item %s already has %d unfinished delegated items; finish or close some first", owner, open)
 	}
 	return nil
 }
