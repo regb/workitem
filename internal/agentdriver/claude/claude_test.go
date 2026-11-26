@@ -26,6 +26,9 @@ func TestMain(m *testing.M) {
 	if os.Getenv("WI_CLAUDE_TEST_BACKEND") == "1" {
 		os.Exit(m.Run())
 	}
+	// Fake backends that ignore SIGTERM are killed without waiting out the
+	// production grace period.
+	stopGrace = 200 * time.Millisecond
 	os.Exit(testutil.RunIsolatedTests(m.Run))
 }
 func TestConfiguration(t *testing.T) {

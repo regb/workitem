@@ -422,7 +422,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 			}
 			state.stopping = true
 			// Escalation must not wait behind compact-event delivery or queue cleanup.
-			stopTimer = time.AfterFunc(3*time.Second, func() { _ = cmd.Process.Kill() })
+			stopTimer = time.AfterFunc(stopGrace, func() { _ = cmd.Process.Kill() })
 			request.Respond(nil)
 			// Queue cancellation shares one reporting deadline. A reachable but
 			// unresponsive event endpoint must not add a timeout per queued item.

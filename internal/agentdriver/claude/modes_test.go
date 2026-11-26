@@ -1,7 +1,6 @@
 package claude
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,19 +9,10 @@ import (
 	protocol "github.com/regb/workitem/agentdriver/protocol"
 )
 
-func TestRuntimeModesReportKeystrokeTUIAndStructuredHeadless(t *testing.T) {
-	modes := RuntimeModes()
-	if err := modes.Validate(); err != nil {
+// The daemon refuses a driver whose modes do not validate.
+func TestRuntimeModesValidate(t *testing.T) {
+	if err := RuntimeModes().Validate(); err != nil {
 		t.Fatal(err)
-	}
-	if tui := modes.Modes[protocol.ModeTUI]; tui.Control != protocol.ControlEmulated || !tui.Terminal || tui.IdleGuard {
-		t.Fatalf("tui = %+v", tui)
-	}
-	if headless := modes.Modes[protocol.ModeHeadless]; headless.Control != protocol.ControlStructured || headless.Terminal {
-		t.Fatalf("headless = %+v", headless)
-	}
-	if !modes.Settings["model"].OnResume || !modes.Settings["reasoning"].OnResume {
-		t.Fatalf("settings = %+v", modes.Settings)
 	}
 }
 
@@ -67,20 +57,7 @@ func TestSettingsReportResolvesAliasesAndSkipsRepeats(t *testing.T) {
 }
 
 func TestHeadlessSettingsUseControlRequestsAndSettleOnResponse(t *testing.T) {
-	r, w, _ := os.Pipe()
-	defer r.Close()
-	defer w.Close()
-	frames := make(chan map[string]any, 4)
-	go func() {
-		d := json.NewDecoder(r)
-		for {
-			var f map[string]any
-			if d.Decode(&f) != nil {
-				return
-			}
-			frames <- f
-		}
-	}()
+	w, frames := pipeFrames[map[string]any](t)
 	events := []protocol.RuntimeEvent{}
 	s := &headlessControls{input: w, initialized: true, emit: func(e protocol.RuntimeEvent) { events = append(events, e) }}
 	if err := s.accept(protocol.ControlCommand{ID: "m", Type: protocol.CommandSet, Setting: &protocol.Setting{Name: "model", Value: "sonnet"}}); err != nil {

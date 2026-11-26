@@ -25,12 +25,7 @@ func TestHeadlessSanitizedNativeFrames(t *testing.T) {
 	defer cancel()
 	frames := make(chan headlessRead, 1)
 	go readHeadlessFrames(ctx, input, frames)
-	socket := filepath.Join(testutil.ShortTempDir(t), "content.sock")
-	content, err := protocol.ListenContent(socket, "runtime", "item", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer content.Close()
+	content, read := listenContent(t, filepath.Join(testutil.ShortTempDir(t), "content.sock"))
 	events := []protocol.RuntimeEvent{}
 	emit := func(e protocol.RuntimeEvent) { events = append(events, e) }
 	s := headlessControls{work: map[string]*headlessDelivery{}, nativeKnown: map[string]*headlessDelivery{}, emit: emit}
@@ -92,9 +87,8 @@ func TestHeadlessSanitizedNativeFrames(t *testing.T) {
 	if settled != 2 || initialized != 2 || interrupts != 1 {
 		t.Fatal(settled, initialized, interrupts)
 	}
-	answer, err := protocol.ReadContent(ctx, socket, "runtime", "item")
-	if err != nil || answer.Text() != "Fixture answer." {
-		t.Fatal(answer.Text(), err)
+	if answer := read(); answer.Text() != "Fixture answer." {
+		t.Fatal(answer.Text())
 	}
 	for _, event := range events {
 		data, _ := json.Marshal(event)

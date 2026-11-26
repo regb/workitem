@@ -1,7 +1,6 @@
 package claude
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -15,12 +14,7 @@ import (
 // Live text links to the transcript record that holds it, so readers can drop
 // it once history shows that record.
 func TestHeadlessAssistantFrameMarksItsRecord(t *testing.T) {
-	socket := filepath.Join(testutil.ShortTempDir(t), "content.sock")
-	server, err := protocol.ListenContent(socket, "runtime", "item", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer server.Close()
+	server, read := listenContent(t, filepath.Join(testutil.ShortTempDir(t), "content.sock"))
 	s := headlessContent{server: server, emit: func(protocol.RuntimeEvent) {}}
 	raw, _ := json.Marshal(map[string]any{"type": "content_block_delta", "index": 0, "delta": map[string]string{"type": "text_delta", "text": "Done."}})
 	if err := s.frame(headlessFrame{Type: "stream_event", Event: raw}); err != nil {
@@ -31,9 +25,8 @@ func TestHeadlessAssistantFrameMarksItsRecord(t *testing.T) {
 	if err := s.frame(f); err != nil {
 		t.Fatal(err)
 	}
-	content, err := protocol.ReadContent(context.Background(), socket, "runtime", "item")
-	if err != nil || content.Text() != "Done." || !reflect.DeepEqual(content.SavedAs, []string{f.UUID}) {
-		t.Fatalf("content=%+v err=%v", content, err)
+	if content := read(); content.Text() != "Done." || !reflect.DeepEqual(content.SavedAs, []string{f.UUID}) {
+		t.Fatalf("content=%+v", content)
 	}
 }
 
@@ -44,17 +37,12 @@ func TestTranscriptFeedMarksTheRecordHoldingTheText(t *testing.T) {
 	if err := os.WriteFile(path, []byte(record), 0600); err != nil {
 		t.Fatal(err)
 	}
-	server, err := protocol.ListenContent(filepath.Join(dir, "content.sock"), "runtime", "item", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer server.Close()
+	server, read := listenContent(t, filepath.Join(dir, "content.sock"))
 	if _, err := (&transcriptFeed{}).refresh(path, server); err != nil {
 		t.Fatal(err)
 	}
-	content, err := protocol.ReadContent(context.Background(), filepath.Join(dir, "content.sock"), "runtime", "item")
-	if err != nil || content.Text() != "Saved answer" || !reflect.DeepEqual(content.SavedAs, []string{"answer-record"}) {
-		t.Fatalf("content=%+v err=%v", content, err)
+	if content := read(); content.Text() != "Saved answer" || !reflect.DeepEqual(content.SavedAs, []string{"answer-record"}) {
+		t.Fatalf("content=%+v", content)
 	}
 }
 

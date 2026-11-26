@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
-	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -55,23 +54,7 @@ func TestHeadlessFrameReader(t *testing.T) {
 	}
 }
 func TestHeadlessCommandsReserveDeduplicateAndCorrelate(t *testing.T) {
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer r.Close()
-	defer w.Close()
-	received := make(chan map[string]any, 8)
-	go func() {
-		d := json.NewDecoder(r)
-		for {
-			var x map[string]any
-			if d.Decode(&x) != nil {
-				return
-			}
-			received <- x
-		}
-	}()
+	w, received := pipeFrames[map[string]any](t)
 	events := []protocol.RuntimeEvent{}
 	s := &headlessControls{input: w, session: "session", initialized: true, cancelQueued: true, emit: func(e protocol.RuntimeEvent) { events = append(events, e) }}
 	command := func(id, kind string) protocol.ControlCommand {
@@ -159,20 +142,7 @@ func TestHeadlessCommandsReserveDeduplicateAndCorrelate(t *testing.T) {
 	}
 }
 func TestHeadlessMissingReceiptAndInterruptFence(t *testing.T) {
-	r, w, _ := os.Pipe()
-	defer r.Close()
-	defer w.Close()
-	frames := make(chan headlessFrame, 8)
-	go func() {
-		d := json.NewDecoder(r)
-		for {
-			var f headlessFrame
-			if d.Decode(&f) != nil {
-				return
-			}
-			frames <- f
-		}
-	}()
+	w, frames := pipeFrames[headlessFrame](t)
 	s := &headlessControls{input: w, initialized: true, cancelQueued: true, emit: func(protocol.RuntimeEvent) {}}
 	c := protocol.ControlCommand{ID: "missing-receipt", Type: protocol.CommandPrompt, Message: "text"}
 	if err := s.accept(c); err != nil {
@@ -228,14 +198,18 @@ func TestHeadlessPartialWritePoisonsNativeTransport(t *testing.T) {
 	}
 	defer r.Close()
 	defer w.Close()
+	defer func(timeout time.Duration) { inputWriteTimeout = timeout }(inputWriteTimeout)
+	inputWriteTimeout = 50 * time.Millisecond
 	s := &headlessControls{input: w, initialized: true, emit: func(protocol.RuntimeEvent) {}}
+	// Nothing reads the pipe: the frame outgrows its buffer and the write
+	// deadline ends it part way.
 	c := protocol.ControlCommand{ID: "partial", Type: protocol.CommandPrompt, Message: strings.Repeat("x", 64<<10)}
 	start := time.Now()
 	if s.accept(c) == nil {
 		t.Fatal("unread pipe write completed")
 	}
-	if time.Since(start) > 4*time.Second {
-		t.Fatal("write not bounded")
+	if time.Since(start) > time.Second {
+		t.Fatal("write not bounded by its deadline")
 	}
 	if !s.inputBroken || s.known[c.ID].phase != "uncertain" || !s.busy() {
 		t.Fatal("partial delivery not fenced")
@@ -272,83 +246,36 @@ func TestHeadlessRuntimeMultiTurnAndShutdown(t *testing.T) {
 	for _, ignore := range []bool{false, true} {
 		t.Run(fmt.Sprint(ignore), func(t *testing.T) {
 			dir := testutil.ShortTempDir(t)
-			backend := filepath.Join(dir, "backend")
-			script := "#!/bin/sh\nWI_CLAUDE_HEADLESS_TEST=1 exec " + quote(os.Args[0]) + " -test.run=TestClaudeHeadlessBackendProcess -- \"$@\"\n"
-			if err := os.WriteFile(backend, []byte(script), 0700); err != nil {
-				t.Fatal(err)
-			}
-			runtimeID := "headless-runtime"
-			itemID := "item"
-			control := filepath.Join(dir, "control.sock")
-			events, err := protocol.ListenEvents(filepath.Join(dir, "events.sock"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer events.Close()
-			var mu sync.Mutex
-			captured := []protocol.RuntimeEvent{}
-			go func() {
-				for r := range events.Requests() {
-					mu.Lock()
-					captured = append(captured, r.Event)
-					mu.Unlock()
-					r.Respond(nil)
-				}
-			}()
+			events := captureEvents(t, eventsPath(dir))
 			env := map[string]string{"HOME": dir, "CLAUDE_CONFIG_DIR": filepath.Join(dir, ".claude"), "TMUX": "must-not-reach-backend", "WI_CLAUDE_FAKE_IGNORE_TERM": fmt.Sprint(ignore)}
-			locator := filepath.Join(dir, "sessions", uuid("headless")+".jsonl")
 			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 			defer cancel()
-			ready := make(chan protocol.Ready, 1)
-			done := make(chan error, 1)
-			go func() {
-				done <- launch(ctx, protocol.LaunchRequest{Runtime: protocol.Runtime{ID: runtimeID, WorkItemID: itemID, Mode: protocol.ModeHeadless, CWD: dir, ControlSocketPath: control, EventSocketPath: eventsPath(dir)}, Conversation: protocol.Conversation{Locator: locator}, Environment: env}, Config{Executable: backend}, func(r protocol.Ready) error { ready <- r; return nil })
-			}()
+			runtime := startFakeHeadless(ctx, t, dir, filepath.Join(dir, "sessions", uuid("headless")+".jsonl"), env)
 			select {
-			case r := <-ready:
+			case r := <-runtime.ready:
 				if r.Error != "" || !r.Capabilities.Headless || !r.Capabilities.Streaming || !r.Capabilities.ImageInput || r.Capabilities.NativeTUI || r.Capabilities.IdleGuard {
 					t.Fatal(r)
 				}
 			case <-ctx.Done():
 				t.Fatal(ctx.Err())
 			}
-			send := func(id, kind, message string) {
-				t.Helper()
-				if err := protocol.SubmitControl(ctx, control, protocol.ControlCommand{ProtocolVersion: protocol.RuntimeVersion, RuntimeID: runtimeID, WorkItemID: itemID, ID: id, RequestID: "req-" + id, Type: kind, Message: message}); err != nil {
-					t.Fatal(err)
-				}
-			}
 			wait := func(id string) {
 				t.Helper()
-				for end := time.Now().Add(3 * time.Second); time.Now().Before(end); {
-					mu.Lock()
-					found := false
-					invalidOutcome := false
-					for _, e := range captured {
-						if e.Type == protocol.EventAgentSettled && e.CommandID == id {
-							if (e.Failed && e.Outcome != "failed") || (!e.Failed && e.Outcome != "completed") {
-								invalidOutcome = true
-							}
-							found = true
-						}
-					}
-					mu.Unlock()
-					if invalidOutcome {
+				events.waitFor(t, "settlement of "+id, func(e protocol.RuntimeEvent) bool {
+					return e.Type == protocol.EventAgentSettled && e.CommandID == id
+				})
+				for _, e := range events.snapshot() {
+					if e.Type == protocol.EventAgentSettled && e.CommandID == id && (e.Failed && e.Outcome != "failed" || !e.Failed && e.Outcome != "completed") {
 						t.Fatal("settlement missing explicit outcome", id)
 					}
-					if found {
-						return
-					}
-					time.Sleep(10 * time.Millisecond)
 				}
-				t.Fatal("turn not settled", id)
 			}
-			send("one", protocol.CommandPrompt, "first private prompt")
+			runtime.submit(ctx, t, "one", protocol.CommandPrompt, "first private prompt")
 			wait("one")
-			send("two", protocol.CommandPrompt, "second private prompt")
+			runtime.submit(ctx, t, "two", protocol.CommandPrompt, "second private prompt")
 			wait("two")
-			send("two", protocol.CommandPrompt, "second private prompt")
-			content, err := protocol.ReadContent(ctx, protocol.ContentSocketPath(control), runtimeID, itemID)
+			runtime.submit(ctx, t, "two", protocol.CommandPrompt, "second private prompt")
+			content, err := protocol.ReadContent(ctx, protocol.ContentSocketPath(runtime.control), "runtime", "item")
 			if err != nil || content.Text() != "answer 2" {
 				t.Fatal(content, err)
 			}
@@ -356,27 +283,19 @@ func TestHeadlessRuntimeMultiTurnAndShutdown(t *testing.T) {
 			if links := content.Prompts; len(links) != 2 || links[1].RequestID != "req-two" || links[1].NativeIDs[0] != uuid("headless-command:two") {
 				t.Fatalf("prompt links = %+v", links)
 			}
-			send("stop", protocol.CommandShutdown, "")
+			runtime.submit(ctx, t, "stop", protocol.CommandShutdown, "")
 			select {
-			case err := <-done:
+			case err := <-runtime.done:
 				if err != nil {
 					t.Fatal(err)
 				}
 			case <-ctx.Done():
 				t.Fatal(ctx.Err())
 			}
-			mu.Lock()
-			defer mu.Unlock()
-			for _, e := range captured {
-				raw, _ := json.Marshal(e)
-				if strings.Contains(string(raw), "private prompt") || strings.Contains(string(raw), "answer ") {
-					t.Fatal("native text retained")
-				}
-			}
+			events.assertPrivate(t, "private prompt", "answer ")
 		})
 	}
 }
-func eventsPath(dir string) string { return filepath.Join(dir, "events.sock") }
 func TestClaudeHeadlessBackendProcess(t *testing.T) {
 	if os.Getenv("WI_CLAUDE_HEADLESS_TEST") != "1" {
 		return

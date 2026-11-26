@@ -112,60 +112,46 @@ func TestSharedRuntimeSetupBothModes(t *testing.T) {
 	}
 }
 
+// TestSharedRuntimeSetupBothModes covers a prompt on create in both modes, and
+// the mode does not change the flags; these are the cases left: a prompt on
+// resume, and blank prompts that add no flag.
 func TestSystemPromptAppendOnCreateAndResume(t *testing.T) {
-	for _, mode := range []protocol.Mode{protocol.ModeTUI, protocol.ModeHeadless} {
-		for _, resume := range []bool{false, true} {
-			for _, prompt := range []string{"Custom instructions\nPreserve this text.", "", "   "} {
-				root := testutil.ShortTempDir(t)
-				locator := filepath.Join(root, uuid("prompt")+".jsonl")
-				if resume {
-					if err := os.WriteFile(locator, []byte("existing native history"), 0600); err != nil {
-						t.Fatal(err)
-					}
-				}
-				request := protocol.LaunchRequest{AppendSystemPrompt: prompt, Runtime: protocol.Runtime{Mode: mode, ID: "runtime", WorkItemID: "item", CWD: root, ControlSocketPath: filepath.Join(root, "control.sock")}, Conversation: protocol.Conversation{Locator: locator}, Environment: map[string]string{"HOME": root, "CLAUDE_CONFIG_DIR": filepath.Join(root, ".claude")}}
-				p, err := prepareRuntime(request, Config{Executable: "sh"})
-				if err != nil {
-					t.Fatal(err)
-				}
-				args, err := p.args()
-				p.close()
-				if err != nil {
-					t.Fatal(err)
-				}
-				count := 0
-				sessionFlag := "--session-id"
-				if resume {
-					sessionFlag = "--resume"
-				}
-				foundSession := false
-				for i, arg := range args {
-					if arg == "--system-prompt" {
-						t.Fatal("replaced native system prompt")
-					}
-					if arg == sessionFlag {
-						foundSession = true
-					}
-					if arg == "--append-system-prompt" {
-						count++
-						if i+1 >= len(args) || args[i+1] != prompt {
-							t.Fatal(args)
-						}
-					}
-				}
-				want := 1
-				if strings.TrimSpace(prompt) == "" {
-					want = 0
-				}
-				if count != want || !foundSession {
-					t.Fatalf("mode=%s resume=%v prompt=%q args=%v", mode, resume, prompt, args)
-				}
-				if resume {
-					data, err := os.ReadFile(locator)
-					if err != nil || string(data) != "existing native history" {
-						t.Fatal("native history changed", err)
-					}
-				}
+	for _, tc := range []struct {
+		prompt string
+		resume bool
+	}{{"Custom instructions\nPreserve this text.", true}, {"", false}, {"   ", true}} {
+		root := testutil.ShortTempDir(t)
+		locator := filepath.Join(root, uuid("prompt")+".jsonl")
+		if tc.resume {
+			if err := os.WriteFile(locator, []byte("existing native history"), 0600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		request := protocol.LaunchRequest{AppendSystemPrompt: tc.prompt, Runtime: protocol.Runtime{Mode: protocol.ModeHeadless, ID: "runtime", WorkItemID: "item", CWD: root, ControlSocketPath: filepath.Join(root, "control.sock")}, Conversation: protocol.Conversation{Locator: locator}, Environment: map[string]string{"HOME": root, "CLAUDE_CONFIG_DIR": filepath.Join(root, ".claude")}}
+		p, err := prepareRuntime(request, Config{Executable: "sh"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		args, err := p.args()
+		p.close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []string{"--dangerously-skip-permissions"}
+		if strings.TrimSpace(tc.prompt) != "" {
+			want = append(want, "--append-system-prompt", tc.prompt)
+		}
+		session := "--session-id"
+		if tc.resume {
+			session = "--resume"
+		}
+		want = append(want, session, p.session)
+		if !reflect.DeepEqual(args, want) {
+			t.Fatalf("prompt=%q resume=%v args=%v", tc.prompt, tc.resume, args)
+		}
+		if tc.resume {
+			if data, err := os.ReadFile(locator); err != nil || string(data) != "existing native history" {
+				t.Fatal("native history changed", err)
 			}
 		}
 	}

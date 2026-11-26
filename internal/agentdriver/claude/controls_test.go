@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/regb/workitem/internal/testutil"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -267,48 +266,27 @@ func TestInvalidCustomKeybindingsDisableCapabilities(t *testing.T) {
 }
 
 func TestTmuxInputBracketedPasteOwnershipAndSteerKeys(t *testing.T) {
-	calls := []string{}
-	payload := ""
-	meta := "%3|" + fmt.Sprint(syscall.Getpgrp()) + "|0|0|0"
-	screen := "history\n───\n❯\u00a0\n───\nfooter"
-	transport := &tmuxInput{pane: "%3", owner: syscall.Getpgrp(), run: func(_ context.Context, input io.Reader, args ...string) (string, error) {
-		calls = append(calls, strings.Join(args, " "))
-		if input != nil {
-			data, _ := io.ReadAll(input)
-			payload = string(data)
-		}
-		if args[0] == "display-message" {
-			return meta, nil
-		}
-		if args[0] == "capture-pane" {
-			return screen, nil
-		}
-		if args[0] == "paste-buffer" {
-			screen = "───\n❯ " + strings.ReplaceAll(payload, "\n", "\n  ") + "\n───"
-		}
-		if args[0] == "send-keys" {
-			screen = "───\n❯\n───"
-		}
-		return "", nil
-	}}
+	tmux := newFakeTmux("history\n───\n❯\u00a0\n───\nfooter")
+	tmux.react = tmux.echo
+	transport := tmux.input()
 	if err := transport.Send(context.Background(), "private\nmultiline", true); err != nil {
 		t.Fatal(err)
 	}
-	if payload != "private\nmultiline" {
-		t.Fatal(payload)
+	if tmux.payload != "private\nmultiline" {
+		t.Fatal(tmux.payload)
 	}
-	joined := strings.Join(calls, "\n")
-	if !strings.Contains(joined, "paste-buffer -p") || !strings.Contains(joined, "send-keys -t %3 C-x C-s") || !strings.Contains(joined, "delete-buffer") || strings.Contains(joined, "private") {
+	joined := strings.Join(tmux.calls, "\n")
+	if !strings.Contains(joined, "paste-buffer -p") || !strings.Contains(joined, "send-keys -t %7 C-x C-s") || !strings.Contains(joined, "delete-buffer") || strings.Contains(joined, "private") {
 		t.Fatal(joined)
 	}
-	for _, wrong := range []string{"%4|1|0|0|0", "%3|1|0|0|0", "%3|" + fmt.Sprint(syscall.Getpgrp()) + "|0|1|0", "%3|" + fmt.Sprint(syscall.Getpgrp()) + "|1|0|0"} {
-		meta = wrong
+	for _, wrong := range []string{"%4|1|0|0|0", "%7|1|0|0|0", fmt.Sprintf("%%7|%d|0|1|0", syscall.Getpgrp()), fmt.Sprintf("%%7|%d|1|0|0", syscall.Getpgrp())} {
+		tmux.meta = wrong
 		if err := transport.Send(context.Background(), "work", false); err == nil {
 			t.Fatal("typed into wrong/mode pane")
 		}
 	}
-	meta = "%3|" + fmt.Sprint(syscall.Getpgrp()) + "|0|0|0"
-	screen = "───\n❯ existing draft\n───"
+	tmux.meta = ownedPane("%7")
+	tmux.screen = "───\n❯ existing draft\n───"
 	if err := transport.Send(context.Background(), "work", false); err == nil {
 		t.Fatal("typed over draft")
 	}
@@ -353,13 +331,50 @@ func TestQueuedPromptWaitsForADialogToClose(t *testing.T) {
 		}
 	}
 }
-
-// Claude hands its prompt hook a long paste in its pasted_content element;
-// the delivery still matches the text wi sent.
-func TestHookDigestMatchesPastedPrompt(t *testing.T) {
-	sent := "line one\nline two\nline three"
-	submitted := "\n\n<pasted_content id=\"b3aa\">\n" + sent + "\n</pasted_content id=\"b3aa\">\n"
-	if promptDigest(unpasted(submitted)) != promptDigest(sent) {
-		t.Fatal("pasted prompt digest differs from the text sent")
+func TestStartupGraceQueuesCommandsArrivingAfterSessionHook(t *testing.T) {
+	s, input, _ := testControls()
+	s.hook("SessionStart", "")
+	c := control("early", protocol.CommandPrompt, "work")
+	if err := s.accept(context.Background(), c); err != nil {
+		t.Fatal(err)
+	}
+	s.tick(context.Background(), s.inputReadyAt.Add(-time.Millisecond))
+	if len(input.messages) != 0 || len(s.queue) != 1 {
+		t.Fatal("typed within grace")
+	}
+	s.tick(context.Background(), s.inputReadyAt.Add(time.Millisecond))
+	if len(input.messages) != 1 {
+		t.Fatal("did not drain ready queue")
+	}
+}
+func TestStartupBusyHookPreventsQueueDraining(t *testing.T) {
+	s, input, _ := testControls()
+	s.hook("SessionStart", "")
+	if err := s.accept(context.Background(), control("early", protocol.CommandPrompt, "work")); err != nil {
+		t.Fatal(err)
+	}
+	s.hook("UserPromptSubmit", "")
+	s.tick(context.Background(), time.Now().Add(time.Second))
+	if len(input.messages) != 0 {
+		t.Fatal("ignored intervening busy hook")
+	}
+}
+func TestDefinitePreInputFailureRejectsOnlyOnceAndNeverRetries(t *testing.T) {
+	s, input, events := testControls()
+	s.ready = true
+	input.err = beforeInputError{fmt.Errorf("editor unavailable")}
+	c := control("early", protocol.CommandPrompt, "work")
+	if err := s.accept(context.Background(), c); err == nil {
+		t.Fatal("lost error")
+	}
+	if s.pending != nil || s.seen[c.ID].phase != "failed" {
+		t.Fatal("reserved uncertain submission slot")
+	}
+	if err := s.accept(context.Background(), c); err == nil {
+		t.Fatal("dedup lost error")
+	}
+	s.tick(context.Background(), time.Now().Add(time.Minute))
+	if len(input.messages) != 1 || len(*events) != 1 {
+		t.Fatal("retried or rejected twice")
 	}
 }

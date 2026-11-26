@@ -367,4 +367,10 @@ func TestHistoryShowsPastedTextAsSent(t *testing.T) {
 	if got := h.Messages[2].Text(); got != "<pasted_content id=\"z\">\nmine\n</pasted_content id=\"z\">" {
 		t.Fatalf("assistant text changed: %q", got)
 	}
+	// Claude hands its prompt hook a long paste in the same element; the
+	// delivery still matches the text wi sent.
+	sent := "line one\nline two\nline three"
+	if promptDigest(unpasted("\n\n<pasted_content id=\"b3aa\">\n"+sent+"\n</pasted_content id=\"b3aa\">\n")) != promptDigest(sent) {
+		t.Fatal("pasted prompt digest differs from the text sent")
+	}
 }

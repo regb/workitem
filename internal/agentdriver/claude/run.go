@@ -303,7 +303,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 			stopping = true
 			controls.stopping = true
 			if stopTimer == nil {
-				stopTimer = time.NewTimer(3 * time.Second)
+				stopTimer = time.NewTimer(stopGrace)
 				stopDeadline = stopTimer.C
 			}
 			request.Respond(nil)

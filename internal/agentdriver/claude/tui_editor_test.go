@@ -3,11 +3,7 @@ package claude
 import (
 	"context"
 	"errors"
-	"fmt"
-	protocol "github.com/regb/workitem/agentdriver/protocol"
-	"io"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
@@ -40,151 +36,64 @@ func TestBoundedEditorParsing(t *testing.T) {
 	}
 }
 func TestDelayedEditorAndPasteReadbackBeforeSingleSubmit(t *testing.T) {
-	captures, pastes, keys, deletes := 0, 0, 0, 0
-	payload := ""
-	afterPaste := 0
-	input := &tmuxInput{pane: "%7", owner: syscall.Getpgrp(), run: func(_ context.Context, reader io.Reader, args ...string) (string, error) {
-		if reader != nil {
-			data, _ := io.ReadAll(reader)
-			payload = string(data)
-		}
+	tmux := newFakeTmux("loading")
+	captures, afterPaste := 0, 0
+	tmux.react = func(args []string) {
 		switch args[0] {
-		case "display-message":
-			return fmt.Sprintf("%%7|%d|0|0|0", syscall.Getpgrp()), nil
 		case "capture-pane":
-			captures++
-			if captures == 1 {
-				return "loading", nil
+			// The editor appears late, and the pasted text later still.
+			if captures++; captures > 1 {
+				tmux.screen = "───\n❯\n───"
 			}
-			if pastes == 0 {
-				return "───\n❯\n───", nil
+			if tmux.count("paste-buffer") > 0 {
+				if afterPaste++; afterPaste >= 3 {
+					tmux.screen = "───\n❯ " + tmux.payload + "\n───"
+				}
 			}
-			afterPaste++
-			if afterPaste < 3 {
-				return "───\n❯\n───", nil
-			}
-			return "───\n❯ " + payload + "\n───", nil
-		case "paste-buffer":
-			pastes++
 		case "send-keys":
 			if afterPaste < 3 {
 				t.Fatal("submitted before readback")
 			}
-			keys++
-		case "delete-buffer":
-			deletes++
 		}
-		return "", nil
-	}}
-	if err := input.Send(context.Background(), "private prompt", false); err != nil {
+	}
+	if err := tmux.input().Send(context.Background(), "private prompt", false); err != nil {
 		t.Fatal(err)
 	}
-	if pastes != 1 || keys != 1 || deletes != 1 {
+	if pastes, keys, deletes := tmux.count("paste-buffer"), tmux.count("send-keys"), tmux.count("delete-buffer"); pastes != 1 || keys != 1 || deletes != 1 {
 		t.Fatal(pastes, keys, deletes)
 	}
 }
 func TestMissingOrChangedPasteReadbackNeverSubmits(t *testing.T) {
 	for _, post := range []string{"───\n❯\n───", "───\n❯ unrelated draft\n───", "───\n❯ [Pasted text #1 +20 lines]\n───"} {
-		pastes, keys, deletes := 0, 0, 0
-		input := &tmuxInput{pane: "%7", owner: syscall.Getpgrp(), run: func(_ context.Context, _ io.Reader, args ...string) (string, error) {
-			switch args[0] {
-			case "display-message":
-				return fmt.Sprintf("%%7|%d|0|0|0", syscall.Getpgrp()), nil
-			case "capture-pane":
-				if pastes == 0 {
-					return "───\n❯\n───", nil
-				}
-				return post, nil
-			case "paste-buffer":
-				pastes++
-			case "send-keys":
-				keys++
-			case "delete-buffer":
-				deletes++
+		tmux := newFakeTmux("───\n❯\n───")
+		tmux.react = func(args []string) {
+			if args[0] == "paste-buffer" {
+				tmux.screen = post
 			}
-			return "", nil
-		}}
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
-		err := input.Send(ctx, "private prompt", false)
+		err := tmux.input().Send(ctx, "private prompt", false)
 		cancel()
 		var before beforeInputError
-		if err == nil || errors.As(err, &before) || !strings.Contains(err.Error(), "uncertain") || pastes != 1 || keys != 0 || deletes != 1 {
+		if pastes, keys, deletes := tmux.count("paste-buffer"), tmux.count("send-keys"), tmux.count("delete-buffer"); err == nil || errors.As(err, &before) || !strings.Contains(err.Error(), "uncertain") || pastes != 1 || keys != 0 || deletes != 1 {
 			t.Fatal(err, pastes, keys, deletes)
 		}
 	}
 }
 func TestUnavailableEditorNeverTypesAndOwnershipFailureDoesNotPoll(t *testing.T) {
 	for _, screen := range []string{"loading", "───\n❯ existing draft\n───", "───\n❯\n  continuation draft\n───", "───\n❯ No, exit\nYes, trust\n───"} {
-		mutations := 0
-		input := &tmuxInput{pane: "%7", owner: syscall.Getpgrp(), run: func(_ context.Context, _ io.Reader, args ...string) (string, error) {
-			switch args[0] {
-			case "display-message":
-				return fmt.Sprintf("%%7|%d|0|0|0", syscall.Getpgrp()), nil
-			case "capture-pane":
-				return screen, nil
-			default:
-				mutations++
-			}
-			return "", nil
-		}}
+		tmux := newFakeTmux(screen)
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
-		err := input.Send(ctx, "work", false)
+		err := tmux.input().Send(ctx, "work", false)
 		cancel()
 		var before beforeInputError
-		if !errors.As(err, &before) || mutations != 0 {
+		if mutations := len(tmux.calls) - tmux.count("display-message") - tmux.count("capture-pane"); !errors.As(err, &before) || mutations != 0 {
 			t.Fatal(err, mutations)
 		}
 	}
-	calls := 0
-	input := &tmuxInput{pane: "%7", owner: syscall.Getpgrp(), run: func(context.Context, io.Reader, ...string) (string, error) { calls++; return "%8|1|0|0|0", nil }}
-	if err := input.Send(context.Background(), "work", false); err == nil || calls != 1 {
-		t.Fatal(err, calls)
-	}
-}
-func TestStartupGraceQueuesCommandsArrivingAfterSessionHook(t *testing.T) {
-	s, input, _ := testControls()
-	s.hook("SessionStart", "")
-	c := control("early", protocol.CommandPrompt, "work")
-	if err := s.accept(context.Background(), c); err != nil {
-		t.Fatal(err)
-	}
-	s.tick(context.Background(), s.inputReadyAt.Add(-time.Millisecond))
-	if len(input.messages) != 0 || len(s.queue) != 1 {
-		t.Fatal("typed within grace")
-	}
-	s.tick(context.Background(), s.inputReadyAt.Add(time.Millisecond))
-	if len(input.messages) != 1 {
-		t.Fatal("did not drain ready queue")
-	}
-}
-func TestStartupBusyHookPreventsQueueDraining(t *testing.T) {
-	s, input, _ := testControls()
-	s.hook("SessionStart", "")
-	if err := s.accept(context.Background(), control("early", protocol.CommandPrompt, "work")); err != nil {
-		t.Fatal(err)
-	}
-	s.hook("UserPromptSubmit", "")
-	s.tick(context.Background(), time.Now().Add(time.Second))
-	if len(input.messages) != 0 {
-		t.Fatal("ignored intervening busy hook")
-	}
-}
-func TestDefinitePreInputFailureRejectsOnlyOnceAndNeverRetries(t *testing.T) {
-	s, input, events := testControls()
-	s.ready = true
-	input.err = beforeInputError{fmt.Errorf("editor unavailable")}
-	c := control("early", protocol.CommandPrompt, "work")
-	if err := s.accept(context.Background(), c); err == nil {
-		t.Fatal("lost error")
-	}
-	if s.pending != nil || s.seen[c.ID].phase != "failed" {
-		t.Fatal("reserved uncertain submission slot")
-	}
-	if err := s.accept(context.Background(), c); err == nil {
-		t.Fatal("dedup lost error")
-	}
-	s.tick(context.Background(), time.Now().Add(time.Minute))
-	if len(input.messages) != 1 || len(*events) != 1 {
-		t.Fatal("retried or rejected twice")
+	tmux := newFakeTmux("───\n❯\n───")
+	tmux.meta = "%8|1|0|0|0"
+	if err := tmux.input().Send(context.Background(), "work", false); err == nil || len(tmux.calls) != 1 {
+		t.Fatal(err, tmux.calls)
 	}
 }

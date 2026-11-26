@@ -8,11 +8,9 @@ import (
 	protocol "github.com/regb/workitem/agentdriver/protocol"
 	"image"
 	"image/png"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 )
 
@@ -86,42 +84,28 @@ func TestStagedImagesArePrivateValidatedAndRemoved(t *testing.T) {
 	}
 }
 func TestImageTransportUsesNativePathPasteAndSingleSubmission(t *testing.T) {
-	screen := "───\n❯\n───"
-	payload := ""
+	tmux := newFakeTmux("───\n❯\n───")
 	paths := []string{}
-	pastes, keys := 0, 0
-	input := &tmuxInput{pane: "%7", owner: syscall.Getpgrp(), run: func(_ context.Context, reader io.Reader, args ...string) (string, error) {
-		if reader != nil {
-			data, _ := io.ReadAll(reader)
-			payload = string(data)
+	tmux.react = func(args []string) {
+		if args[0] != "paste-buffer" {
+			return
 		}
-		switch args[0] {
-		case "display-message":
-			return fmt.Sprintf("%%7|%d|0|0|0", syscall.Getpgrp()), nil
-		case "capture-pane":
-			return screen, nil
-		case "paste-buffer":
-			pastes++
-			if strings.HasSuffix(payload, ".png") {
-				if _, err := os.Stat(payload); err != nil {
-					t.Fatal(err)
-				}
-				paths = append(paths, payload)
-				screen = "───\n❯ [Image #1]\n───"
-			} else {
-				screen = "───\n❯ [Image #1]" + payload + "\n───"
+		if strings.HasSuffix(tmux.payload, ".png") {
+			if _, err := os.Stat(tmux.payload); err != nil {
+				t.Fatal(err)
 			}
-		case "send-keys":
-			keys++
+			paths = append(paths, tmux.payload)
+			tmux.screen = "───\n❯ [Image #1]\n───"
+		} else {
+			tmux.screen = "───\n❯ [Image #1]" + tmux.payload + "\n───"
 		}
-		return "", nil
-	}}
-	digest, cleanup, err := input.SendImages(context.Background(), "describe", []protocol.ImageContent{testPNG(t)}, false)
+	}
+	digest, cleanup, err := tmux.input().SendImages(context.Background(), "describe", []protocol.ImageContent{testPNG(t)}, false)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cleanup()
-	if digest != promptDigest("[Image #1]describe") || pastes != 2 || keys != 1 {
+	if pastes, keys := tmux.count("paste-buffer"), tmux.count("send-keys"); digest != promptDigest("[Image #1]describe") || pastes != 2 || keys != 1 {
 		t.Fatal(digest, pastes, keys)
 	}
 	cleanup()

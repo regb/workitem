@@ -3,9 +3,7 @@ package driverprotocol
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
-	"net"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,6 +27,12 @@ func TestControlContentValidation(t *testing.T) {
 		{"malformed base64", ControlCommand{Type: CommandPrompt, Images: []ImageContent{{MIMEType: image.MIMEType, Data: "not-base64"}}}},
 		{"noncanonical base64", ControlCommand{Type: CommandPrompt, Images: []ImageContent{{MIMEType: image.MIMEType, Data: "YR=="}}}},
 		{"base64 newline", ControlCommand{Type: CommandPrompt, Images: []ImageContent{{MIMEType: image.MIMEType, Data: "YW\nJj"}}}},
+		{"answer without answers", ControlCommand{Type: CommandAnswer}},
+		{"blank answer", ControlCommand{Type: CommandAnswer, Answers: map[string]string{"q": " "}}},
+		{"empty question", ControlCommand{Type: CommandAnswer, Answers: map[string]string{"": "a"}}},
+		{"answer with message", ControlCommand{Type: CommandAnswer, Answers: map[string]string{"q": "a"}, Message: "text"}},
+		{"prompt with answers", ControlCommand{Type: CommandPrompt, Message: "hi", Answers: map[string]string{"q": "a"}}},
+		{"answer too long", ControlCommand{Type: CommandAnswer, Answers: map[string]string{"q": strings.Repeat("a", MaxControlAnswerBytes+1)}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := tc.command.ValidateContent(); err == nil {
@@ -38,6 +42,9 @@ func TestControlContentValidation(t *testing.T) {
 				t.Fatalf("invalid content reached socket: %v", err)
 			}
 		})
+	}
+	if err := (ControlCommand{Type: CommandAnswer, ToolCallID: "t", Answers: map[string]string{"q": "a"}}).ValidateContent(); err != nil {
+		t.Fatal("bounded answer rejected:", err)
 	}
 	data := base64.StdEncoding.EncodeToString(make([]byte, MaxControlImageBytes))
 	command := ControlCommand{Type: CommandPrompt, Images: []ImageContent{{MIMEType: image.MIMEType, Data: data}}}
@@ -110,13 +117,26 @@ func TestControlSerializedEnvelopeLimit(t *testing.T) {
 	}
 }
 
+// The event server reads one event of at most 1 MiB.
 func TestEventLimitRemainsOneMiB(t *testing.T) {
-	left, right := net.Pipe()
-	defer left.Close()
-	defer right.Close()
-	go func() { _ = json.NewEncoder(left).Encode(map[string]string{"data": strings.Repeat("x", 1<<20)}) }()
-	var event RuntimeEvent
-	if err := decodeLine(right, &event, 1<<20); err == nil {
+	path := filepath.Join(testutil.ShortTempDir(t), "events.sock")
+	server, err := ListenEvents(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	go func() {
+		for request := range server.Requests() {
+			request.Respond(nil)
+		}
+	}()
+	// The encoded event adds its other fields and a newline to the ID.
+	if err := SubmitEvent(ctx, path, RuntimeEvent{EventID: strings.Repeat("x", 1<<20-1024)}); err != nil {
+		t.Fatal("event within the limit refused:", err)
+	}
+	if err := SubmitEvent(ctx, path, RuntimeEvent{EventID: strings.Repeat("x", 1<<20)}); err == nil {
 		t.Fatal("oversized event accepted")
 	}
 }

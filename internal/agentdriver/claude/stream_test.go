@@ -13,21 +13,9 @@ import (
 )
 
 func TestDisplayStreamOrderingAndTranscriptLag(t *testing.T) {
-	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
-	server, err := protocol.ListenContent(path, "runtime", "item", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer server.Close()
+	server, snapshot := listenContent(t, filepath.Join(testutil.ShortTempDir(t), "content.sock"))
 	turns := &turnTracker{promptID: "prompt", started: time.Now().Add(-time.Second)}
 	s := &displayStream{server: server, turns: turns}
-	snapshot := func() protocol.Content {
-		c, e := protocol.ReadContent(context.Background(), path, "runtime", "item")
-		if e != nil {
-			t.Fatal(e)
-		}
-		return c
-	}
 	chunk := func(message string, index int, final bool, delta string) {
 		ok, e := s.accept(displayInput{hookInput: hookInput{PromptID: "prompt", ObservedAt: time.Now()}, displayFields: displayFields{TurnID: "turn", MessageID: message, Index: index, Final: final, Delta: delta}})
 		if e != nil || !ok {
@@ -106,5 +94,36 @@ func TestDisplayBoundsUTF8(t *testing.T) {
 	v, truncated := boundedDisplay(strings.Repeat("é", maxDisplayDelta), maxDisplayDelta-1)
 	if !truncated || len(v) > maxDisplayDelta-1 || strings.HasSuffix(v, "\xc3") {
 		t.Fatal("invalid bound")
+	}
+}
+func TestSettledTranscriptRecoversMissingDisplayBeforeHookStart(t *testing.T) {
+	server, read := listenContent(t, filepath.Join(testutil.ShortTempDir(t), "content.sock"))
+	now := time.Now()
+	turns := &turnTracker{promptID: "current", started: now.Add(-time.Second)}
+	stream := displayStream{server: server, turns: turns}
+	// The first optional batch was lost. The observed final batch starts after
+	// Claude committed the answer, so comparing against firstAt cannot recover.
+	accepted, err := stream.accept(displayInput{hookInput: hookInput{PromptID: "current", ObservedAt: now}, displayFields: displayFields{TurnID: "turn", MessageID: "display", Index: 1, Final: true, Delta: "missing prefix"}})
+	if err != nil || !accepted || !stream.incomplete {
+		t.Fatal(accepted, err)
+	}
+	recorded := now.Add(-100 * time.Millisecond)
+	stream.PublishPromptTranscript("current-leaf", "Complete native answer", "Message saved", nil, "current", recorded)
+	if !stream.active {
+		t.Fatal("in-flight display reconciled before native settlement")
+	}
+	turns.settled = true
+	for _, stale := range []struct {
+		prompt string
+		at     time.Time
+	}{{"previous", recorded}, {"current", turns.started.Add(-time.Second)}} {
+		stream.PublishPromptTranscript("stale-leaf", "Stale answer", "Message saved", nil, stale.prompt, stale.at)
+		if !stream.active {
+			t.Fatal("settlement accepted stale transcript")
+		}
+	}
+	stream.PublishPromptTranscript("current-leaf", "Complete native answer", "Message saved", nil, "current", recorded)
+	if value := read(); stream.active || value.Text() != "Complete native answer" || value.Truncated || value.LeafID != "current-leaf" {
+		t.Fatal(value)
 	}
 }

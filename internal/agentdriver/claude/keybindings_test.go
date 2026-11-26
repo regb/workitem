@@ -2,8 +2,6 @@ package claude
 
 import (
 	"context"
-	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -101,29 +99,10 @@ func TestCustomKeysTransportAndLiveChangesFence(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	calls := []string{}
-	screen := "───\n❯\n───"
-	payload := ""
-	input := &tmuxInput{pane: "%7", owner: syscall.Getpgrp(), bindingPath: path, bindings: keys, fingerprint: fingerprint, run: func(_ context.Context, reader io.Reader, args ...string) (string, error) {
-		if reader != nil {
-			data, _ := io.ReadAll(reader)
-			payload = string(data)
-		}
-		calls = append(calls, strings.Join(args, " "))
-		if args[0] == "display-message" {
-			return fmt.Sprintf("%%7|%d|0|0|0", syscall.Getpgrp()), nil
-		}
-		if args[0] == "capture-pane" {
-			return screen, nil
-		}
-		if args[0] == "paste-buffer" {
-			screen = "───\n❯ " + payload + "\n───"
-		}
-		if args[0] == "send-keys" {
-			screen = "───\n❯\n───"
-		}
-		return "", nil
-	}}
+	tmux := newFakeTmux("───\n❯\n───")
+	tmux.react = tmux.echo
+	input := tmux.input()
+	input.bindingPath, input.bindings, input.fingerprint = path, keys, fingerprint
 	for _, steer := range []bool{false, true} {
 		if err := input.Send(context.Background(), "private prompt", steer); err != nil {
 			t.Fatal(err)
@@ -132,7 +111,7 @@ func TestCustomKeysTransportAndLiveChangesFence(t *testing.T) {
 	if err := input.Interrupt(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	joined := strings.Join(calls, "\n")
+	joined := strings.Join(tmux.calls, "\n")
 	for _, want := range []string{"send-keys -t %7 C-u", "send-keys -t %7 C-p C-y", "send-keys -t %7 M-q"} {
 		if !strings.Contains(joined, want) {
 			t.Fatal(joined)
@@ -141,11 +120,11 @@ func TestCustomKeysTransportAndLiveChangesFence(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{}`), 0600); err != nil {
 		t.Fatal(err)
 	}
-	calls = nil
+	tmux.calls = nil
 	if err := input.Send(context.Background(), "work", false); err == nil {
 		t.Fatal("used stale keys")
 	}
-	if len(calls) != 0 {
+	if len(tmux.calls) != 0 {
 		t.Fatal("touched pane after file change")
 	}
 }

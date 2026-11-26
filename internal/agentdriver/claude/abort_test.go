@@ -3,9 +3,7 @@ package claude
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -138,46 +136,28 @@ func TestAbortValidationAndRuntimeExit(t *testing.T) {
 	}
 }
 func TestTmuxInterruptSendsSingleEscapeAndPreservesDrafts(t *testing.T) {
-	calls := []string{}
-	screen := "history\n───\n❯ \n───\nfooter"
-	metadata := fmt.Sprintf("%%7|%d|0|0|0", syscall.Getpgrp())
-	input := &tmuxInput{pane: "%7", owner: syscall.Getpgrp(), run: func(_ context.Context, _ io.Reader, args ...string) (string, error) {
-		calls = append(calls, strings.Join(args, " "))
-		switch args[0] {
-		case "display-message":
-			return metadata, nil
-		case "capture-pane":
-			return screen, nil
-		}
-		return "", nil
-	}}
+	tmux := newFakeTmux("history\n───\n❯ \n───\nfooter")
+	input := tmux.input()
 	if err := input.Interrupt(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	count := 0
-	for _, call := range calls {
-		if strings.HasPrefix(call, "send-keys") {
-			count++
-			if call != "send-keys -t %7 Escape" {
-				t.Fatal(call)
-			}
+	for _, call := range tmux.calls {
+		if strings.HasPrefix(call, "send-keys") && call != "send-keys -t %7 Escape" {
+			t.Fatal(call)
 		}
 	}
-	if count != 1 {
-		t.Fatal(calls)
+	if tmux.count("send-keys") != 1 {
+		t.Fatal(tmux.calls)
 	}
-	calls = nil
-	screen = "───\n❯ existing draft\n───"
+	tmux.calls = nil
+	tmux.screen = "───\n❯ existing draft\n───"
 	if err := input.Interrupt(context.Background()); err == nil {
 		t.Fatal("interrupted draft or modal UI")
 	}
-	for _, call := range calls {
-		if strings.HasPrefix(call, "send-keys") {
-			t.Fatal("sent Escape over draft")
-		}
+	if tmux.count("send-keys") != 0 {
+		t.Fatal("sent Escape over draft")
 	}
-	calls = nil
-	metadata = "%99|1|0|0|0"
+	tmux.meta = "%99|1|0|0|0"
 	if err := input.Interrupt(context.Background()); err == nil {
 		t.Fatal("interrupted replacement pane")
 	}

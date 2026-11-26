@@ -1,7 +1,6 @@
 package claude
 
 import (
-	"context"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -13,12 +12,7 @@ import (
 )
 
 func TestHeadlessAPIContentAndParallelToolPrivacy(t *testing.T) {
-	socket := filepath.Join(testutil.ShortTempDir(t), "content.sock")
-	server, err := protocol.ListenContent(socket, "runtime", "item", false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer server.Close()
+	server, read := listenContent(t, filepath.Join(testutil.ShortTempDir(t), "content.sock"))
 	events := []protocol.RuntimeEvent{}
 	s := headlessContent{server: server, emit: func(e protocol.RuntimeEvent) { events = append(events, e) }}
 	stream := func(event any) {
@@ -36,9 +30,8 @@ func TestHeadlessAPIContentAndParallelToolPrivacy(t *testing.T) {
 		t.Fatal(err)
 	}
 	stream(map[string]any{"type": "content_block_delta", "index": 1, "delta": map[string]string{"type": "text_delta", "text": " second"}})
-	content, err := protocol.ReadContent(context.Background(), socket, "runtime", "item")
-	if err != nil || content.Text() != "first second" || content.Activity != "Assistant responding" {
-		t.Fatal(content, err)
+	if content := read(); content.Text() != "first second" || content.Activity != "Assistant responding" {
+		t.Fatal(content)
 	}
 	for i, name := range []string{"Bash", "Read"} {
 		stream(map[string]any{"type": "content_block_start", "index": i + 2, "content_block": map[string]string{"type": "tool_use", "id": name, "name": name}})
@@ -49,11 +42,11 @@ func TestHeadlessAPIContentAndParallelToolPrivacy(t *testing.T) {
 	if err := s.frame(f); err != nil {
 		t.Fatal(err)
 	}
-	content, err = protocol.ReadContent(context.Background(), socket, "runtime", "item")
 	// The failed call keeps its place before the one still running.
+	content := read()
 	tools := protocol.PartsTools(content.Parts)
-	if err != nil || len(tools) != 2 || tools[0].Name != "Bash" || tools[0].Input != "private tool input" || tools[0].Status != "failed" || tools[0].Output != "private tool result" || tools[1].Name != "Read" {
-		t.Fatal(content, err)
+	if len(tools) != 2 || tools[0].Name != "Bash" || tools[0].Input != "private tool input" || tools[0].Status != "failed" || tools[0].Output != "private tool result" || tools[1].Name != "Read" {
+		t.Fatal(content)
 	}
 	for _, e := range events {
 		raw, _ := json.Marshal(e)
@@ -62,9 +55,8 @@ func TestHeadlessAPIContentAndParallelToolPrivacy(t *testing.T) {
 		}
 	}
 	stream(map[string]any{"type": "content_block_delta", "index": 1, "delta": map[string]string{"type": "text_delta", "text": strings.Repeat("é", maxDisplayText)}})
-	content, err = protocol.ReadContent(context.Background(), socket, "runtime", "item")
-	if err != nil || !content.Truncated || len(content.Text()) > maxDisplayText {
-		t.Fatal(err)
+	if content := read(); !content.Truncated || len(content.Text()) > maxDisplayText {
+		t.Fatal(content.Truncated, len(content.Text()))
 	}
 	for i := 0; i < 129; i++ {
 		s.rememberTool(&protocol.HistoryTool{ID: uuid(string(rune(i)))})

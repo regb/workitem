@@ -16,6 +16,13 @@ import (
 
 const maxHeadlessFrame = 16 << 20
 
+// inputWriteTimeout bounds one frame write to Claude's input. Tests shorten it.
+var inputWriteTimeout = 3 * time.Second
+
+// stopGrace is how long Claude has to exit after SIGTERM before it is killed.
+// Tests shorten it.
+var stopGrace = 3 * time.Second
+
 // These objects never go to the compact event socket. In particular init
 // responses include account information and frames include unrestricted text.
 type headlessFrame struct {
@@ -128,7 +135,7 @@ func writeHeadlessFrame(w *os.File, value any) (int, error) {
 		return 0, errors.New("Claude input frame exceeds 16 MiB")
 	}
 	data = append(data, '\n')
-	if err := w.SetWriteDeadline(time.Now().Add(3 * time.Second)); err != nil {
+	if err := w.SetWriteDeadline(time.Now().Add(inputWriteTimeout)); err != nil {
 		return 0, fmt.Errorf("set Claude input deadline: %w", err)
 	}
 	total := 0

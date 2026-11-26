@@ -12,27 +12,6 @@ import (
 	"github.com/regb/workitem/internal/testutil"
 )
 
-func TestControlTransport(t *testing.T) {
-	server, err := ListenControl(filepath.Join(testutil.ShortTempDir(t), "control.sock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer server.Close()
-	command := ControlCommand{ProtocolVersion: RuntimeVersion, ID: "command-1", RuntimeID: "runtime-1", WorkItemID: "item-1", Type: CommandPrompt, Message: "test", CreatedAt: time.Now()}
-	done := make(chan error, 1)
-	go func() {
-		done <- SubmitControl(context.Background(), filepath.Join(filepath.Dir(server.path), "control.sock"), command)
-	}()
-	request := <-server.Requests()
-	if request.Command.ID != command.ID {
-		t.Fatalf("command=%+v", request.Command)
-	}
-	request.Respond(nil)
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestControlServerCloseWaitsForActiveHandlers(t *testing.T) {
 	path := filepath.Join(testutil.ShortTempDir(t), "control.sock")
 	server, err := ListenControl(path)

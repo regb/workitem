@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -22,12 +21,7 @@ func answerCommand(tool string, answers map[string]string) protocol.ControlComma
 }
 
 func TestHeadlessHoldsAQuestionUntilItIsAnswered(t *testing.T) {
-	reader, writer, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer reader.Close()
-	defer writer.Close()
+	writer, frames := pipeFrames[json.RawMessage](t)
 	s := headlessControls{input: writer, initialized: true, emit: func(protocol.RuntimeEvent) {}}
 	var frame headlessFrame
 	if err := json.Unmarshal([]byte(`{"type":"control_request","request_id":"req-1","request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","tool_use_id":"toolu_1","input":`+askedInput+`}}`), &frame); err != nil {
@@ -60,8 +54,13 @@ func TestHeadlessHoldsAQuestionUntilItIsAnswered(t *testing.T) {
 		t.Fatal(err)
 	}
 	writer.Close()
-	data := make([]byte, 4096)
-	n, _ := reader.Read(data)
+	var data []json.RawMessage
+	for frame := range frames {
+		data = append(data, frame)
+	}
+	if len(data) != 1 {
+		t.Fatalf("wrote %d frames for one answer", len(data))
+	}
 	var written struct {
 		Response struct {
 			RequestID string `json:"request_id"`
@@ -71,12 +70,12 @@ func TestHeadlessHoldsAQuestionUntilItIsAnswered(t *testing.T) {
 			} `json:"response"`
 		} `json:"response"`
 	}
-	if err := json.Unmarshal(bytes.TrimSpace(data[:n]), &written); err != nil {
-		t.Fatalf("%v: %s", err, data[:n])
+	if err := json.Unmarshal(data[0], &written); err != nil {
+		t.Fatalf("%v: %s", err, data[0])
 	}
 	answers, _ := written.Response.Response.UpdatedInput["answers"].(map[string]any)
 	if written.Response.RequestID != "req-1" || written.Response.Response.Behavior != "allow" || answers["Which color?"] != "Blue" || written.Response.Response.UpdatedInput["questions"] == nil {
-		t.Fatalf("written: %s", data[:n])
+		t.Fatalf("written: %s", data[0])
 	}
 }
 
@@ -160,23 +159,5 @@ func TestTUIQuestionHookWaitsForTheRuntimesAnswer(t *testing.T) {
 	server.Close()
 	if got := <-hook(); got != "" {
 		t.Fatalf("hook without a runtime decided: %q", got)
-	}
-}
-
-func TestAnswerCommandsAreBounded(t *testing.T) {
-	for _, c := range []protocol.ControlCommand{
-		{Type: protocol.CommandAnswer},
-		{Type: protocol.CommandAnswer, Answers: map[string]string{"q": " "}},
-		{Type: protocol.CommandAnswer, Answers: map[string]string{"": "a"}},
-		{Type: protocol.CommandAnswer, Answers: map[string]string{"q": "a"}, Message: "text"},
-		{Type: protocol.CommandPrompt, Message: "hi", Answers: map[string]string{"q": "a"}},
-		{Type: protocol.CommandAnswer, Answers: map[string]string{"q": strings.Repeat("a", protocol.MaxControlAnswerBytes+1)}},
-	} {
-		if err := c.ValidateContent(); err == nil {
-			t.Errorf("accepted %+v", c)
-		}
-	}
-	if err := (protocol.ControlCommand{Type: protocol.CommandAnswer, ToolCallID: "t", Answers: map[string]string{"q": "a"}}).ValidateContent(); err != nil {
-		t.Fatal(err)
 	}
 }
