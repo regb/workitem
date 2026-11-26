@@ -2,7 +2,9 @@ package daemonapi_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -188,4 +190,45 @@ func TestEventsWatchMultiplexes(t *testing.T) {
 	for range events {
 	}
 	eventually(t, "the watch to close", func() bool { return f.API().Watchers() == 0 })
+}
+
+// Watches end while their parts are still sending: when the first part
+// ends, the others may be mid-send. The daemon must refuse those sends
+// rather than write to a finished response, which crashed it.
+func TestEventsWatchSurvivesEndingWhileChangesArrive(t *testing.T) {
+	t.Parallel()
+	f := apitest.New(t)
+	f.API().SetHeartbeatInterval(30 * time.Millisecond)
+	repo := f.Repository(t, "test")
+	id := newItem(t, f, repo, "churned").Id
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	churned := make(chan struct{})
+	go func() {
+		defer close(churned)
+		for i := 0; ctx.Err() == nil; i++ {
+			_, _ = f.Clients.Items.AddNote(ctx, connect.NewRequest(&v1.AddNoteRequest{ItemId: id, Text: fmt.Sprintf("change %d", i)}))
+		}
+	}()
+	var wg sync.WaitGroup
+	for watcher := range 40 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for round := range 10 {
+				watchCtx, stop := context.WithTimeout(ctx, time.Duration(1+(watcher+round)%7)*time.Millisecond)
+				if stream, err := f.Clients.Events.Watch(watchCtx, connect.NewRequest(&v1.WatchRequest{ItemId: id})); err == nil {
+					for stream.Receive() {
+					}
+					_ = stream.Close()
+				}
+				stop()
+			}
+		}()
+	}
+	wg.Wait()
+	cancel()
+	<-churned
+	call(t, f.Clients.System.GetInfo, &v1.GetInfoRequest{})
+	eventually(t, "the watches to close", func() bool { return f.API().Watchers() == 0 })
 }

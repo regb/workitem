@@ -38,11 +38,25 @@ func (s *Server) Watch(ctx context.Context, req *connect.Request[v1.WatchRequest
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer s.watching()()
+	// The parts send from their own goroutines, which may still be sending
+	// when the first to end ends the stream. Once the handler returns, the
+	// stream's response is gone and a send would crash the daemon: closing
+	// under the lock waits for a send in progress and refuses later ones.
 	var mu sync.Mutex
+	closed := false
+	defer func() {
+		cancel()
+		mu.Lock()
+		closed = true
+		mu.Unlock()
+	}()
 	var sent atomic.Int64
 	send := func(out *v1.WatchResponse) error {
 		mu.Lock()
 		defer mu.Unlock()
+		if closed {
+			return context.Canceled
+		}
 		sent.Store(time.Now().UnixNano())
 		return stream.Send(out)
 	}
