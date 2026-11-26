@@ -211,54 +211,6 @@ func TestShellCommandQuotesSafely(t *testing.T) {
 	}
 }
 
-func TestKillSessionAsyncCommandConstruction(t *testing.T) {
-	r := &recordingRunner{}
-	client := tmux.Client{Path: "tmux", Runner: r}
-	if err := client.KillSessionAsync(context.Background(), "wi-session"); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(r.calls[0].Args, []string{"run-shell", "-b", "sleep 0.2; tmux kill-session -t wi-session"}) {
-		t.Fatalf("async kill args = %#v", r.calls[0].Args)
-	}
-}
-
-func TestAttachOrSwitchCommandConstruction(t *testing.T) {
-	r := &recordingRunner{outs: [][]byte{nil, []byte("/dev/pts/42\n")}}
-	client := tmux.Client{Path: "tmux", Runner: r}
-	if err := client.AttachOrSwitch(context.Background(), "wi-session", false); err != nil {
-		t.Fatal(err)
-	}
-	if err := client.AttachOrSwitch(context.Background(), "wi-session", true); err != nil {
-		t.Fatal(err)
-	}
-	if err := client.AttachOrSwitchClient(context.Background(), "wi-new-session", true, "client-7"); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(r.calls[0].Args, []string{"attach-session", "-t", "wi-session"}) {
-		t.Fatalf("outside tmux args = %#v", r.calls[0].Args)
-	}
-	if !reflect.DeepEqual(r.calls[1].Args, []string{"display-message", "-p", "#{client_name}"}) {
-		t.Fatalf("client lookup args = %#v", r.calls[1].Args)
-	}
-	if !reflect.DeepEqual(r.calls[2].Args, []string{"switch-client", "-c", "/dev/pts/42", "-t", "wi-session"}) {
-		t.Fatalf("inside tmux args = %#v", r.calls[2].Args)
-	}
-	if !reflect.DeepEqual(r.calls[3].Args, []string{"switch-client", "-c", "client-7", "-t", "wi-new-session"}) {
-		t.Fatalf("explicit client args = %#v", r.calls[3].Args)
-	}
-}
-
-func TestAttachOrSwitchRecoversUnexpandedClientFormat(t *testing.T) {
-	r := &recordingRunner{outs: [][]byte{[]byte("/dev/pts/42\n")}}
-	client := tmux.Client{Path: "tmux", Runner: r}
-	if err := client.AttachOrSwitchClient(context.Background(), "wi-session", true, "#{client_name}"); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(r.calls[0].Args, []string{"display-message", "-p", "#{client_name}"}) || !reflect.DeepEqual(r.calls[1].Args, []string{"switch-client", "-c", "/dev/pts/42", "-t", "wi-session"}) {
-		t.Fatalf("calls=%+v", r.calls)
-	}
-}
-
 func envContains(env []string, want string) bool {
 	for _, value := range env {
 		if strings.TrimSpace(value) == want {

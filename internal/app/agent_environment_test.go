@@ -56,7 +56,6 @@ func (fakeBaseTmux) PaneInfo(context.Context, string) (tmuxpkg.PaneInfo, error) 
 }
 func (fakeBaseTmux) AttachOrSwitch(context.Context, string, bool) error { return nil }
 func (fakeBaseTmux) KillSession(context.Context, string) error          { return nil }
-func (fakeBaseTmux) KillSessionAsync(context.Context, string) error     { return nil }
 func (fakeBaseTmux) CurrentSession(context.Context) (string, error)     { return "", nil }
 func (f fakeBaseTmux) SessionEnvironment(context.Context, string) (map[string]string, error) {
 	return f.session, nil

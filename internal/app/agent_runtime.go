@@ -32,16 +32,6 @@ type AgentRuntimeStatusResult struct {
 type StopAgentRuntimeResult = agentcore.StopResult
 
 func (a *App) EnsureAgentRuntime(ctx context.Context, opts ResolveOptions, mode agent.Mode) (EnsureAgentRuntimeResult, error) {
-	return a.ensureAgentRuntime(ctx, opts, mode, false)
-}
-
-// EnsureNewAgentRuntime applies queued startup only to a fresh working item.
-// The guard is checked under the same operation lock as workspace/runtime creation.
-func (a *App) EnsureNewAgentRuntime(ctx context.Context, opts ResolveOptions, mode agent.Mode) (EnsureAgentRuntimeResult, error) {
-	return a.ensureAgentRuntime(ctx, opts, mode, true)
-}
-
-func (a *App) ensureAgentRuntime(ctx context.Context, opts ResolveOptions, mode agent.Mode, fresh bool) (EnsureAgentRuntimeResult, error) {
 	if !mode.Valid() {
 		return EnsureAgentRuntimeResult{}, fmt.Errorf("invalid agent runtime mode %q", mode)
 	}
@@ -66,9 +56,6 @@ func (a *App) ensureAgentRuntime(ctx context.Context, opts ResolveOptions, mode 
 		return EnsureAgentRuntimeResult{}, err
 	}
 	defer operation.Release()
-	if fresh && (m.State != model.StateActive || m.PrimaryConversation != nil) {
-		return EnsureAgentRuntimeResult{}, fmt.Errorf("work item %s changed while queued; startup was not applied", m.ID)
-	}
 	if m.State == model.StateClosed {
 		return EnsureAgentRuntimeResult{}, fmt.Errorf("work item %s is closed; set it to backlog before ensuring an agent runtime", m.ID)
 	}

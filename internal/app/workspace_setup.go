@@ -61,19 +61,6 @@ func skipSetup(ctx context.Context) bool {
 	return skip
 }
 
-type detachedSetupKey struct{}
-
-// WithDetachedSetup lets a setup started under ctx outlive it: when ctx
-// ends first, setup goes on and the caller gets ErrSetupContinues. Web
-// requests are short; setup is not.
-func WithDetachedSetup(ctx context.Context) context.Context {
-	return context.WithValue(ctx, detachedSetupKey{}, true)
-}
-
-// ErrSetupContinues reports a setup still running after its caller stopped
-// waiting for it.
-var ErrSetupContinues = errors.New("the workspace is still being set up; its agent can start once setup is done")
-
 // SetupWorkspace makes the item's checkout ready for work: it claims a
 // checkout if there is none, then runs the setup hooks (repository files,
 // the setup command) unless this claim was already set up. The item lock is
@@ -114,44 +101,8 @@ func (a *App) ensureWorkspaceSetup(ctx context.Context, m model.Manifest) ([]str
 	return result.Warnings, err
 }
 
+// setupClaim sets the claim up under the item's setup lock.
 func (a *App) setupClaim(ctx context.Context, m model.Manifest, rerun bool) (SetupResult, error) {
-	detached, _ := ctx.Value(detachedSetupKey{}).(bool)
-	if !detached {
-		return a.setupClaimNow(ctx, m, rerun)
-	}
-	type outcome struct {
-		result SetupResult
-		err    error
-	}
-	done := make(chan outcome, 1)
-	locked := make(chan struct{})
-	go func() {
-		result, err := a.setupClaimLocked(context.WithoutCancel(ctx), m, rerun, func() { close(locked) })
-		done <- outcome{result, err}
-	}()
-	select {
-	case finished := <-done:
-		return finished.result, finished.err
-	case <-ctx.Done():
-	}
-	// The caller is told setup continues only once it holds the setup lock:
-	// whoever then waits for setup (WaitWorkspaceSetup) waits for this run,
-	// rather than finding none started yet.
-	select {
-	case <-locked:
-		return SetupResult{WorkItemID: m.ID, Warnings: []string{}}, ErrSetupContinues
-	case finished := <-done:
-		return finished.result, finished.err
-	}
-}
-
-func (a *App) setupClaimNow(ctx context.Context, m model.Manifest, rerun bool) (SetupResult, error) {
-	return a.setupClaimLocked(ctx, m, rerun, nil)
-}
-
-// setupClaimLocked sets the claim up under the item's setup lock, calling
-// onLocked once it holds it.
-func (a *App) setupClaimLocked(ctx context.Context, m model.Manifest, rerun bool, onLocked func()) (SetupResult, error) {
 	result := SetupResult{WorkItemID: m.ID, Warnings: []string{}}
 	claim := m.Checkout.Claim
 	if claim == nil || claim.Path == "" {
@@ -165,9 +116,6 @@ func (a *App) setupClaimLocked(ctx context.Context, m model.Manifest, rerun bool
 		return result, err
 	}
 	defer lock.Release()
-	if onLocked != nil {
-		onLocked()
-	}
 	previous, _ := a.readSetupRun(m.ID)
 	if previous.Ready(claim.ID) && !rerun {
 		result.Run = previous
@@ -350,24 +298,4 @@ func worktreeGitDir(checkout string) (string, error) {
 		dir = filepath.Join(checkout, dir)
 	}
 	return dir, nil
-}
-
-// WaitWorkspaceSetup waits for a setup of the item that is running, as one
-// a request detached from, to end, and reports whether its current checkout
-// is now set up. A failed setup is not retried here.
-func (a *App) WaitWorkspaceSetup(ctx context.Context, opts ResolveOptions) (bool, error) {
-	m, err := a.ResolveItem(ctx, opts)
-	if err != nil || a.setupDir() == "" {
-		return false, err
-	}
-	lock, err := itemlock.Acquire(ctx, a.setupPath(m.ID, ".lock"))
-	if err != nil {
-		return false, err
-	}
-	_ = lock.Release()
-	if m, err = a.Store.LoadManifest(m.ID); err != nil {
-		return false, err
-	}
-	run, err := a.readSetupRun(m.ID)
-	return err == nil && m.Checkout.Claim != nil && run.Ready(m.Checkout.Claim.ID), err
 }

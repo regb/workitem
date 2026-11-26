@@ -8,8 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
 	gitpkg "github.com/regb/workitem/internal/git"
+	"github.com/regb/workitem/internal/store"
 	"github.com/regb/workitem/internal/testutil"
 )
 
@@ -66,16 +68,9 @@ func TestMergeSyncsManagedTargetWorktreeAndRecordsItsEvent(t *testing.T) {
 	a, repo, source, item := setupMergeWorkItem(t)
 	next := 110
 	a.NewID = func() (string, error) { next++; return testutil.ID(t, byte(next)), nil }
-	targetItem, err := a.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Managed target", CWD: repo})
-	if err != nil {
-		t.Fatal(err)
-	}
-	target, err := a.StartWorkItem(context.Background(), app.ResolveOptions{Selector: targetItem.Manifest.ID, CWD: repo}, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	targetPath := target.Workspace.Checkout.Claim.Path
-	branch := target.Workspace.Checkout.Specification.Branch
+	target, _ := startItem(t, a, app.NewWorkItemOptions{Title: "Managed target", CWD: repo}, agent.ModeTUI)
+	targetPath := target.Checkout.Claim.Path
+	branch := target.Checkout.Specification.Branch
 	writeMergeFile(t, targetPath, "target.txt", "target commit\n")
 	runMergeGit(t, targetPath, "add", ".")
 	runMergeGit(t, targetPath, "commit", "-m", "target change")
@@ -85,10 +80,10 @@ func TestMergeSyncsManagedTargetWorktreeAndRecordsItsEvent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Rebased || !result.TargetSynced || result.TargetManagedWorkItemID != targetItem.Manifest.ID || readMergeFile(t, targetPath, "feature.txt") != "feature\n" || readMergeFile(t, targetPath, "local.txt") != "keep dirty target\n" {
+	if !result.Rebased || !result.TargetSynced || result.TargetManagedWorkItemID != target.ID || readMergeFile(t, targetPath, "feature.txt") != "feature\n" || readMergeFile(t, targetPath, "local.txt") != "keep dirty target\n" {
 		t.Fatal("managed target not synchronized safely", result)
 	}
-	events, err := a.Store.ReadEvents(targetItem.Manifest.ID)
+	events, err := a.Store.(*store.Store).ReadEvents(target.ID)
 	if err != nil {
 		t.Fatal(err)
 	}

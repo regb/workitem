@@ -25,7 +25,7 @@ func TestUntitledCreationUsesIDDerivedSlug(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := New(itemStore{items: tc.existing}, creationGit{root: t.TempDir()}, nil, testutil.Time, func() (string, error) { return id, nil }, nil, nil)
-			result, err := s.NewWorkItem(context.Background(), NewOptions{Untitled: true, Slug: tc.explicit, Description: "Details are separate", CWD: t.TempDir(), PrepareOnly: true})
+			result, err := s.NewWorkItem(context.Background(), NewOptions{Untitled: true, Slug: tc.explicit, Description: "Details are separate", CWD: t.TempDir()})
 			if tc.wantError {
 				if err == nil {
 					t.Fatal("explicit collision accepted")

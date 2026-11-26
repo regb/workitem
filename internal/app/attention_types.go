@@ -10,23 +10,6 @@ import (
 
 type AttentionActivity = viewapp.Activity
 
-type AttentionCandidate struct {
-	Item     WorkListItem      `json:"item"`
-	Activity AttentionActivity `json:"activity"`
-	Rank     int               `json:"rank"`
-}
-
-type AttentionQueueOptions struct {
-	WorkListOptions
-	ResolveOptions
-}
-
-type AttentionQueueResult struct {
-	Strategy   string               `json:"strategy"`
-	Candidates []AttentionCandidate `json:"candidates"`
-	Warnings   []string             `json:"warnings"`
-}
-
 type DeferResult struct {
 	WorkItemID string            `json:"work_item_id"`
 	DeferredAt time.Time         `json:"deferred_at"`
@@ -43,25 +26,13 @@ type ReadMarkerResult struct {
 	Warnings   []string          `json:"warnings"`
 }
 
-type WorkItemActivityResult struct {
-	WorkItemID string            `json:"work_item_id"`
-	Activity   AttentionActivity `json:"activity"`
-	Warnings   []string          `json:"warnings"`
-}
-
 // NotNeedsAttentionError is an eligibility result, not an infrastructure
-// failure. Adapter porcelain may safely skip an optional defer when this
-// error is observed.
+// failure: attention defer requires an active item.
 type NotNeedsAttentionError struct {
 	WorkItemID string
 	State      string
-	Agent      string
-	Worktree   string
 }
 
 func (e *NotNeedsAttentionError) Error() string {
-	if e.State != model.StateActive {
-		return fmt.Sprintf("work item %s is %s; attention defer requires an active item", e.WorkItemID, e.State)
-	}
-	return fmt.Sprintf("work item %s is not in NEEDS ATTENTION (agent=%s, worktree=%s)", e.WorkItemID, e.Agent, e.Worktree)
+	return fmt.Sprintf("work item %s is %s; attention defer requires an active item", e.WorkItemID, e.State)
 }

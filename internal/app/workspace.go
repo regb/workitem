@@ -7,37 +7,9 @@ import (
 	"github.com/regb/workitem/internal/model"
 )
 
-type CheckoutCreateResult = workspacecore.CheckoutCreateResult
-type CheckoutRemoveResult = workspacecore.CheckoutRemoveResult
-type CheckoutStatusResult = workspacecore.CheckoutStatusResult
-type WorkspaceGitStatus = workspacecore.GitStatus
 type WorkspaceStatusResult = workspacecore.StatusResult
 type WorkspaceReleaseResult = workspacecore.ReleaseResult
 type checkoutRelease = workspacecore.CheckoutRelease
-
-func (a *App) CheckoutCreate(ctx context.Context, opts ResolveOptions) (CheckoutCreateResult, error) {
-	m, operation, err := a.lockItemOperation(ctx, opts)
-	if err != nil {
-		return CheckoutCreateResult{}, err
-	}
-	defer operation.Release()
-	opts.Selector = m.ID
-	return a.workspaceService().CheckoutCreate(ctx, opts)
-}
-
-func (a *App) CheckoutRemove(ctx context.Context, opts ResolveOptions) (CheckoutRemoveResult, error) {
-	m, operation, err := a.lockItemOperation(ctx, opts)
-	if err != nil {
-		return CheckoutRemoveResult{}, err
-	}
-	defer operation.Release()
-	opts.Selector = m.ID
-	return a.workspaceService().CheckoutRemove(ctx, opts)
-}
-
-func (a *App) CheckoutStatus(ctx context.Context, opts ResolveOptions) (CheckoutStatusResult, error) {
-	return a.workspaceService().CheckoutStatus(ctx, opts)
-}
 
 // WorkspaceStatus inspects only the repository worktree.
 func (a *App) WorkspaceStatus(ctx context.Context, opts ResolveOptions) (WorkspaceStatusResult, error) {

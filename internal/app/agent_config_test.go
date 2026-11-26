@@ -35,32 +35,25 @@ func (b *configCheckingBackend) ValidateConfig(_ context.Context, name string, r
 }
 
 func TestDefaultAgentIsResolvedAndStoredAtCreation(t *testing.T) {
-	ctx := context.Background()
 	st := store.New(t.TempDir())
 	a := newTestApp(st, newFakeGit(t))
-	first, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "First", CWD: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.Manifest.Agent != "pi" {
-		t.Fatalf("stored agent %q", first.Manifest.Agent)
+	first := createItem(t, a, app.NewWorkItemOptions{Title: "First"})
+	if first.Agent != "pi" {
+		t.Fatalf("stored agent %q", first.Agent)
 	}
 	a.StaticAgentProfiles.Profiles = append(a.StaticAgentProfiles.Profiles, model.AgentProfile{Name: "review", Driver: "pi", Config: map[string]any{}})
 	a.StaticAgentProfiles.Default = "review"
-	second, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "Second", CWD: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
+	second := createItem(t, a, app.NewWorkItemOptions{Title: "Second"})
+	if second.Agent != "review" {
+		t.Fatalf("stored agent %q", second.Agent)
 	}
-	if second.Manifest.Agent != "review" {
-		t.Fatalf("stored agent %q", second.Manifest.Agent)
-	}
-	original, err := st.LoadManifest(first.Manifest.ID)
+	original, err := st.LoadManifest(first.ID)
 	if err != nil || original.Agent != "pi" {
 		t.Fatalf("existing item changed: %+v %v", original, err)
 	}
-	explicit, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "Explicit", Agent: "pi", CWD: t.TempDir()})
-	if err != nil || explicit.Manifest.Agent != "pi" {
-		t.Fatalf("explicit: %+v %v", explicit, err)
+	explicit := createItem(t, a, app.NewWorkItemOptions{Title: "Explicit", Agent: "pi"})
+	if explicit.Agent != "pi" {
+		t.Fatalf("explicit agent %q", explicit.Agent)
 	}
 }
 
@@ -91,69 +84,35 @@ func TestAgentConfigValidationMergesSettingsWithoutResources(t *testing.T) {
 
 func TestInvalidAgentConfigFailsBeforeStartupEffects(t *testing.T) {
 	for _, mode := range []agent.Mode{agent.ModeTUI, agent.ModeHeadless} {
-		for _, action := range []string{"ensure", "start", "resume", "new"} {
-			t.Run(string(mode)+"/"+action, func(t *testing.T) {
-				ctx := context.Background()
-				st := store.New(t.TempDir())
-				git := newFakeGit(t)
-				a := newTestApp(st, git)
-				backend := &configCheckingBackend{}
-				a.ConversationBackends["pi"] = backend
-				tmux := &fakeTmux{}
-				a.Tmux = tmux
-				if action == "new" {
-					_, err := a.NewAgentWorkItem(ctx, app.NewWorkItemOptions{Title: "Invalid config", CWD: t.TempDir()}, mode, "task", "operator")
-					if err == nil || !strings.Contains(err.Error(), "required setting") {
-						t.Fatalf("err=%v", err)
-					}
-					items, _ := st.ListManifests()
-					if len(items) != 0 {
-						t.Fatal("invalid config created an item")
-					}
-				} else {
-					created, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "Invalid config", CWD: t.TempDir()})
-					if err != nil {
-						t.Fatal(err)
-					}
-					m := created.Manifest
-					if action == "ensure" {
-						m.State = model.StateActive
-					}
-					if action == "resume" {
-						m.State = model.StateActive
-					}
-					if err := st.SaveManifest(ctx, m); err != nil {
-						t.Fatal(err)
-					}
-					opts := app.ResolveOptions{Selector: m.ID}
-					switch action {
-					case "ensure":
-						_, err = a.EnsureAgentRuntime(ctx, opts, mode)
-					case "start":
-						_, err = a.StartWorkItemInMode(ctx, opts, false, false, mode)
-					case "resume":
-						_, err = a.ResumeWorkItemInMode(ctx, opts, false, mode)
-					}
-					if err == nil || !strings.Contains(err.Error(), "required setting") {
-						t.Fatalf("err=%v", err)
-					}
-					after, err := st.LoadManifest(m.ID)
-					if err != nil || after.State != m.State || after.Checkout.Claim != nil || after.PrimaryConversation != nil {
-						t.Fatalf("startup changed item: %+v %v", after, err)
-					}
-					runtime, err := st.LoadAgentRuntime(m.ID)
-					if err != nil || runtime != nil {
-						t.Fatalf("startup created runtime: %+v %v", runtime, err)
-					}
-				}
-				if len(git.worktrees) != 0 || len(git.branches) != 0 || len(tmux.ensured) != 0 || len(tmux.launched) != 0 {
-					t.Fatal("invalid config allocated external resources")
-				}
-				if backend.calls != 1 {
-					t.Fatalf("validation calls=%d", backend.calls)
-				}
-			})
-		}
+		t.Run(string(mode), func(t *testing.T) {
+			ctx := context.Background()
+			st := store.New(t.TempDir())
+			git := newFakeGit(t)
+			a := newTestApp(st, git)
+			backend := &configCheckingBackend{}
+			a.ConversationBackends["pi"] = backend
+			tmux := &fakeTmux{}
+			a.Tmux = tmux
+			created := createItem(t, a, app.NewWorkItemOptions{Title: "Invalid config"})
+			m := activateItem(t, a, created.ID)
+			if _, err := a.EnsureAgentRuntime(ctx, app.ResolveOptions{Selector: m.ID}, mode); err == nil || !strings.Contains(err.Error(), "required setting") {
+				t.Fatalf("err=%v", err)
+			}
+			after, err := st.LoadManifest(m.ID)
+			if err != nil || after.State != m.State || after.Checkout.Claim != nil || after.PrimaryConversation != nil {
+				t.Fatalf("startup changed item: %+v %v", after, err)
+			}
+			runtime, err := st.LoadAgentRuntime(m.ID)
+			if err != nil || runtime != nil {
+				t.Fatalf("startup created runtime: %+v %v", runtime, err)
+			}
+			if len(git.worktrees) != 0 || len(git.branches) != 0 || len(tmux.ensured) != 0 || len(tmux.launched) != 0 {
+				t.Fatal("invalid config allocated external resources")
+			}
+			if backend.calls != 1 {
+				t.Fatalf("validation calls=%d", backend.calls)
+			}
+		})
 	}
 }
 
@@ -161,18 +120,15 @@ func TestExistingOwnerDoesNotValidateNewProfileSettings(t *testing.T) {
 	ctx := context.Background()
 	st := store.New(t.TempDir())
 	a := newTestApp(st, newFakeGit(t))
-	created, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "Existing owner", CWD: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	created := createItem(t, a, app.NewWorkItemOptions{Title: "Existing owner"})
 	a.Process = &fakeProcess{alive: map[int]bool{123: true}}
-	runtime := model.AgentRuntime{ID: "owner", WorkItemID: created.Manifest.ID, State: model.AgentRuntimeRunning, Mode: "headless", HostPID: 123, HostProcessGroup: 123, HostStartTime: 123}
-	if err := st.SaveAgentRuntime(ctx, created.Manifest.ID, runtime); err != nil {
+	runtime := model.AgentRuntime{ID: "owner", WorkItemID: created.ID, State: model.AgentRuntimeRunning, Mode: "headless", HostPID: 123, HostProcessGroup: 123, HostStartTime: 123}
+	if err := st.SaveAgentRuntime(ctx, created.ID, runtime); err != nil {
 		t.Fatal(err)
 	}
 	backend := &configCheckingBackend{}
 	a.ConversationBackends["pi"] = backend
-	if err := a.ValidateItemAgentConfig(ctx, app.ResolveOptions{Selector: created.Manifest.ID}); err != nil {
+	if err := a.ValidateItemAgentConfig(ctx, app.ResolveOptions{Selector: created.ID}); err != nil {
 		t.Fatal(err)
 	}
 	if backend.calls != 0 {

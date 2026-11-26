@@ -26,7 +26,6 @@ type Tmux interface {
 	HasSession(context.Context, string) (bool, error)
 	CurrentSession(context.Context) (string, error)
 	EnsureSession(context.Context, tmuxpkg.SessionSpec) (bool, error)
-	AttachOrSwitch(context.Context, string, bool) error
 	KillSession(context.Context, string) error
 }
 
@@ -50,15 +49,6 @@ func New(st Store, t Tmux, r Resolver, ensure WorkspaceEnsurer, ownership Owners
 	return &Service{store: st, tmux: t, resolve: r, ensureWorkspace: ensure, ownership: ownership, now: now}
 }
 
-type StatusResult struct {
-	WorkItemID string   `json:"work_item_id"`
-	Session    string   `json:"session"`
-	Exists     bool     `json:"exists"`
-	Inspected  bool     `json:"inspected"`
-	Current    bool     `json:"current"`
-	Warnings   []string `json:"warnings"`
-}
-
 type Result struct {
 	WorkItemID string         `json:"work_item_id"`
 	Session    string         `json:"session"`
@@ -76,99 +66,6 @@ type CloseResult struct {
 }
 
 func InTmux(env map[string]string) bool { return env != nil && strings.TrimSpace(env["TMUX"]) != "" }
-
-func (s *Service) Status(ctx context.Context, opts contract.ResolveOptions) (StatusResult, error) {
-	m, err := s.resolve(ctx, opts)
-	if err != nil {
-		return StatusResult{}, err
-	}
-	res := StatusResult{WorkItemID: m.ID, Session: m.TerminalSessionName(), Warnings: []string{}}
-	if s.tmux == nil || strings.TrimSpace(res.Session) == "" {
-		return res, nil
-	}
-	res.Inspected = true
-	res.Exists, err = s.tmux.HasSession(ctx, res.Session)
-	if err != nil {
-		res.Warnings = append(res.Warnings, "could not inspect tmux terminal: "+err.Error())
-	}
-	if InTmux(opts.Env) {
-		if current, err := s.tmux.CurrentSession(ctx); err == nil {
-			res.Current = current == res.Session
-		}
-	}
-	return res, nil
-}
-
-func (s *Service) Ensure(ctx context.Context, opts contract.ResolveOptions) (Result, error) {
-	m, err := s.resolveTerminalItem(ctx, opts)
-	if err != nil {
-		return Result{}, err
-	}
-	return s.EnsureForManifest(ctx, opts, m, false)
-}
-
-func (s *Service) Enter(ctx context.Context, opts contract.ResolveOptions, attach bool) (Result, error) {
-	res, err := s.Ensure(ctx, opts)
-	if err != nil {
-		return res, err
-	}
-	return s.attach(ctx, opts, res, attach)
-}
-
-// EnterExisting attaches to an already-running terminal without ensuring or
-// validating its checkout. This is the repair path for a verified live TUI
-// whose checkout has drifted and must remain reachable to be fixed.
-func (s *Service) EnterExisting(ctx context.Context, opts contract.ResolveOptions, attach bool) (Result, error) {
-	m, err := s.resolveTerminalItem(ctx, opts)
-	if err != nil {
-		return Result{}, err
-	}
-	res := Result{WorkItemID: m.ID, Session: m.TerminalSessionName(), Checkout: m.Checkout, Warnings: []string{}}
-	if s.tmux == nil {
-		return Result{}, fmt.Errorf("tmux terminal adapter is not configured")
-	}
-	exists, err := s.validateClaim(ctx, m)
-	if err != nil {
-		return Result{}, err
-	}
-	if !exists {
-		return Result{}, fmt.Errorf("active TUI runtime terminal %s does not exist; the runtime process may be orphaned after a tmux server restart, run `wi agent runtime stop --force --item %s`, wait for it to exit, then switch again", res.Session, m.ID)
-	}
-	return s.attach(ctx, opts, res, attach)
-}
-
-func (s *Service) attach(ctx context.Context, opts contract.ResolveOptions, res Result, attach bool) (Result, error) {
-	if !attach {
-		return res, nil
-	}
-	inTmux := InTmux(opts.Env)
-	client := strings.TrimSpace(opts.Env["WI_TMUX_CLIENT"])
-	// An untargeted display-message can resolve to a session that was just
-	// created by this process rather than the popup's originating client. When
-	// the binding captured a client explicitly, always issue switch-client for
-	// that client; it is idempotent and avoids falsely treating creation as an
-	// already-completed switch.
-	if inTmux && client == "" {
-		if current, err := s.tmux.CurrentSession(ctx); err == nil && current == res.Session {
-			res.Attached = true
-			res.Warnings = append(res.Warnings, "already in tmux terminal "+res.Session)
-			return res, nil
-		}
-	}
-	var err error
-	if switcher, ok := s.tmux.(interface {
-		AttachOrSwitchClient(context.Context, string, bool, string) error
-	}); ok && client != "" {
-		err = switcher.AttachOrSwitchClient(ctx, res.Session, inTmux, client)
-	} else {
-		err = s.tmux.AttachOrSwitch(ctx, res.Session, inTmux)
-	}
-	if err != nil {
-		return Result{}, err
-	}
-	res.Attached = true
-	return res, nil
-}
 
 func (s *Service) Close(ctx context.Context, opts contract.ResolveOptions) (CloseResult, error) {
 	m, err := s.resolve(ctx, opts)
@@ -217,15 +114,7 @@ func (s *Service) Close(ctx context.Context, opts contract.ResolveOptions) (Clos
 	return res, nil
 }
 
-func (s *Service) EnsureForManifest(ctx context.Context, opts contract.ResolveOptions, m model.Manifest, createCheckout bool) (Result, error) {
-	return s.EnsureForManifestWithEnvironment(ctx, opts, m, createCheckout, nil)
-}
-
-func (s *Service) EnsureForManifestWithEnvironment(ctx context.Context, opts contract.ResolveOptions, m model.Manifest, createCheckout bool, environment map[string]string) (Result, error) {
-	return s.EnsureForManifestWithEnvironmentAndScrub(ctx, opts, m, createCheckout, environment, nil)
-}
-
-func (s *Service) EnsureForManifestWithEnvironmentAndScrub(ctx context.Context, opts contract.ResolveOptions, m model.Manifest, createCheckout bool, environment map[string]string, scrub []string) (Result, error) {
+func (s *Service) EnsureForManifest(ctx context.Context, opts contract.ResolveOptions, m model.Manifest, createCheckout bool, environment map[string]string, scrub []string) (Result, error) {
 	m, warnings, err := s.ensureWorkspace(ctx, opts, m, createCheckout)
 	if err != nil {
 		return Result{}, err
@@ -237,7 +126,7 @@ func (s *Service) EnsureForManifestWithEnvironmentAndScrub(ctx context.Context, 
 	if _, err := s.validateClaim(ctx, m); err != nil {
 		return Result{}, err
 	}
-	created, err := s.tmux.EnsureSession(ctx, s.SpecWithEnvironmentAndScrub(m, environment, scrub))
+	created, err := s.tmux.EnsureSession(ctx, s.Spec(m, environment, scrub))
 	if err != nil {
 		return Result{}, err
 	}
@@ -286,26 +175,7 @@ func (s *Service) validateClaim(ctx context.Context, m model.Manifest) (bool, er
 	return true, nil
 }
 
-func (s *Service) resolveTerminalItem(ctx context.Context, opts contract.ResolveOptions) (model.Manifest, error) {
-	m, err := s.resolve(ctx, opts)
-	if err != nil {
-		return model.Manifest{}, err
-	}
-	if m.State == model.StateClosed {
-		return model.Manifest{}, fmt.Errorf("work item %s is closed; set it to backlog before ensuring terminal access", m.ID)
-	}
-	return m, nil
-}
-
-func (s *Service) Spec(m model.Manifest) tmuxpkg.SessionSpec {
-	return s.SpecWithEnvironment(m, nil)
-}
-
-func (s *Service) SpecWithEnvironment(m model.Manifest, environment map[string]string) tmuxpkg.SessionSpec {
-	return s.SpecWithEnvironmentAndScrub(m, environment, nil)
-}
-
-func (s *Service) SpecWithEnvironmentAndScrub(m model.Manifest, environment map[string]string, scrub []string) tmuxpkg.SessionSpec {
+func (s *Service) Spec(m model.Manifest, environment map[string]string, scrub []string) tmuxpkg.SessionSpec {
 	spec := s.spec(m, environment)
 	spec.Scrub = scrub
 	return spec

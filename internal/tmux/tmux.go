@@ -35,10 +35,6 @@ type Runner interface {
 	Run(ctx context.Context, path string, args []string, env []string) ([]byte, error)
 }
 
-type InteractiveRunner interface {
-	RunInteractive(ctx context.Context, path string, args []string, env []string) error
-}
-
 type ExecRunner struct{}
 
 func (ExecRunner) Run(ctx context.Context, path string, args []string, env []string) ([]byte, error) {
@@ -47,22 +43,6 @@ func (ExecRunner) Run(ctx context.Context, path string, args []string, env []str
 		cmd.Env = env
 	}
 	return cmd.CombinedOutput()
-}
-
-func (ExecRunner) RunInteractive(ctx context.Context, path string, args []string, env []string) error {
-	stdin, stdout, stderr, cleanup, err := interactiveStdio()
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-	cmd := exec.CommandContext(ctx, path, args...)
-	if env != nil {
-		cmd.Env = env
-	}
-	cmd.Stdin = stdin
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	return cmd.Run()
 }
 
 type Client struct {
@@ -256,41 +236,6 @@ func (c Client) windowExists(ctx context.Context, session, name string) (bool, e
 	return false, nil
 }
 
-func (c Client) AttachOrSwitch(ctx context.Context, name string, inTmux bool) error {
-	return c.AttachOrSwitchClient(ctx, name, inTmux, "")
-}
-
-func (c Client) AttachOrSwitchClient(ctx context.Context, name string, inTmux bool, originatingClient string) error {
-	if inTmux {
-		args := []string{"switch-client"}
-		client := strings.TrimSpace(originatingClient)
-		if strings.ContainsAny(client, "\r\n\x00") {
-			return fmt.Errorf("invalid tmux client name")
-		}
-		// Treat an unexpanded tmux format from an older/misparsed binding as
-		// absent rather than passing the literal through to switch-client.
-		if strings.Contains(client, "#{") {
-			client = ""
-		}
-		// Bindings capture the originating client before launching a popup or
-		// background shell. Fall back to tmux discovery for manual invocations.
-		if client == "" {
-			if out, err := c.run(ctx, []string{"display-message", "-p", "#{client_name}"}, nil); err == nil {
-				client = strings.TrimSpace(string(out))
-			}
-		}
-		if client != "" {
-			args = append(args, "-c", client)
-		}
-		// switch-client is a server command and does not need a controlling
-		// terminal. Keeping it non-interactive allows tmux run-shell bindings to
-		// navigate silently in the background.
-		_, err := c.run(ctx, append(args, "-t", name), nil)
-		return err
-	}
-	return c.runInteractive(ctx, []string{"attach-session", "-t", name}, nil)
-}
-
 func (c Client) ListSessions(ctx context.Context) ([]string, error) {
 	out, err := c.run(ctx, []string{"list-sessions", "-F", "#{session_name}"}, nil)
 	if err != nil {
@@ -312,15 +257,6 @@ func (c Client) ListSessions(ctx context.Context) ([]string, error) {
 
 func (c Client) KillSession(ctx context.Context, name string) error {
 	_, err := c.run(ctx, []string{"kill-session", "-t", name}, nil)
-	return err
-}
-
-// KillSessionAsync asks the tmux server to destroy a session after a short
-// delay. This lets a command running in that session persist its final durable
-// state and exit before tmux tears down the command's own pane.
-func (c Client) KillSessionAsync(ctx context.Context, name string) error {
-	command := "sleep 0.2; tmux kill-session -t " + shellQuote(name)
-	_, err := c.run(ctx, []string{"run-shell", "-b", command}, nil)
 	return err
 }
 
@@ -396,25 +332,6 @@ func (c Client) run(ctx context.Context, args []string, env []string) ([]byte, e
 		return nil, fmt.Errorf("tmux %s: %w", strings.Join(args, " "), err)
 	}
 	return out, nil
-}
-
-func (c Client) runInteractive(ctx context.Context, args []string, env []string) error {
-	path := c.Path
-	if path == "" {
-		path = "tmux"
-	}
-	runner := c.Runner
-	if runner == nil {
-		runner = ExecRunner{}
-	}
-	if interactive, ok := runner.(InteractiveRunner); ok {
-		if err := interactive.RunInteractive(ctx, path, args, env); err != nil {
-			return fmt.Errorf("tmux %s: %w", strings.Join(args, " "), err)
-		}
-		return nil
-	}
-	_, err := c.run(ctx, args, env)
-	return err
 }
 
 func sortedKeys(m map[string]string) []string {

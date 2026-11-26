@@ -8,10 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/regb/workitem/agentdriver/protocol"
+	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
 	agentdriver "github.com/regb/workitem/internal/agentdriver"
-	tmuxporcelain "github.com/regb/workitem/internal/app/adapter/tmux/porcelain"
 	terminaladapter "github.com/regb/workitem/internal/app/adapter/tmux/terminal"
 	"github.com/regb/workitem/internal/app/contract"
 	attentioncore "github.com/regb/workitem/internal/app/core/attention"
@@ -48,9 +47,7 @@ type Tmux interface {
 	EnsureSession(ctx context.Context, spec tmuxpkg.SessionSpec) (bool, error)
 	LaunchCommand(ctx context.Context, spec tmuxpkg.LaunchSpec) error
 	PaneInfo(ctx context.Context, target string) (tmuxpkg.PaneInfo, error)
-	AttachOrSwitch(ctx context.Context, name string, inTmux bool) error
 	KillSession(ctx context.Context, name string) error
-	KillSessionAsync(ctx context.Context, name string) error
 	CurrentSession(ctx context.Context) (string, error)
 	SessionEnvironment(ctx context.Context, name string) (map[string]string, error)
 	GlobalEnvironment(ctx context.Context) (map[string]string, error)
@@ -76,7 +73,6 @@ type ConversationBackend interface {
 
 type Store interface {
 	Ensure() error
-	CreateItem(ctx context.Context, manifest model.Manifest, events ...model.Event) error
 	SaveManifest(ctx context.Context, manifest model.Manifest) error
 	LoadTerminalRuntime(id string) (*model.TerminalRuntime, error)
 	SaveTerminalRuntime(ctx context.Context, id string, workspace model.TerminalRuntime) error
@@ -84,7 +80,6 @@ type Store interface {
 	LoadAgentRuntime(id string) (*model.AgentRuntime, error)
 	SaveAgentRuntime(ctx context.Context, id string, runtime model.AgentRuntime) error
 	AppendEvent(ctx context.Context, id string, event model.Event) error
-	ReadEvents(id string) ([]model.Event, error)
 	RemoveItem(id string) error
 	LockPath(id string) string
 	LoadManifest(id string) (model.Manifest, error)
@@ -247,10 +242,6 @@ func (a *App) terminalService() *terminaladapter.Service {
 		return ownership.ProcessAlive, ownership.Mode
 	}, a.now)
 }
-func (a *App) tmuxPorcelainService() *tmuxporcelain.Service {
-	return tmuxporcelain.New(a.ResolveItem)
-}
-
 func (a *App) now() time.Time {
 	if a.Clock == nil {
 		return time.Now()

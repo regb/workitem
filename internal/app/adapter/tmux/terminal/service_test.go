@@ -2,7 +2,6 @@ package terminal
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/regb/workitem/internal/app/contract"
@@ -11,12 +10,10 @@ import (
 )
 
 type fakeTmux struct {
-	exists     bool
-	current    string
-	err        error
-	specSink   *tmuxpkg.SessionSpec
-	attachSink *int
-	clientSink *string
+	exists   bool
+	current  string
+	err      error
+	specSink *tmuxpkg.SessionSpec
 }
 
 func (f fakeTmux) HasSession(context.Context, string) (bool, error) { return f.exists, f.err }
@@ -26,21 +23,6 @@ func (f fakeTmux) EnsureSession(_ context.Context, spec tmuxpkg.SessionSpec) (bo
 		*f.specSink = spec
 	}
 	return false, f.err
-}
-func (f fakeTmux) AttachOrSwitch(context.Context, string, bool) error {
-	if f.attachSink != nil {
-		*f.attachSink++
-	}
-	return f.err
-}
-func (f fakeTmux) AttachOrSwitchClient(_ context.Context, _ string, _ bool, client string) error {
-	if f.attachSink != nil {
-		*f.attachSink++
-	}
-	if f.clientSink != nil {
-		*f.clientSink = client
-	}
-	return f.err
 }
 func (f fakeTmux) KillSession(context.Context, string) error { return f.err }
 
@@ -67,7 +49,7 @@ func TestEnsureForManifestAppliesEnvironmentBeforeSessionCreation(t *testing.T) 
 	var captured tmuxpkg.SessionSpec
 	var saved *model.TerminalRuntime
 	service := New(fakeStore{saved: &saved}, fakeTmux{specSink: &captured}, nil, workspace, nil, nil)
-	_, err := service.EnsureForManifestWithEnvironment(context.Background(), contract.ResolveOptions{}, manifest, true, map[string]string{"PROJECT_TOKEN": "loaded", "PATH": "/project/bin"})
+	_, err := service.EnsureForManifest(context.Background(), contract.ResolveOptions{}, manifest, true, map[string]string{"PROJECT_TOKEN": "loaded", "PATH": "/project/bin"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,74 +61,23 @@ func TestEnsureForManifestAppliesEnvironmentBeforeSessionCreation(t *testing.T) 
 	}
 }
 
-func TestEnterExistingBypassesWorkspaceEnsureForRepairAccess(t *testing.T) {
-	manifest := model.Manifest{ID: "item-1", State: model.StateActive, Checkout: model.Checkout{}}
-	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }
-	workspace := func(context.Context, contract.ResolveOptions, model.Manifest, bool) (model.Manifest, []string, error) {
-		return model.Manifest{}, nil, errors.New("workspace ensure must not run")
-	}
-	attached := 0
-	res, err := New(fakeStore{}, fakeTmux{exists: true, attachSink: &attached}, resolve, workspace, nil, nil).EnterExisting(context.Background(), contract.ResolveOptions{Env: map[string]string{"TMUX": "yes", "WI_TMUX_CLIENT": "client-7"}}, true)
-	if err != nil || !res.Attached || attached != 1 {
-		t.Fatalf("result=%+v attached=%d err=%v", res, attached, err)
-	}
-}
-
-func TestEnterAlwaysSwitchesCapturedOriginatingClientAfterSessionCreation(t *testing.T) {
-	manifest := model.Manifest{ID: "item-1", Repository: model.Repository{RootAtCreation: "/repo"}, Checkout: model.Checkout{}}
-	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }
-	workspace := func(context.Context, contract.ResolveOptions, model.Manifest, bool) (model.Manifest, []string, error) {
-		return manifest, nil, nil
-	}
-	attached := 0
-	client := ""
-	mux := fakeTmux{current: manifest.TerminalSessionName(), attachSink: &attached, clientSink: &client}
-	res, err := New(fakeStore{}, mux, resolve, workspace, nil, nil).Enter(context.Background(), contract.ResolveOptions{Env: map[string]string{"TMUX": "yes", "WI_TMUX_CLIENT": "client-7"}}, true)
-	if err != nil || !res.Attached || attached != 1 || client != "client-7" {
-		t.Fatalf("result=%+v attached=%d client=%q err=%v", res, attached, client, err)
-	}
-}
-
 type boundTerminalStore struct{ fakeStore }
 
 func (boundTerminalStore) LoadTerminalRuntime(string) (*model.TerminalRuntime, error) {
 	return &model.TerminalRuntime{WorkspaceClaimID: "claim-1", WorkspaceClaimGeneration: 1}, nil
 }
 
-func TestTerminalCannotEnterSupersededClaim(t *testing.T) {
+func TestTerminalRefusesSupersededClaim(t *testing.T) {
 	manifest := model.Manifest{ID: "item-1", State: model.StateActive, Checkout: model.Checkout{ClaimGeneration: 2, Claim: &model.WorkspaceClaim{ID: "claim-2", Generation: 2, Path: "/workspace"}}}
-	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) { return manifest, nil }
 	workspace := func(context.Context, contract.ResolveOptions, model.Manifest, bool) (model.Manifest, []string, error) {
 		return manifest, nil, nil
 	}
-	attached := 0
-	service := New(boundTerminalStore{}, fakeTmux{exists: true, attachSink: &attached}, resolve, workspace, nil, nil)
-	if _, err := service.EnterExisting(context.Background(), contract.ResolveOptions{}, true); err == nil {
-		t.Fatal("entered stale terminal")
-	}
-	if _, err := service.Ensure(context.Background(), contract.ResolveOptions{}); err == nil {
+	var captured tmuxpkg.SessionSpec
+	service := New(boundTerminalStore{}, fakeTmux{exists: true, specSink: &captured}, nil, workspace, nil, nil)
+	if _, err := service.EnsureForManifest(context.Background(), contract.ResolveOptions{}, manifest, true, nil, nil); err == nil {
 		t.Fatal("reused stale terminal")
 	}
-	if attached != 0 {
-		t.Fatal("attached before validating claim")
-	}
-}
-
-func TestStatus(t *testing.T) {
-	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1"}, nil
-	}
-	res, err := New(nil, fakeTmux{exists: true, current: "wi-item-1"}, resolve, nil, nil, nil).Status(context.Background(), contract.ResolveOptions{Env: map[string]string{"TMUX": "yes"}})
-	if err != nil || !res.Exists || !res.Inspected || !res.Current || len(res.Warnings) != 0 {
-		t.Fatalf("result=%+v err=%v", res, err)
-	}
-}
-func TestStatusReportsInspectionWarning(t *testing.T) {
-	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1"}, nil
-	}
-	res, err := New(nil, fakeTmux{err: errors.New("boom")}, resolve, nil, nil, nil).Status(context.Background(), contract.ResolveOptions{})
-	if err != nil || len(res.Warnings) != 1 {
-		t.Fatalf("result=%+v err=%v", res, err)
+	if captured.Name != "" {
+		t.Fatal("ensured the session before validating the claim")
 	}
 }

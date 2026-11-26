@@ -50,28 +50,9 @@ func (a *App) launchAgentInTmuxWithEnvironment(ctx context.Context, m model.Mani
 	return append(warnings, a.recordPrimaryTerminalRuntime(ctx, m, window)...), nil
 }
 
-type TerminalStatusResult = terminaladapter.StatusResult
 type TerminalResult = terminaladapter.Result
 type TerminalCloseResult = terminaladapter.CloseResult
 
-func (a *App) TerminalStatus(ctx context.Context, opts ResolveOptions) (TerminalStatusResult, error) {
-	return a.terminalService().Status(ctx, opts)
-}
-func (a *App) EnsureTerminal(ctx context.Context, opts ResolveOptions) (TerminalResult, error) {
-	m, operation, err := a.lockItemOperation(ctx, opts)
-	if err != nil {
-		return TerminalResult{}, err
-	}
-	defer operation.Release()
-	opts.Selector = m.ID
-	return a.terminalService().Ensure(ctx, opts)
-}
-func (a *App) EnterTerminal(ctx context.Context, opts ResolveOptions, attach bool) (TerminalResult, error) {
-	return a.terminalService().Enter(ctx, opts, attach)
-}
-func (a *App) enterExistingTerminal(ctx context.Context, opts ResolveOptions, attach bool) (TerminalResult, error) {
-	return a.terminalService().EnterExisting(ctx, opts, attach)
-}
 func (a *App) CloseTerminal(ctx context.Context, opts ResolveOptions) (TerminalCloseResult, error) {
 	m, operation, err := a.lockItemOperation(ctx, opts)
 	if err != nil {
@@ -82,9 +63,17 @@ func (a *App) CloseTerminal(ctx context.Context, opts ResolveOptions) (TerminalC
 	return a.terminalService().Close(ctx, opts)
 }
 func (a *App) ensureTerminalWorkspaceWithEnvironment(ctx context.Context, opts ResolveOptions, m model.Manifest, createCheckout bool, environment map[string]string, scrub []string) (TerminalResult, error) {
-	return a.terminalService().EnsureForManifestWithEnvironmentAndScrub(ctx, opts, m, createCheckout, environment, scrub)
+	return a.terminalService().EnsureForManifest(ctx, opts, m, createCheckout, environment, scrub)
 }
 func (a *App) tmuxSpecWithEnvironmentAndScrub(m model.Manifest, environment map[string]string, scrub []string) tmuxpkg.SessionSpec {
-	return a.terminalService().SpecWithEnvironmentAndScrub(m, environment, scrub)
+	return a.terminalService().Spec(m, environment, scrub)
 }
 func inTmux(env map[string]string) bool { return terminaladapter.InTmux(env) }
+
+func (a *App) tmuxTerminalExists(ctx context.Context, m model.Manifest) bool {
+	if a.Tmux == nil {
+		return false
+	}
+	exists, err := a.Tmux.HasSession(ctx, m.TerminalSessionName())
+	return err == nil && exists
+}

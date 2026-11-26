@@ -13,12 +13,6 @@ type historyBackend interface {
 	History(context.Context, string, string) (driverprotocol.History, error)
 }
 
-// ConversationHistory reads the canonical primary conversation through its
-// driver. Reading neither materializes a checkout nor starts a runtime.
-func (a *App) ConversationHistory(ctx context.Context, opts ResolveOptions, leaf string) (driverprotocol.History, error) {
-	return a.conversationHistory(ctx, opts, leaf, "")
-}
-
 // ConversationHistoryPage reads an older page pinned to the selected native branch.
 func (a *App) ConversationHistoryPage(ctx context.Context, opts ResolveOptions, leaf, before string) (driverprotocol.History, error) {
 	return a.conversationHistory(ctx, opts, leaf, before)

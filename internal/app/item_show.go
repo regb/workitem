@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	itemcore "github.com/regb/workitem/internal/app/core/item"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -77,10 +76,4 @@ func (a *App) showRepository(ctx context.Context, m model.Manifest) *ShowReposit
 		view.Ahead, view.Behind = &ahead, &behind
 	}
 	return view
-}
-
-type WorkItemEventsResult = itemcore.EventsResult
-
-func (a *App) WorkItemEvents(ctx context.Context, opts ResolveOptions) (WorkItemEventsResult, error) {
-	return a.itemService().Events(ctx, opts)
 }

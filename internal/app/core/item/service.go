@@ -14,11 +14,8 @@ import (
 
 type Store interface {
 	Ensure() error
-	CreateItem(context.Context, model.Manifest, ...model.Event) error
-	RemoveItem(string) error
 	SaveManifest(context.Context, model.Manifest) error
 	AppendEvent(context.Context, string, model.Event) error
-	ReadEvents(string) ([]model.Event, error)
 	ListManifests() ([]model.Manifest, []error)
 	ItemDir(string) string
 }
@@ -59,7 +56,6 @@ type NewOptions struct {
 	Base             string
 	CWD              string
 	Env              map[string]string
-	PrepareOnly      bool
 	Agent            string
 	AgentSettings    map[string]string
 }
@@ -69,7 +65,6 @@ type NewResult struct {
 	ItemDir     string         `json:"item_dir"`
 	Warnings    []string       `json:"warnings"`
 	Description string         `json:"-"`
-	CreateEvent model.Event    `json:"-"`
 }
 
 type ShowResult struct {
@@ -96,12 +91,6 @@ type StateTransitionResult struct {
 	Warnings      []string       `json:"warnings"`
 }
 
-type StateResult struct {
-	WorkItemID string         `json:"work_item_id"`
-	State      string         `json:"state"`
-	Manifest   model.Manifest `json:"manifest"`
-}
-
 type LabelResult struct {
 	WorkItemID string         `json:"work_item_id"`
 	Labels     []string       `json:"labels"`
@@ -119,11 +108,9 @@ type DeepWorkResult struct {
 	Warnings   []string       `json:"warnings"`
 }
 
-type EventsResult struct {
-	WorkItemID string        `json:"work_item_id"`
-	Events     []model.Event `json:"events"`
-}
-
+// NewWorkItem prepares a new item: its identity, slug, branch, labels and
+// base. It writes nothing; the caller persists the item (the daemon through
+// the coordinator).
 func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, error) {
 	if s == nil || s.store == nil || s.git == nil {
 		return NewResult{}, fmt.Errorf("item service is not fully configured")
@@ -226,19 +213,7 @@ func (s *Service) NewWorkItem(ctx context.Context, opts NewOptions) (NewResult, 
 		m.Agent = "default"
 	}
 	m.AgentSettings = opts.AgentSettings
-	createEvent := model.NewEventFrom(ctx, now, "work_item.created", map[string]any{"title": title, "slug": slug, "workspace_kind": checkout.Specification.Kind})
-	if opts.PrepareOnly {
-		return NewResult{Manifest: m, ItemDir: s.store.ItemDir(id), Warnings: warnings, Description: opts.Description, CreateEvent: createEvent}, nil
-	}
-	if err = s.store.CreateItem(ctx, m, createEvent); err != nil {
-		return NewResult{}, err
-	}
-	path := filepath.Join(s.store.ItemDir(id), model.DescriptionFilename)
-	if err = os.WriteFile(path, []byte(opts.Description), 0600); err != nil {
-		_ = s.store.RemoveItem(id)
-		return NewResult{}, fmt.Errorf("write description file: %w", err)
-	}
-	return NewResult{Manifest: m, ItemDir: s.store.ItemDir(id), Warnings: warnings}, nil
+	return NewResult{Manifest: m, ItemDir: s.store.ItemDir(id), Warnings: warnings, Description: opts.Description}, nil
 }
 
 func itemDefaultLabelsFromEnv(env map[string]string) ([]string, error) {
@@ -269,10 +244,6 @@ func (s *Service) Show(ctx context.Context, opts contract.ResolveOptions) (ShowR
 		return ShowResult{}, fmt.Errorf("read description file: %w", err)
 	}
 	return ShowResult{Manifest: m, Description: string(b), ItemDir: s.store.ItemDir(m.ID)}, nil
-}
-
-func (s *Service) UniqueSlug(base string) (string, error) {
-	return s.chooseSlug("", base)
 }
 
 func (s *Service) chooseSlug(explicit, title string) (string, error) {

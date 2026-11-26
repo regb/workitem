@@ -15,7 +15,7 @@ import (
 )
 
 func TestAttentionCommandsReadCompactProjectionWithoutHistoryOrConversation(t *testing.T) {
-	for _, command := range []string{"read", "unread", "defer", "activity"} {
+	for _, command := range []string{"read", "unread", "defer"} {
 		for _, unavailable := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/unavailable=%t", command, unavailable), func(t *testing.T) {
 				ctx := context.Background()
@@ -23,14 +23,9 @@ func TestAttentionCommandsReadCompactProjectionWithoutHistoryOrConversation(t *t
 				a := newTestApp(native, newFakeGit(t))
 				now := testutil.Time()
 				a.Clock = fixedClock{now}
-				created, err := a.NewWorkItem(ctx, app.NewWorkItemOptions{Title: "Projected attention", CWD: t.TempDir()})
-				if err != nil {
-					t.Fatal(err)
-				}
-				opts := app.ResolveOptions{Selector: created.Manifest.ID}
-				if _, err := a.SetWorkItemState(ctx, opts, model.StateActive, false); err != nil {
-					t.Fatal(err)
-				}
+				created := createItem(t, a, app.NewWorkItemOptions{Title: "Projected attention"})
+				opts := app.ResolveOptions{Selector: created.ID}
+				activateItem(t, a, created.ID)
 				tracked := &navigationStore{Store: native}
 				a.Store = tracked
 				a.ConversationProjectionObserver = func(context.Context, model.Manifest, time.Time) (app.ConversationStatus, []string) {
@@ -42,7 +37,7 @@ func TestAttentionCommandsReadCompactProjectionWithoutHistoryOrConversation(t *t
 				calls := 0
 				a.AttentionActivityReader = func(_ context.Context, id string) (app.AttentionActivity, error) {
 					calls++
-					if id != created.Manifest.ID {
+					if id != created.ID {
 						t.Fatal("read another item")
 					}
 					if unavailable {
@@ -72,12 +67,6 @@ func TestAttentionCommandsReadCompactProjectionWithoutHistoryOrConversation(t *t
 						t.Fatal(err)
 					}
 					activity, warnings = result.Activity, result.Warnings
-				case "activity":
-					result, err := a.WorkItemActivity(ctx, opts)
-					if err != nil {
-						t.Fatal(err)
-					}
-					activity, warnings = result.Activity, result.Warnings
 				}
 				if calls != 1 || tracked.historyReads != 0 {
 					t.Fatalf("query did not use exactly one projection read: %d, history %d", calls, tracked.historyReads)
@@ -102,7 +91,7 @@ func TestAttentionCommandsReadCompactProjectionWithoutHistoryOrConversation(t *t
 				if !reflect.DeepEqual(activity, expected) {
 					t.Fatalf("activity = %+v, want %+v", activity, expected)
 				}
-				events, err := native.ReadEvents(created.Manifest.ID)
+				events, err := native.ReadEvents(created.ID)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -112,11 +101,7 @@ func TestAttentionCommandsReadCompactProjectionWithoutHistoryOrConversation(t *t
 						markers++
 					}
 				}
-				want := 1
-				if command == "activity" {
-					want = 0
-				}
-				if markers != want {
+				if markers != 1 {
 					t.Fatal("lost or duplicated mutation", markers)
 				}
 			})
@@ -129,15 +114,12 @@ func TestReadResultDoesNotOverwriteNewerProjectedMarker(t *testing.T) {
 	a := newTestApp(native, newFakeGit(t))
 	now := testutil.Time()
 	a.Clock = fixedClock{now}
-	created, err := a.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Concurrent read", CWD: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
+	created := createItem(t, a, app.NewWorkItemOptions{Title: "Concurrent read"})
 	later := now.Add(time.Minute)
 	a.AttentionActivityReader = func(context.Context, string) (app.AttentionActivity, error) {
 		return app.AttentionActivity{LastReadAt: &later}, nil
 	}
-	result, err := a.MarkRead(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID})
+	result, err := a.MarkRead(context.Background(), app.ResolveOptions{Selector: created.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

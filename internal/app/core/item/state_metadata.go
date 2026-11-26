@@ -10,116 +10,6 @@ import (
 	"github.com/regb/workitem/internal/model"
 )
 
-func (s *Service) State(ctx context.Context, opts contract.ResolveOptions) (StateResult, error) {
-	m, err := s.resolve(ctx, opts)
-	if err != nil {
-		return StateResult{}, err
-	}
-	return StateResult{WorkItemID: m.ID, State: m.State, Manifest: m}, nil
-}
-
-func (s *Service) SetState(ctx context.Context, opts contract.ResolveOptions, target string, force bool, maxActive int) (StateTransitionResult, error) {
-	target, err := model.NormalizeStateInput(target)
-	if err != nil {
-		return StateTransitionResult{}, err
-	}
-	switch target {
-	case model.StateActive:
-		return s.TransitionState(ctx, opts, target, "work_item.state_set", force, maxActive)
-	case model.StateBacklog:
-		m, err := s.resolve(ctx, opts)
-		if err != nil {
-			return StateTransitionResult{}, err
-		}
-		if m.State == model.StateClosed {
-			return s.restoreArchived(ctx, m)
-		}
-		return s.TransitionState(ctx, opts, target, "work_item.state_set", force, maxActive)
-	default:
-		return s.closeState(ctx, opts, model.ResolutionCompleted)
-	}
-}
-
-func (s *Service) restoreArchived(ctx context.Context, m model.Manifest) (StateTransitionResult, error) {
-	previous := m.State
-	if m.State != model.StateClosed {
-		return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Manifest: m}, nil
-	}
-	slug, err := s.UniqueSlug(model.Slugify(m.Title))
-	if err != nil {
-		return StateTransitionResult{}, err
-	}
-	now := s.now()
-	m.Slug, m.State, m.Resolution, m.StateChangedAt, m.UpdatedAt = slug, model.StateBacklog, "", now, now
-	if err := s.store.SaveManifest(ctx, m); err != nil {
-		return StateTransitionResult{}, err
-	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "work_item.state_set", map[string]any{"previous_state": previous, "new_state": m.State, "slug": slug, "workspace_unchanged": true}))
-	return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Changed: true, Manifest: m}, nil
-}
-
-func (s *Service) closeState(ctx context.Context, opts contract.ResolveOptions, resolution string) (StateTransitionResult, error) {
-	m, err := s.resolve(ctx, opts)
-	if err != nil {
-		return StateTransitionResult{}, err
-	}
-	previous := m.State
-	if previous == model.StateClosed {
-		return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Manifest: m}, nil
-	}
-	now, previousSlug := s.now(), m.Slug
-	m.State, m.Slug, m.Resolution, m.Blockers, m.StateChangedAt, m.UpdatedAt = model.StateClosed, "", resolution, nil, now, now
-	if err := s.store.SaveManifest(ctx, m); err != nil {
-		return StateTransitionResult{}, err
-	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "work_item.state_set", map[string]any{"previous_state": previous, "new_state": m.State, "previous_slug": previousSlug, "resolution": resolution, "workspace_unchanged": true}))
-	return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Changed: true, Manifest: m}, nil
-}
-
-func (s *Service) TransitionState(ctx context.Context, opts contract.ResolveOptions, target, eventType string, force bool, maxActive int) (StateTransitionResult, error) {
-	m, err := s.resolve(ctx, opts)
-	if err != nil {
-		return StateTransitionResult{}, err
-	}
-	if m.State == model.StateClosed {
-		return StateTransitionResult{}, fmt.Errorf("work item %s is closed; run `wi state set backlog --item %s` before changing it", m.ID, m.ID)
-	}
-	previous := m.State
-	capacity := s.DeepWorkCapacity(maxActive)
-	if previous == target {
-		return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Manifest: m, DeepWork: m.DeepWork, Capacity: &capacity}, nil
-	}
-	if previous == model.StateBacklog && target != model.StateActive {
-		return StateTransitionResult{}, fmt.Errorf("cannot move backlog item directly to %s; run `wi start` first", target)
-	}
-	valid := target == model.StateActive && previous == model.StateBacklog ||
-		target == model.StateBacklog && previous == model.StateActive
-	if !valid {
-		return StateTransitionResult{}, fmt.Errorf("invalid state transition %s -> %s", previous, target)
-	}
-	if m.DeepWork && previous == model.StateBacklog && target == model.StateActive && capacity.Active >= capacity.Limit && !force {
-		return StateTransitionResult{}, capacityError(m, capacity)
-	}
-	now := s.now()
-	m.State, m.StateChangedAt, m.UpdatedAt = target, now, now
-	if err := s.store.SaveManifest(ctx, m); err != nil {
-		return StateTransitionResult{}, err
-	}
-	data := map[string]any{"previous_state": previous, "new_state": target, "deep_work": m.DeepWork, "active_before": capacity.Active, "limit": capacity.Limit, "forced": force}
-	if eventType == "work_item.state_set" {
-		data["workspace_unchanged"] = true
-	}
-	if force && m.DeepWork && previous == model.StateBacklog {
-		_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "deep_work_limit.overridden", data))
-	}
-	_ = s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, eventType, data))
-	return StateTransitionResult{WorkItemID: m.ID, PreviousState: previous, State: m.State, Changed: true, Manifest: m, DeepWork: m.DeepWork, Capacity: &capacity}, nil
-}
-
-func capacityError(m model.Manifest, capacity Capacity) error {
-	return fmt.Errorf("cannot activate %q. Deep work active limit reached: %d/%d. Currently active: %s. Use --force to activate this work item anyway", m.Title, capacity.Active, capacity.Limit, strings.Join(capacity.ItemIDs, ", "))
-}
-
 func (s *Service) DeepWorkCapacity(maxActive int) Capacity {
 	if maxActive < 0 {
 		maxActive = 0
@@ -208,18 +98,6 @@ func (s *Service) ListLabels(ctx context.Context, opts contract.ResolveOptions) 
 		return LabelResult{}, err
 	}
 	return LabelResult{WorkItemID: m.ID, Labels: append([]string{}, m.Labels...), Manifest: m}, nil
-}
-
-func (s *Service) Events(ctx context.Context, opts contract.ResolveOptions) (EventsResult, error) {
-	m, err := s.resolve(ctx, opts)
-	if err != nil {
-		return EventsResult{}, err
-	}
-	events, err := s.store.ReadEvents(m.ID)
-	if err != nil {
-		return EventsResult{}, err
-	}
-	return EventsResult{WorkItemID: m.ID, Events: events}, nil
 }
 
 func (s *Service) AbsPath(itemID, rel string) (string, error) {

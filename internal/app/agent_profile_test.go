@@ -32,36 +32,4 @@ func TestRemovedProfileExplainsHowToMoveTheItem(t *testing.T) {
 	if _, err := a.AgentSettings(ctx, ResolveOptions{Selector: m.ID}); !errors.As(err, &missing) {
 		t.Fatalf("settings err = %v", err)
 	}
-
-	// Another driver cannot resume the conversation.
-	if _, err := a.SetAgentProfile(ctx, ResolveOptions{Selector: m.ID}, "claude", nil); err == nil || !strings.Contains(err.Error(), `driver "pi"`) {
-		t.Fatalf("other driver err = %v", err)
-	}
-	moved, err := a.SetAgentProfile(ctx, ResolveOptions{Selector: m.ID}, "pi-work", map[string]string{"reasoning": "high"})
-	if err != nil || moved.Agent != "pi-work" || moved.AgentSettings["reasoning"] != "high" {
-		t.Fatalf("moved=%+v err=%v", moved, err)
-	}
-	if err := a.ValidateItemAgentConfig(ctx, ResolveOptions{Selector: m.ID}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := a.SetAgentProfile(ctx, ResolveOptions{Selector: m.ID}, "missing", nil); err == nil {
-		t.Fatal("moved to an unconfigured profile")
-	}
-}
-
-// Before the item has a conversation, any profile can take it.
-func TestItemWithoutConversationCanMoveToAnyDriver(t *testing.T) {
-	a, _, m := settingsApp(t)
-	ctx := context.Background()
-	a.StaticAgentProfiles.Profiles = append(a.StaticAgentProfiles.Profiles, model.AgentProfile{Name: "claude", Driver: "claude"})
-	a.DriversConfig["claude"] = config.DriverDefinitionConfig{}
-	a.ConversationBackends["claude"] = &settingsBackend{}
-	m.PrimaryConversation = nil
-	if err := a.Store.SaveManifest(ctx, m); err != nil {
-		t.Fatal(err)
-	}
-	moved, err := a.SetAgentProfile(ctx, ResolveOptions{Selector: m.ID}, "claude", nil)
-	if err != nil || moved.Agent != "claude" {
-		t.Fatalf("moved=%+v err=%v", moved, err)
-	}
 }

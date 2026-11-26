@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	attentioncore "github.com/regb/workitem/internal/app/core/attention"
-	"github.com/regb/workitem/internal/model"
 )
 
 // RecordAttentionDefer is a core attention primitive. It records a priority
@@ -25,28 +24,6 @@ func (a *App) RecordAttentionDefer(ctx context.Context, opts ResolveOptions) (De
 	activity.LastDeferredAt = latestAttentionTime(activity.LastDeferredAt, res.DeferredAt)
 	return DeferResult{WorkItemID: res.WorkItemID, DeferredAt: res.DeferredAt,
 		Activity: activity, Manifest: res.Manifest, Warnings: warnings}, nil
-}
-
-// DeferWorkItem validates live NEEDS ATTENTION eligibility before recording.
-// It is used by tmux navigation; the public core command calls
-// RecordAttentionDefer directly.
-func (a *App) DeferWorkItem(ctx context.Context, opts ResolveOptions) (DeferResult, error) {
-	m, err := a.ResolveItem(ctx, opts)
-	if err != nil {
-		return DeferResult{}, err
-	}
-	if m.State != model.StateActive {
-		return DeferResult{}, &NotNeedsAttentionError{WorkItemID: m.ID, State: m.State}
-	}
-	status, err := a.AgentStatus(ctx, AgentStatusOptions{ResolveOptions: ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env}})
-	if err != nil {
-		return DeferResult{}, err
-	}
-	agent := a.workAgentStatus(status)
-	if agent.Bucket != "needs_attention" || (status.Worktree != nil && status.Worktree.Status == "problem") {
-		return DeferResult{}, &NotNeedsAttentionError{WorkItemID: m.ID, State: m.State, Agent: status.Status, Worktree: worktreeStatusName(status.Worktree)}
-	}
-	return a.RecordAttentionDefer(ctx, ResolveOptions{Selector: m.ID, CWD: opts.CWD, Env: opts.Env})
 }
 
 // MarkRead records that the operator has seen the agent's responses so far.

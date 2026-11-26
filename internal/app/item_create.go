@@ -26,12 +26,6 @@ type NewWorkItemOptions struct {
 	AgentSettings map[string]string
 }
 
-type NewWorkItemResult struct {
-	Manifest model.Manifest `json:"manifest"`
-	ItemDir  string         `json:"item_dir"`
-	Warnings []string       `json:"warnings"`
-}
-
 type PreparedNewWorkItem struct {
 	Manifest    model.Manifest
 	ItemDir     string
@@ -55,38 +49,12 @@ func (a *App) PrepareNewWorkItem(ctx context.Context, opts NewWorkItemOptions) (
 		Title: opts.Title, Untitled: opts.Untitled, Slug: opts.Slug, Description: opts.Description, Agent: agentName, AgentSettings: settings,
 		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
 		DeepWork: opts.DeepWork, Base: opts.Base,
-		CWD: opts.CWD, Env: opts.Env, PrepareOnly: true, Repository: opts.Repository, RepositoryLabels: opts.RepositoryLabels,
+		CWD: opts.CWD, Env: opts.Env, Repository: opts.Repository, RepositoryLabels: opts.RepositoryLabels,
 	})
 	if err != nil {
 		return PreparedNewWorkItem{}, err
 	}
 	return PreparedNewWorkItem{Manifest: res.Manifest, ItemDir: res.ItemDir, Warnings: res.Warnings, Description: res.Description}, nil
-}
-
-// NewWorkItem creates only the canonical durable work-item record. It does not
-// materialize a worktree, terminal, conversation, or agent runtime.
-func (a *App) NewWorkItem(ctx context.Context, opts NewWorkItemOptions) (NewWorkItemResult, error) {
-	if a == nil || a.Store == nil || a.Git == nil {
-		return NewWorkItemResult{}, fmt.Errorf("app is not fully configured")
-	}
-	agentName, err := a.resolveAgentName(opts.Agent)
-	if err != nil {
-		return NewWorkItemResult{}, err
-	}
-	settings, _, err := mergeSettings(nil, opts.AgentSettings)
-	if err != nil {
-		return NewWorkItemResult{}, err
-	}
-	res, err := a.itemService().NewWorkItem(ctx, itemcore.NewOptions{
-		Title: opts.Title, Untitled: opts.Untitled, Slug: opts.Slug, Description: opts.Description, Agent: agentName, AgentSettings: settings,
-		Labels: opts.Labels, NoDefaultLabels: opts.NoDefaultLabels,
-		DeepWork: opts.DeepWork, Base: opts.Base,
-		CWD: opts.CWD, Env: opts.Env, Repository: opts.Repository, RepositoryLabels: opts.RepositoryLabels,
-	})
-	if err != nil {
-		return NewWorkItemResult{}, err
-	}
-	return NewWorkItemResult{Manifest: res.Manifest, ItemDir: res.ItemDir, Warnings: res.Warnings}, nil
 }
 
 // agentProfileName resolves omitted choices and historical item records that

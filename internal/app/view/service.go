@@ -231,10 +231,6 @@ func matchesLabels(labels []string, rules map[string]bool) bool {
 	}
 	return true
 }
-func ProjectItem(m model.Manifest, folders int) Item {
-	return makeItem(m, false, folders)
-}
-
 func makeItem(m model.Manifest, full bool, folders int) Item {
 	return makeItemAt(m, full, folders, time.Now())
 }

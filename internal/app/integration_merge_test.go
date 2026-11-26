@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/app"
 	reviewcore "github.com/regb/workitem/internal/app/core/review"
 	gitpkg "github.com/regb/workitem/internal/git"
@@ -226,27 +227,18 @@ func setupMergeWorkItem(t *testing.T) (*app.App, string, string, string) {
 	application := newTestApp(st, gitpkg.New("git"))
 	application.Tmux = &fakeTmux{}
 	application.Clock = fixedClock{testutil.Time()}
-	ids := []string{testutil.ID(t, 91), testutil.ID(t, 92)}
-	idx := 0
-	application.NewID = func() (string, error) { id := ids[idx]; idx++; return id, nil }
-	created, err := application.NewWorkItem(context.Background(), app.NewWorkItemOptions{Title: "Merge Feature", CWD: repo})
-	if err != nil {
-		t.Fatal(err)
-	}
-	started, err := application.StartWorkItem(context.Background(), app.ResolveOptions{Selector: created.Manifest.ID, CWD: repo}, false, false)
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := started.Workspace.Checkout.Claim.Path
+	sequenceIDs(t, application, testutil.ID(t, 91), testutil.ID(t, 92))
+	created, _ := startItem(t, application, app.NewWorkItemOptions{Title: "Merge Feature", CWD: repo}, agent.ModeTUI)
+	source := created.Checkout.Claim.Path
 	runMergeGit(t, source, "config", "user.email", "test@example.com")
 	runMergeGit(t, source, "config", "user.name", "Test User")
-	m, _ := application.Store.LoadManifest(created.Manifest.ID)
+	m, _ := application.Store.LoadManifest(created.ID)
 	m.Repository.CurrentRoot = filepath.Join(repo, ".git")
 	if err := application.Store.SaveManifest(context.Background(), m); err != nil {
 		t.Fatal(err)
 	}
 	application.ReviewRecords = &mergeRecords{state: reviewcore.New(m.ID, m.Repository.ID)}
-	return application, repo, source, created.Manifest.ID
+	return application, repo, source, created.ID
 }
 
 func writeMergeFile(t *testing.T, root, name, content string) {

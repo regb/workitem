@@ -18,28 +18,6 @@ type CheckoutCreateResult struct {
 	Warnings   []string       `json:"warnings"`
 }
 
-type CheckoutRemoveResult struct {
-	WorkItemID string         `json:"work_item_id"`
-	Checkout   model.Checkout `json:"checkout"`
-	LastHead   string         `json:"last_head"`
-	Dirty      bool           `json:"dirty"`
-	Manifest   model.Manifest `json:"manifest"`
-	Warnings   []string       `json:"warnings"`
-}
-
-type CheckoutStatusResult struct {
-	WorkItemID      string         `json:"work_item_id"`
-	Checkout        model.Checkout `json:"checkout"`
-	CurrentHead     string         `json:"current_head"`
-	ExpectedBranch  string         `json:"expected_branch,omitempty"`
-	CurrentBranch   string         `json:"current_branch,omitempty"`
-	BranchMatches   bool           `json:"branch_matches"`
-	BranchMismatch  bool           `json:"branch_mismatch,omitempty"`
-	Dirty           bool           `json:"dirty"`
-	StatusPorcelain string         `json:"status_porcelain"`
-	Warnings        []string       `json:"warnings"`
-}
-
 type EnsureResult struct {
 	WorkItemID string
 	Manifest   model.Manifest
@@ -97,70 +75,6 @@ func (s *Service) CheckoutCreate(ctx context.Context, opts contract.ResolveOptio
 	return CheckoutCreateResult{WorkItemID: m.ID, Checkout: m.Checkout, Source: assigned.Source, Manifest: m, Warnings: warnings}, nil
 }
 
-func (s *Service) CheckoutRemove(ctx context.Context, opts contract.ResolveOptions) (CheckoutRemoveResult, error) {
-	m, err := s.resolve(ctx, opts)
-	if err != nil {
-		return CheckoutRemoveResult{}, err
-	}
-	warnings := []string{}
-	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
-		warnings = append(warnings, "checkout is already absent")
-		return CheckoutRemoveResult{WorkItemID: m.ID, Checkout: m.Checkout, Manifest: m, Warnings: warnings}, nil
-	}
-	previousClaim := *m.Checkout.Claim
-	previousPath := previousClaim.Path
-	released, err := s.releaseCheckout(ctx, m)
-	if err != nil {
-		return CheckoutRemoveResult{}, err
-	}
-	m, warnings = released.Manifest, append(warnings, released.Warnings...)
-	now := s.now()
-	m.UpdatedAt = now
-	if err := s.store.SaveManifest(ctx, m); err != nil {
-		return CheckoutRemoveResult{}, err
-	}
-	if err := s.store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "checkout.released", map[string]any{"claim_id": previousClaim.ID, "claim_generation": previousClaim.Generation, "executor": previousClaim.Executor, "path": previousPath, "last_head": released.LastHead, "slot": released.Slot})); err != nil {
-		warnings = append(warnings, "could not append checkout.released event: "+err.Error())
-	}
-	return CheckoutRemoveResult{WorkItemID: m.ID, Checkout: m.Checkout, LastHead: released.LastHead, Dirty: released.Dirty, Manifest: m, Warnings: warnings}, nil
-}
-
-func (s *Service) CheckoutStatus(ctx context.Context, opts contract.ResolveOptions) (CheckoutStatusResult, error) {
-	m, err := s.resolve(ctx, opts)
-	if err != nil {
-		return CheckoutStatusResult{}, err
-	}
-	res := CheckoutStatusResult{WorkItemID: m.ID, Checkout: m.Checkout, ExpectedBranch: ExpectedBranch(m), Warnings: []string{}}
-	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
-		res.Warnings = append(res.Warnings, "checkout is absent")
-		return res, nil
-	}
-	if _, err := os.Stat(m.Checkout.Claim.Path); err != nil {
-		res.Warnings = append(res.Warnings, "checkout path is unavailable: "+err.Error())
-		return res, nil
-	}
-	if branch, err := s.git.CurrentBranch(ctx, m.Checkout.Claim.Path); err == nil {
-		res.CurrentBranch, res.BranchMatches = branch, res.ExpectedBranch != "" && branch == res.ExpectedBranch
-		res.BranchMismatch = res.ExpectedBranch != "" && branch != res.ExpectedBranch
-		if res.BranchMismatch {
-			res.Warnings = append(res.Warnings, fmt.Sprintf("checkout branch mismatch: expected %s, found %s", res.ExpectedBranch, branch))
-		}
-	} else {
-		res.Warnings = append(res.Warnings, "could not inspect checkout branch: "+err.Error())
-	}
-	if head, err := s.git.Head(ctx, m.Checkout.Claim.Path); err == nil {
-		res.CurrentHead = head
-	} else {
-		res.Warnings = append(res.Warnings, "could not resolve checkout HEAD: "+err.Error())
-	}
-	if status, err := s.git.StatusPorcelain(ctx, m.Checkout.Claim.Path); err == nil {
-		res.StatusPorcelain, res.Dirty = status, strings.TrimSpace(status) != ""
-	} else {
-		res.Warnings = append(res.Warnings, "could not inspect checkout status: "+err.Error())
-	}
-	return res, nil
-}
-
 func (s *Service) Ensure(ctx context.Context, opts contract.ResolveOptions) (EnsureResult, error) {
 	m, err := s.resolve(ctx, opts)
 	if err != nil {
@@ -207,16 +121,6 @@ func (s *Service) EnsureCheckout(ctx context.Context, opts contract.ResolveOptio
 		warnings = append(warnings, err.Error())
 	}
 	return m, warnings, nil
-}
-
-func (s *Service) EnsureUsable(m model.Manifest) error {
-	if !m.Checkout.Present() || m.Checkout.Claim == nil || m.Checkout.Claim.Path == "" {
-		return fmt.Errorf("checkout is absent; run `wi workspace ensure` first")
-	}
-	if _, err := os.Stat(m.Checkout.Claim.Path); err != nil {
-		return fmt.Errorf("checkout path is unavailable: %w", err)
-	}
-	return nil
 }
 
 func (s *Service) Release(ctx context.Context, opts contract.ResolveOptions) (ReleaseResult, error) {
@@ -327,8 +231,4 @@ func validateCheckoutKind(checkout model.Checkout) error {
 
 func (s *Service) ReleaseCheckout(ctx context.Context, m model.Manifest) (CheckoutRelease, error) {
 	return s.releaseCheckout(ctx, m)
-}
-
-func (s *Service) EnsureBranch(ctx context.Context, m model.Manifest) error {
-	return s.ensureCheckoutBranch(ctx, m)
 }

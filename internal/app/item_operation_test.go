@@ -46,19 +46,10 @@ func TestResourceAndLifecycleOperationsShareTheItemLock(t *testing.T) {
 			_, err := a.Close(ctx, opts, CloseOptions{Resolution: model.ResolutionCompleted})
 			return err
 		},
-		"shelve": func(ctx context.Context) error { _, err := a.Shelve(ctx, opts, false); return err },
-		"state": func(ctx context.Context) error {
-			_, err := a.SetWorkItemState(ctx, opts, model.StateClosed, false)
-			return err
-		},
+		"shelve":         func(ctx context.Context) error { _, err := a.Shelve(ctx, opts, false); return err },
 		"ensure":         func(ctx context.Context) error { _, err := a.EnsureWorkItemWorkspace(ctx, opts); return err },
 		"release":        func(ctx context.Context) error { _, err := a.ReleaseWorkItemWorkspace(ctx, opts); return err },
-		"terminal":       func(ctx context.Context) error { _, err := a.EnsureTerminal(ctx, opts); return err },
 		"terminal-close": func(ctx context.Context) error { _, err := a.CloseTerminal(ctx, opts); return err },
-		"delete": func(ctx context.Context) error {
-			_, err := a.DeleteWorkItems(ctx, DeleteWorkItemsOptions{ResolveOptions: opts})
-			return err
-		},
 	}
 	for name, call := range cases {
 		t.Run(name, func(t *testing.T) {

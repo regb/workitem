@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	workspacecore "github.com/regb/workitem/internal/app/core/workspace"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -129,17 +128,9 @@ func (a *App) commitChangesForClose(ctx context.Context, m model.Manifest, opts 
 	return append(warnings, removed...), err
 }
 
-func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, resolution string, env map[string]string, force bool, warnings []string, deferTerminalClose ...bool) (StateTransitionResult, error) {
+func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, resolution string, env map[string]string, force bool, warnings []string) (StateTransitionResult, error) {
 	previousClaim := m.Checkout.Claim
-	workspaceChanged := false
-	deferredSession := ""
-	var workspaceWarnings []string
-	var err error
-	if len(deferTerminalClose) > 0 && deferTerminalClose[0] {
-		m, workspaceWarnings, workspaceChanged, deferredSession, err = a.releaseWorkspaceBeforeDeferredTerminalClose(ctx, m)
-	} else {
-		m, workspaceWarnings, workspaceChanged, err = a.closeWorkspace(ctx, m, force, env)
-	}
+	m, workspaceWarnings, workspaceChanged, err := a.closeWorkspace(ctx, m, force, env)
 	if err != nil {
 		return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Manifest: m, Warnings: append(warnings, workspaceWarnings...)}, fmt.Errorf("close not committed; external resources may already have changed: %w", err)
 	}
@@ -179,57 +170,7 @@ func (a *App) finishArchive(ctx context.Context, m model.Manifest, prevState, re
 	}
 	_ = a.Store.AppendEvent(ctx, m.ID, model.NewEventFrom(ctx, now, "work_item.closed", map[string]any{"previous_state": prevState, "new_state": m.State, "resolution": resolution, "previous_slug": previousSlug, "workspace_closed": workspaceChanged, "forced": force}))
 	warnings = append(warnings, workspaceWarnings...)
-	if deferredSession != "" {
-		if err := a.Tmux.KillSessionAsync(ctx, deferredSession); err != nil {
-			warnings = append(warnings, "item is closed, but the previous terminal could not be scheduled for closure: "+err.Error())
-		} else {
-			warnings = append(warnings, "scheduled previous terminal session for closure: "+deferredSession)
-			_ = a.Store.AppendEvent(ctx, m.ID, model.NewEvent(a.now(), "terminal.close_scheduled", "wi", map[string]any{"session": deferredSession, "reason": "lifecycle_cleanup"}))
-			if err := a.Store.RemoveTerminalRuntime(ctx, m.ID); err != nil {
-				warnings = append(warnings, "could not remove terminal-runtime handle cache: "+err.Error())
-			}
-		}
-	}
 	return StateTransitionResult{WorkItemID: m.ID, PreviousState: prevState, State: m.State, Changed: true, Manifest: m, Warnings: warnings}, nil
-}
-
-// releaseWorkspaceBeforeDeferredTerminalClose is the special finalization path
-// used after tmux switch-client. The wi process still runs in the previous
-// pane, so killing that session synchronously would kill wi before it can save
-// archived state. Only reusable slots are eligible: releasing one updates the
-// durable assignment without deleting the process's current directory.
-func (a *App) releaseWorkspaceBeforeDeferredTerminalClose(ctx context.Context, m model.Manifest) (model.Manifest, []string, bool, string, error) {
-	warnings := []string{}
-	if runtime, err := a.Store.LoadAgentRuntime(m.ID); err != nil {
-		return m, warnings, false, "", err
-	} else if a.primaryAgentService().ObserveOwnership(runtime).ProcessAlive {
-		return m, warnings, false, "", fmt.Errorf("agent runtime %s is still active", runtime.ID)
-	}
-	removed, err := a.ensureCheckoutReleasable(ctx, m)
-	warnings = append(warnings, removed...)
-	if err != nil {
-		return m, warnings, false, "", err
-	}
-	if m.Checkout.Present() && m.Checkout.Claim != nil && !workspacecore.IsSlotPathName(m.Checkout.Claim.Path) {
-		return m, warnings, false, "", fmt.Errorf("cannot defer terminal closure for non-slot worktree %s", m.Checkout.Claim.Path)
-	}
-	session := strings.TrimSpace(m.TerminalSessionName())
-	if a.Tmux != nil && session != "" {
-		exists, err := a.Tmux.HasSession(ctx, session)
-		if err != nil {
-			return m, warnings, false, "", fmt.Errorf("could not inspect previous terminal before archiving: %w", err)
-		}
-		if !exists {
-			session = ""
-		}
-	}
-	hadCheckoutClaim := m.Checkout.Present() && m.Checkout.Claim != nil && m.Checkout.Claim.Path != ""
-	released, err := a.releaseCheckout(ctx, m)
-	if err != nil {
-		return m, warnings, false, "", err
-	}
-	warnings = append(warnings, released.Warnings...)
-	return released.Manifest, warnings, hadCheckoutClaim || session != "", session, nil
 }
 
 func (a *App) stopRuntimeForArchive(ctx context.Context, m model.Manifest, opts ResolveOptions, force bool) ([]string, error) {
