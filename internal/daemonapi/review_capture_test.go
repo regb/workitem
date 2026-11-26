@@ -3,6 +3,7 @@ package daemonapi_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,10 +14,14 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/apitest"
+	reviewcore "github.com/regb/workitem/internal/app/core/review"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/lock"
 	"github.com/regb/workitem/internal/model"
 )
+
+// White-box: automatic capture follows runtime events the daemon ingests,
+// and these tests inject events, record stores and Git; none has an API entry.
 
 func waitReviewRecord(t *testing.T, f *apitest.Fixture, item string, want func() bool) {
 	t.Helper()
@@ -32,7 +37,7 @@ func waitReviewRecord(t *testing.T, f *apitest.Fixture, item string, want func()
 func TestAutomaticReviewCapturesEveryModeAndRetainsNonblockingFailures(t *testing.T) {
 	for _, mode := range []string{"tui", "headless"} {
 		t.Run(mode, func(t *testing.T) {
-			f, item, ws := reviewWorkspace(t)
+			f, item, ws := workspacesCheckout(t)
 			ctx := context.Background()
 			claim := ws.Claim
 			runtime := model.AgentRuntime{ID: "runtime", WorkItemID: item, ConversationID: "conversation", Mode: mode, State: model.AgentRuntimeRunning, WorkspaceClaimID: claim.Id, WorkspaceClaimGeneration: uint64(claim.Generation), StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
@@ -61,7 +66,7 @@ func TestAutomaticReviewCapturesEveryModeAndRetainsNonblockingFailures(t *testin
 			if len(state.Revisions) != 1 {
 				t.Fatal("duplicate native event caused another capture")
 			}
-			gitdir := integrationGit(t, claim.Path, "rev-parse", "--absolute-git-dir")
+			gitdir := git(t, claim.Path, "rev-parse", "--absolute-git-dir")
 			if err := os.WriteFile(filepath.Join(gitdir, "MERGE_HEAD"), []byte(state.Revisions[0].Head+"\n"), 0600); err != nil {
 				t.Fatal(err)
 			}
@@ -109,7 +114,7 @@ func TestGitCaptureDoesNotHoldItemOrControllerAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f, item, ws := reviewWorkspace(t)
+	f, item, ws := workspacesCheckout(t)
 	ctx := context.Background()
 	body, _ := json.Marshal(coordinator.AgentObservation{WorkItemID: item, Status: "idle"})
 	if _, err := f.Core().Database().Commit(coordinator.Command{ID: "idle-observation", Type: "test", ItemID: item}, nil, []coordinator.ProjectionUpdate{{Projection: coordinator.AgentObservationProjection, Key: item, Value: body}}); err != nil {
@@ -182,5 +187,46 @@ func TestGitCaptureDoesNotHoldItemOrControllerAdmission(t *testing.T) {
 	_, err = f.Clients.Agents.SendMessage(admission, connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: "normal send", ClientMessageId: "send", Delivery: v1.Delivery_DELIVERY_PROMPT}))
 	if admission.Err() != nil {
 		t.Fatal("send was held by capture", err)
+	}
+}
+
+type failingReviewRecords struct {
+	inner interface {
+		LoadReview(context.Context, string) (reviewcore.State, error)
+		StoreReview(context.Context, reviewcore.State, uint64, string, string, map[string]string) error
+	}
+}
+
+func (f failingReviewRecords) LoadReview(ctx context.Context, item string) (reviewcore.State, error) {
+	return f.inner.LoadReview(ctx, item)
+}
+func (f failingReviewRecords) StoreReview(context.Context, reviewcore.State, uint64, string, string, map[string]string) error {
+	return errors.New("record write failed")
+}
+
+// A snapshot ref whose record failed to write is harmless: the next capture
+// needs no recovery.
+func TestUnrecordedSnapshotRefIsHarmlessAndNextCaptureNeedsNoRecovery(t *testing.T) {
+	f, item, ws := workspacesCheckout(t)
+	ctx := context.Background()
+	if err := os.WriteFile(filepath.Join(ws.Claim.Path, "work.txt"), []byte("work\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	f.App().ReviewRecords = failingReviewRecords{f.Core()}
+	if _, err := f.Clients.Reviews.CaptureReviewRevision(ctx, connect.NewRequest(&v1.CaptureReviewRevisionRequest{ItemId: item, CaptureId: "failed", ExpectedClaimId: ws.Claim.Id, ExpectedClaimGeneration: ws.Claim.Generation})); err == nil {
+		t.Fatal("failed record write succeeded")
+	}
+	state, err := f.Core().LoadReview(ctx, item)
+	if err != nil || len(state.Revisions) != 0 {
+		t.Fatal("partial record created", err)
+	}
+	m, _ := f.App().Store.LoadManifest(item)
+	if refs := git(t, m.Repository.OperationalRoot(), "for-each-ref", "--format=%(refname)", "refs/wi/review/"+item+"/snapshots/"); refs == "" {
+		t.Fatal("missing harmless unrecorded ref")
+	}
+	f.App().ReviewRecords = f.Core()
+	out, err := f.Clients.Reviews.CaptureReviewRevision(ctx, connect.NewRequest(&v1.CaptureReviewRevisionRequest{ItemId: item, CaptureId: "next", ExpectedClaimId: ws.Claim.Id, ExpectedClaimGeneration: ws.Claim.Generation}))
+	if err != nil || out.Msg.Revision.Id != "r1" {
+		t.Fatalf("orphan ref blocked next normal capture: %v %v", out, err)
 	}
 }

@@ -1,7 +1,10 @@
 package daemonapi
 
+// The job registry and its persistence: interrupted jobs after a restart.
+
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -122,4 +125,22 @@ func TestJobSummaryCorruptionFailsStartup(t *testing.T) {
 	if _, err := newPersistentJobRegistry(context.Background(), db); err == nil {
 		t.Fatal("malformed protobuf summary ignored")
 	}
+}
+
+// It asserts nothing itself: run under -race, it proves shutdown and new
+// jobs do not race, and without hanging that wait returns.
+func TestRegistryShutdownRacesWithNewJobs(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	registry := newJobRegistry(ctx)
+	var group sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			registry.start("race", "", "", func(ctx context.Context, _ *jobRun) error { <-ctx.Done(); return ctx.Err() })
+		}()
+	}
+	cancel()
+	registry.wait()
+	group.Wait()
 }

@@ -234,7 +234,8 @@ func settingAny(value *v1.SettingValue) any {
 		return int64(v.IntValue)
 	case *v1.SettingValue_ListValue:
 		if v.ListValue != nil {
-			return v.ListValue.Values
+			// An empty list is a list: never null, which the option refuses.
+			return append([]string{}, v.ListValue.Values...)
 		}
 	}
 	return nil

@@ -1,14 +1,13 @@
 package cli
 
 import (
-	"strings"
 	"testing"
 
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 )
 
-// An agent's new item is its item's; the user takes it, or hands it to
-// another item, with wi edit --owner. An agent cannot change owners.
+// The command line's owner flags: an agent's wi new delegates to its item,
+// --owner takes an item ID or "me". Ownership rules are the API suite's.
 func TestEditOwnerFromTheCommandLine(t *testing.T) {
 	f := newClientFixture(t)
 	parent, other := f.create(t, "Parent"), f.create(t, "Other")
@@ -26,18 +25,15 @@ func TestEditOwnerFromTheCommandLine(t *testing.T) {
 	}
 	f.cfg.API = operator
 	delete(f.cfg.Env, "WI_ID")
-	if strings.Contains(f.run(t, "list", "--no-agent"), "split-work") {
-		t.Fatal("a delegated item is in the user's list")
-	}
 	f.run(t, "edit", "--item", delegated.Item.Id, "--owner", other.Id)
 	var shown v1.GetItemResponse
 	f.decode(t, f.run(t, "show", delegated.Item.Id, "--json"), &shown)
 	if shown.Item.Owner != "item:"+other.Id {
 		t.Fatalf("handed to: %s", shown.Item.Owner)
 	}
-	f.run(t, "edit", "--item", delegated.Item.Id, "--owner", "me")
-	if !strings.Contains(f.run(t, "list", "--no-agent"), "split-work") {
-		t.Fatal("a taken item is not in the user's list")
+	f.decode(t, f.run(t, "edit", "--item", delegated.Item.Id, "--owner", "me", "--json"), &shown)
+	if shown.Item.Owner != "user:operator" {
+		t.Fatalf("taken by: %s", shown.Item.Owner)
 	}
 }
 

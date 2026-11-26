@@ -12,6 +12,9 @@ import (
 	"github.com/regb/workitem/internal/daemonapi"
 )
 
+// White-box: it holds a start job open through daemonapi hooks, which no
+// API request can do deterministically.
+//
 // While a job starts an item's agent, the item reads busy with the job's
 // phase, and change readers learn when it starts and ends: before the
 // runtime exists, nothing else knows the agent is coming.

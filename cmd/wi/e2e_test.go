@@ -136,6 +136,11 @@ func (f *binaryFixture) historyReady(item string, count int) {
 	apitest.WaitHistory(f.t, f.clients, item, count)
 }
 
+// TestCLIAPIEndToEnd proves what only the real binary can: daemon autostart,
+// one CLI walk that starts an agent and sends to it, the agent credential
+// files, the socket speaking Connect to curl, TUI agents in tmux, and a
+// daemon restart keeping state. Behaviour reachable through the API is
+// tested in internal/daemonapi.
 func TestCLIAPIEndToEnd(t *testing.T) {
 	f := newBinaryFixture(t)
 	var added v1.AddRepositoryResponse
@@ -149,76 +154,30 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	if len(listed.Items) != 1 || listed.Items[0].Id != item {
 		t.Fatal(listed.String())
 	}
-	for _, args := range [][]string{{"info", "socket"}, {"info", "config-file"}, {"config", "get", "plugins.setup.trust", "--origins"}, {"list", "--ids", "--no-agent"}, {"repo", "show", repo}} {
+	for _, args := range [][]string{{"info", "socket"}, {"info", "config-file"}, {"list", "--ids", "--no-agent"}, {"repo", "show", repo}} {
 		if len(f.run(args...)) == 0 {
 			t.Fatalf("missing human output: %v", args)
 		}
 	}
-	f.run("attention", "unread", item)
-	f.run("attention", "read", item)
-	f.run("note", "--item", item, "Durable RPC note")
-	var notes v1.ListNotesResponse
-	f.json(&notes, "notes", item)
-	if len(notes.Notes) != 1 {
-		t.Fatal(notes.String())
-	}
-	f.run("state", "set", "active", item)
-	var ensured v1.EnsureWorkspaceResponse
-	f.json(&ensured, "workspace", "ensure", item)
-	if ensured.Checkout.Claim == nil || ensured.Job.State != v1.JobState_JOB_STATE_SUCCEEDED {
-		t.Fatal(ensured.String())
-	}
-	f.run("workspace", "setup", item)
-	f.run("workspace", "status", item)
-	f.run("workspace", "release", item)
 	var started v1.CreateAndStartItemResponse
 	f.json(&started, "new", "--repo", repo, "--title", "API fake agent", "--start", "--agent-mode", "headless", "--prompt", "first prompt")
 	agentItem := started.Item.Id
 	f.historyReady(agentItem, 2)
 	first := f.idle(agentItem)
-	if first.Generation == 0 || first.Mode != v1.AgentMode_AGENT_MODE_HEADLESS {
-		t.Fatal(first.String())
-	}
 	if start := started.Job.GetAgentStart(); started.Job.GetState() != v1.JobState_JOB_STATE_SUCCEEDED || start.GetGeneration() != first.Generation || start.GetMode() != v1.AgentMode_AGENT_MODE_HEADLESS {
 		t.Fatal("start result", started.Job.String())
 	}
-	f.run("send", "--item", agentItem, "second prompt")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	send := exec.CommandContext(ctx, f.wi, "send", "--item", agentItem, "--stdin")
+	send.Env = f.env
+	send.Dir = f.root
+	send.Stdin = strings.NewReader("second prompt")
+	if out, err := send.CombinedOutput(); err != nil || !strings.Contains(string(out), "sent to") {
+		t.Fatalf("send: %v %s", err, out)
+	}
 	f.historyReady(agentItem, 4)
 	f.idle(agentItem)
-	history, err := f.clients.Agents.GetHistory(context.Background(), connect.NewRequest(&v1.GetHistoryRequest{ItemId: agentItem}))
-	if err != nil || len(history.Msg.Messages) < 4 {
-		t.Fatalf("history: %v %v", history, err)
-	}
-	f.cliControlCompatibility(agentItem)
-	f.run("agent", "settings", "set", "--item", agentItem, "--model", "test/model", "--reasoning", "low")
-	f.idle(agentItem)
-	settings, err := f.clients.Agents.GetAgentSettings(context.Background(), connect.NewRequest(&v1.GetAgentSettingsRequest{ItemId: agentItem}))
-	if err != nil || settings.Msg.Overrides["reasoning"] != "low" {
-		t.Fatalf("settings: %v %v", settings, err)
-	}
-	// A subscription gets a current snapshot without affecting runtime lifetime.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	stream, err := f.clients.Agents.WatchLiveContent(ctx, connect.NewRequest(&v1.WatchLiveContentRequest{ItemId: agentItem}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !stream.Receive() || stream.Msg().GetSnapshot() == nil {
-		t.Fatalf("live snapshot: %v", stream.Err())
-	}
-	cancel()
-	stream.Close()
-	f.idle(agentItem)
-	var stopped v1.StopAgentResponse
-	f.json(&stopped, "agent", "runtime", "stop", "--item", agentItem, "--force")
-	f.run("resume", agentItem, "--agent-mode", "headless")
-	second := f.idle(agentItem)
-	if second.Generation <= first.Generation {
-		t.Fatalf("generation did not advance: %d -> %d", first.Generation, second.Generation)
-	}
-	_, err = f.clients.Agents.RestartAgent(context.Background(), connect.NewRequest(&v1.RestartAgentRequest{ItemId: agentItem, ExpectedGeneration: first.Generation}))
-	if connect.CodeOf(err) != connect.CodeAborted {
-		t.Fatalf("stale generation: %v", err)
-	}
 	// Keep a copy of the agent's credential: its file goes with the runtime.
 	running, _ := filepath.Glob(filepath.Join(f.root, "state", "wi", "*", "items", agentItem, "runtimes", "*", "credential"))
 	if len(running) != 1 {
@@ -230,8 +189,6 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	}
 	f.run("agent", "runtime", "stop", "--item", agentItem, "--force")
 	f.run("close", agentItem, "--resolution", "completed")
-	f.run("repo", "settings", "set", "--repo", repo, "plugins.setup.trust", "never")
-	f.run("repo", "env", "set", "--repo", repo, "PORT=8080")
 	// Direct curl proves the public socket speaks the declared Connect API,
 	// to a caller presenting the operator's credential and to no other.
 	operator, err := credential.Read(credential.OperatorFile(filepath.Join(f.root, "data", "wi")), credential.Operator)
@@ -264,63 +221,16 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	if out, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(out), "no longer valid") {
 		t.Fatalf("a stopped agent's credential: %v %s", err, out)
 	}
-	f.schedules()
-	// A profile's models can be listed before any item uses it.
-	profiles, err := f.clients.Profiles.ListAgentProfiles(context.Background(), connect.NewRequest(&v1.ListAgentProfilesRequest{}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	models, err := f.clients.Profiles.GetProfileModels(context.Background(), connect.NewRequest(&v1.GetProfileModelsRequest{Name: profiles.Msg.DefaultProfile}))
-	if err != nil || models.Msg.Catalog == nil || len(models.Msg.Catalog.Models) == 0 || models.Msg.Catalog.Models[0].Value != "test/model" || models.Msg.Driver == "" || models.Msg.Values["executable"] != "" {
-		t.Fatalf("profile models: %v %v", models, err)
-	}
-	if _, err := f.clients.Profiles.GetProfileModels(context.Background(), connect.NewRequest(&v1.GetProfileModelsRequest{Name: "missing"})); connect.CodeOf(err) != connect.CodeNotFound {
-		t.Fatalf("unknown profile: %v", err)
-	}
-	// The daemon answers usage from its plugin host; here the plugin is off.
-	if value, err := f.clients.System.GetUsage(context.Background(), connect.NewRequest(&v1.GetUsageRequest{Wait: true})); err != nil || value.Msg.Enabled || value.Msg.Error != "" || value.Msg.CheckedAt == nil {
-		t.Fatalf("usage: %v %v", value, err)
-	}
 	f.tui(repo)
-	f.cliTUICompatibility(repo)
-	f.restartJobs(repo, added.Job.Id)
-}
-
-// schedules drives `wi schedule` end to end: a run starts a normal item whose
-// agent answers the rendered prompt, as an item started from the dashboard.
-func (f *binaryFixture) schedules() {
-	profiles, err := f.clients.Profiles.ListAgentProfiles(context.Background(), connect.NewRequest(&v1.ListAgentProfilesRequest{}))
-	if err != nil {
-		f.t.Fatal(err)
+	// A restarted daemon keeps its items and its finished jobs.
+	f.run("daemon", "stop")
+	f.run("daemon", "start")
+	job, err := f.clients.Jobs.GetJob(context.Background(), connect.NewRequest(&v1.GetJobRequest{JobId: added.Job.Id}))
+	if err != nil || job.Msg.Job.State != v1.JobState_JOB_STATE_SUCCEEDED {
+		t.Fatalf("finished job after restart: %v %v", job, err)
 	}
-	var added v1.PutScheduleResponse
-	f.json(&added, "schedule", "add", "--repo", "test", "--cron", "0 9 * * 1-5", "--agent", profiles.Msg.DefaultProfile, "--prompt", "scheduled check of {{repo}}", "--label", "nightly")
-	schedule := added.Schedule
-	if schedule.Id == "" || !schedule.Enabled || schedule.NextRunAt == nil || schedule.Title != "" {
-		f.t.Fatal(schedule.String())
-	}
-	if out := string(f.run("schedule")); !strings.Contains(out, schedule.Id) || !strings.Contains(out, "(generated)") {
-		f.t.Fatalf("schedule list: %s", out)
-	}
-	var ran v1.RunScheduleResponse
-	f.json(&ran, "schedule", "run", schedule.Id[:10])
-	f.historyReady(ran.ItemId, 2)
-	f.idle(ran.ItemId)
-	value, err := f.clients.Items.GetItem(context.Background(), connect.NewRequest(&v1.GetItemRequest{ItemId: ran.ItemId, IncludeDescription: true}))
-	if err != nil || value.Msg.Description != "scheduled check of test" || value.Msg.Item.State != v1.ItemState_ITEM_STATE_ACTIVE || len(value.Msg.Item.Labels) != 1 {
-		f.t.Fatalf("scheduled item: %v %v", value, err)
-	}
-	var disabled v1.PutScheduleResponse
-	f.json(&disabled, "schedule", "disable", schedule.Id)
-	if disabled.Schedule.Enabled || disabled.Schedule.NextRunAt != nil || disabled.Schedule.LastItemId != ran.ItemId {
-		f.t.Fatal(disabled.Schedule.String())
-	}
-	f.run("agent", "runtime", "stop", "--item", ran.ItemId, "--force")
-	f.run("close", ran.ItemId, "--resolution", "completed")
-	f.run("schedule", "rm", schedule.Id)
-	var listed v1.ListSchedulesResponse
-	f.json(&listed, "schedule", "list")
-	if len(listed.Schedules) != 0 {
-		f.t.Fatal(listed.String())
+	f.json(&listed, "list")
+	if len(listed.Items) != 1 || listed.Items[0].Id != item {
+		t.Fatalf("items after restart: %s", listed.String())
 	}
 }

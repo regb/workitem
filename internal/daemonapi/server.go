@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -59,6 +60,8 @@ type Server struct {
 	watchMu  sync.Mutex
 	watchers int
 	stopBeat context.CancelFunc
+	// heartbeat, in nanoseconds, overrides heartbeatInterval when set.
+	heartbeat atomic.Int64
 }
 
 func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.Config, host *plugin.Host, root string) (*Server, error) {

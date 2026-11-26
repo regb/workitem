@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
@@ -218,73 +217,5 @@ func TestClientValidationHasNoDurableEffects(t *testing.T) {
 	listed, err := f.api.Clients.Items.ListItems(context.Background(), connect.NewRequest(&v1.ListItemsRequest{}))
 	if err != nil || len(listed.Msg.Items) != 1 {
 		t.Fatalf("invalid input mutated state: %v %v", listed, err)
-	}
-}
-func TestRepositorySettingsFilesAndEnvironmentThroughAPI(t *testing.T) {
-	f := newClientFixture(t)
-	f.cfg.Env["WI_ID"] = f.create(t, "Context").Id
-	f.run(t, "repo", "list", "--json")
-	f.run(t, "repo", "settings", "set", "plugins.setup.trust", "always", "--json")
-	f.run(t, "repo", "settings", "show", "--json")
-	f.run(t, "repo", "settings", "unset", "plugins.setup.trust", "--json")
-	f.run(t, "repo", "env", "set", "PORT=8080", "TOKEN=private", "--json")
-	var environment v1.GetEnvironmentResponse
-	f.decode(t, f.run(t, "repo", "env", "show", "--json"), &environment)
-	if len(environment.Variables) != 2 {
-		t.Fatal(environment.String())
-	}
-	f.run(t, "repo", "env", "unset", "TOKEN", "--json")
-	path := filepath.Join(f.api.Root, "local.env")
-	_ = os.WriteFile(path, []byte("PORT=8080"), 0600)
-	f.run(t, "repo", "files", "add", path, "--as", ".env", "--json")
-	if out := f.run(t, "repo", "files", "cat", ".env"); out != "PORT=8080" {
-		t.Fatal(out)
-	}
-	f.run(t, "repo", "files", "remove", ".env", "--json")
-	f.run(t, "repo", "rename", "test", "renamed", "--json")
-	f.run(t, "repo", "archive", "renamed", "--json")
-	f.run(t, "repo", "list", "--all", "--json")
-	f.run(t, "repo", "restore", "renamed", "--json")
-}
-func TestProfilesAndSystemThroughAPI(t *testing.T) {
-	f := newClientFixture(t)
-	f.run(t, "agent", "profile", "add", "other", "--driver", "pi", "--model", "test/model", "--json")
-	f.run(t, "agent", "profile", "default", "other", "--json")
-	f.run(t, "agent", "profile", "default", "test", "--json")
-	f.run(t, "agent", "profile", "remove", "other", "--json")
-	f.run(t, "agent", "profile", "drivers", "--json")
-	f.run(t, "version", "--json")
-	f.run(t, "info", "--json")
-	var cfg v1.GetConfigResponse
-	f.decode(t, f.run(t, "config", "--json"), &cfg)
-	var tree map[string]any
-	if err := json.Unmarshal([]byte(cfg.ConfigJson), &tree); err != nil {
-		t.Fatal(err)
-	}
-	if tree["drivers"] == nil {
-		t.Fatal(tree)
-	}
-	f.run(t, "plugin", "list", "--json")
-}
-func TestFailedStartRetainsDescriptionAndReportsAJob(t *testing.T) {
-	f := newClientFixture(t)
-	file := filepath.Join(f.api.Root, "task.md")
-	_ = os.WriteFile(file, []byte("durable description"), 0600)
-	f.out.Reset()
-	f.errs.Reset()
-	if code := Run(context.Background(), []string{"new", "--repo", "test", "--title", "Partial", "--start", "--agent-mode", "headless", "--prompt", "separate prompt", "--desc-file", file, "--json"}, f.cfg); code == ExitOK {
-		t.Fatal("unconfigured test runtime unexpectedly started")
-	}
-	items, err := f.api.Clients.Items.ListItems(context.Background(), connect.NewRequest(&v1.ListItemsRequest{}))
-	if err != nil || len(items.Msg.Items) != 1 {
-		t.Fatalf("created item lost: %v %v", items, err)
-	}
-	value, err := f.api.Clients.Items.GetItem(context.Background(), connect.NewRequest(&v1.GetItemRequest{ItemId: items.Msg.Items[0].Id, IncludeDescription: true}))
-	if err != nil || value.Msg.Description != "durable description" || value.Msg.Item.State != v1.ItemState_ITEM_STATE_ACTIVE {
-		t.Fatalf("partial create: %v %v", value, err)
-	}
-	jobs, err := f.api.Clients.Jobs.ListJobs(context.Background(), connect.NewRequest(&v1.ListJobsRequest{ItemId: value.Msg.Item.Id}))
-	if err != nil || len(jobs.Msg.Jobs) == 0 || jobs.Msg.Jobs[0].Partial == nil {
-		t.Fatalf("partial job: %v %v", jobs, err)
 	}
 }

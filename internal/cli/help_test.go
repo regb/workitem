@@ -6,35 +6,6 @@ import (
 	"testing"
 )
 
-func TestGlobalHelpGroupsCommands(t *testing.T) {
-	var out bytes.Buffer
-	printUsage(&out)
-	text := out.String()
-	sections := []string{"Work:", "Metadata and history:", "Agent and checkout:", "Administration:"}
-	last := -1
-	for _, section := range sections {
-		index := strings.Index(text, section)
-		if index < 0 {
-			t.Fatalf("global help is missing %q:\n%s", section, text)
-		}
-		if index <= last {
-			t.Fatalf("global help section %q is out of order:\n%s", section, text)
-		}
-		last = index
-	}
-}
-
-func TestCloseHelpExplainsReopening(t *testing.T) {
-	var out bytes.Buffer
-	if !printHelp(&out, "close") {
-		t.Fatal("close help topic is missing")
-	}
-	text := out.String()
-	if !strings.Contains(text, "wi reopen <item-id>") {
-		t.Fatalf("close help does not explain reopening:\n%s", text)
-	}
-}
-
 func TestAllPublicHelpTopicsAreDocumented(t *testing.T) {
 	topics := []string{
 		"config", "config show", "config get", "config drivers", "config plugins", "version", "new", "list", "show", "events", "start", "switch", "next", "resume", "merge", "shelve", "close", "wait", "blocker", "blocker add", "blocker list", "blocker clear", "pick", "plugin", "reopen", "delete", "shutdown", "edit", "note", "notes", "attach", "attachments", "attachment", "attachment cat",

@@ -145,6 +145,12 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 	}
 	var settings map[string]any
 	_ = json.Unmarshal(r.Config, &settings)
+	if model, _ := settings["model"].(string); model == "test/fail-launch" {
+		// A start that fails, on request.
+		err := fmt.Errorf("the test agent refuses to launch")
+		_ = reply(p.Response{ProtocolVersion: p.Version, Error: err.Error()})
+		return err
+	}
 	caps := p.Capabilities{LiveContent: true, IdleGuard: true, ImageInput: true, BundledSkills: true, NativeTUI: r.Runtime.Mode == p.ModeTUI, Headless: r.Runtime.Mode == p.ModeHeadless, Streaming: true, Prompt: true, Steering: true, FollowUp: true, Cancel: true, Monitor: true, Control: p.ControlStructured, Settings: []string{"model", "reasoning"}, Answer: true}
 	if emulated, _ := settings["emulated_tui"].(bool); emulated && r.Runtime.Mode == p.ModeTUI {
 		caps.Control = p.ControlEmulated
@@ -170,9 +176,19 @@ func launch(ctx context.Context, r p.LaunchRequest, reply func(p.Response) error
 	busy := false
 	// asked is the AskUserQuestion call waiting for an answer.
 	asked := ""
+	// A restarted agent goes on with its conversation.
 	leaf := "-"
-	seen := map[string]bool{}
 	counter := 0
+	if data, err := os.ReadFile(r.Conversation.Locator); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			var entry struct{ Type, ID string }
+			if json.Unmarshal([]byte(line), &entry) == nil && entry.Type == "message" {
+				counter++
+				leaf = entry.ID
+			}
+		}
+	}
+	seen := map[string]bool{}
 	appendMessage := func(role, text string) string {
 		counter++
 		entry := fmt.Sprintf("fake%08d", counter)

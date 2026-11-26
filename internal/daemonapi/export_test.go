@@ -2,7 +2,6 @@ package daemonapi
 
 import (
 	"context"
-	"testing"
 	"time"
 
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
@@ -94,12 +93,8 @@ func (s *Server) RunDueSchedules(now time.Time) { s.runDueSchedules(now) }
 
 // Watch.
 
-// SetHeartbeatInterval sets how often Watch beats until the test ends.
-func SetHeartbeatInterval(t testing.TB, interval time.Duration) {
-	previous := heartbeatInterval
-	heartbeatInterval = interval
-	t.Cleanup(func() { heartbeatInterval = previous })
-}
+// SetHeartbeatInterval sets how often the server's Watch streams beat.
+func (s *Server) SetHeartbeatInterval(interval time.Duration) { s.heartbeat.Store(int64(interval)) }
 
 // Watchers counts open watch streams.
 func (s *Server) Watchers() int {

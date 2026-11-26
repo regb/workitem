@@ -15,8 +15,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-// Watch timing: a heartbeat when nothing else was sent for heartbeatInterval;
-// the observation beat while anyone watches.
+// Watch timing: a heartbeat when nothing else was sent for heartbeatInterval
+// (a server's heartbeat overrides it); the observation beat while anyone
+// watches.
 var (
 	heartbeatInterval   = 15 * time.Second
 	observationInterval = 10 * time.Second
@@ -59,7 +60,11 @@ func (s *Server) Watch(ctx context.Context, req *connect.Request[v1.WatchRequest
 			})
 		}()
 	}
-	ticker := time.NewTicker(heartbeatInterval / 3)
+	interval := heartbeatInterval
+	if value := s.heartbeat.Load(); value > 0 {
+		interval = time.Duration(value)
+	}
+	ticker := time.NewTicker(interval / 3)
 	defer ticker.Stop()
 	for {
 		select {
@@ -68,7 +73,7 @@ func (s *Server) Watch(ctx context.Context, req *connect.Request[v1.WatchRequest
 		case err := <-done:
 			return err
 		case <-ticker.C:
-			if time.Since(time.Unix(0, sent.Load())) < heartbeatInterval {
+			if time.Since(time.Unix(0, sent.Load())) < interval {
 				continue
 			}
 			if err := send(&v1.WatchResponse{Event: &v1.WatchResponse_Heartbeat{Heartbeat: &v1.Heartbeat{}}}); err != nil {
