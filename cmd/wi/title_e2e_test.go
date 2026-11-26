@@ -30,6 +30,7 @@ func TestTitleModelEndToEnd(t *testing.T) {
 
 	var repo v1.AddRepositoryResponse
 	f.json(&repo, "repo", "add", "test", "--from", f.source, "--local")
+	var lastItem string
 	titled := func(description string) string {
 		t.Helper()
 		created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo.Repository.Id, Description: description, GenerateTitle: true}))
@@ -37,12 +38,24 @@ func TestTitleModelEndToEnd(t *testing.T) {
 			t.Fatal(err)
 		}
 		initial := created.Msg.Item.Title
+		lastItem = created.Msg.Item.Id
 		for deadline := time.Now().Add(15 * time.Second); ; time.Sleep(50 * time.Millisecond) {
 			item, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: created.Msg.Item.Id}))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if item.Msg.Item.Title != initial {
+				// A model's title is its job's result too; a fallback's job
+				// failed and has none.
+				jobs, err := f.clients.Jobs.ListJobs(ctx, connect.NewRequest(&v1.ListJobsRequest{ItemId: created.Msg.Item.Id}))
+				if err != nil {
+					t.Fatal(err)
+				}
+				for _, job := range jobs.Msg.Jobs {
+					if job.Kind == "suggest_title" && job.GetTitle() != nil && job.GetTitle().Title != item.Msg.Item.Title {
+						t.Fatalf("title result %q, item %q", job.GetTitle().Title, item.Msg.Item.Title)
+					}
+				}
 				return item.Msg.Item.Title
 			}
 			if time.Now().After(deadline) {
@@ -52,6 +65,13 @@ func TestTitleModelEndToEnd(t *testing.T) {
 	}
 	if title := titled("write the docs"); title != "Test suggested title" {
 		t.Fatalf("model title: %q", title)
+	}
+	jobs, err := f.clients.Jobs.ListJobs(ctx, connect.NewRequest(&v1.ListJobsRequest{ItemId: lastItem}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs.Msg.Jobs) == 0 || jobs.Msg.Jobs[0].GetTitle().GetTitle() != "Test suggested title" {
+		t.Fatalf("title job result: %v", jobs.Msg.Jobs)
 	}
 	if title := titled("Repair the importer\nthen fail the model"); title != "Repair the importer" {
 		t.Fatalf("fallback title: %q", title)

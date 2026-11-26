@@ -89,7 +89,7 @@ func (s *Server) CreateItem(ctx context.Context, req *connect.Request[v1.CreateI
 		return nil, rpcError(err)
 	}
 	if r.GenerateTitle {
-		s.startJob(ctx, "suggest_title", created.Manifest.ID, r.RepositoryId, func(ctx context.Context, _ *jobRun) error {
+		s.startJob(ctx, "suggest_title", created.Manifest.ID, r.RepositoryId, func(ctx context.Context, j *jobRun) error {
 			// A model failure still yields the description's first line;
 			// the job then records why the model did not title the item.
 			title, generated := s.App.GenerateTitle(ctx, r.Description)
@@ -108,6 +108,11 @@ func (s *Server) CreateItem(ctx context.Context, req *connect.Request[v1.CreateI
 			}
 			if current.Manifest.Title != prepared.Manifest.Title || description != r.Description {
 				return nil
+			}
+			// The result is set before the title, so a client that sees the
+			// title finds it; a failure clears it.
+			if generated == nil {
+				j.change(func(job *v1.Job) { job.Result = &v1.Job_Title{Title: &v1.TitleResult{Title: title}} })
 			}
 			if _, err = s.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: created.Manifest.ID, ExpectedRevision: uint32(current.Revision), Title: &title})); err != nil {
 				return err

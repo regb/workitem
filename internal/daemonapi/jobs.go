@@ -228,6 +228,8 @@ func (r *jobRegistry) startKey(kind, key, item, repo string, run func(context.Co
 				v.State = v1.JobState_JOB_STATE_SUCCEEDED
 				v.Phase = "finished"
 			} else {
+				// Only a job that succeeded has a result.
+				v.Result = nil
 				v.State = v1.JobState_JOB_STATE_FAILED
 				v.Error = err.Error()
 				if errors.Is(err, context.Canceled) {

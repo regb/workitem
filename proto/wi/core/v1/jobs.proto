@@ -72,6 +72,54 @@ message Job {
   google.protobuf.Timestamp created_at = 12;
   google.protobuf.Timestamp started_at = 13;
   google.protobuf.Timestamp finished_at = 14;
+  // result is what a job that succeeded produced, for the kinds that
+  // produce something a client would otherwise re-read state to learn.
+  // Other kinds, and a job that failed or was cancelled, have none.
+  oneof result {
+    // integration is an integrate_item's merge.
+    IntegrationResult integration = 15;
+    // repository_sync is a sync_repository's outcome.
+    RepositorySyncResult repository_sync = 16;
+    // agent_start is the agent a job started: start_item, start_agent,
+    // restart_agent, or a send_message or acquire_control that started it.
+    AgentStartResult agent_start = 17;
+    // title is the title a suggest_title gave the item.
+    TitleResult title = 18;
+  }
+}
+
+// IntegrationResult is what integrating an item did.
+message IntegrationResult {
+  // commit is the target branch's new commit.
+  string commit = 1;
+  string target_branch = 2;
+  // revision_id is the review revision captured as the merge's input.
+  string revision_id = 3;
+}
+
+// RepositorySyncResult is what synchronizing a repository did.
+message RepositorySyncResult {
+  // changed means the repository's branch moved.
+  bool changed = 1;
+  string local_sha = 2;
+  string upstream_sha = 3;
+  // recovery_ref keeps the commits a reset to upstream left behind, when
+  // there were any.
+  string recovery_ref = 4;
+}
+
+// AgentStartResult is the agent a job started.
+message AgentStartResult {
+  // generation is the agent's new generation, which fences what is sent to
+  // it.
+  uint32 generation = 1;
+  AgentMode mode = 2;
+}
+
+// TitleResult is the title a job chose for an item.
+message TitleResult {
+  // title is the title the model wrote, now the item's.
+  string title = 1;
 }
 
 message GetJobRequest {

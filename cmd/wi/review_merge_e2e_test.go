@@ -61,6 +61,9 @@ func TestOrdinaryMergeCLIRecordsSquashAndPreservedSeries(t *testing.T) {
 		t.Fatal("unresolved feedback blocked merge or warning lost", result.String())
 	}
 	after := git("rev-parse", "main")
+	if merged := result.Job.GetIntegration(); merged.GetCommit() != after || merged.GetTargetBranch() != "main" || merged.GetRevisionId() == "" {
+		t.Fatal("merge result", result.Job.String())
+	}
 	if git("rev-parse", "HEAD") != after || git("rev-parse", after+"^") != before || git("log", "-1", "--format=%s", after) != "Reviewed squash" {
 		t.Fatal("wrong squash or continued source")
 	}
@@ -78,6 +81,9 @@ func TestOrdinaryMergeCLIRecordsSquashAndPreservedSeries(t *testing.T) {
 	}
 	tip := git("rev-parse", "HEAD")
 	f.json(&result, "merge", "--item", id, "main", "--local", "--rebase")
+	if result.Job.GetIntegration().GetCommit() != tip {
+		t.Fatal("rebase result", result.Job.String())
+	}
 	if git("rev-parse", "main") != tip || git("rev-list", "--count", after+"..main") != "2" {
 		t.Fatal("--rebase did not preserve ordinary series")
 	}

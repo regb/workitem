@@ -207,6 +207,9 @@ func TestCLIAPIEndToEnd(t *testing.T) {
 	if first.Generation == 0 || first.Mode != v1.AgentMode_AGENT_MODE_HEADLESS {
 		t.Fatal(first.String())
 	}
+	if start := started.Job.GetAgentStart(); started.Job.GetState() != v1.JobState_JOB_STATE_SUCCEEDED || start.GetGeneration() != first.Generation || start.GetMode() != v1.AgentMode_AGENT_MODE_HEADLESS {
+		t.Fatal("start result", started.Job.String())
+	}
 	f.run("send", "--item", agentItem, "second prompt")
 	f.historyReady(agentItem, 4)
 	f.idle(agentItem)

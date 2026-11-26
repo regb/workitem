@@ -99,12 +99,23 @@ type Job struct {
 	// log_tail is the end of the job's log, such as setup command output.
 	LogTail string `protobuf:"bytes,7,opt,name=log_tail,json=logTail,proto3" json:"log_tail,omitempty"`
 	// error explains a failure; partial says what was kept.
-	Error         string                 `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
-	Partial       *PartialOutcome        `protobuf:"bytes,10,opt,name=partial,proto3" json:"partial,omitempty"`
-	Warnings      []string               `protobuf:"bytes,11,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
-	FinishedAt    *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	Error      string                 `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
+	Partial    *PartialOutcome        `protobuf:"bytes,10,opt,name=partial,proto3" json:"partial,omitempty"`
+	Warnings   []string               `protobuf:"bytes,11,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	CreatedAt  *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	StartedAt  *timestamppb.Timestamp `protobuf:"bytes,13,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	FinishedAt *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	// result is what a job that succeeded produced, for the kinds that
+	// produce something a client would otherwise re-read state to learn.
+	// Other kinds, and a job that failed or was cancelled, have none.
+	//
+	// Types that are valid to be assigned to Result:
+	//
+	//	*Job_Integration
+	//	*Job_RepositorySync
+	//	*Job_AgentStart
+	//	*Job_Title
+	Result        isJob_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -230,6 +241,318 @@ func (x *Job) GetFinishedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Job) GetResult() isJob_Result {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *Job) GetIntegration() *IntegrationResult {
+	if x != nil {
+		if x, ok := x.Result.(*Job_Integration); ok {
+			return x.Integration
+		}
+	}
+	return nil
+}
+
+func (x *Job) GetRepositorySync() *RepositorySyncResult {
+	if x != nil {
+		if x, ok := x.Result.(*Job_RepositorySync); ok {
+			return x.RepositorySync
+		}
+	}
+	return nil
+}
+
+func (x *Job) GetAgentStart() *AgentStartResult {
+	if x != nil {
+		if x, ok := x.Result.(*Job_AgentStart); ok {
+			return x.AgentStart
+		}
+	}
+	return nil
+}
+
+func (x *Job) GetTitle() *TitleResult {
+	if x != nil {
+		if x, ok := x.Result.(*Job_Title); ok {
+			return x.Title
+		}
+	}
+	return nil
+}
+
+type isJob_Result interface {
+	isJob_Result()
+}
+
+type Job_Integration struct {
+	// integration is an integrate_item's merge.
+	Integration *IntegrationResult `protobuf:"bytes,15,opt,name=integration,proto3,oneof"`
+}
+
+type Job_RepositorySync struct {
+	// repository_sync is a sync_repository's outcome.
+	RepositorySync *RepositorySyncResult `protobuf:"bytes,16,opt,name=repository_sync,json=repositorySync,proto3,oneof"`
+}
+
+type Job_AgentStart struct {
+	// agent_start is the agent a job started: start_item, start_agent,
+	// restart_agent, or a send_message or acquire_control that started it.
+	AgentStart *AgentStartResult `protobuf:"bytes,17,opt,name=agent_start,json=agentStart,proto3,oneof"`
+}
+
+type Job_Title struct {
+	// title is the title a suggest_title gave the item.
+	Title *TitleResult `protobuf:"bytes,18,opt,name=title,proto3,oneof"`
+}
+
+func (*Job_Integration) isJob_Result() {}
+
+func (*Job_RepositorySync) isJob_Result() {}
+
+func (*Job_AgentStart) isJob_Result() {}
+
+func (*Job_Title) isJob_Result() {}
+
+// IntegrationResult is what integrating an item did.
+type IntegrationResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// commit is the target branch's new commit.
+	Commit       string `protobuf:"bytes,1,opt,name=commit,proto3" json:"commit,omitempty"`
+	TargetBranch string `protobuf:"bytes,2,opt,name=target_branch,json=targetBranch,proto3" json:"target_branch,omitempty"`
+	// revision_id is the review revision captured as the merge's input.
+	RevisionId    string `protobuf:"bytes,3,opt,name=revision_id,json=revisionId,proto3" json:"revision_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IntegrationResult) Reset() {
+	*x = IntegrationResult{}
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IntegrationResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IntegrationResult) ProtoMessage() {}
+
+func (x *IntegrationResult) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IntegrationResult.ProtoReflect.Descriptor instead.
+func (*IntegrationResult) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *IntegrationResult) GetCommit() string {
+	if x != nil {
+		return x.Commit
+	}
+	return ""
+}
+
+func (x *IntegrationResult) GetTargetBranch() string {
+	if x != nil {
+		return x.TargetBranch
+	}
+	return ""
+}
+
+func (x *IntegrationResult) GetRevisionId() string {
+	if x != nil {
+		return x.RevisionId
+	}
+	return ""
+}
+
+// RepositorySyncResult is what synchronizing a repository did.
+type RepositorySyncResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// changed means the repository's branch moved.
+	Changed     bool   `protobuf:"varint,1,opt,name=changed,proto3" json:"changed,omitempty"`
+	LocalSha    string `protobuf:"bytes,2,opt,name=local_sha,json=localSha,proto3" json:"local_sha,omitempty"`
+	UpstreamSha string `protobuf:"bytes,3,opt,name=upstream_sha,json=upstreamSha,proto3" json:"upstream_sha,omitempty"`
+	// recovery_ref keeps the commits a reset to upstream left behind, when
+	// there were any.
+	RecoveryRef   string `protobuf:"bytes,4,opt,name=recovery_ref,json=recoveryRef,proto3" json:"recovery_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RepositorySyncResult) Reset() {
+	*x = RepositorySyncResult{}
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RepositorySyncResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RepositorySyncResult) ProtoMessage() {}
+
+func (x *RepositorySyncResult) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RepositorySyncResult.ProtoReflect.Descriptor instead.
+func (*RepositorySyncResult) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RepositorySyncResult) GetChanged() bool {
+	if x != nil {
+		return x.Changed
+	}
+	return false
+}
+
+func (x *RepositorySyncResult) GetLocalSha() string {
+	if x != nil {
+		return x.LocalSha
+	}
+	return ""
+}
+
+func (x *RepositorySyncResult) GetUpstreamSha() string {
+	if x != nil {
+		return x.UpstreamSha
+	}
+	return ""
+}
+
+func (x *RepositorySyncResult) GetRecoveryRef() string {
+	if x != nil {
+		return x.RecoveryRef
+	}
+	return ""
+}
+
+// AgentStartResult is the agent a job started.
+type AgentStartResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// generation is the agent's new generation, which fences what is sent to
+	// it.
+	Generation    uint32    `protobuf:"varint,1,opt,name=generation,proto3" json:"generation,omitempty"`
+	Mode          AgentMode `protobuf:"varint,2,opt,name=mode,proto3,enum=wi.core.v1.AgentMode" json:"mode,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AgentStartResult) Reset() {
+	*x = AgentStartResult{}
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AgentStartResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AgentStartResult) ProtoMessage() {}
+
+func (x *AgentStartResult) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AgentStartResult.ProtoReflect.Descriptor instead.
+func (*AgentStartResult) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AgentStartResult) GetGeneration() uint32 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
+func (x *AgentStartResult) GetMode() AgentMode {
+	if x != nil {
+		return x.Mode
+	}
+	return AgentMode_AGENT_MODE_UNSPECIFIED
+}
+
+// TitleResult is the title a job chose for an item.
+type TitleResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// title is the title the model wrote, now the item's.
+	Title         string `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TitleResult) Reset() {
+	*x = TitleResult{}
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TitleResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TitleResult) ProtoMessage() {}
+
+func (x *TitleResult) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TitleResult.ProtoReflect.Descriptor instead.
+func (*TitleResult) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *TitleResult) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
 type GetJobRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
@@ -239,7 +562,7 @@ type GetJobRequest struct {
 
 func (x *GetJobRequest) Reset() {
 	*x = GetJobRequest{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[1]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -251,7 +574,7 @@ func (x *GetJobRequest) String() string {
 func (*GetJobRequest) ProtoMessage() {}
 
 func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[1]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -264,7 +587,7 @@ func (x *GetJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobRequest.ProtoReflect.Descriptor instead.
 func (*GetJobRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{1}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetJobRequest) GetJobId() string {
@@ -283,7 +606,7 @@ type GetJobResponse struct {
 
 func (x *GetJobResponse) Reset() {
 	*x = GetJobResponse{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[2]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -295,7 +618,7 @@ func (x *GetJobResponse) String() string {
 func (*GetJobResponse) ProtoMessage() {}
 
 func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[2]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -308,7 +631,7 @@ func (x *GetJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetJobResponse.ProtoReflect.Descriptor instead.
 func (*GetJobResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{2}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetJobResponse) GetJob() *Job {
@@ -329,7 +652,7 @@ type ListJobsRequest struct {
 
 func (x *ListJobsRequest) Reset() {
 	*x = ListJobsRequest{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[3]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -341,7 +664,7 @@ func (x *ListJobsRequest) String() string {
 func (*ListJobsRequest) ProtoMessage() {}
 
 func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[3]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -354,7 +677,7 @@ func (x *ListJobsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsRequest.ProtoReflect.Descriptor instead.
 func (*ListJobsRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{3}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListJobsRequest) GetItemId() string {
@@ -380,7 +703,7 @@ type ListJobsResponse struct {
 
 func (x *ListJobsResponse) Reset() {
 	*x = ListJobsResponse{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[4]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -392,7 +715,7 @@ func (x *ListJobsResponse) String() string {
 func (*ListJobsResponse) ProtoMessage() {}
 
 func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[4]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -405,7 +728,7 @@ func (x *ListJobsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListJobsResponse.ProtoReflect.Descriptor instead.
 func (*ListJobsResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{4}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListJobsResponse) GetJobs() []*Job {
@@ -424,7 +747,7 @@ type WatchJobRequest struct {
 
 func (x *WatchJobRequest) Reset() {
 	*x = WatchJobRequest{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[5]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -436,7 +759,7 @@ func (x *WatchJobRequest) String() string {
 func (*WatchJobRequest) ProtoMessage() {}
 
 func (x *WatchJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[5]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -449,7 +772,7 @@ func (x *WatchJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchJobRequest.ProtoReflect.Descriptor instead.
 func (*WatchJobRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{5}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *WatchJobRequest) GetJobId() string {
@@ -468,7 +791,7 @@ type WatchJobResponse struct {
 
 func (x *WatchJobResponse) Reset() {
 	*x = WatchJobResponse{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[6]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -480,7 +803,7 @@ func (x *WatchJobResponse) String() string {
 func (*WatchJobResponse) ProtoMessage() {}
 
 func (x *WatchJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[6]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -493,7 +816,7 @@ func (x *WatchJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchJobResponse.ProtoReflect.Descriptor instead.
 func (*WatchJobResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{6}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *WatchJobResponse) GetJob() *Job {
@@ -512,7 +835,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[7]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -524,7 +847,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[7]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -537,7 +860,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{7}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CancelJobRequest) GetJobId() string {
@@ -556,7 +879,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[8]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -568,7 +891,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[8]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -581,7 +904,7 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{8}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *CancelJobResponse) GetJob() *Job {
@@ -596,7 +919,7 @@ var File_wi_core_v1_jobs_proto protoreflect.FileDescriptor
 const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\n" +
 	"\x15wi/core/v1/jobs.proto\x12\n" +
-	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17wi/core/v1/common.proto\"\xef\x03\n" +
+	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17wi/core/v1/common.proto\"\xfb\x05\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12*\n" +
@@ -614,7 +937,30 @@ const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12;\n" +
 	"\vfinished_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAtJ\x04\b\b\x10\tR\bapproval\"&\n" +
+	"finishedAt\x12A\n" +
+	"\vintegration\x18\x0f \x01(\v2\x1d.wi.core.v1.IntegrationResultH\x00R\vintegration\x12K\n" +
+	"\x0frepository_sync\x18\x10 \x01(\v2 .wi.core.v1.RepositorySyncResultH\x00R\x0erepositorySync\x12?\n" +
+	"\vagent_start\x18\x11 \x01(\v2\x1c.wi.core.v1.AgentStartResultH\x00R\n" +
+	"agentStart\x12/\n" +
+	"\x05title\x18\x12 \x01(\v2\x17.wi.core.v1.TitleResultH\x00R\x05titleB\b\n" +
+	"\x06resultJ\x04\b\b\x10\tR\bapproval\"q\n" +
+	"\x11IntegrationResult\x12\x16\n" +
+	"\x06commit\x18\x01 \x01(\tR\x06commit\x12#\n" +
+	"\rtarget_branch\x18\x02 \x01(\tR\ftargetBranch\x12\x1f\n" +
+	"\vrevision_id\x18\x03 \x01(\tR\n" +
+	"revisionId\"\x93\x01\n" +
+	"\x14RepositorySyncResult\x12\x18\n" +
+	"\achanged\x18\x01 \x01(\bR\achanged\x12\x1b\n" +
+	"\tlocal_sha\x18\x02 \x01(\tR\blocalSha\x12!\n" +
+	"\fupstream_sha\x18\x03 \x01(\tR\vupstreamSha\x12!\n" +
+	"\frecovery_ref\x18\x04 \x01(\tR\vrecoveryRef\"]\n" +
+	"\x10AgentStartResult\x12\x1e\n" +
+	"\n" +
+	"generation\x18\x01 \x01(\rR\n" +
+	"generation\x12)\n" +
+	"\x04mode\x18\x02 \x01(\x0e2\x15.wi.core.v1.AgentModeR\x04mode\"#\n" +
+	"\vTitleResult\x12\x14\n" +
+	"\x05title\x18\x01 \x01(\tR\x05title\"&\n" +
 	"\rGetJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"3\n" +
 	"\x0eGetJobResponse\x12!\n" +
@@ -659,44 +1005,54 @@ func file_wi_core_v1_jobs_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_jobs_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_wi_core_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_wi_core_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_wi_core_v1_jobs_proto_goTypes = []any{
 	(JobState)(0),                 // 0: wi.core.v1.JobState
 	(*Job)(nil),                   // 1: wi.core.v1.Job
-	(*GetJobRequest)(nil),         // 2: wi.core.v1.GetJobRequest
-	(*GetJobResponse)(nil),        // 3: wi.core.v1.GetJobResponse
-	(*ListJobsRequest)(nil),       // 4: wi.core.v1.ListJobsRequest
-	(*ListJobsResponse)(nil),      // 5: wi.core.v1.ListJobsResponse
-	(*WatchJobRequest)(nil),       // 6: wi.core.v1.WatchJobRequest
-	(*WatchJobResponse)(nil),      // 7: wi.core.v1.WatchJobResponse
-	(*CancelJobRequest)(nil),      // 8: wi.core.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),     // 9: wi.core.v1.CancelJobResponse
-	(*PartialOutcome)(nil),        // 10: wi.core.v1.PartialOutcome
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*IntegrationResult)(nil),     // 2: wi.core.v1.IntegrationResult
+	(*RepositorySyncResult)(nil),  // 3: wi.core.v1.RepositorySyncResult
+	(*AgentStartResult)(nil),      // 4: wi.core.v1.AgentStartResult
+	(*TitleResult)(nil),           // 5: wi.core.v1.TitleResult
+	(*GetJobRequest)(nil),         // 6: wi.core.v1.GetJobRequest
+	(*GetJobResponse)(nil),        // 7: wi.core.v1.GetJobResponse
+	(*ListJobsRequest)(nil),       // 8: wi.core.v1.ListJobsRequest
+	(*ListJobsResponse)(nil),      // 9: wi.core.v1.ListJobsResponse
+	(*WatchJobRequest)(nil),       // 10: wi.core.v1.WatchJobRequest
+	(*WatchJobResponse)(nil),      // 11: wi.core.v1.WatchJobResponse
+	(*CancelJobRequest)(nil),      // 12: wi.core.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),     // 13: wi.core.v1.CancelJobResponse
+	(*PartialOutcome)(nil),        // 14: wi.core.v1.PartialOutcome
+	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
+	(AgentMode)(0),                // 16: wi.core.v1.AgentMode
 }
 var file_wi_core_v1_jobs_proto_depIdxs = []int32{
 	0,  // 0: wi.core.v1.Job.state:type_name -> wi.core.v1.JobState
-	10, // 1: wi.core.v1.Job.partial:type_name -> wi.core.v1.PartialOutcome
-	11, // 2: wi.core.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	11, // 3: wi.core.v1.Job.started_at:type_name -> google.protobuf.Timestamp
-	11, // 4: wi.core.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
-	1,  // 5: wi.core.v1.GetJobResponse.job:type_name -> wi.core.v1.Job
-	1,  // 6: wi.core.v1.ListJobsResponse.jobs:type_name -> wi.core.v1.Job
-	1,  // 7: wi.core.v1.WatchJobResponse.job:type_name -> wi.core.v1.Job
-	1,  // 8: wi.core.v1.CancelJobResponse.job:type_name -> wi.core.v1.Job
-	2,  // 9: wi.core.v1.JobService.GetJob:input_type -> wi.core.v1.GetJobRequest
-	4,  // 10: wi.core.v1.JobService.ListJobs:input_type -> wi.core.v1.ListJobsRequest
-	6,  // 11: wi.core.v1.JobService.WatchJob:input_type -> wi.core.v1.WatchJobRequest
-	8,  // 12: wi.core.v1.JobService.CancelJob:input_type -> wi.core.v1.CancelJobRequest
-	3,  // 13: wi.core.v1.JobService.GetJob:output_type -> wi.core.v1.GetJobResponse
-	5,  // 14: wi.core.v1.JobService.ListJobs:output_type -> wi.core.v1.ListJobsResponse
-	7,  // 15: wi.core.v1.JobService.WatchJob:output_type -> wi.core.v1.WatchJobResponse
-	9,  // 16: wi.core.v1.JobService.CancelJob:output_type -> wi.core.v1.CancelJobResponse
-	13, // [13:17] is the sub-list for method output_type
-	9,  // [9:13] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	14, // 1: wi.core.v1.Job.partial:type_name -> wi.core.v1.PartialOutcome
+	15, // 2: wi.core.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	15, // 3: wi.core.v1.Job.started_at:type_name -> google.protobuf.Timestamp
+	15, // 4: wi.core.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
+	2,  // 5: wi.core.v1.Job.integration:type_name -> wi.core.v1.IntegrationResult
+	3,  // 6: wi.core.v1.Job.repository_sync:type_name -> wi.core.v1.RepositorySyncResult
+	4,  // 7: wi.core.v1.Job.agent_start:type_name -> wi.core.v1.AgentStartResult
+	5,  // 8: wi.core.v1.Job.title:type_name -> wi.core.v1.TitleResult
+	16, // 9: wi.core.v1.AgentStartResult.mode:type_name -> wi.core.v1.AgentMode
+	1,  // 10: wi.core.v1.GetJobResponse.job:type_name -> wi.core.v1.Job
+	1,  // 11: wi.core.v1.ListJobsResponse.jobs:type_name -> wi.core.v1.Job
+	1,  // 12: wi.core.v1.WatchJobResponse.job:type_name -> wi.core.v1.Job
+	1,  // 13: wi.core.v1.CancelJobResponse.job:type_name -> wi.core.v1.Job
+	6,  // 14: wi.core.v1.JobService.GetJob:input_type -> wi.core.v1.GetJobRequest
+	8,  // 15: wi.core.v1.JobService.ListJobs:input_type -> wi.core.v1.ListJobsRequest
+	10, // 16: wi.core.v1.JobService.WatchJob:input_type -> wi.core.v1.WatchJobRequest
+	12, // 17: wi.core.v1.JobService.CancelJob:input_type -> wi.core.v1.CancelJobRequest
+	7,  // 18: wi.core.v1.JobService.GetJob:output_type -> wi.core.v1.GetJobResponse
+	9,  // 19: wi.core.v1.JobService.ListJobs:output_type -> wi.core.v1.ListJobsResponse
+	11, // 20: wi.core.v1.JobService.WatchJob:output_type -> wi.core.v1.WatchJobResponse
+	13, // 21: wi.core.v1.JobService.CancelJob:output_type -> wi.core.v1.CancelJobResponse
+	18, // [18:22] is the sub-list for method output_type
+	14, // [14:18] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_jobs_proto_init() }
@@ -705,13 +1061,19 @@ func file_wi_core_v1_jobs_proto_init() {
 		return
 	}
 	file_wi_core_v1_common_proto_init()
+	file_wi_core_v1_jobs_proto_msgTypes[0].OneofWrappers = []any{
+		(*Job_Integration)(nil),
+		(*Job_RepositorySync)(nil),
+		(*Job_AgentStart)(nil),
+		(*Job_Title)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_jobs_proto_rawDesc), len(file_wi_core_v1_jobs_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   9,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

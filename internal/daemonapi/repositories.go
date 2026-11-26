@@ -154,7 +154,11 @@ func (s *Server) SyncRepository(ctx context.Context, req *connect.Request[v1.Syn
 			}
 			request.ExpectedLocalSHA, request.ExpectedUpstreamSHA = status.LocalSHA, status.UpstreamSHA
 		}
-		_, err := s.Local.SyncRepository(ctx, request)
+		synced, err := s.Local.SyncRepository(ctx, request)
+		if err == nil {
+			result := &v1.RepositorySyncResult{Changed: synced.Changed, LocalSha: synced.LocalSHA, UpstreamSha: synced.UpstreamSHA, RecoveryRef: synced.RecoveryRef}
+			j.change(func(job *v1.Job) { job.Result = &v1.Job_RepositorySync{RepositorySync: result} })
+		}
 		return err
 	})
 	return response(&v1.SyncRepositoryResponse{Job: job}, nil)
@@ -187,6 +191,8 @@ func (s *Server) IntegrateItem(ctx context.Context, req *connect.Request[v1.Inte
 			for _, warning := range result.Warnings {
 				j.change(func(job *v1.Job) { job.Warnings = append(job.Warnings, warning) })
 			}
+			integration := &v1.IntegrationResult{Commit: result.Commit, TargetBranch: result.TargetBranch, RevisionId: result.RevisionID}
+			j.change(func(job *v1.Job) { job.Result = &v1.Job_Integration{Integration: integration} })
 		}
 		return err
 	})

@@ -49,6 +49,9 @@ func (s *Server) startJobKey(request context.Context, kind, key, item, repo stri
 		err := run(ctx, j)
 		close(done)
 		<-finished
+		if err == nil && item != "" && agentStartingJobs[kind] {
+			s.recordAgentStart(ctx, j, item)
+		}
 		if monitorSetup {
 			if setup := s.setup(ctx, item); setup != nil {
 				snapshot, _ := j.snapshot()
@@ -59,4 +62,15 @@ func (s *Server) startJobKey(request context.Context, kind, key, item, repo stri
 		}
 		return err
 	})
+}
+
+// recordAgentStart gives a job that started an item's agent that agent as
+// its result.
+func (s *Server) recordAgentStart(ctx context.Context, j *jobRun, itemID string) {
+	agent, err := s.generation(ctx, itemID, 0)
+	if err != nil || !agent.Online {
+		return
+	}
+	result := &v1.AgentStartResult{Generation: agent.Generation, Mode: agent.Mode}
+	j.change(func(v *v1.Job) { v.Result = &v1.Job_AgentStart{AgentStart: result} })
 }
