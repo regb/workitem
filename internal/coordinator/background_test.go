@@ -9,6 +9,7 @@ import (
 
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/model"
+	bolt "go.etcd.io/bbolt"
 )
 
 func TestConversationIndexTracksBackgroundWorkOfTheCurrentProcess(t *testing.T) {
@@ -89,5 +90,63 @@ func TestBackgroundWorkKeepsWhatItIs(t *testing.T) {
 	apply(ConversationEventFact{Role: "user", Timestamp: start.Add(time.Minute), BackgroundEnded: []string{"ci"}})
 	if _, kept := index.BackgroundLabels["ci"]; kept || index.PendingBackground(start) != 2 {
 		t.Fatalf("ended work kept: %+v", index)
+	}
+}
+
+func TestAnOwnerWorksWhileADelegationWorks(t *testing.T) {
+	db, _ := attentionTestDatabase(t)
+	at := time.Now().UTC()
+	manifest := func(id, owner string, state string) model.Manifest {
+		m := model.NewManifest(id, id, id, nil, false, at, model.Repository{}, model.Checkout{})
+		m.State, m.Owner = state, owner
+		return m
+	}
+	ids := map[string]string{}
+	for _, name := range []string{"owner", "busy", "grand", "middle", "asking", "idle", "closed", "lone"} {
+		id, err := model.NewID()
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[name] = id
+	}
+	manifests := []model.Manifest{
+		manifest(ids["owner"], "", model.StateActive),
+		manifest(ids["middle"], "", model.StateActive),
+		manifest(ids["grand"], model.ItemPrincipal(ids["middle"]), model.StateActive),
+		manifest(ids["busy"], model.ItemPrincipal(ids["owner"]), model.StateActive),
+		manifest(ids["lone"], "", model.StateActive),
+		manifest(ids["asking"], model.ItemPrincipal(ids["lone"]), model.StateActive),
+		manifest(ids["idle"], model.ItemPrincipal(ids["lone"]), model.StateActive),
+		manifest(ids["closed"], model.ItemPrincipal(ids["lone"]), model.StateClosed),
+	}
+	observe := func(name string, o AgentObservation) ProjectionUpdate {
+		encoded, _ := json.Marshal(o)
+		return ProjectionUpdate{Projection: AgentObservationProjection, Key: ids[name], Value: encoded}
+	}
+	if err := db.UpdateProjections([]ProjectionUpdate{
+		observe("owner", AgentObservation{Status: "idle"}),
+		observe("busy", AgentObservation{Status: "busy"}),
+		observe("middle", AgentObservation{Status: "idle"}),
+		observe("grand", AgentObservation{Status: "idle", BackgroundTasks: 1}),
+		observe("lone", AgentObservation{Status: "idle"}),
+		observe("asking", AgentObservation{Status: "busy", Runtime: &model.AgentRuntime{Readiness: "waiting_input"}}),
+		observe("idle", AgentObservation{Status: "idle"}),
+		observe("closed", AgentObservation{Status: "busy"}),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var working map[string]bool
+	err := db.db.View(func(tx *bolt.Tx) error {
+		var err error
+		working, err = workingItems(manifests, tx.Bucket(bucketProjections).Bucket([]byte(AgentObservationProjection)))
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]bool{"owner": true, "busy": true, "middle": true, "grand": true, "lone": false, "asking": false, "idle": false} {
+		if working[ids[name]] != want {
+			t.Errorf("%s: working=%v, want %v", name, working[ids[name]], want)
+		}
 	}
 }

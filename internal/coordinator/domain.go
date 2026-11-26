@@ -475,6 +475,10 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 		return manifests[i].ID < manifests[j].ID
 	})
 	now := time.Now()
+	working, err := workingItems(manifests, observationsBucket)
+	if err != nil {
+		return ActionabilityQueueResult{}, err
+	}
 	projected := map[string]ActionabilityQueueCandidate{}
 	candidates := []priority.Candidate{}
 	for _, manifest := range manifests {
@@ -491,6 +495,11 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 			return ActionabilityQueueResult{}, err
 		}
 		if observation.Status == "" || observation.Status == "busy" || observation.Status == "problem" || observation.Worktree != nil && observation.Worktree.Status == "problem" {
+			continue
+		}
+		// An idle agent waiting on background work or on working
+		// delegations is re-activated when they end: it is at work.
+		if working[manifest.ID] {
 			continue
 		}
 		// Read markers are written by commands in this transaction; the
@@ -525,6 +534,58 @@ func actionabilityQueueFromTransaction(tx *bolt.Tx, options ActionabilityQueueOp
 		value := projected[candidate.ID]
 		value.Rank = index + 1
 		result.Candidates = append(result.Candidates, value)
+	}
+	return result, nil
+}
+
+// workingItems reports which active items are at work: their agent busy and
+// not asking, waiting on background work, or owning an active delegation
+// that is at work.
+func workingItems(manifests []model.Manifest, observations *bolt.Bucket) (map[string]bool, error) {
+	self := map[string]bool{}
+	delegations := map[string][]string{}
+	for _, manifest := range manifests {
+		if manifest.State != model.StateActive {
+			continue
+		}
+		if owner := model.PrincipalItem(manifest.Owner); owner != "" {
+			delegations[owner] = append(delegations[owner], manifest.ID)
+		}
+		if observations == nil {
+			continue
+		}
+		encoded := observations.Get([]byte(manifest.ID))
+		if encoded == nil {
+			continue
+		}
+		var observation AgentObservation
+		if err := json.Unmarshal(encoded, &observation); err != nil {
+			return nil, err
+		}
+		asking := observation.Runtime != nil && observation.Runtime.Readiness == "waiting_input"
+		self[manifest.ID] = observation.Status == "busy" && !asking || observation.Status == "idle" && observation.BackgroundTasks > 0
+	}
+	result := map[string]bool{}
+	var at func(id string, depth int) bool
+	at = func(id string, depth int) bool {
+		if self[id] {
+			return true
+		}
+		if depth >= 8 {
+			return false
+		}
+		for _, delegation := range delegations[id] {
+			if at(delegation, depth+1) {
+				return true
+			}
+		}
+		return false
+	}
+	for id := range delegations {
+		result[id] = at(id, 0)
+	}
+	for id, busy := range self {
+		result[id] = result[id] || busy
 	}
 	return result, nil
 }

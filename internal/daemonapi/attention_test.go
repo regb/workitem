@@ -22,6 +22,9 @@ func TestAWorkingAgentNeedsNoAttentionForItsLastResponse(t *testing.T) {
 		{"question while capturing", &v1.ItemObservation{AgentStatus: idle, Capturing: true, Asking: true}, false, true},
 		{"idle agent waiting on background work", &v1.ItemObservation{AgentStatus: idle, BackgroundTasks: 2}, false, false},
 		{"unread reply while background work runs", &v1.ItemObservation{AgentStatus: idle, Unread: true, BackgroundTasks: 1}, false, false},
+		{"idle agent waiting on working delegations", &v1.ItemObservation{AgentStatus: idle, WorkingDelegations: 2}, false, false},
+		{"unread reply while a delegation works", &v1.ItemObservation{AgentStatus: idle, Unread: true, WorkingDelegations: 1}, false, false},
+		{"question while a delegation works", &v1.ItemObservation{AgentStatus: idle, Asking: true, WorkingDelegations: 1}, false, true},
 		{"question while busy", &v1.ItemObservation{AgentStatus: busy, Asking: true}, false, true},
 		{"problem", &v1.ItemObservation{AgentStatus: problem, Unread: true}, false, true},
 		{"waiting item with an unread reply", &v1.ItemObservation{AgentStatus: idle, Unread: true}, true, true},
@@ -33,6 +36,26 @@ func TestAWorkingAgentNeedsNoAttentionForItsLastResponse(t *testing.T) {
 	} {
 		if got := needsAttention(c.o, c.waiting); got != c.want {
 			t.Errorf("%s: needsAttention=%v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestADelegationWorksWhileItsAgentDoesOrWaitsOnWork(t *testing.T) {
+	busy, idle := v1.AgentStatus_AGENT_STATUS_BUSY, v1.AgentStatus_AGENT_STATUS_IDLE
+	for _, c := range []struct {
+		name string
+		o    *v1.ItemObservation
+		want bool
+	}{
+		{"busy", &v1.ItemObservation{AgentStatus: busy}, true},
+		{"asking", &v1.ItemObservation{AgentStatus: busy, Asking: true}, false},
+		{"idle", &v1.ItemObservation{AgentStatus: idle, Unread: true}, false},
+		{"waiting on background work", &v1.ItemObservation{AgentStatus: idle, BackgroundTasks: 1}, true},
+		{"waiting on its own delegations", &v1.ItemObservation{AgentStatus: idle, WorkingDelegations: 1}, true},
+		{"problem", &v1.ItemObservation{AgentStatus: v1.AgentStatus_AGENT_STATUS_PROBLEM}, false},
+	} {
+		if got := working(c.o); got != c.want {
+			t.Errorf("%s: working=%v, want %v", c.name, got, c.want)
 		}
 	}
 }

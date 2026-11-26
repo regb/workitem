@@ -217,6 +217,12 @@ message ItemObservation {
   uint32 background_tasks = 14;
   // background lists that work, oldest first.
   repeated BackgroundTask background = 15;
+  // working_delegations counts the active items this item's agent delegated
+  // that are working: their agent busy and not asking, or waiting on
+  // background work or on working delegations of their own. Their notices
+  // re-activate this agent, so while it is nonzero this item counts as
+  // working, as it does for background work.
+  uint32 working_delegations = 16;
 }
 
 // BackgroundTask is background work an idle agent waits on.

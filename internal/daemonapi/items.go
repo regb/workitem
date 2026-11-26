@@ -126,6 +126,14 @@ func (s *Server) ResolveItem(ctx context.Context, req *connect.Request[v1.Resolv
 	return response(&v1.ResolveItemResponse{ItemId: m.ID}, err)
 }
 func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObservation {
+	return s.observationAt(ctx, m, 0)
+}
+
+// maxDelegationDepth bounds how deep an observation looks through
+// delegations of delegations.
+const maxDelegationDepth = 8
+
+func (s *Server) observationAt(ctx context.Context, m model.Manifest, depth int) *v1.ItemObservation {
 	out := &v1.ItemObservation{WorktreeStatus: v1.WorktreeStatus_WORKTREE_STATUS_ABSENT, Capturing: s.App.ReviewCaptures.Capturing(m.ID)}
 	online := false
 	if observed, err := s.Local.AgentObservation(ctx, m.ID); err == nil && observed.Found {
@@ -160,6 +168,12 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 		} else if reason, failed := s.failedStart(m.ID); failed && !online && m.State == model.StateActive {
 			out.AgentStatus = v1.AgentStatus_AGENT_STATUS_PROBLEM
 			out.AgentReason = reason
+		}
+	}
+	if m.State == model.StateActive && depth < maxDelegationDepth {
+		out.WorkingDelegations = s.workingDelegations(ctx, m.ID, depth)
+		if out.WorkingDelegations > 0 && out.AgentStatus == v1.AgentStatus_AGENT_STATUS_IDLE && out.BackgroundTasks == 0 {
+			out.AgentReason = fmt.Sprintf("waiting on %d working delegation%s that will notify the agent", out.WorkingDelegations, plural(int(out.WorkingDelegations)))
 		}
 	}
 	out.NeedsAttention = m.State == model.StateActive && needsAttention(out, m.Waiting(time.Now()))
@@ -212,13 +226,14 @@ func (s *Server) failedStart(itemID string) (string, bool) {
 }
 
 // needsAttention reports whether an active item needs the operator. An agent
-// still working (busy, capturing code, or waiting on background work)
+// still working (busy, capturing code, or waiting on background work or on
+// working delegations)
 // needs no attention for its last response, for being idle, or for its
 // checkout: a branch the agent switched or a checkout problem waits until it
 // settles, when the item needs attention anyway. It does for a question or an
 // agent problem. A waiting item needs attention only for an unread response.
 func needsAttention(o *v1.ItemObservation, waiting bool) bool {
-	working := o.Capturing || o.AgentStatus == v1.AgentStatus_AGENT_STATUS_BUSY || o.BackgroundTasks > 0
+	working := o.Capturing || o.AgentStatus == v1.AgentStatus_AGENT_STATUS_BUSY || o.BackgroundTasks > 0 || o.WorkingDelegations > 0
 	if o.Unread && !working {
 		return true
 	}
@@ -297,6 +312,7 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 	if err != nil {
 		return nil, rpcError(err)
 	}
+	ctx = context.WithValue(ctx, manifestsKey{}, manifests)
 	ranks := map[string]int{}
 	if r.Order == v1.ListOrder_LIST_ORDER_ATTENTION {
 		q, err := s.Local.ActionabilitySnapshot(ctx, coordinator.ActionabilitySnapshotRequest{Queue: coordinator.ActionabilityQueueOptions{Strategy: s.Config.Attention.Priority}})
@@ -863,4 +879,47 @@ func (s *Server) checkOwner(ctx context.Context, target model.Manifest, owner st
 		}
 	}
 	return nil
+}
+
+// working reports whether an observed item is at work: its agent busy and
+// not waiting on a question, or waiting on work that will re-activate it.
+func working(o *v1.ItemObservation) bool {
+	return o.AgentStatus == v1.AgentStatus_AGENT_STATUS_BUSY && !o.Asking || o.Capturing || o.BackgroundTasks > 0 || o.WorkingDelegations > 0
+}
+
+// workingDelegations counts the active items the item delegated that are
+// working. A list shares one read of the manifests among its rows.
+func (s *Server) workingDelegations(ctx context.Context, itemID string, depth int) uint32 {
+	manifests, ok := ctx.Value(manifestsKey{}).([]model.Manifest)
+	if !ok {
+		var err error
+		if manifests, err = s.Local.ListManifests(ctx); err != nil {
+			return 0
+		}
+		ctx = context.WithValue(ctx, manifestsKey{}, manifests)
+	}
+	return countWorking(manifests, itemID, func(m model.Manifest) *v1.ItemObservation { return s.observationAt(ctx, m, depth+1) })
+}
+
+// countWorking counts the active items the item delegated that are working,
+// as observe sees them.
+func countWorking(manifests []model.Manifest, itemID string, observe func(model.Manifest) *v1.ItemObservation) uint32 {
+	owner := model.ItemPrincipal(itemID)
+	count := uint32(0)
+	for _, m := range manifests {
+		if m.State == model.StateActive && m.OwnerPrincipal() == owner && working(observe(m)) {
+			count++
+		}
+	}
+	return count
+}
+
+// manifestsKey carries a request's manifests to the observations it makes.
+type manifestsKey struct{}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }

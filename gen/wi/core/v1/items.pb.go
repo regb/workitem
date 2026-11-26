@@ -976,9 +976,15 @@ type ItemObservation struct {
 	// completes. While it is nonzero the agent counts as working.
 	BackgroundTasks uint32 `protobuf:"varint,14,opt,name=background_tasks,json=backgroundTasks,proto3" json:"background_tasks,omitempty"`
 	// background lists that work, oldest first.
-	Background    []*BackgroundTask `protobuf:"bytes,15,rep,name=background,proto3" json:"background,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Background []*BackgroundTask `protobuf:"bytes,15,rep,name=background,proto3" json:"background,omitempty"`
+	// working_delegations counts the active items this item's agent delegated
+	// that are working: their agent busy and not asking, or waiting on
+	// background work or on working delegations of their own. Their notices
+	// re-activate this agent, so while it is nonzero this item counts as
+	// working, as it does for background work.
+	WorkingDelegations uint32 `protobuf:"varint,16,opt,name=working_delegations,json=workingDelegations,proto3" json:"working_delegations,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ItemObservation) Reset() {
@@ -1107,6 +1113,13 @@ func (x *ItemObservation) GetBackground() []*BackgroundTask {
 		return x.Background
 	}
 	return nil
+}
+
+func (x *ItemObservation) GetWorkingDelegations() uint32 {
+	if x != nil {
+		return x.WorkingDelegations
+	}
+	return 0
 }
 
 // BackgroundTask is background work an idle agent waits on.
@@ -4456,7 +4469,7 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\n" +
 	"blocked_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tblockedAt\x129\n" +
 	"\n" +
-	"cleared_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tclearedAt\"\x84\x05\n" +
+	"cleared_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tclearedAt\"\xb5\x05\n" +
 	"\x0fItemObservation\x12\x1c\n" +
 	"\tcapturing\x18\r \x01(\bR\tcapturing\x12:\n" +
 	"\fagent_status\x18\x01 \x01(\x0e2\x17.wi.core.v1.AgentStatusR\vagentStatus\x12!\n" +
@@ -4475,7 +4488,8 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\x10background_tasks\x18\x0e \x01(\rR\x0fbackgroundTasks\x12:\n" +
 	"\n" +
 	"background\x18\x0f \x03(\v2\x1a.wi.core.v1.BackgroundTaskR\n" +
-	"background\"q\n" +
+	"background\x12/\n" +
+	"\x13working_delegations\x18\x10 \x01(\rR\x12workingDelegations\"q\n" +
 	"\x0eBackgroundTask\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x129\n" +
