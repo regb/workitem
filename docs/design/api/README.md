@@ -178,7 +178,7 @@ What `wi web`'s credential may call is a table in the daemon, `internal/daemonap
 
 | Service | The page may call | Refused, and why |
 | --- | --- | --- |
-| `ItemService` | `CreateItem`, `GetItem`, `ListItems`, `SearchItems`, notes and attachments, blockers, `MarkRead` | `DeleteItem` (irreversible); `SetItemState`, `UpdateItem`, `DeferItem`, `ResolveItem`, `ListItemEvents` (plumbing the page does not use) |
+| `ItemService` | `CreateItem`, `GetItem`, `ListItems`, `SearchItems`, `UpdateItem` (taking an item over), notes and attachments, blockers, `MarkRead` | `DeleteItem` (irreversible); `SetItemState`, `DeferItem`, `ResolveItem`, `ListItemEvents` (plumbing the page does not use) |
 | `LifecycleService` | all: create and start, start, shelve, close, reopen | |
 | `AgentService` | messages, `AbortTurn`, `AnswerQuestion`, history, live content, settings, `RestartAgent`, `SuggestTitle` | `StartAgent`, `StopAgent` (plumbing; the page uses the porcelain) |
 | `ControlService` | all | |
