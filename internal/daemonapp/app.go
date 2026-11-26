@@ -30,7 +30,7 @@ func withClient(ctx context.Context, local *coordinator.Client, paths xdg.Paths,
 	native := store.New(paths.DataRoot)
 	a := app.New(native, git.New("git"))
 	a.DeepWorkConfig, a.ItemConfig, a.ListConfig, a.RepoConfig = cfg.DeepWork, cfg.Item, cfg.List, cfg.Repo
-	a.AgentConfig, a.AgentStatusConfig, a.AttentionConfig, a.DriversConfig = cfg.Agent, cfg.AgentStatus, cfg.Attention, cfg.Drivers
+	a.AgentConfig, a.DriversConfig = cfg.Agent, cfg.Drivers
 	a.Plugins, a.Tmux, a.SelfPath, a.Environment = host, tmux.New("tmux"), self, env
 	a.AgentRuntimeStateRoot, a.AgentRuntimeSocketRoot = paths.DataStateRoot, paths.DataRuntimeRoot
 	for _, driver := range []string{"pi", "claude", "antigravity"} {

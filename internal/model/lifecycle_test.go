@@ -6,19 +6,6 @@ import (
 	"time"
 )
 
-func TestNormalizeStateInputAcceptsOnlyCurrentNames(t *testing.T) {
-	for input, want := range map[string]string{"backlog": StateBacklog, "active": StateActive, "closed": StateClosed, " Active ": StateActive} {
-		if got, err := NormalizeStateInput(input); err != nil || got != want {
-			t.Fatalf("%q = %q, %v", input, got, err)
-		}
-	}
-	for _, input := range []string{"working", "waiting", "archived", "done", ""} {
-		if _, err := NormalizeStateInput(input); err == nil {
-			t.Fatalf("%q accepted", input)
-		}
-	}
-}
-
 func TestBlockerValidationAndOpenness(t *testing.T) {
 	now := time.Now()
 	future, past := now.Add(time.Hour), now.Add(-time.Hour)

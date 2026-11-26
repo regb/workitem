@@ -224,16 +224,6 @@ func ValidBlockerKind(kind string) bool {
 	return kind == BlockerTime || kind == BlockerItem || kind == BlockerExternal || kind == BlockerUsage
 }
 
-// NormalizeStateInput maps operator input to a lifecycle state.
-func NormalizeStateInput(value string) (string, error) {
-	switch state := strings.ToLower(strings.TrimSpace(value)); state {
-	case StateBacklog, StateActive, StateClosed:
-		return state, nil
-	default:
-		return "", fmt.Errorf("invalid state %q; expected backlog, active, or closed", value)
-	}
-}
-
 // ValidateBlocker checks a blocker's shape independent of other items.
 func ValidateBlocker(b Blocker, itemID string, now time.Time) error {
 	if !ValidBlockerKind(b.Kind) {

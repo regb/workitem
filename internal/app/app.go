@@ -136,8 +136,6 @@ type App struct {
 	ListConfig                 config.ListConfig
 	RepoConfig                 config.RepoConfig
 	AgentConfig                config.AgentConfig
-	AgentStatusConfig          config.AgentStatusConfig
-	AttentionConfig            config.AttentionConfig
 	// LoadAgentProfiles reads the daemon's agent profiles. Without it, as in
 	// tests, the app uses StaticAgentProfiles.
 	LoadAgentProfiles              func(context.Context) (model.AgentProfiles, error)
@@ -169,7 +167,7 @@ type App struct {
 
 func New(st Store, git Git) *App {
 	cfg := config.Default()
-	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, RepoConfig: cfg.Repo, AgentConfig: cfg.Agent, AgentStatusConfig: cfg.AgentStatus, AttentionConfig: cfg.Attention, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
+	a := &App{Store: st, Git: git, Process: processpkg.New(), Clock: realClock{}, NewID: model.NewID, DeepWorkConfig: cfg.DeepWork, ItemConfig: cfg.Item, ListConfig: cfg.List, RepoConfig: cfg.Repo, AgentConfig: cfg.Agent, DriversConfig: cfg.Drivers, AgentRuntimeLauncher: agent.ExecLauncher{}, RunAgentDriver: agentdriver.Run, ConversationBackends: map[string]ConversationBackend{}, BundledDriverCommands: map[string]BundledDriverCommand{}}
 	return a
 }
 
