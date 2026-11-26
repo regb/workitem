@@ -80,9 +80,21 @@ func TestDefaultBranchWorktreeAndPlumbing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if exists, err := client.BranchExists(ctx, repo, "feature"); err != nil || exists {
+		t.Fatalf("branch exists before creation: %v %v", exists, err)
+	}
 	feature := filepath.Join(t.TempDir(), "feature")
 	if err := client.WorktreeAdd(ctx, git.WorktreeAddOptions{RepoRoot: repo, Path: feature, Branch: "feature", StartPoint: oldSHA, NewBranch: true}); err != nil {
 		t.Fatal(err)
+	}
+	if exists, err := client.BranchExists(ctx, repo, "feature"); err != nil || !exists {
+		t.Fatalf("branch was not created: %v %v", exists, err)
+	}
+	if _, err := os.Stat(filepath.Join(feature, "README.md")); err != nil {
+		t.Fatalf("worktree content missing: %v", err)
+	}
+	if current, err := client.CurrentBranch(ctx, feature); err != nil || current != "feature" {
+		t.Fatalf("current branch = %q %v", current, err)
 	}
 	if err := os.WriteFile(filepath.Join(feature, "feature.txt"), []byte("feature\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -123,6 +135,18 @@ func TestDefaultBranchWorktreeAndPlumbing(t *testing.T) {
 	if err := client.UpdateRef(ctx, repo, "refs/heads/"+branch, oldSHA, oldSHA, "stale CAS"); err == nil {
 		t.Fatal("expected compare-and-swap update to fail")
 	}
+	if err := client.WorktreeRemove(ctx, repo, feature, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(feature); !os.IsNotExist(err) {
+		t.Fatalf("worktree still exists or unexpected stat error: %v", err)
+	}
+	if err := client.DeleteBranch(ctx, repo, "feature", true); err != nil {
+		t.Fatal(err)
+	}
+	if exists, err := client.BranchExists(ctx, repo, "feature"); err != nil || exists {
+		t.Fatalf("branch still exists after deletion: %v %v", exists, err)
+	}
 }
 
 func samePath(t *testing.T, left, right string) bool {
@@ -130,59 +154,6 @@ func samePath(t *testing.T, left, right string) bool {
 	leftInfo, leftErr := os.Stat(left)
 	rightInfo, rightErr := os.Stat(right)
 	return leftErr == nil && rightErr == nil && os.SameFile(leftInfo, rightInfo)
-}
-
-func TestWorktreeAddRemoveAndBranchExists(t *testing.T) {
-	if _, err := exec.LookPath("git"); err != nil {
-		t.Skip("git not available")
-	}
-	repo := setupRepo(t)
-	client := git.New("git")
-	ctx := context.Background()
-	exists, err := client.BranchExists(ctx, repo, "wi/test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if exists {
-		t.Fatal("branch unexpectedly exists")
-	}
-	path := filepath.Join(t.TempDir(), "worktree")
-	if err := client.WorktreeAdd(ctx, git.WorktreeAddOptions{RepoRoot: repo, Path: path, Branch: "wi/test", StartPoint: "HEAD", NewBranch: true}); err != nil {
-		t.Fatal(err)
-	}
-	exists, err = client.BranchExists(ctx, repo, "wi/test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !exists {
-		t.Fatal("branch was not created")
-	}
-	if _, err := os.Stat(filepath.Join(path, "README.md")); err != nil {
-		t.Fatalf("worktree content missing: %v", err)
-	}
-	branch, err := client.CurrentBranch(ctx, path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if branch != "wi/test" {
-		t.Fatalf("current branch = %q", branch)
-	}
-	if err := client.WorktreeRemove(ctx, repo, path, false); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("worktree still exists or unexpected stat error: %v", err)
-	}
-	if err := client.DeleteBranch(ctx, repo, "wi/test", true); err != nil {
-		t.Fatal(err)
-	}
-	exists, err = client.BranchExists(ctx, repo, "wi/test")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if exists {
-		t.Fatal("branch still exists after deletion")
-	}
 }
 
 func setupRepo(t *testing.T) string {
@@ -207,6 +178,13 @@ func runGitOutput(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, out)
 	}
 	return strings.TrimSpace(string(out))
+}
+
+func writeRepoFile(t *testing.T, dir, name, content string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func runGit(t *testing.T, dir string, args ...string) {

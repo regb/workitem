@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	gitpkg "github.com/regb/workitem/internal/git"
@@ -13,25 +12,14 @@ import (
 
 func TestReviewRecreatedUntrackedFileIsNotAnAddition(t *testing.T) {
 	dir := setupRepo(t)
-	run := func(args ...string) string {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	if err := os.WriteFile(filepath.Join(dir, "restored"), []byte("base"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	run := func(args ...string) string { t.Helper(); return runGitOutput(t, dir, args...) }
+	writeRepoFile(t, dir, "restored", "base")
 	run("add", ".")
 	run("commit", "-m", "base")
 	base := run("rev-parse", "HEAD")
 	run("rm", "restored")
 	run("commit", "-m", "delete")
-	if err := os.WriteFile(filepath.Join(dir, "restored"), []byte("changed"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	writeRepoFile(t, dir, "restored", "changed")
 	paths, _, err := gitpkg.New("git").ReviewFiles(context.Background(), dir, base, run("rev-parse", "HEAD"), true)
 	if err != nil || len(paths) != 1 || paths[0].Change != "modified" {
 		t.Fatalf("recreated path: %+v %v", paths, err)
@@ -40,19 +28,8 @@ func TestReviewRecreatedUntrackedFileIsNotAnAddition(t *testing.T) {
 
 func TestReviewKeepsUnmergedPathsConflicted(t *testing.T) {
 	dir := setupRepo(t)
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-	}
-	write := func(text string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, "conflict"), []byte(text), 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	run := func(args ...string) { t.Helper(); runGit(t, dir, args...) }
+	write := func(text string) { t.Helper(); writeRepoFile(t, dir, "conflict", text) }
 	write("base\n")
 	run("add", ".")
 	run("commit", "-m", "base")
@@ -87,21 +64,8 @@ func TestReviewTracksStagedUnstagedDeletedBinaryAndLiteralPaths(t *testing.T) {
 	dir := setupRepo(t)
 	ctx := context.Background()
 	g := gitpkg.New("git")
-	run := func(args ...string) string {
-		t.Helper()
-		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	write := func(p, s string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, p), []byte(s), 0600); err != nil {
-			t.Fatal(err)
-		}
-	}
+	run := func(args ...string) string { t.Helper(); return runGitOutput(t, dir, args...) }
+	write := func(p, s string) { t.Helper(); writeRepoFile(t, dir, p, s) }
 	for _, p := range []string{"staged", "unstaged", "deleted", ":(glob)*"} {
 		write(p, "before\n")
 	}

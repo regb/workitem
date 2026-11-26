@@ -95,23 +95,3 @@ func TestNormalizeLabels(t *testing.T) {
 		t.Fatalf("labels=%v added=%v", labels, added)
 	}
 }
-
-func TestNewManifestUsesEmptyLabelsAndNoPiRegistry(t *testing.T) {
-	m := model.NewManifest("01K1ABCDE0000000000000000", "slug", "Title", nil, false, time.Now(), model.Repository{}, model.Checkout{})
-	if m.Labels == nil {
-		t.Fatalf("manifest labels should be a non-nil empty slice: %+v", m)
-	}
-	if m.PrimaryConversation != nil {
-		t.Fatalf("new manifest should not pre-register a primary conversation: %+v", m)
-	}
-}
-
-func TestNames(t *testing.T) {
-	id := "01K1ABCDE0000000000000000"
-	if got := model.ItemBranchName("Fix Race", id); got != "wi/fix-race-00000000" {
-		t.Fatalf("ItemBranchName = %q", got)
-	}
-	if got := model.TerminalSessionName(id); got != "wi-01K1ABCDE000" {
-		t.Fatalf("TmuxSessionName = %q", got)
-	}
-}

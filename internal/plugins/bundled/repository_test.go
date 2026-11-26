@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/regb/workitem/internal/plugin"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/model"
+	"github.com/regb/workitem/internal/plugin"
 )
 
 func fixturePreparation(cfg config.Config, read plugin.RepositoryReader) plugin.Pipeline {
@@ -21,14 +21,14 @@ func fixturePreparation(cfg config.Config, read plugin.RepositoryReader) plugin.
 	return plugin.NewHost(catalog, cfg.Plugins, cfg.PluginSettings, "wi", read).Preparation()
 }
 
-func TestHostResolvesFrozenRepositoryOptionsWithoutPluginDatabaseAccess(t *testing.T) {
+// Repository settings override the global ones for the bundled plugins; the
+// snapshot an operation reads once (see plugin's
+// TestNativeAndExecutableUseOneSettingsResolver) is not aliased by its callers.
+func TestHostResolvesRepositoryOptionsForBundledPlugins(t *testing.T) {
 	cfg := config.Default()
 	cfg.PluginSettings = map[string]map[string]any{"setup": {"trust": "never"}, "direnv": {"load": true}}
-	reads := 0
-	trust := `"always"`
 	read := func(ctx context.Context, id string) (model.RepositorySettings, error) {
-		reads++
-		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"plugins.setup": {"trust": json.RawMessage(trust)}, "plugins.direnv": {"load": json.RawMessage(`false`)}}}, nil
+		return model.RepositorySettings{RepositoryID: id, Revision: 1, Namespaces: map[string]map[string]json.RawMessage{"plugins.setup": {"trust": json.RawMessage(`"always"`)}, "plugins.direnv": {"load": json.RawMessage(`false`)}}}, nil
 	}
 	p := fixturePreparation(cfg, read)
 	first, err := p.Options(context.Background(), "repo-id", "setup")
@@ -39,15 +39,8 @@ func TestHostResolvesFrozenRepositoryOptionsWithoutPluginDatabaseAccess(t *testi
 		t.Fatal(direnv, err)
 	}
 	first["trust"] = "mutated"
-	trust = `"never"`
-	again, err := p.Options(context.Background(), "repo-id", "setup")
-	if err != nil || reads != 1 || again["trust"] != "always" {
-		t.Fatal("operation snapshot changed", again, reads, err)
-	}
-	next := fixturePreparation(cfg, read)
-	newValue, err := next.Options(context.Background(), "repo-id", "setup")
-	if err != nil || reads != 2 || newValue["trust"] != "never" {
-		t.Fatal("next operation did not refresh", newValue, reads, err)
+	if again, err := p.Options(context.Background(), "repo-id", "setup"); err != nil || again["trust"] != "always" {
+		t.Fatal("caller mutated the operation snapshot", again, err)
 	}
 	global, err := p.Options(context.Background(), "", "setup")
 	if err != nil || global["trust"] != "never" {

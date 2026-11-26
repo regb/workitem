@@ -1,9 +1,12 @@
 package claude
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
 	"encoding/json"
 	"errors"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -11,7 +14,20 @@ import (
 	"github.com/regb/workitem/internal/usage"
 )
 
-const structuredFixtureReport = `{"session":{"total_cost_usd":9999,"secret":"fixture-secret","model_usage":{"discard-me":{}}},"rate_limits":{"limits":[{"kind":"session","group":"session","percent":12.75,"resets_at":"2026-10-22T20:12:34.341312Z","severity":"normal","is_active":true},{"kind":"weekly_all","group":"weekly","percent":20,"resets_at":"2026-10-28T20:00:00Z"},{"kind":"weekly_scoped","group":"weekly","percent":50.5,"resets_at":null,"scope":{"model":{"display_name":"Sonnet"}}},{"kind":"weekly_scoped","group":"weekly","percent":100,"resets_at":null,"scope":{"model":{"display_name":"Fable"},"surface":{"display_name":"Claude Code"}}}],"extra_usage":{"used_credits":9999,"secret":"fixture-secret"}}}`
+// The report's shape follows Claude Code's stream-json usage_report; its
+// session and extra_usage sections hold data that must never be exported.
+//
+//go:embed testdata/structured-usage-report.json
+var structuredFixtureJSON []byte
+
+// structuredFixtureReport is the report compacted to one stream-json line.
+var structuredFixtureReport = func() string {
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, structuredFixtureJSON); err != nil {
+		panic(err)
+	}
+	return compact.String()
+}()
 
 func guardedResult(text string) string {
 	b, _ := json.Marshal(map[string]any{"type": "result", "local_command": "usage", "num_turns": 0, "duration_api_ms": 0, "total_cost_usd": 0, "is_error": false, "result": text})
@@ -21,11 +37,16 @@ func reportStream(report, result string) []byte {
 	return []byte(`{"type":"system","subtype":"init"}` + "\n" + `{"type":"assistant","usage_report":` + report + `}` + "\n" + result + "\n")
 }
 
+// The quota comes from auth status and the local /usage command, never a
+// model prompt, and keeps only the native rate limits.
 func TestStructuredNativeTeamQuota(t *testing.T) {
-	a, _ := commandFixture(t, "structured")
+	a, report := commandFixture(t, "structured")
 	q := a.Quota(context.Background())
-	if q.State != usage.OK || len(q.Windows) != 4 || q.Windows[0].RemainingPercent == nil || *q.Windows[0].RemainingPercent != 87.25 {
+	if q.State != usage.OK || len(q.Windows) != 4 || q.Windows[0].RemainingPercent == nil || *q.Windows[0].RemainingPercent != 87.25 || q.Windows[1].RemainingPercent == nil || *q.Windows[1].RemainingPercent != 80 {
 		t.Fatal(q)
+	}
+	if calls, _ := os.ReadFile(report); string(calls) != "auth\nusage\n" {
+		t.Fatal(string(calls))
 	}
 	if !q.Windows[0].ResetsAt.Equal(time.Date(2026, 10, 22, 20, 12, 34, 341312000, time.UTC)) {
 		t.Fatal("lost exact native reset", q.Windows[0])
@@ -34,7 +55,7 @@ func TestStructuredNativeTeamQuota(t *testing.T) {
 		t.Fatal(q.Windows)
 	}
 	b, _ := json.Marshal(q)
-	for _, private := range []string{"fixture-secret", "discard-me", "9999", "total_cost_usd", "model_usage", "used_credits"} {
+	for _, private := range []string{"fixture-secret", "discard-secret", "discard-me", "9999", "total_cost_usd", "model_usage", "used_credits"} {
 		if strings.Contains(string(b), private) {
 			t.Fatal("non-quota native data exported", string(b))
 		}

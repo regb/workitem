@@ -20,34 +20,6 @@ func TestAMissingConfigurationFileIsTheDefaults(t *testing.T) {
 	}
 }
 
-func TestAgentProfilesInConfigurationPointToTheDaemon(t *testing.T) {
-	for _, content := range []string{"default_agent = \"pi\"\n", "[agents.pi]\ndriver = \"pi\"\n"} {
-		path := filepath.Join(t.TempDir(), "config.toml")
-		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
-			t.Fatal(err)
-		}
-		if _, _, err := config.Load(path); err == nil || !strings.Contains(err.Error(), "wi agent profile add") {
-			t.Fatalf("%q: %v", content, err)
-		}
-	}
-}
-
-func TestLoadDirenvAutoTrustRepositories(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
-	writeFile(t, path, "[direnv]\nauto_trust_repositories = [\"/srv/repos/one\", \"/srv/repos/two\"]\n")
-	if _, _, err := config.LoadWithRegistry(path, bundled.Registry()); err == nil || !strings.Contains(err.Error(), "no longer supported") {
-		t.Fatalf("legacy allowlist error=%v", err)
-	}
-}
-
-func TestLoadRejectsRelativeDirenvAutoTrustRepository(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
-	writeFile(t, path, "[direnv]\nauto_trust_repositories = [\"relative/repo\"]\n")
-	if _, _, err := config.LoadWithRegistry(path, bundled.Registry()); err == nil {
-		t.Fatal("expected retired path allowlist rejection")
-	}
-}
-
 func TestLoadDriverDefaults(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
 	writeFile(t, path, "[drivers.pi.defaults]\nexecutable = \"/opt/pi/bin/pi\"\nextensions = [\"/opt/pi/web-search.ts\"]\n")
@@ -87,35 +59,30 @@ func TestLoadProjectItemDefaults(t *testing.T) {
 	}
 }
 
-func TestRejectInvalidProjectDefaultLabel(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "wi.toml")
-	writeFile(t, path, "[item.defaults]\nlabels = [\"bad!label\"]\n")
-	if _, _, err := config.LoadProject(path); err == nil {
-		t.Fatal("expected invalid project default label to fail")
-	}
-}
-
-func TestRejectInvalidListLabelsArray(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
-	writeFile(t, path, "[list]\nlabels = \"+backend\"\n")
-	if _, _, err := config.Load(path); err == nil {
-		t.Fatal("expected non-array labels to fail")
-	}
-}
-
-func TestRejectUnknownAttentionPriority(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
-	writeFile(t, path, "[attention]\npriority = \"missing\"\n")
-	if _, _, err := config.Load(path); err == nil {
-		t.Fatal("expected unknown priority strategy to fail")
-	}
-}
-
-func TestRejectNegativeLimit(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.toml")
-	writeFile(t, path, "[deep_work]\nmax_active = -1\n")
-	if _, _, err := config.Load(path); err == nil {
-		t.Fatal("expected negative limit to fail")
+func TestLoadRejectsInvalidConfiguration(t *testing.T) {
+	load := func(path string) error { _, _, err := config.Load(path); return err }
+	withPlugins := func(path string) error { _, _, err := config.LoadWithRegistry(path, bundled.Registry()); return err }
+	project := func(path string) error { _, _, err := config.LoadProject(path); return err }
+	for _, tc := range []struct {
+		name    string
+		load    func(string) error
+		content string
+		want    string
+	}{
+		{"agent default in configuration", load, "default_agent = \"pi\"\n", "wi agent profile add"},
+		{"agent profile in configuration", load, "[agents.pi]\ndriver = \"pi\"\n", "wi agent profile add"},
+		{"retired direnv allowlist", withPlugins, "[direnv]\nauto_trust_repositories = [\"/srv/repos/one\", \"/srv/repos/two\"]\n", "no longer supported"},
+		{"retired relative direnv allowlist", withPlugins, "[direnv]\nauto_trust_repositories = [\"relative/repo\"]\n", ""},
+		{"invalid project default label", project, "[item.defaults]\nlabels = [\"bad!label\"]\n", ""},
+		{"list labels not an array", load, "[list]\nlabels = \"+backend\"\n", ""},
+		{"unknown attention priority", load, "[attention]\npriority = \"missing\"\n", ""},
+		{"negative limit", load, "[deep_work]\nmax_active = -1\n", ""},
+	} {
+		path := filepath.Join(t.TempDir(), "config.toml")
+		writeFile(t, path, tc.content)
+		if err := tc.load(path); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err=%v, want error containing %q", tc.name, err, tc.want)
+		}
 	}
 }
 

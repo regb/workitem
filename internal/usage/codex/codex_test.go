@@ -26,11 +26,11 @@ func fixture(t *testing.T, mode string) (*Adapter, string) {
 	t.Helper()
 	root := t.TempDir()
 	report := filepath.Join(root, "methods")
-	env := map[string]string{"HOME": root, "GO_WANT_USAGE_HELPER": "1", "GO_NATIVE_MODE": mode, "GO_NATIVE_REPORT": report, "WI_TEST_PROCESS_ROOT": os.Getenv("WI_TEST_PROCESS_ROOT")}
-	return &Adapter{Root: root, Environment: env, Command: []string{os.Args[0], "-test.run=^TestNativeHelper$"}, Now: func() time.Time { return time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC) }}, report
+	command, env := testutil.HelperProcess("TestNativeHelper", map[string]string{"HOME": root, "GO_NATIVE_MODE": mode, "GO_NATIVE_REPORT": report})
+	return &Adapter{Root: root, Environment: env, Command: command, Now: func() time.Time { return time.Date(2026, 10, 22, 12, 0, 0, 0, time.UTC) }}, report
 }
 func TestNativeHelper(t *testing.T) {
-	if os.Getenv("GO_WANT_USAGE_HELPER") != "1" {
+	if !testutil.InHelperProcess("TestNativeHelper") {
 		return
 	}
 	mode := os.Getenv("GO_NATIVE_MODE")

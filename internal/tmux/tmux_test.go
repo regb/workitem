@@ -121,70 +121,76 @@ func TestEnsureSessionCommandConstruction(t *testing.T) {
 	}
 }
 
-func TestLaunchCommandUsesAgentWindow(t *testing.T) {
-	r := &recordingRunner{outs: [][]byte{nil, []byte("agent\nshell\n")}}
-	client := tmux.Client{Path: "tmux", Runner: r}
-	if err := client.LaunchCommand(context.Background(), tmux.LaunchSpec{
-		SessionName:      "wi-session",
-		CWD:              "/tmp/worktree",
-		Env:              map[string]string{"WI_ID": "abc"},
-		Command:          []string{"/path with space/wi", "agent", "exec", "--item", "abc", "--conversation", "def"},
-		ReuseAgentWindow: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if len(r.calls) != 3 {
-		t.Fatalf("call count = %d", len(r.calls))
-	}
-	if !reflect.DeepEqual(r.calls[0].Args, []string{"set-environment", "-t", "wi-session", "WI_ID", "abc"}) {
-		t.Fatalf("environment set args = %#v", r.calls[0].Args)
-	}
-	if !reflect.DeepEqual(r.calls[1].Args, []string{"list-windows", "-t", "wi-session", "-F", "#{window_name}"}) {
-		t.Fatalf("inspection args = %#v", r.calls[1].Args)
-	}
-	wantCommand := "'/path with space/wi' agent exec --item abc --conversation def"
-	if !reflect.DeepEqual(r.calls[2].Args, []string{"respawn-pane", "-k", "-c", "/tmp/worktree", "-t", "wi-session:agent", wantCommand}) {
-		t.Fatalf("launch args = %#v", r.calls[2].Args)
-	}
-}
-
-func TestLaunchCommandRecreatesMissingAgentWindow(t *testing.T) {
-	r := &recordingRunner{outs: [][]byte{nil, []byte("shell\n")}}
-	client := tmux.Client{Path: "tmux", Runner: r}
-	if err := client.LaunchCommand(context.Background(), tmux.LaunchSpec{SessionName: "wi-session", CWD: "/tmp/worktree", Env: map[string]string{"WI_ID": "abc"}, Command: []string{"wi", "agent", "exec"}, ReuseAgentWindow: true}); err != nil {
-		t.Fatal(err)
-	}
-	if len(r.calls) != 3 {
-		t.Fatalf("call count = %d", len(r.calls))
-	}
-	if !reflect.DeepEqual(r.calls[0].Args, []string{"set-environment", "-t", "wi-session", "WI_ID", "abc"}) {
-		t.Fatalf("environment set args = %#v", r.calls[0].Args)
-	}
-	if !reflect.DeepEqual(r.calls[1].Args, []string{"list-windows", "-t", "wi-session", "-F", "#{window_name}"}) {
-		t.Fatalf("window inspection args = %#v", r.calls[1].Args)
-	}
-	if !reflect.DeepEqual(r.calls[2].Args, []string{"new-window", "-t", "wi-session:", "-n", "agent", "-c", "/tmp/worktree", "wi agent exec"}) {
-		t.Fatalf("new-window args = %#v", r.calls[2].Args)
+func TestLaunchCommandSetsEnvironmentThenTargetsTheWindow(t *testing.T) {
+	setEnv := []string{"set-environment", "-t", "wi-session", "WI_ID", "abc"}
+	listWindows := []string{"list-windows", "-t", "wi-session", "-F", "#{window_name}"}
+	for _, tc := range []struct {
+		name    string
+		windows string // list-windows output, when the agent window is reused
+		spec    tmux.LaunchSpec
+		want    [][]string
+	}{
+		{
+			name:    "respawns the existing agent window",
+			windows: "agent\nshell\n",
+			spec:    tmux.LaunchSpec{Command: []string{"/path with space/wi", "agent", "exec", "--item", "abc", "--conversation", "def"}, ReuseAgentWindow: true},
+			want:    [][]string{setEnv, listWindows, {"respawn-pane", "-k", "-c", "/tmp/worktree", "-t", "wi-session:agent", "'/path with space/wi' agent exec --item abc --conversation def"}},
+		},
+		{
+			name:    "recreates a missing agent window",
+			windows: "shell\n",
+			spec:    tmux.LaunchSpec{Command: []string{"wi", "agent", "exec"}, ReuseAgentWindow: true},
+			want:    [][]string{setEnv, listWindows, {"new-window", "-t", "wi-session:", "-n", "agent", "-c", "/tmp/worktree", "wi agent exec"}},
+		},
+		{
+			name: "creates a named window",
+			spec: tmux.LaunchSpec{WindowName: "alt", Command: []string{"wi", "agent", "exec", "--conversation", "def"}},
+			want: [][]string{setEnv, {"new-window", "-t", "wi-session:", "-n", "alt", "-c", "/tmp/worktree", "wi agent exec --conversation def"}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			r := &recordingRunner{outs: [][]byte{nil, []byte(tc.windows)}}
+			spec := tc.spec
+			spec.SessionName, spec.CWD, spec.Env = "wi-session", "/tmp/worktree", map[string]string{"WI_ID": "abc"}
+			if err := (tmux.Client{Path: "tmux", Runner: r}).LaunchCommand(context.Background(), spec); err != nil {
+				t.Fatal(err)
+			}
+			var got [][]string
+			for _, c := range r.calls {
+				got = append(got, c.Args)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("calls = %#v\nwant %#v", got, tc.want)
+			}
+		})
 	}
 }
 
-func TestLaunchCommandCreatesNewWindow(t *testing.T) {
-	r := &recordingRunner{}
+// PaneInfo and SessionEnvironment parse tmux's output: tab-separated pane
+// fields, and environment lines where "-NAME" marks a removed variable.
+func TestPaneInfoAndSessionEnvironmentParseOutput(t *testing.T) {
+	r := &recordingRunner{outs: [][]byte{
+		[]byte("wi-a\tagent\t%1\t0\t123\tpi\t/tmp/a b\n"),
+		[]byte("too\tfew\n"),
+		[]byte("WI_ID=abc\n-REMOVED\nEMPTY=\nURL=a=b\nnoequals\n\n"),
+	}}
 	client := tmux.Client{Path: "tmux", Runner: r}
-	if err := client.LaunchCommand(context.Background(), tmux.LaunchSpec{
-		SessionName: "wi-session",
-		WindowName:  "alt",
-		CWD:         "/tmp/worktree",
-		Env:         map[string]string{"WI_ID": "abc"},
-		Command:     []string{"wi", "agent", "exec", "--conversation", "def"},
-	}); err != nil {
-		t.Fatal(err)
+	pane, err := client.PaneInfo(context.Background(), "wi-a:agent")
+	if want := (tmux.PaneInfo{SessionName: "wi-a", WindowName: "agent", PaneID: "%1", PaneIndex: "0", PanePID: 123, Command: "pi", CurrentPath: "/tmp/a b"}); err != nil || pane != want {
+		t.Fatalf("pane = %+v err=%v", pane, err)
 	}
-	if !reflect.DeepEqual(r.calls[0].Args, []string{"set-environment", "-t", "wi-session", "WI_ID", "abc"}) {
-		t.Fatalf("environment set args = %#v", r.calls[0].Args)
+	if _, err := client.PaneInfo(context.Background(), "wi-a:agent"); err == nil {
+		t.Fatal("accepted short pane info")
 	}
-	if !reflect.DeepEqual(r.calls[1].Args, []string{"new-window", "-t", "wi-session:", "-n", "alt", "-c", "/tmp/worktree", "wi agent exec --conversation def"}) {
-		t.Fatalf("new-window args = %#v", r.calls[1].Args)
+	if _, err := client.PaneInfo(context.Background(), " "); err == nil {
+		t.Fatal("accepted empty target")
+	}
+	env, err := client.SessionEnvironment(context.Background(), "wi-a")
+	if want := map[string]string{"WI_ID": "abc", "EMPTY": "", "URL": "a=b"}; err != nil || !reflect.DeepEqual(env, want) {
+		t.Fatalf("env = %#v err=%v", env, err)
+	}
+	if got := r.calls[len(r.calls)-1].Args; !reflect.DeepEqual(got, []string{"show-environment", "-t", "wi-a"}) {
+		t.Fatalf("show-environment args = %#v", got)
 	}
 }
 

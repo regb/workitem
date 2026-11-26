@@ -8,6 +8,7 @@ import (
 
 	adapter "github.com/regb/workitem/internal/direnv"
 	"github.com/regb/workitem/internal/plugin"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 type lifecycleClient struct {
@@ -123,7 +124,7 @@ func TestInheritedCleanupRunsWithLoadingDisabled(t *testing.T) {
 	p := plugin.Pipeline{Hooks: []plugin.Hooks{New(nil)}, Options: func(_ context.Context, _ string, _ string) (map[string]any, error) {
 		return map[string]any{"load": false}, nil
 	}}
-	env, removed, _, err := p.Environment(context.Background(), "sanitize", plugin.EnvironmentRequest{Values: map[string]string{"DIRENV_DIFF": encodedDirenvDiff(t, `{"p":{"OLD_SECRET":null}}`), "OLD_SECRET": "secret", "HOME": "/home/operator", "PATH": "/bin"}})
+	env, removed, _, err := p.Environment(context.Background(), "sanitize", plugin.EnvironmentRequest{Values: map[string]string{"DIRENV_DIFF": testutil.DirenvDiff(t, `{"p":{"OLD_SECRET":null}}`), "OLD_SECRET": "secret", "HOME": "/home/operator", "PATH": "/bin"}})
 	if err != nil || env["OLD_SECRET"] != "" || env["DIRENV_DIFF"] != "" || env["PATH"] != "/bin" || len(removed) != 2 {
 		t.Fatal("inherited project state survived", err)
 	}

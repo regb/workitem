@@ -20,11 +20,11 @@ func commandFixture(t *testing.T, mode string) (*Adapter, string) {
 	home := t.TempDir()
 	report := filepath.Join(home, "methods")
 	root := filepath.Join(home, ".claude")
-	env := map[string]string{"HOME": home, "GO_WANT_CLAUDE_USAGE_HELPER": "1", "GO_NATIVE_MODE": mode, "GO_NATIVE_REPORT": report, "WI_TEST_PROCESS_ROOT": os.Getenv("WI_TEST_PROCESS_ROOT"), "CLAUDE_CODE_PROJECT_DIR_NAME": "must-not-leak", "CLAUDE_CODE_SESSION_ID": "must-not-leak"}
-	return &Adapter{Root: root, Command: []string{os.Args[0], "-test.run=^TestLocalUsageHelper$", "--"}, Environment: env, Now: func() time.Time { return time.Date(2026, 10, 22, 18, 0, 0, 0, time.UTC) }}, report
+	command, env := testutil.HelperProcess("TestLocalUsageHelper", map[string]string{"HOME": home, "GO_NATIVE_MODE": mode, "GO_NATIVE_REPORT": report, "CLAUDE_CODE_PROJECT_DIR_NAME": "must-not-leak", "CLAUDE_CODE_SESSION_ID": "must-not-leak"})
+	return &Adapter{Root: root, Command: command, Environment: env, Now: func() time.Time { return time.Date(2026, 10, 22, 18, 0, 0, 0, time.UTC) }}, report
 }
 func TestLocalUsageHelper(t *testing.T) {
-	if os.Getenv("GO_WANT_CLAUDE_USAGE_HELPER") != "1" {
+	if !testutil.InHelperProcess("TestLocalUsageHelper") {
 		return
 	}
 	if os.Getenv("CLAUDE_CODE_PROJECT_DIR_NAME") != "" || os.Getenv("CLAUDE_CODE_SESSION_ID") != "" {
@@ -119,24 +119,6 @@ func TestLocalUsageHelper(t *testing.T) {
 	}
 	_ = json.NewEncoder(os.Stdout).Encode(value)
 	os.Exit(0)
-}
-func TestLocalNativeQuotaWithoutModelPrompt(t *testing.T) {
-	a, report := commandFixture(t, "success")
-	q := a.Quota(context.Background())
-	if q.State != usage.OK || len(q.Windows) != 4 || q.Windows[0].RemainingPercent == nil || *q.Windows[0].RemainingPercent != 87.25 || q.Windows[1].RemainingPercent == nil || *q.Windows[1].RemainingPercent != 80 || q.Windows[0].ResetsAt == nil {
-		t.Fatal(q)
-	}
-	if !q.Windows[0].ResetsAt.Equal(time.Date(2026, 10, 22, 20, 12, 34, 341312000, time.UTC)) {
-		t.Fatal(q.Windows)
-	}
-	calls, _ := os.ReadFile(report)
-	if string(calls) != "auth\nusage\n" {
-		t.Fatal(string(calls))
-	}
-	b, _ := json.Marshal(q)
-	if strings.Contains(string(b), "fixture-secret") || strings.Contains(string(b), "discard-secret") {
-		t.Fatal("native content leaked")
-	}
 }
 func TestLocalNativeExplicitRootLiteral(t *testing.T) {
 	a, _ := commandFixture(t, "success")

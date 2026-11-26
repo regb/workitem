@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,30 +11,19 @@ import (
 	"github.com/regb/workitem/internal/plugin"
 	"github.com/regb/workitem/internal/plugins/files"
 	"github.com/regb/workitem/internal/repofiles"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 // checkout makes a bare store with one linked worktree, as wi's slots are.
 func checkout(t *testing.T, tracked ...string) (store, worktree string) {
 	t.Helper()
 	root := t.TempDir()
-	store, seed, worktree := filepath.Join(root, "store.git"), filepath.Join(root, "seed"), filepath.Join(root, "slot-0001")
-	git := func(args ...string) {
-		t.Helper()
-		if output, err := exec.Command("git", args...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, output)
-		}
+	files := map[string]string{"README": "tracked\n"}
+	for _, p := range tracked {
+		files[p] = "tracked\n"
 	}
-	git("init", "-q", "--bare", "-b", "main", store)
-	git("init", "-q", "-b", "main", seed)
-	for _, p := range append([]string{"README"}, tracked...) {
-		if err := os.WriteFile(filepath.Join(seed, p), []byte("tracked\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	git("-C", seed, "add", ".")
-	git("-C", seed, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "init")
-	git("-C", seed, "push", "-q", store, "main")
-	git("--git-dir", store, "worktree", "add", "-q", worktree, "main")
+	store, worktree = testutil.GitStore(t, root, testutil.GitBranch{Name: "main", Files: files}), filepath.Join(root, "slot-0001")
+	testutil.GitWorktree(t, store, worktree, "main")
 	return store, worktree
 }
 
@@ -46,11 +34,8 @@ func run(t *testing.T, store, worktree, filesDir string, settings map[string]any
 }
 
 func status(t *testing.T, worktree string) string {
-	output, err := exec.Command("git", "-C", worktree, "status", "--porcelain").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(output)
+	t.Helper()
+	return testutil.Git(t, "-C", worktree, "status", "--porcelain")
 }
 
 func TestFilesAreCopiedAndIgnored(t *testing.T) {

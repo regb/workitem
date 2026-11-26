@@ -1,11 +1,9 @@
 package direnv_test
 
 import (
-	"bytes"
-	"compress/zlib"
 	"context"
-	"encoding/base64"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +13,7 @@ import (
 	"time"
 
 	"github.com/regb/workitem/internal/direnv"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 type recordingRunner struct {
@@ -105,20 +104,25 @@ func TestEnvironmentReloadsWatchedSourceWhenCallerHasPreviouslyLoadedEnvironment
 	if err != nil || loaded["WI_DIRENV_RELOAD_SENTINEL"] != "old" {
 		t.Fatalf("initial environment sentinel=%q err=%v", loaded["WI_DIRENV_RELOAD_SENTINEL"], err)
 	}
-	// Direnv's watch representation can use second-resolution mtimes. Ensure
-	// the sourced file's next version is observably newer.
-	time.Sleep(1100 * time.Millisecond)
 	if err := os.WriteFile(values, []byte("export WI_DIRENV_RELOAD_SENTINEL=fresh\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	command := exec.Command(os.Args[0], "-test.run=TestEnvironmentReloadHelper")
-	command.Env = make([]string, 0, len(loaded)+3)
-	for key, value := range loaded {
+	// Direnv's watch representation can use second-resolution mtimes. Make
+	// the sourced file's next version observably newer without waiting.
+	future := time.Now().Add(2 * time.Second)
+	if err := os.Chtimes(values, future, future); err != nil {
+		t.Fatal(err)
+	}
+	// This child deliberately tests an already-loaded direnv environment;
+	// HelperProcess keeps the parent test namespace marker so TestMain does
+	// not scrub that fixture.
+	extra := maps.Clone(loaded)
+	extra["WI_DIRENV_HELPER_DIR"], extra["WI_DIRENV_HELPER_PATH"] = dir, path
+	args, env := testutil.HelperProcess("TestEnvironmentReloadHelper", extra)
+	command := exec.Command(args[0], args[1:]...)
+	for key, value := range env {
 		command.Env = append(command.Env, key+"="+value)
 	}
-	// This child deliberately tests an already-loaded direnv environment. Keep
-	// the parent test namespace marker so TestMain does not scrub that fixture.
-	command.Env = append(command.Env, "WI_TEST_PROCESS_ROOT="+os.Getenv("WI_TEST_PROCESS_ROOT"), "WI_DIRENV_HELPER=1", "WI_DIRENV_HELPER_DIR="+dir, "WI_DIRENV_HELPER_PATH="+path)
 	// Judge only the helper's stdout: a coverage-instrumented helper adds a
 	// GOCOVERDIR warning to stderr when it exits.
 	var stderr strings.Builder
@@ -130,7 +134,7 @@ func TestEnvironmentReloadsWatchedSourceWhenCallerHasPreviouslyLoadedEnvironment
 }
 
 func TestEnvironmentReloadHelper(t *testing.T) {
-	if os.Getenv("WI_DIRENV_HELPER") != "1" {
+	if !testutil.InHelperProcess("TestEnvironmentReloadHelper") {
 		return
 	}
 	client := direnv.Client{Path: os.Getenv("WI_DIRENV_HELPER_PATH"), Runner: direnv.ExecRunner{}}
@@ -153,50 +157,39 @@ func envFromProcess(entries []string) map[string]string {
 	return env
 }
 
-func TestManagedVariablesDecodesDirenvDiff(t *testing.T) {
-	compressed := encodeDirenvDiff(t, `{"p":{"PATH":"/x"},"n":{"PROJECT_GH_TOKEN":"","ISSUE_TRACKER_TOKEN":""}}`)
-	vars := direnv.ManagedVariables(compressed)
-	if !vars["PATH"] || !vars["PROJECT_GH_TOKEN"] || !vars["ISSUE_TRACKER_TOKEN"] {
-		t.Fatalf("managed variables = %v", vars)
-	}
-}
-
-func TestManagedVariablesIgnoresMalformedInput(t *testing.T) {
-	if vars := direnv.ManagedVariables("not-base64!"); len(vars) != 0 {
-		t.Fatalf("malformed input produced variables: %v", vars)
-	}
-}
-
-func encodeDirenvDiff(t *testing.T, payload string) string {
-	t.Helper()
-	var buf bytes.Buffer
-	writer := zlib.NewWriter(&buf)
-	if _, err := writer.Write([]byte(payload)); err != nil {
-		t.Fatal(err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return base64.URLEncoding.EncodeToString(buf.Bytes())
-}
-
-func TestParseStatusAcceptsNumericAllowedStatus(t *testing.T) {
-	allowed := direnv.ParseStatus("Found RC path /repo/.envrc\nFound RC allowed 0\n")
-	denied := direnv.ParseStatus("Found RC path /repo/.envrc\nFound RC allowed 1\n")
-	if !allowed.Allowed || denied.Allowed {
-		t.Fatalf("allowed=%+v denied=%+v", allowed, denied)
+func TestManagedVariables(t *testing.T) {
+	for _, tc := range []struct {
+		diff string
+		want map[string]bool
+	}{
+		{testutil.DirenvDiff(t, `{"p":{"PATH":"/x"},"n":{"PROJECT_GH_TOKEN":"","ISSUE_TRACKER_TOKEN":""}}`), map[string]bool{"PATH": true, "PROJECT_GH_TOKEN": true, "ISSUE_TRACKER_TOKEN": true}},
+		{"not-base64!", map[string]bool{}},
+		{"", map[string]bool{}},
+	} {
+		got := direnv.ManagedVariables(tc.diff)
+		if len(got) != len(tc.want) {
+			t.Errorf("ManagedVariables(%q) = %v, want %v", tc.diff, got, tc.want)
+		}
+		for name := range tc.want {
+			if !got[name] {
+				t.Errorf("ManagedVariables(%q) = %v, want %v", tc.diff, got, tc.want)
+			}
+		}
 	}
 }
 
 func TestParseStatus(t *testing.T) {
-	st := direnv.ParseStatus(`direnv exec path /usr/bin/direnv
-No .envrc loaded
-Found RC path /repo/.envrc
-Found watch: ".envrc" - 2026-07-31T00:00:00+02:00
-Found RC allowed true
-Found RC allowPath /home/me/.local/share/direnv/allow/abc
-`)
-	if !st.Found || st.RCPath != "/repo/.envrc" || !st.Allowed {
-		t.Fatalf("status = %+v", st)
+	for _, tc := range []struct {
+		output string
+		want   direnv.Status
+	}{
+		{"direnv exec path /usr/bin/direnv\nNo .envrc loaded\nFound RC path /repo/.envrc\nFound watch: \".envrc\" - 2026-07-31T00:00:00+02:00\nFound RC allowed true\nFound RC allowPath /home/me/.local/share/direnv/allow/abc\n", direnv.Status{Found: true, RCPath: "/repo/.envrc", Allowed: true}},
+		{"Found RC path /repo/.envrc\nFound RC allowed 0\n", direnv.Status{Found: true, RCPath: "/repo/.envrc", Allowed: true}},
+		{"Found RC path /repo/.envrc\nFound RC allowed 1\n", direnv.Status{Found: true, RCPath: "/repo/.envrc"}},
+		{"No .envrc or .env found\n", direnv.Status{}},
+	} {
+		if got := direnv.ParseStatus(tc.output); got.Found != tc.want.Found || got.RCPath != tc.want.RCPath || got.Allowed != tc.want.Allowed {
+			t.Errorf("ParseStatus(%q) = %+v, want %+v", tc.output, got, tc.want)
+		}
 	}
 }

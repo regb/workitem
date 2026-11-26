@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/regb/workitem/internal/plugin"
 	"github.com/regb/workitem/internal/plugins/setup"
 	"github.com/regb/workitem/internal/repofiles"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 // repository makes a bare store whose main branch holds .config/wi.toml
@@ -19,33 +19,15 @@ import (
 func repository(t *testing.T, config, featureConfig string) (store, worktree string) {
 	t.Helper()
 	root := t.TempDir()
-	store, seed, worktree := filepath.Join(root, "store.git"), filepath.Join(root, "seed"), filepath.Join(root, "slot-0001")
-	git := func(args ...string) {
-		t.Helper()
-		if output, err := exec.Command("git", args...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v\n%s", args, err, output)
+	files := func(content string) map[string]string {
+		if content == "" {
+			return nil
 		}
+		return map[string]string{".config/wi.toml": content}
 	}
-	commit := func(content string) {
-		if content != "" {
-			if err := os.MkdirAll(filepath.Join(seed, ".config"), 0o755); err != nil {
-				t.Fatal(err)
-			}
-			if err := os.WriteFile(filepath.Join(seed, ".config", "wi.toml"), []byte(content), 0o644); err != nil {
-				t.Fatal(err)
-			}
-		}
-		git("-C", seed, "add", ".")
-		git("-C", seed, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "c")
-	}
-	git("init", "-q", "--bare", "-b", "main", store)
-	git("init", "-q", "-b", "main", seed)
-	commit(config)
-	git("-C", seed, "push", "-q", store, "main")
-	git("-C", seed, "switch", "-q", "-c", "feature")
-	commit(featureConfig)
-	git("-C", seed, "push", "-q", store, "feature")
-	git("--git-dir", store, "worktree", "add", "-q", worktree, "feature")
+	store = testutil.GitStore(t, root, testutil.GitBranch{Name: "main", Files: files(config)}, testutil.GitBranch{Name: "feature", Files: files(featureConfig)})
+	worktree = filepath.Join(root, "slot-0001")
+	testutil.GitWorktree(t, store, worktree, "feature")
 	return store, worktree
 }
 

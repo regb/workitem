@@ -4,32 +4,21 @@ import (
 	"bytes"
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/regb/workitem/internal/repofiles"
+	"github.com/regb/workitem/internal/testutil"
 )
-
-func git(t *testing.T, args ...string) {
-	t.Helper()
-	if output, err := exec.Command("git", args...).CombinedOutput(); err != nil {
-		t.Fatalf("git %v: %v\n%s", args, err, output)
-	}
-}
 
 func TestRemovingAFileCleansCheckoutsNotInUse(t *testing.T) {
 	ctx := context.Background()
 	root := t.TempDir()
-	store, seed := filepath.Join(root, "store.git"), filepath.Join(root, "seed")
-	git(t, "init", "-q", "--bare", "-b", "main", store)
-	git(t, "init", "-q", "-b", "main", seed)
-	git(t, "-C", seed, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "init")
-	git(t, "-C", seed, "push", "-q", store, "main")
+	store := testutil.GitStore(t, root, testutil.GitBranch{Name: "main"})
 	idle, busy, edited := filepath.Join(root, "slot-1"), filepath.Join(root, "slot-2"), filepath.Join(root, "slot-3")
 	for i, slot := range []string{idle, busy, edited} {
-		git(t, "--git-dir", store, "worktree", "add", "-q", "-b", "b"+string(rune('1'+i)), slot, "main")
+		testutil.GitWorktree(t, store, slot, "main", "-b", "b"+string(rune('1'+i)))
 	}
 	files := filepath.Join(root, "files")
 	if _, err := repofiles.Put(files, ".env", []byte("A=1\n")); err != nil {

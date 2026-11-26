@@ -1,0 +1,56 @@
+{
+  "session": {
+    "total_cost_usd": 9999,
+    "secret": "fixture-secret",
+    "model_usage": {
+      "discard-me": {}
+    }
+  },
+  "rate_limits": {
+    "limits": [
+      {
+        "kind": "session",
+        "group": "session",
+        "percent": 12.75,
+        "resets_at": "2026-10-22T20:12:34.341312Z",
+        "severity": "normal",
+        "is_active": true
+      },
+      {
+        "kind": "weekly_all",
+        "group": "weekly",
+        "percent": 20,
+        "resets_at": "2026-10-28T20:00:00Z"
+      },
+      {
+        "kind": "weekly_scoped",
+        "group": "weekly",
+        "percent": 50.5,
+        "resets_at": null,
+        "scope": {
+          "model": {
+            "display_name": "Sonnet"
+          }
+        }
+      },
+      {
+        "kind": "weekly_scoped",
+        "group": "weekly",
+        "percent": 100,
+        "resets_at": null,
+        "scope": {
+          "model": {
+            "display_name": "Fable"
+          },
+          "surface": {
+            "display_name": "Claude Code"
+          }
+        }
+      }
+    ],
+    "extra_usage": {
+      "used_credits": 9999,
+      "secret": "fixture-secret"
+    }
+  }
+}

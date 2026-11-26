@@ -65,6 +65,9 @@ func TestCreateLoadListAndEvents(t *testing.T) {
 	if err := st.CreateItem(context.Background(), m, ev); err != nil {
 		t.Fatal(err)
 	}
+	if err := st.AppendEvent(context.Background(), m.ID, model.NewEvent(now, "work_item.edited", "test", nil)); err != nil {
+		t.Fatal(err)
+	}
 	loaded, err := st.LoadManifest(m.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -86,7 +89,7 @@ func TestCreateLoadListAndEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 1 || events[0].Type != "work_item.created" {
+	if len(events) != 2 || events[0].Type != "work_item.created" || events[1].Type != "work_item.edited" {
 		t.Fatalf("events = %+v", events)
 	}
 }
@@ -150,150 +153,6 @@ func TestTerminalRuntimeRoundTripAndRemove(t *testing.T) {
 	}
 }
 
-func TestAppendEvent(t *testing.T) {
-	st := store.New(t.TempDir())
-	now := testutil.Time()
-	m := manifest(t, testutil.ID(t, 3), "Events", now)
-	if err := st.CreateItem(context.Background(), m); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.AppendEvent(context.Background(), m.ID, model.NewEvent(now, "one", "test", nil)); err != nil {
-		t.Fatal(err)
-	}
-	if err := st.AppendEvent(context.Background(), m.ID, model.NewEvent(now, "two", "test", nil)); err != nil {
-		t.Fatal(err)
-	}
-	events, err := st.ReadEvents(m.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := []string{events[0].Type, events[1].Type}; got[0] != "one" || got[1] != "two" {
-		t.Fatalf("events order = %+v", got)
-	}
-}
-
-func TestResolveByIDPrefixAndSlug(t *testing.T) {
-	st := store.New(t.TempDir())
-	m1 := manifest(t, testutil.ID(t, 4), "Fix Race", testutil.Time())
-	m2 := manifest(t, testutil.ID(t, 5), "Add Cache", testutil.Time().Add(time.Minute))
-	for _, m := range []model.Manifest{m1, m2} {
-		if err := st.CreateItem(context.Background(), m); err != nil {
-			t.Fatal(err)
-		}
-	}
-	byID, err := st.Resolve(m1.ID)
-	if err != nil || byID.ID != m1.ID {
-		t.Fatalf("resolve by id = %+v, %v", byID, err)
-	}
-	byPrefix, err := st.Resolve(m2.ID[:12])
-	if err != nil || byPrefix.ID != m2.ID {
-		t.Fatalf("resolve by prefix = %+v, %v", byPrefix, err)
-	}
-	bySlug, err := st.Resolve(m1.Slug)
-	if err != nil || bySlug.ID != m1.ID {
-		t.Fatalf("resolve by slug = %+v, %v", bySlug, err)
-	}
-}
-
-func TestResolveByUniquePartialActiveSelector(t *testing.T) {
-	st := store.New(t.TempDir())
-	now := testutil.Time()
-	m1 := manifest(t, testutil.ID(t, 7), "Draft Scheduler Cron Job Feature", now)
-	m2 := manifest(t, testutil.ID(t, 8), "Add Cache", now.Add(time.Minute))
-	m2.Labels = []string{"backend"}
-	m3 := manifest(t, testutil.ID(t, 9), "Old Scheduler Cron Job", now.Add(2*time.Minute))
-	m3.State = model.StateClosed
-	m3.Slug = ""
-	for _, m := range []model.Manifest{m1, m2, m3} {
-		if err := st.CreateItem(context.Background(), m); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(st.ItemDir(m1.ID), model.DescriptionFilename), []byte("Related issue: ISSUE-42"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	for selector, want := range map[string]string{
-		"scheduler": m1.ID,
-		"cron job":  m1.ID,
-		"ISSUE-42":  m1.ID,
-		"backend":   m2.ID,
-	} {
-		got, err := st.Resolve(selector)
-		if err != nil {
-			t.Fatalf("resolve %q: %v", selector, err)
-		}
-		if got.ID != want {
-			t.Fatalf("resolve %q = %s, want %s", selector, got.ID, want)
-		}
-	}
-
-	m4 := manifest(t, testutil.ID(t, 10), "Scheduler Docs", now.Add(3*time.Minute))
-	if err := st.CreateItem(context.Background(), m4); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := st.Resolve("scheduler"); err == nil {
-		t.Fatal("expected ambiguous partial selector")
-	} else {
-		var ambiguous store.AmbiguousError
-		if !errors.As(err, &ambiguous) {
-			t.Fatalf("expected AmbiguousError, got %T %v", err, err)
-		}
-	}
-}
-
-func TestResolvePrefersUniqueSlugSubstringOverDescriptionReference(t *testing.T) {
-	st := store.New(t.TempDir())
-	now := testutil.Time()
-	target := manifest(t, testutil.ID(t, 20), "TASK 1042 Cache Prototype", now)
-	reference := manifest(t, testutil.ID(t, 21), "TASK 1043 Cache Design Notes", now.Add(time.Minute))
-	for _, item := range []model.Manifest{target, reference} {
-		if err := st.CreateItem(context.Background(), item); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if err := os.WriteFile(filepath.Join(st.ItemDir(reference.ID), model.DescriptionFilename), []byte("Notes from task-1042"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	resolved, err := st.Resolve("task-1042")
-	if err != nil || resolved.ID != target.ID {
-		t.Fatalf("slug-priority resolution = %+v err=%v", resolved, err)
-	}
-}
-
-func TestResolveActiveSlugAcceptsExactOrUniqueActiveSubstring(t *testing.T) {
-	st := store.New(t.TempDir())
-	now := testutil.Time()
-	active := manifest(t, testutil.ID(t, 17), "Exact Active", now)
-	similar := manifest(t, testutil.ID(t, 19), "Exact Action", now)
-	archived := manifest(t, testutil.ID(t, 18), "Old", now)
-	archived.State = model.StateClosed
-	archived.Slug = ""
-	for _, item := range []model.Manifest{active, similar, archived} {
-		if err := st.CreateItem(context.Background(), item); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, selector := range []string{active.Slug, "tive", "TIVE"} {
-		resolved, err := st.ResolveActiveSlug(selector)
-		if err != nil || resolved.ID != active.ID {
-			t.Fatalf("ResolveActiveSlug(%q) = %+v err=%v", selector, resolved, err)
-		}
-	}
-	if _, err := st.ResolveActiveSlug("act"); err == nil {
-		t.Fatal("expected ambiguous active slug substring")
-	} else {
-		var ambiguous store.AmbiguousError
-		if !errors.As(err, &ambiguous) || len(ambiguous.Candidates) != 2 {
-			t.Fatalf("ambiguous error = %T %v", err, err)
-		}
-	}
-	for _, selector := range []string{active.ID, "Exact Active", "old", ""} {
-		if _, err := st.ResolveActiveSlug(selector); err == nil {
-			t.Fatalf("ResolveActiveSlug(%q) unexpectedly succeeded", selector)
-		}
-	}
-}
-
 func TestCreateItemRollsBackOnEventFailure(t *testing.T) {
 	st := store.New(t.TempDir())
 	m := manifest(t, testutil.ID(t, 6), "Rollback", testutil.Time())
@@ -317,57 +176,145 @@ func manifest(t *testing.T, id, title string, now time.Time) model.Manifest {
 	}, model.Checkout{Specification: model.CheckoutSpecification{Branch: model.ItemBranchName("item", id)}})
 }
 
-// An item's whole ID resolves to that item or to nothing, never to another
-// item whose title or description mentions it.
-func TestResolveWholeIDOfMissingItemIsNotFound(t *testing.T) {
-	st := store.New(t.TempDir())
+func TestResolveFromManifests(t *testing.T) {
 	now := testutil.Time()
+	fix := manifest(t, testutil.ID(t, 4), "Fix Race", now)
+	cache := manifest(t, testutil.ID(t, 5), "Add Cache", now)
+	cache.Labels = []string{"backend"}
+	scheduler := manifest(t, testutil.ID(t, 7), "Draft Scheduler Cron Job Feature", now)
+	oldScheduler := manifest(t, testutil.ID(t, 9), "Old Scheduler Cron Job", now)
+	oldScheduler.State, oldScheduler.Slug = model.StateClosed, ""
+	task := manifest(t, testutil.ID(t, 20), "TASK 1042 Cache Prototype", now)
+	taskNotes := manifest(t, testutil.ID(t, 21), "TASK 1043 Cache Design Notes", now)
 	missing := testutil.ID(t, 30)
-	reference := manifest(t, testutil.ID(t, 31), "Follow up "+missing, now)
-	if err := st.CreateItem(context.Background(), reference); err != nil {
-		t.Fatal(err)
+	followUp := manifest(t, testutil.ID(t, 31), "Follow up "+missing, now)
+	closedAuth := manifest(t, testutil.ID(t, 40), "Auth refactor", now)
+	closedAuth.State, closedAuth.Slug, closedAuth.ClosedSlug = model.StateClosed, "", "auth-refactor"
+	authV2 := manifest(t, testutil.ID(t, 41), "Auth refactor follow-up", now)
+	authV2.Slug = "auth-refactor-v2"
+	descriptions := map[string]string{
+		scheduler.ID: "Related issue: ISSUE-42",
+		taskNotes.ID: "Notes from task-1042",
+		followUp.ID:  "Continues @@[Old](wi:" + missing + ")",
+		authV2.ID:    "Continues auth-refactor",
 	}
-	if err := os.WriteFile(filepath.Join(st.ItemDir(reference.ID), model.DescriptionFilename), []byte("Continues @@[Old](wi:"+missing+")"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	for _, selector := range []string{missing, strings.ToLower(missing)} {
-		if resolved, err := st.Resolve(selector); !errors.Is(err, store.ErrNotFound) {
-			t.Fatalf("missing ID %s resolved to %+v err=%v", selector, resolved, err)
-		}
-	}
-	if resolved, err := st.Resolve(strings.ToLower(reference.ID)); err != nil || resolved.ID != reference.ID {
-		t.Fatalf("own ID = %+v err=%v", resolved, err)
+	describe := func(m model.Manifest) string { return descriptions[m.ID] }
+	base := []model.Manifest{fix, cache, scheduler, oldScheduler, task, taskNotes, followUp, closedAuth, authV2}
+	schedulerDocs := manifest(t, testutil.ID(t, 10), "Scheduler Docs", now)
+	reusedAuth := manifest(t, testutil.ID(t, 42), "Auth refactor again", now)
+	reusedAuth.Slug = "auth-refactor"
+	closedAgain := closedAuth
+	closedAgain.ID = testutil.ID(t, 43)
+	for _, tc := range []struct {
+		name     string
+		selector string
+		extra    []model.Manifest
+		want     string // an item ID, or "ambiguous" or "not found"
+	}{
+		{"whole ID", fix.ID, nil, fix.ID},
+		{"lower-case whole ID", strings.ToLower(followUp.ID), nil, followUp.ID},
+		{"ID prefix", cache.ID[:12], nil, cache.ID},
+		{"exact slug", fix.Slug, nil, fix.ID},
+		{"active slug substring", "scheduler", nil, scheduler.ID},
+		{"title words as slug", "cron job", nil, scheduler.ID},
+		{"description mention", "ISSUE-42", nil, scheduler.ID},
+		{"label", "backend", nil, cache.ID},
+		{"ambiguous slug substring", "scheduler", []model.Manifest{schedulerDocs}, "ambiguous"},
+		// A unique slug substring wins over another item's description mention.
+		{"slug substring before description", "task-1042", nil, task.ID},
+		// A whole ID names its item or nothing, never an item mentioning it.
+		{"missing whole ID", missing, nil, "not found"},
+		{"missing lower-case whole ID", strings.ToLower(missing), nil, "not found"},
+		// A closed item keeps the slug it had, before slugs containing it or mentions.
+		{"closed item's slug", "auth-refactor", nil, closedAuth.ID},
+		{"active slug before closed slug", "auth-refactor", []model.Manifest{reusedAuth}, reusedAuth.ID},
+		{"two closed items with the slug", "auth-refactor", []model.Manifest{closedAgain}, "ambiguous"},
+		{"empty", " ", nil, "not found"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := store.ResolveFromManifests(append(append([]model.Manifest{}, base...), tc.extra...), tc.selector, describe)
+			var ambiguous store.AmbiguousError
+			switch tc.want {
+			case "ambiguous":
+				if !errors.As(err, &ambiguous) {
+					t.Fatalf("got %+v err=%v, want ambiguous", got.ID, err)
+				}
+			case "not found":
+				if !errors.Is(err, store.ErrNotFound) {
+					t.Fatalf("got %+v err=%v, want not found", got.ID, err)
+				}
+			default:
+				if err != nil || got.ID != tc.want {
+					t.Fatalf("got %s err=%v, want %s", got.ID, err, tc.want)
+				}
+			}
+		})
 	}
 }
 
-func TestResolveNamesAClosedItemByTheSlugItHad(t *testing.T) {
+func TestResolveActiveSlugFromManifestsAcceptsExactOrUniqueActiveSubstring(t *testing.T) {
 	now := testutil.Time()
-	closed := manifest(t, testutil.ID(t, 40), "Auth refactor", now)
-	closed.State, closed.Slug, closed.ClosedSlug = model.StateClosed, "", "auth-refactor"
-	other := manifest(t, testutil.ID(t, 41), "Auth refactor follow-up", now)
-	other.Slug = "auth-refactor-v2"
-	describe := func(m model.Manifest) string {
-		if m.ID == other.ID {
-			return "Continues auth-refactor"
+	active := manifest(t, testutil.ID(t, 17), "Exact Active", now)
+	similar := manifest(t, testutil.ID(t, 19), "Exact Action", now)
+	archived := manifest(t, testutil.ID(t, 18), "Old", now)
+	archived.State, archived.Slug = model.StateClosed, ""
+	items := []model.Manifest{active, similar, archived}
+	for _, selector := range []string{active.Slug, "tive", "TIVE"} {
+		resolved, err := store.ResolveActiveSlugFromManifests(items, selector)
+		if err != nil || resolved.ID != active.ID {
+			t.Fatalf("ResolveActiveSlug(%q) = %+v err=%v", selector, resolved, err)
 		}
-		return ""
 	}
-	// Neither the other slug containing it nor a mention takes it.
-	resolved, err := store.ResolveFromManifests([]model.Manifest{closed, other}, "auth-refactor", describe)
-	if err != nil || resolved.ID != closed.ID {
-		t.Fatalf("closed slug = %+v err=%v", resolved, err)
-	}
-	// A new active item with the slug takes precedence.
-	reused := manifest(t, testutil.ID(t, 42), "Auth refactor again", now)
-	reused.Slug = "auth-refactor"
-	if resolved, err := store.ResolveFromManifests([]model.Manifest{closed, other, reused}, "auth-refactor", describe); err != nil || resolved.ID != reused.ID {
-		t.Fatalf("active slug = %+v err=%v", resolved, err)
-	}
-	// Two closed items that had it are ambiguous, not either one.
-	again := closed
-	again.ID = testutil.ID(t, 43)
 	var ambiguous store.AmbiguousError
-	if _, err := store.ResolveFromManifests([]model.Manifest{closed, again, other}, "auth-refactor", describe); !errors.As(err, &ambiguous) {
-		t.Fatalf("two closed items: %v", err)
+	if _, err := store.ResolveActiveSlugFromManifests(items, "act"); !errors.As(err, &ambiguous) || len(ambiguous.Candidates) != 2 {
+		t.Fatalf("ambiguous error = %T %v", err, err)
+	}
+	for _, selector := range []string{active.ID, "Exact Active", "old", ""} {
+		if _, err := store.ResolveActiveSlugFromManifests(items, selector); err == nil {
+			t.Fatalf("ResolveActiveSlug(%q) unexpectedly succeeded", selector)
+		}
+	}
+}
+
+// The store resolves over the manifests on disk, reading descriptions from
+// the item directory, and reports a malformed manifest rather than skipping it.
+func TestStoreResolvesOnDiskAndReportsMalformedManifests(t *testing.T) {
+	st := store.New(t.TempDir())
+	now := testutil.Time()
+	described := manifest(t, testutil.ID(t, 50), "Described", now)
+	other := manifest(t, testutil.ID(t, 51), "Other", now)
+	for _, m := range []model.Manifest{described, other} {
+		if err := st.CreateItem(context.Background(), m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(st.ItemDir(described.ID), model.DescriptionFilename), []byte("Related issue: ISSUE-42"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := st.Resolve("ISSUE-42"); err != nil || got.ID != described.ID {
+		t.Fatalf("Resolve = %s err=%v", got.ID, err)
+	}
+	if got, err := st.ResolveActiveSlug("describ"); err != nil || got.ID != described.ID {
+		t.Fatalf("ResolveActiveSlug = %s err=%v", got.ID, err)
+	}
+	for name, content := range map[string]string{
+		"parse":   "{not json",
+		"invalid": `{"id":"` + other.ID + `","title":" "}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := os.WriteFile(st.ManifestPath(other.ID), []byte(content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.LoadManifest(other.ID); err == nil || !strings.HasPrefix(err.Error(), name+" manifest") {
+				t.Fatalf("LoadManifest err=%v", err)
+			}
+			items, errs := st.ListManifests()
+			if len(errs) != 1 || len(items) != 1 || items[0].ID != described.ID {
+				t.Fatalf("ListManifests = %d items, errs=%v", len(items), errs)
+			}
+			if _, err := st.Resolve(described.ID); err == nil {
+				t.Fatal("Resolve ignored a malformed manifest")
+			}
+		})
 	}
 }

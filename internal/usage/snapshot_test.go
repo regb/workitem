@@ -24,7 +24,9 @@ func exportJSON(t *testing.T, q Quota) map[string]any {
 	return envelope["results"].([]any)[0].(map[string]any)
 }
 
-func TestQuotaExportMinimalSuccess(t *testing.T) {
+// A successful result exports only provider, account, observation time,
+// windows and credits: no internal state, diagnostics or refresh metadata.
+func TestQuotaExportSuccessIsQuotaOnly(t *testing.T) {
 	now := time.Date(2026, 10, 23, 17, 17, 8, 0, time.UTC)
 	q := Quota{
 		Account: Account{Provider: "codex", ID: "slot"}, State: OK,
@@ -39,6 +41,20 @@ func TestQuotaExportMinimalSuccess(t *testing.T) {
 	}
 	if q.Windows != nil {
 		t.Fatal("export mutated the internal quota")
+	}
+	q.Windows = []Window{{ID: "five_hour", RemainingPercent: floatPtr(75)}, {ID: "unknown"}}
+	q.Credits = &Credits{Remaining: floatPtr(12), Unit: "provider_credits"}
+	result = exportJSON(t, q)
+	want["windows"] = []any{
+		map[string]any{"id": "five_hour", "remaining_percent": float64(75), "resets_at": nil, "duration_seconds": nil},
+		map[string]any{"id": "unknown", "remaining_percent": nil, "resets_at": nil, "duration_seconds": nil},
+	}
+	want["credits"] = map[string]any{"remaining": float64(12), "unlimited": nil, "unit": "provider_credits"}
+	if !reflect.DeepEqual(result, want) {
+		t.Fatalf("got %#v; want %#v", result, want)
+	}
+	if b, _ := json.Marshal(NewSnapshot(nil)); string(b) != `{"schema_version":1,"results":[]}` {
+		t.Fatal(string(b))
 	}
 }
 

@@ -1,64 +1,47 @@
 package xdg_test
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/regb/workitem/internal/xdg"
 )
 
-func TestResolveDefaults(t *testing.T) {
-	home := filepath.Join(t.TempDir(), "home")
-	paths, err := xdg.Resolve(xdg.Map{}, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantRoot := filepath.Join(home, ".local", "share", "wi")
-	if paths.DataRoot != wantRoot {
-		t.Fatalf("DataRoot = %q, want %q", paths.DataRoot, wantRoot)
-	}
-	if paths.ItemsDir != filepath.Join(wantRoot, "items") {
-		t.Fatalf("ItemsDir = %q", paths.ItemsDir)
-	}
-	if paths.ConfigFile != filepath.Join(home, ".config", "wi", "config.toml") {
-		t.Fatalf("ConfigFile = %q", paths.ConfigFile)
-	}
-	if paths.CacheRoot != filepath.Join(home, ".cache", "wi") {
-		t.Fatalf("CacheRoot = %q", paths.CacheRoot)
-	}
-	if paths.StateRoot != filepath.Join(home, ".local", "state", "wi") || paths.DataStateRoot != filepath.Join(paths.StateRoot, paths.DataRootKey) {
-		t.Fatalf("state paths = root %q data %q", paths.StateRoot, paths.DataStateRoot)
-	}
-	if paths.DataRuntimeRoot != filepath.Join(paths.RuntimeDir, "wi", paths.DataRootKey) {
-		t.Fatalf("DataRuntimeRoot = %q", paths.DataRuntimeRoot)
-	}
-}
-
-func TestResolveXDGOverrides(t *testing.T) {
+// Each XDG variable moves its own root, falling back to the home directory;
+// state and runtime directories are keyed by the data root.
+func TestResolve(t *testing.T) {
 	base := t.TempDir()
-	paths, err := xdg.Resolve(xdg.Map{
-		"XDG_DATA_HOME":   filepath.Join(base, "data"),
-		"XDG_CONFIG_HOME": filepath.Join(base, "config"),
-		"XDG_CACHE_HOME":  filepath.Join(base, "cache"),
-		"XDG_STATE_HOME":  filepath.Join(base, "state"),
-		"XDG_RUNTIME_DIR": filepath.Join(base, "runtime"),
-	}, filepath.Join(base, "home"))
-	if err != nil {
-		t.Fatal(err)
+	home := filepath.Join(base, "home")
+	override := xdg.Map{}
+	for _, name := range []string{"DATA", "CONFIG", "CACHE", "STATE"} {
+		override["XDG_"+name+"_HOME"] = filepath.Join(base, name)
 	}
-	if paths.DataRoot != filepath.Join(base, "data", "wi") {
-		t.Fatalf("DataRoot = %q", paths.DataRoot)
-	}
-	if paths.ConfigFile != filepath.Join(base, "config", "wi", "config.toml") {
-		t.Fatalf("ConfigFile = %q", paths.ConfigFile)
-	}
-	if paths.CacheRoot != filepath.Join(base, "cache", "wi") {
-		t.Fatalf("CacheRoot = %q", paths.CacheRoot)
-	}
-	if paths.DataStateRoot != filepath.Join(base, "state", "wi", paths.DataRootKey) {
-		t.Fatalf("DataStateRoot = %q", paths.DataStateRoot)
-	}
-	if paths.DataRuntimeRoot != filepath.Join(base, "runtime", "wi", paths.DataRootKey) {
-		t.Fatalf("DataRuntimeRoot = %q", paths.DataRuntimeRoot)
+	override["XDG_RUNTIME_DIR"] = filepath.Join(base, "RUNTIME")
+	keys := map[string]bool{}
+	for _, tc := range []struct {
+		env                                 xdg.Map
+		data, config, cache, state, runtime string
+	}{
+		{xdg.Map{}, filepath.Join(home, ".local", "share"), filepath.Join(home, ".config"), filepath.Join(home, ".cache"), filepath.Join(home, ".local", "state"), filepath.Join(os.TempDir(), fmt.Sprintf("wi-%d", os.Getuid()))},
+		{override, filepath.Join(base, "DATA"), filepath.Join(base, "CONFIG"), filepath.Join(base, "CACHE"), filepath.Join(base, "STATE"), filepath.Join(base, "RUNTIME")},
+	} {
+		paths, err := xdg.Resolve(tc.env, home)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := []string{paths.DataRoot, paths.ItemsDir, paths.ConfigFile, paths.CacheRoot, paths.DataStateRoot, paths.DataRuntimeRoot}
+		want := []string{
+			filepath.Join(tc.data, "wi"), filepath.Join(tc.data, "wi", "items"), filepath.Join(tc.config, "wi", "config.toml"), filepath.Join(tc.cache, "wi"),
+			filepath.Join(tc.state, "wi", paths.DataRootKey), filepath.Join(tc.runtime, "wi", paths.DataRootKey),
+		}
+		if fmt.Sprint(got) != fmt.Sprint(want) {
+			t.Errorf("env %v:\n got %q\nwant %q", tc.env, got, want)
+		}
+		if paths.DataRootKey == "" || keys[paths.DataRootKey] {
+			t.Errorf("data root key %q is empty or shared", paths.DataRootKey)
+		}
+		keys[paths.DataRootKey] = true
 	}
 }

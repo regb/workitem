@@ -1,17 +1,15 @@
 package direnv
 
 import (
-	"bytes"
-	"compress/zlib"
 	"context"
-	"encoding/base64"
+	"maps"
+	"os"
+	"path/filepath"
 	"testing"
 
 	adapter "github.com/regb/workitem/internal/direnv"
 	"github.com/regb/workitem/internal/plugin"
-	"maps"
-	"os"
-	"path/filepath"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 type fakeCLIDirenv struct {
@@ -52,7 +50,7 @@ func TestLoadCLIProjectEnvironmentPreservesExplicitCallerValue(t *testing.T) {
 }
 
 func TestLoadCLIProjectEnvironmentReplacesStaleDirenvValue(t *testing.T) {
-	diff := encodedDirenvDiff(t, `{"p":{"WI_LIST_LABELS":null,"SECRET":null,"PATH":null}}`)
+	diff := testutil.DirenvDiff(t, `{"p":{"WI_LIST_LABELS":null,"SECRET":null,"PATH":null}}`)
 	client := &fakeCLIDirenv{status: adapter.Status{Found: true, Allowed: true}, environment: map[string]string{"WI_LIST_LABELS": "+current"}}
 	got, err := loadCLIProjectEnvironment(context.Background(), client, "/repo", map[string]string{"DIRENV_DIFF": diff, "WI_LIST_LABELS": "+stale", "SECRET": "old", "PATH": "/usr/bin"})
 	if err != nil || got["WI_LIST_LABELS"] != "+current" {
@@ -72,19 +70,6 @@ func TestLoadCLIProjectEnvironmentDoesNotRunUntrustedEnvrc(t *testing.T) {
 	if err != nil || client.calls != 0 || got["PATH"] != "/usr/bin" {
 		t.Fatalf("environment=%+v calls=%d err=%v", got, client.calls, err)
 	}
-}
-
-func encodedDirenvDiff(t *testing.T, value string) string {
-	t.Helper()
-	var compressed bytes.Buffer
-	writer := zlib.NewWriter(&compressed)
-	if _, err := writer.Write([]byte(value)); err != nil {
-		t.Fatal(err)
-	}
-	if err := writer.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return base64.URLEncoding.EncodeToString(compressed.Bytes())
 }
 
 func (f *fakeCLIDirenv) Allow(context.Context, string, map[string]string) error { return nil }

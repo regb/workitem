@@ -177,7 +177,7 @@ func TestNativeOpenCodeIdentityFailureNeverUsesOldSlot(t *testing.T) {
 }
 
 func TestNativeOpenCodeProcessHelper(t *testing.T) {
-	if os.Getenv("GO_WANT_OC_HELPER") != "1" {
+	if !testutil.InHelperProcess("TestNativeOpenCodeProcessHelper") {
 		return
 	}
 	cwd, _ := os.Getwd()
@@ -216,9 +216,8 @@ func TestNativeOpenCodeProcessHelper(t *testing.T) {
 }
 func processAdapter(t *testing.T, mode string) *Adapter {
 	t.Helper()
-	return &Adapter{Root: t.TempDir(), Command: []string{os.Args[0], "-test.run=^TestNativeOpenCodeProcessHelper$", "--"}, Now: func() time.Time { return now }, Environment: map[string]string{
-		"HOME": t.TempDir(), "GO_WANT_OC_HELPER": "1", "GO_OC_MODE": mode, "OPENCODE_CONFIG_CONTENT": "preserved", "WI_TEST_PROCESS_ROOT": os.Getenv("WI_TEST_PROCESS_ROOT"),
-	}}
+	command, env := testutil.HelperProcess("TestNativeOpenCodeProcessHelper", map[string]string{"HOME": t.TempDir(), "GO_OC_MODE": mode, "OPENCODE_CONFIG_CONTENT": "preserved"})
+	return &Adapter{Root: t.TempDir(), Command: command, Now: func() time.Time { return now }, Environment: env}
 }
 func TestNativeOpenCodeBridgeJavaScript(t *testing.T) {
 	node, err := exec.LookPath("node")
