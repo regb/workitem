@@ -216,6 +216,11 @@ message SendMessageRequest {
   // checkout, starts the item with the message as its first prompt, as
   // LifecycleService.StartItem does, and returns the start's job.
   bool require_online = 9;
+  // awaits_reply says the sender waits for the reply to this message (wi
+  // send --wait). When an item's agent sends it to an item it delegated, the
+  // daemon then sends no notice of that turn's end to the sender: the reply
+  // is its result.
+  bool awaits_reply = 10;
 }
 
 message SendMessageResponse {

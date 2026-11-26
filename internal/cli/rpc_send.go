@@ -68,7 +68,7 @@ func rpcSend(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	if *clientMessage == "" {
 		*clientMessage = newCommandID()
 	}
-	value, err := cfg.API.Agents.SendMessage(ctx, rpcRequest(cfg, &v1.SendMessageRequest{ItemId: id, Text: message, Images: images, Delivery: delivery, ClientMessageId: *clientMessage, StartMode: v1.AgentMode_AGENT_MODE_HEADLESS}))
+	value, err := cfg.API.Agents.SendMessage(ctx, rpcRequest(cfg, &v1.SendMessageRequest{ItemId: id, Text: message, Images: images, Delivery: delivery, ClientMessageId: *clientMessage, StartMode: v1.AgentMode_AGENT_MODE_HEADLESS, AwaitsReply: *wait}))
 	if err != nil {
 		return err
 	}

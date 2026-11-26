@@ -29,6 +29,9 @@ type APIMessageReceipt struct {
 	Sender string `json:"sender,omitempty"`
 	// Marker is the envelope's, when the message reached the agent wrapped.
 	Marker string `json:"marker,omitempty"`
+	// AwaitsReply says the sender waits for the reply, so it needs no
+	// notice of the turn's end.
+	AwaitsReply bool `json:"awaits_reply,omitempty"`
 }
 
 func apiMessageKey(itemID, messageID string) string {
@@ -78,4 +81,24 @@ func (d *Database) ForgetAPIMessage(itemID, messageID string) error {
 		}
 		return bucket.Delete([]byte(apiMessageKey(itemID, messageID)))
 	})
+}
+
+// LatestAPIMessage is the last message sent to an item through the API.
+func (d *Database) LatestAPIMessage(itemID string) (APIMessageReceipt, bool, error) {
+	raw, err := d.ListProjection(apiMessagesProjection)
+	if err != nil {
+		return APIMessageReceipt{}, false, err
+	}
+	var latest APIMessageReceipt
+	found := false
+	for _, data := range raw {
+		var value APIMessageReceipt
+		if err := json.Unmarshal(data, &value); err != nil {
+			return APIMessageReceipt{}, false, err
+		}
+		if value.ItemID == itemID && (!found || value.CreatedAt.After(latest.CreatedAt)) {
+			latest, found = value, true
+		}
+	}
+	return latest, found, nil
 }

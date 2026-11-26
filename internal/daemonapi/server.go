@@ -51,6 +51,7 @@ type Server struct {
 	planSecret      [32]byte
 	credentials     credentials
 	credentialsMu   sync.RWMutex
+	notices         noticed
 	callbackMu      sync.Mutex
 	callbacksClosed bool
 	callbacks       sync.WaitGroup
@@ -82,6 +83,7 @@ func New(ctx context.Context, core *coordinator.Server, a *app.App, cfg config.C
 	}
 	s.jobs.itemChanged = func(itemID string) { core.Database().NotifyItems(itemID) }
 	core.SetRuntimeSettingsObserver(s.observeRuntimeSettings)
+	core.SetRuntimeEventObserver(s.observeRuntimeEvent)
 	s.callbacks.Add(1)
 	go s.scheduleLoop()
 	s.callbacks.Add(1)

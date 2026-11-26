@@ -38,6 +38,7 @@ type Server struct {
 	beforeClose                func()
 	runtimeSettingsObserver    func(string, string, map[string]string, bool)
 	runtimeSettlementObserver  func(string)
+	runtimeEventObserver       func(RuntimeSemanticEvent)
 	startedAt                  time.Time
 	buildIdentity              string
 	domainMu                   sync.Mutex
@@ -729,6 +730,9 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		runtimeResult, err := IngestRuntimeEvent(ctx, s.database, runtimeEvent)
 		s.domainMu.Unlock()
+		if err == nil && !runtimeResult.Duplicate && s.runtimeEventObserver != nil {
+			s.runtimeEventObserver(runtimeEvent)
+		}
 		if err == nil && !runtimeResult.Duplicate && runtimeEvent.Type == "agent.settled" && s.runtimeSettlementObserver != nil {
 			s.runtimeSettlementObserver(runtimeEvent.WorkItemID)
 		}

@@ -51,6 +51,13 @@ func (s *Server) SetRuntimeSettlementObserver(observer func(string)) {
 	s.runtimeSettlementObserver = observer
 }
 
+// SetRuntimeEventObserver installs a nonblocking daemon use-case trigger for
+// every runtime event the coordinator records. The observer must schedule
+// work without waiting for item locks.
+func (s *Server) SetRuntimeEventObserver(observer func(RuntimeSemanticEvent)) {
+	s.runtimeEventObserver = observer
+}
+
 // SetRuntimeSettingsObserver installs daemon-owned handling for compact native
 // setting facts. The observer must schedule work without waiting for item locks.
 func (s *Server) SetRuntimeSettingsObserver(observer func(string, string, map[string]string, bool)) {

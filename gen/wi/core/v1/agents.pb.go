@@ -1082,6 +1082,11 @@ type SendMessageRequest struct {
 	// checkout, starts the item with the message as its first prompt, as
 	// LifecycleService.StartItem does, and returns the start's job.
 	RequireOnline bool `protobuf:"varint,9,opt,name=require_online,json=requireOnline,proto3" json:"require_online,omitempty"`
+	// awaits_reply says the sender waits for the reply to this message (wi
+	// send --wait). When an item's agent sends it to an item it delegated, the
+	// daemon then sends no notice of that turn's end to the sender: the reply
+	// is its result.
+	AwaitsReply   bool `protobuf:"varint,10,opt,name=awaits_reply,json=awaitsReply,proto3" json:"awaits_reply,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1175,6 +1180,13 @@ func (x *SendMessageRequest) GetStartMode() AgentMode {
 func (x *SendMessageRequest) GetRequireOnline() bool {
 	if x != nil {
 		return x.RequireOnline
+	}
+	return false
+}
+
+func (x *SendMessageRequest) GetAwaitsReply() bool {
+	if x != nil {
+		return x.AwaitsReply
 	}
 	return false
 }
@@ -4571,7 +4583,7 @@ const file_wi_core_v1_agents_proto_rawDesc = "" +
 	"\x13expected_generation\x18\x02 \x01(\rR\x12expectedGeneration\"b\n" +
 	"\x14RestartAgentResponse\x12'\n" +
 	"\x05agent\x18\x01 \x01(\v2\x11.wi.core.v1.AgentR\x05agent\x12!\n" +
-	"\x03job\x18\x02 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\xf3\x02\n" +
+	"\x03job\x18\x02 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\x96\x03\n" +
 	"\x12SendMessageRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x12)\n" +
@@ -4582,7 +4594,9 @@ const file_wi_core_v1_agents_proto_rawDesc = "" +
 	"\blease_id\x18\a \x01(\tR\aleaseId\x124\n" +
 	"\n" +
 	"start_mode\x18\b \x01(\x0e2\x15.wi.core.v1.AgentModeR\tstartMode\x12%\n" +
-	"\x0erequire_online\x18\t \x01(\bR\rrequireOnline\"X\n" +
+	"\x0erequire_online\x18\t \x01(\bR\rrequireOnline\x12!\n" +
+	"\fawaits_reply\x18\n" +
+	" \x01(\bR\vawaitsReply\"X\n" +
 	"\x13SendMessageResponse\x12\x1e\n" +
 	"\n" +
 	"generation\x18\x01 \x01(\rR\n" +

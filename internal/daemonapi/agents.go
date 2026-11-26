@@ -345,7 +345,7 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 	if r.ClientMessageId != "" {
 		commandID = messageCommandID(r.ItemId, r.ClientMessageId)
 		if !pending {
-			receipt = coordinator.APIMessageReceipt{ItemID: r.ItemId, MessageID: r.ClientMessageId, RuntimeID: runtime.Runtime.ID, Generation: current.Generation, CreatedAt: time.Now().UTC(), Sender: sender, Marker: envelope.Marker}
+			receipt = coordinator.APIMessageReceipt{ItemID: r.ItemId, MessageID: r.ClientMessageId, RuntimeID: runtime.Runtime.ID, Generation: current.Generation, CreatedAt: time.Now().UTC(), Sender: sender, Marker: envelope.Marker, AwaitsReply: r.AwaitsReply}
 		}
 		if receipt.RuntimeID != runtime.Runtime.ID {
 			return aborted("message delivery belongs to another runtime")
