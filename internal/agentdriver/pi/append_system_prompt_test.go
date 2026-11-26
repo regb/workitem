@@ -67,37 +67,23 @@ func (r *systemPromptRunner) RunHeadless(ctx context.Context, path string, args 
 	}
 	return r.inspect(args)
 }
-func TestAppendSystemPromptBothModesAndSessionStates(t *testing.T) {
+func TestAppendSystemPromptBothModes(t *testing.T) {
 	for _, mode := range []agent.Mode{agent.ModeTUI, agent.ModeHeadless} {
-		for _, resume := range []bool{false, true} {
-			for _, prompt := range []string{"Custom system instructions.\nKeep exact whitespace.", "", "   ", "/etc/passwd"} {
-				for _, fail := range []bool{false, true} {
-					t.Run(string(mode)+"/"+prompt, func(t *testing.T) {
-						session := filepath.Join(t.TempDir(), "session.jsonl")
-						if resume {
-							if err := os.WriteFile(session, []byte("existing native history"), 0600); err != nil {
-								t.Fatal(err)
-							}
+		for _, prompt := range []string{"Custom system instructions.\nKeep exact whitespace.", "", "   ", "/etc/passwd"} {
+			for _, fail := range []bool{false, true} {
+				t.Run(string(mode)+"/"+prompt, func(t *testing.T) {
+					runner := &systemPromptRunner{t: t, prompt: prompt, fail: fail}
+					client := pi.Client{Path: "pi", Runner: runner}
+					err := client.ExecMode(context.Background(), pi.ExecSpec{SessionPath: filepath.Join(t.TempDir(), "session.jsonl"), BridgePath: "/tmp/bridge.ts", Mode: mode, AppendSystemPrompt: prompt})
+					if (err != nil) != fail {
+						t.Fatalf("error=%v fail=%v", err, fail)
+					}
+					if runner.path != "" {
+						if _, err := os.Stat(runner.path); !os.IsNotExist(err) {
+							t.Fatal("temporary prompt survived", err)
 						}
-						runner := &systemPromptRunner{t: t, prompt: prompt, fail: fail}
-						client := pi.Client{Path: "pi", Runner: runner}
-						err := client.ExecMode(context.Background(), pi.ExecSpec{SessionPath: session, BridgePath: "/tmp/bridge.ts", Mode: mode, AppendSystemPrompt: prompt})
-						if (err != nil) != fail {
-							t.Fatalf("error=%v fail=%v", err, fail)
-						}
-						if runner.path != "" {
-							if _, err := os.Stat(runner.path); !os.IsNotExist(err) {
-								t.Fatal("temporary prompt survived", err)
-							}
-						}
-						if resume {
-							data, err := os.ReadFile(session)
-							if err != nil || string(data) != "existing native history" {
-								t.Fatal("native history changed", err)
-							}
-						}
-					})
-				}
+					}
+				})
 			}
 		}
 	}

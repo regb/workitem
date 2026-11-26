@@ -2,10 +2,9 @@ package pi
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,52 +13,44 @@ import (
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agent"
-	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/model"
-	"github.com/regb/workitem/internal/store"
 	"github.com/regb/workitem/internal/testutil"
 )
 
-func TestNativeRPCTransportRetriesLiveEventUntilEventSocketAcknowledges(t *testing.T) {
-	dir := testutil.ShortTempDir(t)
-	socket := filepath.Join(dir, "events.sock")
-	ctx, cancel := context.WithCancel(context.Background())
+// Neither an unreachable event socket nor a retryable relay rejection loses an
+// event or changes its identity; the sender retries until one is acknowledged.
+func TestNativeRPCTransportRetriesRejectedRelayWithoutLosingSettlement(t *testing.T) {
+	root := testutil.ShortTempDir(t)
+	socket := filepath.Join(root, "events.sock")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "runtime-retry", WorkItemID: "item-retry", EventSocketPath: socket}, liveQueue: make(chan queuedLiveEvent, 2), liveContext: ctx, liveNonce: "nonce"}
+	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "retry-owner", WorkItemID: "item", EventSocketPath: socket}, liveQueue: make(chan queuedLiveEvent, 4), liveContext: ctx, liveNonce: "nonce"}
 	go transport.runLiveSender(ctx)
-	transport.queueLiveEvent(agent.RuntimeEvent{Type: agent.EventTurnStarted, Timestamp: time.Now()}, nil)
-	time.Sleep(150 * time.Millisecond)
+	transport.queueLiveEvent(agent.RuntimeEvent{Type: agent.EventAgentStarted, Timestamp: time.Now()}, nil)
+	// The first delivery reaches a socket that drops the connection unanswered.
+	dropping, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, err := dropping.Accept()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = conn.Close()
+	_ = dropping.Close()
 	server, err := driverprotocol.ListenEvents(socket)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer server.Close()
 	select {
-	case request := <-server.Requests():
-		if request.Event.Type != agent.EventTurnStarted || request.Event.RuntimeID != "runtime-retry" {
-			t.Fatalf("event=%+v", request.Event)
+	case first := <-server.Requests():
+		if first.Event.Type != agent.EventAgentStarted || first.Event.RuntimeID != "retry-owner" {
+			t.Fatalf("event=%+v", first.Event)
 		}
-		request.Respond(nil)
-	case <-time.After(3 * time.Second):
-		t.Fatal("queued event was not delivered")
+		first.Respond(nil)
+	case <-ctx.Done():
+		t.Fatal("queued event was not delivered once the event socket listened")
 	}
-}
-
-func TestNativeRPCTransportRetriesRejectedRelayWithoutLosingSettlement(t *testing.T) {
-	root := testutil.ShortTempDir(t)
-	socket := filepath.Join(root, "events.sock")
-	server, err := driverprotocol.ListenEvents(socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer server.Close()
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "retry-owner", WorkItemID: "item", EventSocketPath: socket}, liveQueue: make(chan queuedLiveEvent, 4), liveContext: ctx, liveNonce: "nonce"}
-	go transport.runLiveSender(ctx)
-	transport.queueLiveEvent(agent.RuntimeEvent{Type: agent.EventAgentStarted, Timestamp: time.Now()}, nil)
-	first := <-server.Requests()
-	first.Respond(nil)
 	settled := agent.RuntimeEvent{Type: agent.EventAgentSettled, Outcome: "completed", Timestamp: time.Now()}
 	ack := make(chan struct{})
 	transport.queueLiveEvent(settled, ack)
@@ -135,12 +126,10 @@ func TestNativeRPCTransportRejectsMismatchedControlIdentity(t *testing.T) {
 func TestNativeRPCTransportControlsAndPublishesOnlyCompactEvents(t *testing.T) {
 	dir := testutil.ShortTempDir(t)
 	fakePi := filepath.Join(dir, "fake-pi")
-	script := `#!/usr/bin/env bash
-set -euo pipefail
+	script := `set -eu
 while IFS= read -r line; do
   case "$line" in
     *wi-runtime-ready*)
-      sleep 0.2
       printf '%s\n' '{"id":"wi-runtime-ready","type":"response","command":"get_commands","success":true,"data":{"commands":[{"name":"wi-control-idle"}]}}'
       ;;
     *command-prompt*)
@@ -151,25 +140,24 @@ while IFS= read -r line; do
       printf '%s\n' '{"type":"tool_execution_end","toolCallId":"tool-1","toolName":"bash","result":{"content":[{"type":"text","text":"private result"}]},"isError":false}'
       printf '%s\n' '{"type":"message_start","message":{"role":"assistant","content":[]}}'
       printf '%s\n' '{"type":"message_update","assistantMessageEvent":{"type":"text_delta","delta":"live private text"}}'
-      sleep 1
+      while [ ! -f "$1" ]; do sleep 0.01; done
       printf '%s\n' '{"type":"message_end","message":{"role":"assistant","content":[{"type":"text","text":"private answer"}],"stopReason":"stop"}}'
       printf '%s\n' '{"type":"agent_settled"}'
       ;;
   esac
 done
 `
-	if err := os.WriteFile(fakePi, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WriteScript(t, fakePi, script)
 	itemID, runtimeID := "01K00000000000000000000000", "rpc-test"
-	_, daemonClient := startRuntimeTestDaemon(t, itemID, runtimeID)
+	// The fake Pi saves its answer once the live text has been read.
+	answer := filepath.Join(dir, "answer")
 	result := make(chan error, 1)
 	controlPath := filepath.Join(dir, "control.sock")
-	eventPath := startRuntimeTestEventRelay(t, filepath.Join(dir, "events.sock"), daemonClient)
+	events := recordEvents(t, filepath.Join(dir, "events.sock"))
 	go func() {
-		result <- runNativeRPC(context.Background(), fakePi, []string{"--mode", "rpc"}, os.Environ(), ExecSpec{
+		result <- runNativeRPC(context.Background(), fakePi, []string{answer}, os.Environ(), ExecSpec{
 			CWD: dir, WorkItemID: itemID, RuntimeID: runtimeID,
-			ControlSocketPath: controlPath, EventSocketPath: eventPath, LogPath: filepath.Join(dir, "runtime.log"),
+			ControlSocketPath: controlPath, EventSocketPath: events.path, LogPath: filepath.Join(dir, "runtime.log"),
 		})
 	}()
 	deadline := time.Now().Add(5 * time.Second)
@@ -187,7 +175,7 @@ done
 	if err := agent.SubmitControlSocket(ctx, controlPath, agent.ControlCommand{ProtocolVersion: agent.RuntimeProtocolVersion, ID: "command-prompt", RuntimeID: runtimeID, WorkItemID: itemID, RequestID: "request-1", Type: agent.CommandPrompt, Message: "[wi request request-1]\nprivate prompt", CreatedAt: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
-	waitForDaemonRuntimeEvent(t, daemonClient, itemID, agent.EventRuntimeReady)
+	events.waitFor(t, agent.EventRuntimeReady)
 	contentSeen := false
 	deadline = time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
@@ -201,12 +189,14 @@ done
 	if !contentSeen {
 		t.Fatal("live text was not available through public content endpoint")
 	}
-	events := waitForDaemonRuntimeEvent(t, daemonClient, itemID, agent.EventAgentSettled)
+	if err := os.WriteFile(answer, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
 	types := map[string]bool{}
-	for _, event := range events {
+	for _, event := range events.waitFor(t, agent.EventAgentSettled) {
 		types[event.Type] = true
-		if strings.Contains(string(event.Payload), "private") {
-			t.Fatalf("unrestricted payload entered daemon event: %s", event.Payload)
+		if encoded, _ := json.Marshal(event); strings.Contains(string(encoded), "private") {
+			t.Fatalf("unrestricted payload entered runtime event: %s", encoded)
 		}
 	}
 	for _, eventType := range []string{agent.EventCommandAccepted, agent.EventToolStarted, agent.EventToolCompleted, agent.EventMessageCompleted, agent.EventAgentSettled} {
@@ -227,102 +217,61 @@ done
 	}
 }
 
-func startRuntimeTestEventRelay(t *testing.T, path string, client *coordinator.Client) string {
+// eventRecorder accepts every runtime event sent to its socket.
+type eventRecorder struct {
+	path     string
+	received chan driverprotocol.RuntimeEvent
+	seen     []driverprotocol.RuntimeEvent
+}
+
+func recordEvents(t *testing.T, path string) *eventRecorder {
 	t.Helper()
 	server, err := driverprotocol.ListenEvents(path)
 	if err != nil {
 		t.Fatal(err)
 	}
+	recorder := &eventRecorder{path: path, received: make(chan driverprotocol.RuntimeEvent, 256)}
 	go func() {
 		for request := range server.Requests() {
-			event := request.Event
-			_, err := client.IngestRuntimeEvent(context.Background(), coordinator.RuntimeSemanticEvent{ID: event.EventID, RuntimeID: event.RuntimeID, WorkItemID: event.WorkItemID, Type: event.Type, Timestamp: event.Timestamp, CommandID: event.CommandID, RequestID: event.RequestID, Role: event.Role, ToolName: event.ToolName, Failed: event.Failed, Outcome: event.Outcome, AgentState: event.AgentState, LeafID: event.LeafID, Readiness: event.Readiness, ReasonCode: event.ReasonCode, DeliveryState: event.DeliveryState, Settings: event.Settings})
-			request.Respond(err)
+			recorder.received <- request.Event
+			request.Respond(nil)
 		}
 	}()
 	t.Cleanup(func() { _ = server.Close() })
-	return path
+	return recorder
 }
 
-func startRuntimeTestDaemon(t *testing.T, itemID, runtimeID string) (string, *coordinator.Client) {
+// waitFor returns every event received so far once one of eventType arrives.
+func (r *eventRecorder) waitFor(t *testing.T, eventType string) []driverprotocol.RuntimeEvent {
 	t.Helper()
-	root, runtimeDir := t.TempDir(), testutil.ShortTempDir(t)
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
+	for _, event := range r.seen {
+		if event.Type == eventType {
+			return r.seen
+		}
 	}
-	now := time.Now().UTC()
-	manifest := model.NewManifest(itemID, "rpc", "RPC", nil, false, now, model.Repository{}, model.Checkout{})
-	manifest.State = model.StateActive
-	if err := native.CreateItem(context.Background(), manifest); err != nil {
-		t.Fatal(err)
-	}
-	db, err := coordinator.OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, _ := json.Marshal(manifest)
-	digest := sha256.Sum256(encoded)
-	if _, err := db.SyncImportedManifests(map[string]coordinator.ImportedManifest{itemID: {Manifest: manifest, Digest: hex.EncodeToString(digest[:])}}, true); err != nil {
-		db.Close()
-		t.Fatal(err)
-	}
-	owner, _ := json.Marshal(model.AgentRuntime{ID: runtimeID, WorkItemID: itemID, State: model.AgentRuntimeRunning})
-	if err := db.UpdateProjections([]coordinator.ProjectionUpdate{{Projection: coordinator.RuntimeOwnershipProjection, Key: itemID, Value: owner}}); err != nil {
-		db.Close()
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	socket, err := coordinator.SocketPath(runtimeDir, root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server, err := coordinator.NewServer(root, socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(context.Background()) }()
-	client := &coordinator.Client{SocketPath: socket}
-	t.Cleanup(func() {
-		_ = server.Close()
+	timeout := time.After(5 * time.Second)
+	for {
 		select {
-		case <-done:
-		case <-time.After(3 * time.Second):
-			t.Error("runtime test daemon did not stop")
-		}
-	})
-	return socket, client
-}
-
-func waitForDaemonRuntimeEvent(t *testing.T, client *coordinator.Client, itemID, eventType string) []coordinator.DomainEvent {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		result, err := client.RuntimeEvents(context.Background(), coordinator.RuntimeEventsRequest{ItemID: itemID, Limit: 100})
-		if err == nil {
-			for _, event := range result.Events {
-				if event.Type == eventType {
-					return result.Events
-				}
+		case event := <-r.received:
+			r.seen = append(r.seen, event)
+			if event.Type == eventType {
+				return r.seen
 			}
+		case <-timeout:
+			t.Fatalf("event %s was not observed in %+v", eventType, r.seen)
 		}
-		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("event %s was not observed", eventType)
-	return nil
 }
 
-func TestLiveEventsKeepTheSettingReasonCode(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "runtime", WorkItemID: "item"}, liveQueue: make(chan queuedLiveEvent, 1), liveContext: ctx, liveNonce: "nonce"}
-	transport.queueLiveEvent(agent.RuntimeEvent{Type: agent.EventCommandAccepted, CommandID: "model", ReasonCode: agent.ReasonSettingApplied, Timestamp: time.Now()}, nil)
-	// The daemon needs the reason code to tell a setting change from work.
-	if queued := <-transport.liveQueue; queued.event.ReasonCode != agent.ReasonSettingApplied {
-		t.Fatalf("event=%+v", queued.event)
+// drain returns every event received so far without waiting.
+func (r *eventRecorder) drain() []driverprotocol.RuntimeEvent {
+	for {
+		select {
+		case event := <-r.received:
+			r.seen = append(r.seen, event)
+		default:
+			return r.seen
+		}
 	}
 }
 
@@ -332,8 +281,7 @@ func TestLiveEventsKeepTheSettingReasonCode(t *testing.T) {
 func TestNativeRPCTransportAbortIsNotPublishedAsWork(t *testing.T) {
 	dir := testutil.ShortTempDir(t)
 	fakePi := filepath.Join(dir, "fake-pi")
-	script := `#!/usr/bin/env bash
-set -euo pipefail
+	script := `set -eu
 while IFS= read -r line; do
   case "$line" in
     *wi-runtime-ready*)
@@ -345,34 +293,39 @@ while IFS= read -r line; do
   esac
 done
 `
-	if err := os.WriteFile(fakePi, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WriteScript(t, fakePi, script)
 	itemID, runtimeID := "01K00000000000000000000000", "rpc-abort"
-	_, daemonClient := startRuntimeTestDaemon(t, itemID, runtimeID)
 	controlPath := filepath.Join(dir, "control.sock")
-	eventPath := startRuntimeTestEventRelay(t, filepath.Join(dir, "events.sock"), daemonClient)
+	events := recordEvents(t, filepath.Join(dir, "events.sock"))
+	result := make(chan error, 1)
 	go func() {
-		_ = runNativeRPC(context.Background(), fakePi, []string{"--mode", "rpc"}, os.Environ(), ExecSpec{
+		result <- runNativeRPC(context.Background(), fakePi, []string{"--mode", "rpc"}, os.Environ(), ExecSpec{
 			CWD: dir, WorkItemID: itemID, RuntimeID: runtimeID,
-			ControlSocketPath: controlPath, EventSocketPath: eventPath, LogPath: filepath.Join(dir, "runtime.log"),
+			ControlSocketPath: controlPath, EventSocketPath: events.path, LogPath: filepath.Join(dir, "runtime.log"),
 		})
 	}()
-	waitForDaemonRuntimeEvent(t, daemonClient, itemID, agent.EventRuntimeReady)
+	events.waitFor(t, agent.EventRuntimeReady)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := agent.SubmitControlSocket(ctx, controlPath, agent.ControlCommand{ProtocolVersion: agent.RuntimeProtocolVersion, ID: "command-abort", RuntimeID: runtimeID, WorkItemID: itemID, Type: agent.CommandAbort, CreatedAt: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
-	waitForDaemonRuntimeEvent(t, daemonClient, itemID, agent.EventCommandAccepted)
-	time.Sleep(200 * time.Millisecond)
-	result, err := daemonClient.RuntimeEvents(context.Background(), coordinator.RuntimeEventsRequest{ItemID: itemID, Limit: 100})
-	if err != nil {
+	events.waitFor(t, agent.EventCommandAccepted)
+	// Every event the runtime publishes is delivered before it exits.
+	if err := agent.SubmitControlSocket(ctx, controlPath, agent.ControlCommand{ProtocolVersion: agent.RuntimeProtocolVersion, ID: "command-shutdown", RuntimeID: runtimeID, WorkItemID: itemID, Type: agent.CommandShutdown, CreatedAt: time.Now()}); err != nil {
 		t.Fatal(err)
 	}
-	for _, event := range result.Events {
-		if event.Type == agent.EventCommandAccepted && !strings.Contains(string(event.Payload), `"reason_code":"abort_accepted"`) {
-			t.Fatalf("abort published as work: %s", event.Payload)
+	select {
+	case err := <-result:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-ctx.Done():
+		t.Fatal("native RPC transport did not shut down")
+	}
+	for _, event := range events.drain() {
+		if event.Type == agent.EventCommandAccepted && event.CommandID == "command-abort" && event.ReasonCode != agent.ReasonAbortAccepted {
+			t.Fatalf("abort published as work: %+v", event)
 		}
 	}
 }

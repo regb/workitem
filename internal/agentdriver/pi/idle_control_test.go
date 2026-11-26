@@ -50,6 +50,17 @@ func TestIdleGuardReservesPromptBeforeAgentStart(t *testing.T) {
 	if err := transport.sendCommand(idleTestCommand("retry", agent.CommandPrompt)); err != nil {
 		t.Fatal("rejection did not release reservation", err)
 	}
+	// An agent observed busy refuses idle-only commands the same way.
+	busy, _ := idleTestTransport(t)
+	busy.busy = true
+	for _, typ := range []string{agent.CommandPrompt, agent.CommandShutdown} {
+		if err := busy.sendCommand(idleTestCommand(typ, typ)); err == nil {
+			t.Fatalf("%s accepted while busy", typ)
+		}
+		if busy.stopping || busy.handled[typ] {
+			t.Fatal("refused command changed runtime")
+		}
+	}
 }
 func TestIdlePromptUsesNativeRejectionInsteadOfSteering(t *testing.T) {
 	transport, r := idleTestTransport(t)

@@ -1,0 +1,17 @@
+import bridge from './bridge.ts';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {syncBuiltinESMExports} from 'node:module';
+let handler;let idle=false;let pending=false;let stopped=false;const results=[];
+fs.writeSync=(fd,data)=>{assert.equal(fd,1);results.push(JSON.parse(data));return data.length};syncBuiltinESMExports();
+bridge({registerCommand:(name,command)=>{assert.equal(name,'wi-control-idle');handler=command.handler},on:()=>{},getThinkingLevel:()=>"medium"});
+const ctx={isIdle:()=>idle,hasPendingMessages:()=>pending,shutdown:()=>{stopped=true},abort:()=>{}};
+const command={protocol_version:1,runtime_id:'owner',work_item_id:'item',id:'command',require_idle:true,type:'shutdown'};
+const encode=cmd=>Buffer.from(JSON.stringify(cmd)).toString('base64');
+await handler(encode(command),ctx);assert.equal(results.at(-1).success,false);assert.match(results.at(-1).error,/became busy/);assert.equal(stopped,false);
+assert.equal(results.at(-1).type,'wi_control_result');
+idle=true;pending=true;
+await handler(encode(command),ctx);assert.equal(results.at(-1).success,false);assert.match(results.at(-1).error,/became busy/);assert.equal(stopped,false);
+pending=false;
+await handler(encode({...command,runtime_id:'superseded'}),ctx);assert.match(results.at(-1).error,/owner mismatch/);
+await handler(encode(command),ctx);assert.equal(stopped,true);assert.equal(results.at(-1).success,true);

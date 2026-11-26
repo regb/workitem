@@ -9,6 +9,7 @@ import (
 
 	"github.com/regb/workitem/agentdriver/drivertest"
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
+	"github.com/regb/workitem/internal/testutil"
 	"github.com/regb/workitem/skills"
 )
 
@@ -23,8 +24,7 @@ func TestHeadlessRuntimeConformance(t *testing.T) {
 	profile := t.TempDir()
 	t.Setenv("PI_CODING_AGENT_DIR", profile)
 	backend := filepath.Join(t.TempDir(), "fake-pi")
-	script := `#!/usr/bin/env bash
-set -euo pipefail
+	script := `set -eu
 while [ "$#" -gt 0 ]; do
   if [ "$1" = "--skill" ]; then
     shift
@@ -39,9 +39,7 @@ while IFS= read -r line; do
   esac
 done
 `
-	if err := os.WriteFile(backend, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WriteScript(t, backend, script)
 	capture := filepath.Join(t.TempDir(), "skill-copy")
 	t.Setenv("SKILL_COPY", capture)
 	config, _ := json.Marshal(Config{Executable: backend})

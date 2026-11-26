@@ -19,10 +19,8 @@ func TestNativeRPCStartupQueueOverflowAndInterruptedHandoff(t *testing.T) {
 			dir := testutil.ShortTempDir(t)
 			fakePi := filepath.Join(dir, "fake-pi")
 			// Read the readiness probe, but never respond. A marker controls exit.
-			script := "#!/usr/bin/env bash\nset -euo pipefail\nIFS= read -r line\nwhile [ ! -f \"$1\" ]; do sleep 0.01; done\n"
-			if err := os.WriteFile(fakePi, []byte(script), 0700); err != nil {
-				t.Fatal(err)
-			}
+			script := "set -eu\nIFS= read -r line\nwhile [ ! -f \"$1\" ]; do sleep 0.01; done\n"
+			testutil.WriteScript(t, fakePi, script)
 			exitMarker := filepath.Join(dir, "exit")
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

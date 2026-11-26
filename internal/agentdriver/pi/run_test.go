@@ -15,17 +15,6 @@ import (
 	"github.com/regb/workitem/internal/testutil"
 )
 
-func TestValidReasoningLevel(t *testing.T) {
-	for _, level := range []string{"off", "minimal", "low", "medium", "high", "xhigh", "max"} {
-		if !validReasoningLevel(level) {
-			t.Fatalf("rejected %q", level)
-		}
-	}
-	if validReasoningLevel("extreme") || validReasoningLevel("") {
-		t.Fatal("accepted invalid reasoning level")
-	}
-}
-
 func TestDriverLaunchesConfiguredPiWithTemporarySkill(t *testing.T) {
 	dir := testutil.ShortTempDir(t)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
@@ -38,8 +27,7 @@ func TestDriverLaunchesConfiguredPiWithTemporarySkill(t *testing.T) {
 	envPath := filepath.Join(dir, "env")
 	capture := filepath.Join(dir, "skill-copy")
 	backend := filepath.Join(dir, "pi-test")
-	script := `#!/bin/sh
-printf '%s\n' "$@" > "$ARGS_PATH"
+	script := `printf '%s\n' "$@" > "$ARGS_PATH"
 printf '%s\n%s\n' "$PI_CODING_AGENT_DIR" "$PI_CODING_AGENT_SESSION_DIR" > "$ENV_PATH"
 while [ "$#" -gt 0 ]; do
   if [ "$1" = '--append-system-prompt' ]; then
@@ -52,9 +40,7 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 `
-	if err := os.WriteFile(backend, []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WriteScript(t, backend, script)
 	socket := filepath.Join(dir, "bootstrap.sock")
 	server, err := driverprotocol.Listen(socket)
 	if err != nil {

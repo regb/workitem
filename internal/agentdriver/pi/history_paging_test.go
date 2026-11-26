@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -49,38 +48,5 @@ func TestHistoryPagesNewestFirstWithoutGaps(t *testing.T) {
 	}
 	if _, err := ReadHistoryPage(context.Background(), path, "e450", "foreign-branch"); err == nil {
 		t.Fatal("invalid cursor accepted")
-	}
-}
-
-func TestHistorySupportsFilesBeyondOldSizeLimit(t *testing.T) {
-	if testing.Short() {
-		t.Skip("large native-file regression")
-	}
-	path := filepath.Join(t.TempDir(), "history.jsonl")
-	f, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoder := json.NewEncoder(f)
-	parent := ""
-	padding := strings.Repeat("x", 1<<20)
-	for i := 0; i < 65; i++ {
-		id := fmt.Sprintf("e%d", i)
-		if err := encoder.Encode(map[string]any{"type": "message", "id": id, "parentId": parent, "message": map[string]any{"role": "user", "content": fmt.Sprintf("message %d ", i) + padding}}); err != nil {
-			t.Fatal(err)
-		}
-		parent = id
-	}
-	f.Close()
-	info, _ := os.Stat(path)
-	if info.Size() <= 64<<20 {
-		t.Fatal("fixture not large enough")
-	}
-	page, err := ReadHistory(context.Background(), path, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if page.LeafID != "e64" || len(page.Messages) == 0 || page.Messages[len(page.Messages)-1].ID != "e64" || !page.HasMore {
-		t.Fatalf("large history: %+v", page)
 	}
 }

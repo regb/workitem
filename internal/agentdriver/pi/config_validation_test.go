@@ -8,16 +8,14 @@ import (
 	"testing"
 
 	"github.com/regb/workitem/internal/agentdriver"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestConfigValidationIsStatelessAndSharesLaunchRules(t *testing.T) {
 	profile := t.TempDir()
 	t.Setenv("PI_CODING_AGENT_DIR", profile)
 	marker := filepath.Join(t.TempDir(), "backend-started")
-	executable := filepath.Join(t.TempDir(), "fake-pi")
-	if err := os.WriteFile(executable, []byte("#!/bin/sh\ntouch '"+marker+"'\nexit 9\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
+	executable := testutil.Script(t, "touch '"+marker+"'\nexit 9")
 	client := agentdriver.Client{Driver: "pi", Path: os.Args[0], Args: []string{"-test.run=^TestDecodeTransportHelper$"}, Env: append(os.Environ(), "GO_WANT_WI_PI_DECODE_HELPER=1")}
 	for _, tc := range []struct {
 		name  string

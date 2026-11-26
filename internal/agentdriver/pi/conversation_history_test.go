@@ -10,19 +10,14 @@ import (
 	"testing"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
-	"github.com/regb/workitem/internal/agent"
 )
 
 func TestHistorySelectsBranchAndIgnoresIncompleteAppend(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "native.jsonl")
-	data := `{"type":"session","version":3,"id":"session"}
+	path := writeNativeHistory(t, `{"type":"session","version":3,"id":"session"}
 {"type":"message","id":"root","parentId":null,"message":{"role":"user","content":"hello"}}
 {"type":"message","id":"abandoned","parentId":"root","message":{"role":"assistant","content":[{"type":"text","text":"old answer"}]}}
 {"type":"message","id":"active","parentId":"root","message":{"role":"assistant","content":[{"type":"thinking","thinking":"private"},{"type":"text","text":"new answer"},{"type":"toolCall","name":"bash"}]}}
-{"type":"message","id":"unfinished"`
-	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
+{"type":"message","id":"unfinished"`)
 	result, err := ReadHistory(context.Background(), path, "")
 	if err != nil {
 		t.Fatal(err)
@@ -39,17 +34,12 @@ func TestHistorySelectsBranchAndIgnoresIncompleteAppend(t *testing.T) {
 	}
 }
 func TestHistoryJoinsToolCallAndResult(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "native.jsonl")
-	data := `{"type":"session","version":3,"id":"session"}
+	result, err := readHistory(t, `{"type":"session","version":3,"id":"session"}
 {"type":"message","id":"user","parentId":null,"message":{"role":"user","content":[{"type":"text","text":"inspect"},{"type":"image","mimeType":"image/png","data":"iVBORw0KGgo="}]}}
 {"type":"message","id":"call","parentId":"user","message":{"role":"assistant","content":[{"type":"text","text":"I'll check."},{"type":"toolCall","id":"tool-1","name":"bash","arguments":{"command":"ls"}}]}}
 {"type":"message","id":"result","parentId":"call","message":{"role":"toolResult","toolCallId":"tool-1","toolName":"bash","content":[{"type":"text","text":"README.md"}]}}
 {"type":"message","id":"answer","parentId":"result","message":{"role":"assistant","content":[{"type":"text","text":"The repo has a README."}]}}
-`
-	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
-	result, err := ReadHistory(context.Background(), path, "")
+`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,9 +62,7 @@ func TestHistoryJoinsToolCallAndResult(t *testing.T) {
 
 func TestHistoryRejectsMalformedAndCyclicInput(t *testing.T) {
 	for _, data := range []string{"not json\n", `{"type":"message","id":"cycle","parentId":"cycle"}` + "\n", `{"type":"message","message":{"role":"user","content":"legacy"}}` + "\n"} {
-		path := filepath.Join(t.TempDir(), "native.jsonl")
-		_ = os.WriteFile(path, []byte(data), 0600)
-		if _, err := ReadHistory(context.Background(), path, ""); err == nil {
+		if _, err := readHistory(t, data); err == nil {
 			t.Fatal("malformed history accepted")
 		}
 	}
@@ -101,32 +89,15 @@ func TestHistoryLimitsAndPublicOperation(t *testing.T) {
 		t.Fatalf("history limit %+v", response.History)
 	}
 }
-func TestNativeRPCIdleGuardRefusesBeforeWritingOrStopping(t *testing.T) {
-	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "owner", WorkItemID: "item"}, busy: true, handled: map[string]bool{}}
-	for _, typ := range []string{agent.CommandPrompt, agent.CommandShutdown} {
-		err := transport.sendCommand(agent.ControlCommand{ProtocolVersion: 1, ID: typ, RuntimeID: "owner", WorkItemID: "item", Type: typ, RequireIdle: true})
-		if err == nil {
-			t.Fatal("busy control accepted")
-		}
-		if transport.stopping || transport.handled[typ] {
-			t.Fatal("refused command changed runtime")
-		}
-	}
-}
 
 // A reply the operator stopped keeps its partial text, marked aborted.
 func TestHistoryMarksAnAbortedReply(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "native.jsonl")
-	data := `{"type":"session","version":3,"id":"session"}
+	result, err := readHistory(t, `{"type":"session","version":3,"id":"session"}
 {"type":"message","id":"root","parentId":null,"message":{"role":"user","content":"hello"}}
 {"type":"message","id":"stopped","parentId":"root","message":{"role":"assistant","stopReason":"aborted","content":[{"type":"text","text":"partial"}]}}
 {"type":"message","id":"again","parentId":"stopped","message":{"role":"user","content":"go on"}}
 {"type":"message","id":"done","parentId":"again","message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"complete"}]}}
-`
-	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
-	result, err := ReadHistory(context.Background(), path, "")
+`)
 	if err != nil || len(result.Messages) != 4 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -136,15 +107,10 @@ func TestHistoryMarksAnAbortedReply(t *testing.T) {
 }
 
 func TestHistoryShowsAnOperatorCommand(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "native.jsonl")
-	data := `{"type":"session","version":3,"id":"session"}
+	result, err := readHistory(t, `{"type":"session","version":3,"id":"session"}
 {"type":"message","id":"ran","parentId":null,"message":{"role":"bashExecution","command":"ls","output":"README.md\n","exitCode":0,"cancelled":false}}
 {"type":"message","id":"broke","parentId":"ran","message":{"role":"bashExecution","command":"false","output":"","exitCode":1,"cancelled":false}}
-`
-	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
-	result, err := ReadHistory(context.Background(), path, "")
+`)
 	if err != nil || len(result.Messages) != 2 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -158,16 +124,11 @@ func TestHistoryShowsAnOperatorCommand(t *testing.T) {
 }
 
 func TestHistoryTellsACompactionFromABranchSummary(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "native.jsonl")
-	data := `{"type":"session","version":3,"id":"session"}
+	result, err := readHistory(t, `{"type":"session","version":3,"id":"session"}
 {"type":"message","id":"root","parentId":null,"message":{"role":"user","content":"hello"}}
 {"type":"compaction","id":"compacted","parentId":"root","summary":"## Goal\nearlier work\n\n<read-files>\nREADME.md\nmain.go\n</read-files>\n\n<modified-files>\nmain.go\n</modified-files>","firstKeptEntryId":"root","tokensBefore":261479}
 {"type":"branch_summary","id":"left","parentId":"compacted","summary":"the abandoned approach","fromId":"root"}
-`
-	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
-	result, err := ReadHistory(context.Background(), path, "")
+`)
 	if err != nil || len(result.Messages) != 3 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -181,15 +142,10 @@ func TestHistoryTellsACompactionFromABranchSummary(t *testing.T) {
 }
 
 func TestHistoryKeepsPiReasoning(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "native.jsonl")
-	data := `{"type":"session","version":3,"id":"session"}
+	result, err := readHistory(t, `{"type":"session","version":3,"id":"session"}
 {"type":"message","id":"ask","parentId":null,"message":{"role":"user","content":"why?"}}
 {"type":"message","id":"answer","parentId":"ask","message":{"role":"assistant","content":[{"type":"thinking","thinking":"**Weighing it**","thinkingSignature":"x"},{"type":"thinking","thinking":""},{"type":"text","text":"because"}]}}
-`
-	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
-	result, err := ReadHistory(context.Background(), path, "")
+`)
 	if err != nil || len(result.Messages) != 2 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -206,16 +162,11 @@ func TestHistoryKeepsPiReasoning(t *testing.T) {
 // One reply keeps its blocks in the order the model wrote them, with each
 // call's result joined in, rather than text first and calls after.
 func TestHistoryKeepsAnInterleavedReplyInOrder(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "native.jsonl")
-	data := `{"type":"session","version":3,"id":"session"}
+	result, err := readHistory(t, `{"type":"session","version":3,"id":"session"}
 {"type":"message","id":"ask","parentId":null,"message":{"role":"user","content":"go"}}
 {"type":"message","id":"reply","parentId":"ask","message":{"role":"assistant","content":[{"type":"text","text":"first"},{"type":"toolCall","id":"call","name":"bash","arguments":{"command":"ls"}},{"type":"text","text":"then"},{"type":"thinking","thinking":"hmm"}],"stopReason":"toolUse"}}
 {"type":"message","id":"result","parentId":"reply","message":{"role":"toolResult","toolCallId":"call","toolName":"bash","content":[{"type":"text","text":"a.go"}]}}
-`
-	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
-		t.Fatal(err)
-	}
-	result, err := ReadHistory(context.Background(), path, "")
+`)
 	if err != nil || len(result.Messages) != 2 {
 		t.Fatalf("%+v %v", result, err)
 	}
@@ -230,4 +181,20 @@ func TestHistoryKeepsAnInterleavedReplyInOrder(t *testing.T) {
 	if !reflect.DeepEqual(reply.NativeIDs, []string{"result"}) {
 		t.Fatalf("native ids = %v", reply.NativeIDs)
 	}
+}
+
+// writeNativeHistory writes a native Pi session file holding data.
+func writeNativeHistory(t *testing.T, data string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "native.jsonl")
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// readHistory reads the current branch of a native Pi session holding data.
+func readHistory(t *testing.T, data string) (driverprotocol.History, error) {
+	t.Helper()
+	return ReadHistory(context.Background(), writeNativeHistory(t, data), "")
 }

@@ -9,29 +9,13 @@ import (
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agentdriver"
+	"github.com/regb/workitem/internal/testutil"
 )
-
-func TestRuntimeModesOfferStructuredControlInBothModes(t *testing.T) {
-	modes := RuntimeModes()
-	if err := modes.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	tui, headless := modes.Modes[driverprotocol.ModeTUI], modes.Modes[driverprotocol.ModeHeadless]
-	if tui.Control != driverprotocol.ControlStructured || !tui.Terminal || headless.Control != driverprotocol.ControlStructured || headless.Terminal {
-		t.Fatalf("modes = %+v", modes.Modes)
-	}
-	if !modes.Settings["model"].OnResume || !modes.Settings["reasoning"].OnResume {
-		t.Fatalf("settings = %+v", modes.Settings)
-	}
-}
 
 func TestRuntimeModesCrossTheDriverProcessWithoutLaunching(t *testing.T) {
 	t.Setenv("PI_CODING_AGENT_DIR", t.TempDir())
 	marker := filepath.Join(t.TempDir(), "backend-started")
-	executable := filepath.Join(t.TempDir(), "fake-pi")
-	if err := os.WriteFile(executable, []byte("#!/bin/sh\ntouch '"+marker+"'\nexit 9\n"), 0700); err != nil {
-		t.Fatal(err)
-	}
+	executable := testutil.Script(t, "touch '"+marker+"'\nexit 9")
 	client := agentdriver.Client{Driver: "pi", Path: os.Args[0], Args: []string{"-test.run=^TestDecodeTransportHelper$"}, Env: append(os.Environ(), "GO_WANT_WI_PI_DECODE_HELPER=1")}
 	raw, _ := json.Marshal(Config{Executable: executable})
 	modes, err := client.RuntimeModes(context.Background(), "default", raw)

@@ -12,6 +12,7 @@ import (
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/internal/agentdriver/acp"
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestVersionGates(t *testing.T) {
@@ -147,11 +148,7 @@ func TestQuotaAndFailuresAreFacts(t *testing.T) {
 func TestInvokeIsAOneShotPrintRequest(t *testing.T) {
 	dir := t.TempDir()
 	args := filepath.Join(dir, "args")
-	agy := filepath.Join(dir, "agy")
-	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\n' \"$a\"; done > " + args + "\nenv | grep -c '^WI_' >> " + args + "\necho '  The answer  '\n"
-	if err := os.WriteFile(agy, []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
+	agy := testutil.Script(t, "for a in \"$@\"; do printf '%s\\n' \"$a\"; done > "+args+"\nenv | grep -c '^WI_' >> "+args+"\necho '  The answer  '")
 	t.Setenv("WI_ITEM_ID", "secret-item")
 	answer, err := Invoke(context.Background(), Config{Executable: agy, Model: "gemini-4-neon", Reasoning: "minimal"}, protocol.ModelInvokeRequest{Instructions: "Be brief.", Prompt: "-what does the readme say"})
 	if err != nil || answer != "The answer" {
@@ -168,8 +165,7 @@ func TestInvokeIsAOneShotPrintRequest(t *testing.T) {
 		t.Fatalf("agy arguments:\n%s", got)
 	}
 
-	failing := filepath.Join(dir, "failing")
-	os.WriteFile(failing, []byte("#!/bin/sh\necho 'error: not signed in' >&2\nexit 1\n"), 0700)
+	failing := testutil.Script(t, "echo 'error: not signed in' >&2\nexit 1")
 	if _, err := Invoke(context.Background(), Config{Executable: failing}, protocol.ModelInvokeRequest{Prompt: "task"}); err == nil || !strings.Contains(err.Error(), "not signed in") {
 		t.Fatalf("failure: %v", err)
 	}

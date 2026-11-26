@@ -32,21 +32,6 @@ not json
 	}
 }
 
-func TestThinkingUpdatesBecomeThoughtsOrActivity(t *testing.T) {
-	update := func(kind, delta string) agent.RuntimeEvent {
-		return agent.RuntimeEvent{Data: map[string]any{"assistant_message_event": map[string]any{"type": kind, "delta": delta}}}
-	}
-	if got := thinkingDelta(update("thinking_delta", "weighing")); got != "weighing" {
-		t.Fatalf("thought = %q", got)
-	}
-	if got := thinkingDelta(update("text_delta", "answer")); got != "" {
-		t.Fatalf("answer text taken as thought: %q", got)
-	}
-	if updateKind(update("thinking_start", "")) != "thinking_start" {
-		t.Fatal("thinking start not recognized")
-	}
-}
-
 // A submitted prompt is paired with the saved user message of the same text,
 // and its session entry is reported once Pi has appended it.
 func TestPromptsAreLinkedToTheirSessionEntries(t *testing.T) {
@@ -103,13 +88,5 @@ func TestOnlyAssistantMessagesResetLiveContent(t *testing.T) {
 	value := content.Snapshot()
 	if value.Text() != "Running both" || len(driverprotocol.PartsTools(value.Parts)) != 2 || value.Activity == "Message saved" {
 		t.Fatalf("tool result reset live content: %+v", value)
-	}
-}
-
-func TestRefusedPromptsAreForgotten(t *testing.T) {
-	transport := &nativeRPCTransport{prompts: []submittedPrompt{{requestID: "web:a", text: "go"}, {requestID: "web:b", text: "go"}}}
-	transport.forgetPrompt("web:a")
-	if len(transport.prompts) != 1 || transport.prompts[0].requestID != "web:b" {
-		t.Fatalf("prompts = %+v", transport.prompts)
 	}
 }

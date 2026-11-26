@@ -114,10 +114,21 @@ func TestHeadlessSettingsReportBecomesARuntimeEvent(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	transport := &nativeRPCTransport{spec: ExecSpec{RuntimeID: "owner", WorkItemID: "item"}, liveContext: ctx, liveNonce: "nonce", liveQueue: make(chan queuedLiveEvent, 8), work: map[string]bool{}}
+	// Acknowledge delivery so the transport does not wait out its timeout.
+	delivered := make(chan queuedLiveEvent, 8)
+	go func() {
+		for queued := range transport.liveQueue {
+			if queued.ack != nil {
+				close(queued.ack)
+			}
+			delivered <- queued
+		}
+	}()
+	defer close(transport.liveQueue)
 	if err := transport.handleOutput([]byte(`{"type":"wi_runtime_settings","runtime_id":"owner","work_item_id":"item","settings":{"model":"openai/gpt","reasoning":"high"}}`)); err != nil {
 		t.Fatal(err)
 	}
-	queued := <-transport.liveQueue
+	queued := <-delivered
 	if queued.event.Type != agent.EventSettingsChanged || queued.event.Settings["model"] != "openai/gpt" || queued.event.Settings["reasoning"] != "high" {
 		t.Fatalf("event = %+v", queued.event)
 	}

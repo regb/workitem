@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -26,10 +25,7 @@ func TestHistoryBoundsPreserveUnicodeAndDoNotModifyNativeContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	data := append(record, '\n')
-	path := filepath.Join(t.TempDir(), "native.jsonl")
-	if err := os.WriteFile(path, data, 0600); err != nil {
-		t.Fatal(err)
-	}
+	path := writeNativeHistory(t, string(data))
 	result, err := ReadHistory(context.Background(), path, "")
 	if err != nil {
 		t.Fatal(err)

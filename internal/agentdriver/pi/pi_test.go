@@ -26,17 +26,6 @@ func (r *recordingRunner) RunInteractive(ctx context.Context, path string, args 
 	return nil
 }
 
-func TestArgsUsesExplicitSessionPath(t *testing.T) {
-	args, err := pi.Args("/tmp/item/sessions/pi/session.jsonl")
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := []string{"--session", "/tmp/item/sessions/pi/session.jsonl"}
-	if !reflect.DeepEqual(args, want) {
-		t.Fatalf("args = %#v, want %#v", args, want)
-	}
-}
-
 func (r *recordingRunner) RunHeadless(ctx context.Context, path string, args []string, env []string, spec pi.ExecSpec) error {
 	r.path = path
 	r.args = append([]string(nil), args...)

@@ -18,8 +18,7 @@ func TestStartupPromptIsNotAcceptedUntilNativeReadiness(t *testing.T) {
 	backend := filepath.Join(dir, "backend")
 	marker := filepath.Join(dir, "ready")
 	capture := filepath.Join(dir, "prompt")
-	script := `#!/usr/bin/env bash
-set -euo pipefail
+	script := `set -eu
 IFS= read -r probe
 while [ ! -f "$1" ]; do sleep 0.01; done
 printf '%s\n' '{"type":"response","id":"wi-runtime-ready","command":"get_commands","success":true,"data":{"commands":[{"name":"wi-control-idle"}]}}'
@@ -28,9 +27,7 @@ printf '%s' "$prompt" > "$2"
 printf '%s\n' '{"type":"response","id":"initial-prompt","command":"prompt","success":true}'
 while IFS= read -r ignored; do :; done
 `
-	if err := os.WriteFile(backend, []byte(script), 0700); err != nil {
-		t.Fatal(err)
-	}
+	testutil.WriteScript(t, backend, script)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	events, err := driverprotocol.ListenEvents(filepath.Join(dir, "events.sock"))
