@@ -32,10 +32,6 @@ type Options struct {
 	// Env is the daemon's environment, which drivers and agent runtimes
 	// start from.
 	Env map[string]string
-	// BuildIdentity is the build the daemon presents to its clients when it
-	// is not this process's: runtime hosts started from Self accept only a
-	// daemon of their own build.
-	BuildIdentity string
 }
 
 // Daemon is a composed daemon, ready to serve.
@@ -49,7 +45,7 @@ type Daemon struct {
 // New composes a daemon. The coordinator listens on its socket once New
 // returns; Serve answers requests. ctx bounds the daemon's background work.
 func New(ctx context.Context, o Options) (*Daemon, error) {
-	core, err := coordinator.NewServerAt(coordinator.ServerConfig{Paths: o.Paths, Socket: o.Socket, Decoders: daemonapp.ConversationDecoders(o.Config, o.Self, o.Env), BuildIdentity: o.BuildIdentity})
+	core, err := coordinator.NewServerAt(coordinator.ServerConfig{Paths: o.Paths, Socket: o.Socket, Decoders: daemonapp.ConversationDecoders(o.Config, o.Self, o.Env)})
 	if err != nil {
 		return nil, err
 	}

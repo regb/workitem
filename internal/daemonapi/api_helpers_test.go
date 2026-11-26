@@ -11,13 +11,13 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/apitest"
-	"github.com/regb/workitem/internal/testutil"
+	"github.com/regb/workitem/internal/apitest/runwi"
 )
 
 // Shared helpers of the black-box suite (the api_*_test.go files). They use
 // only the fixture and the generated clients.
 
-func TestMain(m *testing.M) { os.Exit(testutil.RunIsolatedTests(m.Run)) }
+func TestMain(m *testing.M) { os.Exit(runwi.Main(m)) }
 
 // rpc is a unary procedure of a generated client.
 type rpc[Req, Res any] func(context.Context, *connect.Request[Req]) (*connect.Response[Res], error)

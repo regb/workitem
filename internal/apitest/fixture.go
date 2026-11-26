@@ -27,7 +27,6 @@ import (
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/plugins/bundled"
 	"github.com/regb/workitem/internal/testutil"
-	"github.com/regb/workitem/internal/version"
 	"github.com/regb/workitem/internal/xdg"
 )
 
@@ -58,9 +57,9 @@ type options struct {
 // Option configures a fixture.
 type Option func(*options)
 
-// WithAgents runs agents: the daemon's wi executable and pi driver are
-// Build's binaries, so StartAgent starts a headless runtime host that runs
-// the fake driver. Without it, agents cannot start, and the pi driver is an
+// WithAgents runs agents: the daemon's wi executable is the test binary,
+// standing in for wi (see runwi.Main), and its pi driver is Build's fake driver,
+// so StartAgent starts a headless runtime host that runs the fake driver. Without it, agents cannot start, and the pi driver is an
 // in-process stub that only creates and reads conversations.
 func WithAgents() Option { return func(o *options) { o.agents = true } }
 
@@ -102,8 +101,17 @@ func New(t testing.TB, opts ...Option) *Fixture {
 	self := filepath.Join(root, "absent-wi")
 	config := strings.Join(o.config, "\n")
 	if o.agents {
+		// The test binary stands in for wi, so the runtime hosts it starts
+		// are of the daemon's own build, which they require. The package's
+		// TestMain must be runwi.Main.
 		f.Binaries = Build(t)
-		self = f.Binaries.Wi
+		executable, err := os.Executable()
+		if err != nil {
+			t.Fatal(err)
+		}
+		self = executable
+		f.Env = append(f.Env, RunAsWi+"=1")
+		env[RunAsWi] = "1"
 		config = fmt.Sprintf("[drivers.pi]\ncommand = %q\n", f.Binaries.Driver) + config
 	}
 	if err := os.WriteFile(f.Paths.ConfigFile, []byte(config), 0600); err != nil {
@@ -113,16 +121,8 @@ func New(t testing.TB, opts ...Option) *Fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Runtime hosts accept only a daemon of their own build: this one
-	// presents the build of the wi executable they run.
-	identity := ""
-	if o.agents {
-		if identity, err = version.BuildIdentityOf(self); err != nil {
-			t.Fatal(err)
-		}
-	}
 	ctx, cancel := context.WithCancel(context.Background())
-	f.daemon, err = daemon.New(ctx, daemon.Options{Paths: f.Paths, Socket: f.Socket, Config: cfg, Host: host, Self: self, Env: env, BuildIdentity: identity})
+	f.daemon, err = daemon.New(ctx, daemon.Options{Paths: f.Paths, Socket: f.Socket, Config: cfg, Host: host, Self: self, Env: env})
 	if err != nil {
 		cancel()
 		t.Fatal(err)

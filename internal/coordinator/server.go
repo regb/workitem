@@ -81,19 +81,11 @@ type ServerConfig struct {
 	// Socket is the public API socket.
 	Socket   string
 	Decoders ConversationDecoders
-	// BuildIdentity is the build the server presents, which its clients,
-	// such as agent runtime hosts, require to be theirs. Empty means this
-	// process's build.
-	BuildIdentity string
 }
 
 // NewServerAt serves config.Paths.DataRoot like NewServer.
 func NewServerAt(config ServerConfig) (*Server, error) {
-	server, err := newServer(config.Paths.DataRoot, config.Paths.DataRuntimeRoot, config.Paths.DataStateRoot, config.Socket, config.Decoders)
-	if err == nil && config.BuildIdentity != "" {
-		server.buildIdentity = config.BuildIdentity
-	}
-	return server, err
+	return newServer(config.Paths.DataRoot, config.Paths.DataRuntimeRoot, config.Paths.DataStateRoot, config.Socket, config.Decoders)
 }
 
 func newServer(dataRoot, runtimeRoot, stateRoot, socketPath string, conversationDecoders ConversationDecoders) (*Server, error) {

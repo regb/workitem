@@ -1,7 +1,6 @@
 package version
 
 import (
-	"debug/buildinfo"
 	"fmt"
 	"os"
 	"runtime"
@@ -43,21 +42,6 @@ var buildIdentityOnce = sync.OnceValue(func() string {
 // the embedded VCS revision remains unchanged.
 func identity(version string, executable os.FileInfo) string {
 	return fmt.Sprintf("%s:%d:%d", version, executable.Size(), executable.ModTime().UnixNano())
-}
-
-// BuildIdentityOf is the BuildIdentity the wi executable at path reports,
-// provided it was linked with the same release and source flags as this
-// process.
-func BuildIdentityOf(path string) (string, error) {
-	build, err := buildinfo.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	stat, err := os.Stat(path)
-	if err != nil {
-		return "", err
-	}
-	return identity(fromBuildInfoWithSource(strings.TrimSpace(release), build, sourceRevision, sourceModified).Version, stat), nil
 }
 
 func BuildIdentity() string { return buildIdentityOnce() }

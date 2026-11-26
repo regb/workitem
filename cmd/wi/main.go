@@ -4,49 +4,9 @@ import (
 	"context"
 	"os"
 
-	antigravitydriver "github.com/regb/workitem/internal/agentdriver/antigravity"
-	claudedriver "github.com/regb/workitem/internal/agentdriver/claude"
-	pidriver "github.com/regb/workitem/internal/agentdriver/pi"
-	"github.com/regb/workitem/internal/cli"
+	"github.com/regb/workitem/internal/wimain"
 )
 
 func main() {
-	ctx := context.Background()
-	args := os.Args[1:]
-	if len(args) > 0 && args[0] == "internal-driver" {
-		if len(args) == 4 && args[1] == "claude" && args[2] == "hook" {
-			if err := claudedriver.RunHook(ctx, args[3], os.Stdin); err != nil {
-				os.Stderr.WriteString(err.Error() + "\n")
-				os.Exit(1)
-			}
-			return
-		}
-		if len(args) == 4 && args[1] == "claude" && args[2] == "ask" {
-			// Never fails the tool call: without an answer, Claude shows its
-			// own dialog.
-			claudedriver.RunAskHook(ctx, args[3], os.Stdin, os.Stdout)
-			return
-		}
-		var run func(context.Context) error
-		if len(args) == 2 {
-			switch args[1] {
-			case "pi":
-				run = pidriver.Run
-			case "claude":
-				run = claudedriver.Run
-			case "antigravity":
-				run = antigravitydriver.Run
-			}
-		}
-		if run == nil {
-			os.Stderr.WriteString("usage: wi internal-driver <pi|claude|antigravity>\n")
-			os.Exit(2)
-		}
-		if err := run(ctx); err != nil {
-			os.Stderr.WriteString(err.Error() + "\n")
-			os.Exit(1)
-		}
-		return
-	}
-	os.Exit(cli.Main(ctx, args))
+	os.Exit(wimain.Run(context.Background(), os.Args[1:]))
 }
