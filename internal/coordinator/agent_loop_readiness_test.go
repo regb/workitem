@@ -253,8 +253,6 @@ func TestAnAgentBeforeItsFirstTurnIsOnlyAProblemWhenItsRuntimeIsGone(t *testing.
 	}
 }
 
-
-
 // Without live events, an unfinished turn reads busy only while the agent
 // shows activity, or while a tool call awaits its result; a turn that died
 // without a final record is a problem, never busy forever.

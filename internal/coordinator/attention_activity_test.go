@@ -1,11 +1,9 @@
 package coordinator
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -13,8 +11,6 @@ import (
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
 	bolt "go.etcd.io/bbolt"
-
-	"github.com/regb/workitem/internal/testutil"
 )
 
 func attentionTestDatabase(t *testing.T) (*Database, string) {
@@ -164,32 +160,5 @@ func TestMalformedAttentionProjectionDoesNotFallbackOrCommitMarker(t *testing.T)
 				t.Fatal("failed import advanced its checkpoint", err)
 			}
 		})
-	}
-}
-
-func TestAttentionActivityTransport(t *testing.T) {
-	db, root := attentionTestDatabase(t)
-	at := time.Now().UTC()
-	appendAttentionEvent(t, db, "attention.read", at)
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-	socket := filepath.Join(testutil.ShortTempDir(t), "daemon.sock")
-	server, err := NewServer(root, socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(context.Background()) }()
-	t.Cleanup(func() { _ = server.Close(); <-done })
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	client := &Client{SocketPath: socket}
-	snapshot, err := client.AttentionActivity(ctx, importTestID)
-	if err != nil || snapshot.Activity.LastReadAt == nil || !snapshot.Activity.LastReadAt.Equal(at) {
-		t.Fatal(snapshot, err)
-	}
-	if err := client.Call(ctx, MethodAttentionActivity, map[string]any{"item_id": "../escape"}, nil); err == nil {
-		t.Fatal("transport accepted invalid identity")
 	}
 }

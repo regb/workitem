@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 	"time"
-
 )
 
 func TestDatabaseCommitIsAtomicAndIdempotent(t *testing.T) {

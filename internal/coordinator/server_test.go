@@ -3,6 +3,8 @@ package coordinator
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -10,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/regb/workitem/internal/apperr"
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
-
 	"github.com/regb/workitem/internal/testutil"
 )
 
@@ -147,5 +149,15 @@ func TestServerRefusesToReplaceNonSocket(t *testing.T) {
 	content, err := os.ReadFile(path)
 	if err != nil || string(content) != "do not replace" {
 		t.Fatalf("non-socket changed: %q err=%v", content, err)
+	}
+}
+
+func TestProtocolErrorsKeepTheirKind(t *testing.T) {
+	err := protocolErr("command_error", fmt.Errorf("put: %w", ErrScheduleChanged))
+	if err.Kind != "stale" || !errors.Is(err, apperr.Stale) || errors.Is(err, apperr.NotFound) {
+		t.Fatalf("%+v", err)
+	}
+	if plain := protocolErr("command_error", errors.New("plain")); plain.Kind != "" || errors.Is(plain, apperr.Stale) {
+		t.Fatalf("%+v", plain)
 	}
 }

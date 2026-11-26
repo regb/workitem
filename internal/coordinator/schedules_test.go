@@ -2,11 +2,9 @@ package coordinator
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
-	"github.com/regb/workitem/internal/apperr"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -88,14 +86,4 @@ func TestScheduleAndProfileWritesWakeChangeReaders(t *testing.T) {
 		t.Fatal(err)
 	}
 	advanced("setting the title model")
-}
-
-func TestProtocolErrorsKeepTheirKind(t *testing.T) {
-	err := protocolErr("command_error", fmt.Errorf("put: %w", ErrScheduleChanged))
-	if err.Kind != "stale" || !errors.Is(err, apperr.Stale) || errors.Is(err, apperr.NotFound) {
-		t.Fatalf("%+v", err)
-	}
-	if plain := protocolErr("command_error", errors.New("plain")); plain.Kind != "" || errors.Is(plain, apperr.Stale) {
-		t.Fatalf("%+v", plain)
-	}
 }
