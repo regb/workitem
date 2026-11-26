@@ -281,9 +281,16 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 			return nil, invalid("unknown item state")
 		}
 	}
+	// A fresh inspection or ranking that does not finish in time leaves the
+	// list on the last observations, which the daemon refreshes every few
+	// seconds anyway: a busy daemon slows the list rather than failing it.
+	var warnings []string
 	if r.Inspect {
 		if _, err := s.Local.ActivityBarrier(ctx); err != nil {
-			return nil, rpcError(err)
+			if ctx.Err() != nil {
+				return nil, rpcError(err)
+			}
+			warnings = append(warnings, "live inspection did not finish in time; showing the last observations: "+err.Error())
 		}
 	}
 	manifests, err := s.Local.ListManifests(ctx)
@@ -293,18 +300,22 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 	ranks := map[string]int{}
 	if r.Order == v1.ListOrder_LIST_ORDER_ATTENTION {
 		q, err := s.Local.ActionabilitySnapshot(ctx, coordinator.ActionabilitySnapshotRequest{Queue: coordinator.ActionabilityQueueOptions{Strategy: s.Config.Attention.Priority}})
-		if err != nil {
+		switch {
+		case err == nil:
+			for i, c := range q.Queue.Candidates {
+				ranks[c.Manifest.ID] = i + 1
+			}
+		case ctx.Err() != nil:
 			return nil, rpcError(err)
-		}
-		for i, c := range q.Queue.Candidates {
-			ranks[c.Manifest.ID] = i + 1
+		default:
+			warnings = append(warnings, "attention ranking did not finish in time; the list is not ranked: "+err.Error())
 		}
 	}
 	visible, err := s.visibleTo(ctx)
 	if err != nil {
 		return nil, err
 	}
-	out := &v1.ListItemsResponse{Items: []*v1.ItemSummary{}}
+	out := &v1.ListItemsResponse{Items: []*v1.ItemSummary{}, Warnings: warnings}
 	for _, m := range manifests {
 		if !visible(m) {
 			continue
