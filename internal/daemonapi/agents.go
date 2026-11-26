@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"regexp"
 
 	"encoding/base64"
 	"errors"
@@ -693,9 +694,13 @@ func (s *Server) GetHistory(ctx context.Context, req *connect.Request[v1.GetHist
 // with, from the links the agent reported: exact, unlike matching text.
 func (s *Server) linkPrompts(itemID string, messages []*v1.ConversationMessage) {
 	requests, err := s.Core.Database().PromptRequests(itemID)
-	if err != nil || len(requests) == 0 {
-		return
+	if err != nil {
+		requests = nil
 	}
+	// A message whose delivery was never linked to its history entry, as
+	// when a driver could not confirm it, still shows its envelope: its
+	// marker, which only wi knows, names the message it was.
+	var enveloped map[string]coordinator.APIMessageReceipt
 	for _, m := range messages {
 		for _, id := range append([]string{m.Id}, m.NativeIds...) {
 			if request, ok := requests[id]; ok {
@@ -703,11 +708,23 @@ func (s *Server) linkPrompts(itemID string, messages []*v1.ConversationMessage) 
 				break
 			}
 		}
-		if m.ClientMessageId == "" {
-			continue
+		var receipt coordinator.APIMessageReceipt
+		found := false
+		if m.ClientMessageId != "" {
+			receipt, found, err = s.Core.Database().APIMessage(itemID, m.ClientMessageId)
+			found = found && err == nil
+		} else if marker := envelopeMarker(m); marker != "" {
+			if enveloped == nil {
+				if enveloped, err = s.Core.Database().EnvelopedAPIMessages(itemID); err != nil {
+					enveloped = map[string]coordinator.APIMessageReceipt{}
+				}
+			}
+			receipt, found = enveloped[marker]
+			if found {
+				m.ClientMessageId = receipt.MessageID
+			}
 		}
-		receipt, found, err := s.Core.Database().APIMessage(itemID, m.ClientMessageId)
-		if err != nil || !found {
+		if !found {
 			continue
 		}
 		m.Sender = receipt.Sender
@@ -721,6 +738,23 @@ func (s *Server) linkPrompts(itemID string, messages []*v1.ConversationMessage) 
 			}
 		}
 	}
+}
+
+// envelopeMarkerPattern finds the marker of an envelope wi wrote.
+var envelopeMarkerPattern = regexp.MustCompile(`<wi-message-([0-9a-f]{16}) from=`)
+
+// envelopeMarker is the marker of the envelope a user's message shows, if
+// it shows one.
+func envelopeMarker(m *v1.ConversationMessage) string {
+	if m.Role != v1.MessageRole_MESSAGE_ROLE_USER {
+		return ""
+	}
+	for _, part := range m.Parts {
+		if match := envelopeMarkerPattern.FindStringSubmatch(part.GetText()); match != nil {
+			return match[1]
+		}
+	}
+	return ""
 }
 func (s *Server) GetSubagentHistory(ctx context.Context, req *connect.Request[v1.GetSubagentHistoryRequest]) (*connect.Response[v1.GetSubagentHistoryResponse], error) {
 	value, err := s.App.SubagentHistoryPage(ctx, resolve(req.Msg.ItemId), req.Msg.SubagentId, req.Msg.Before)

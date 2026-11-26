@@ -102,3 +102,25 @@ func (d *Database) LatestAPIMessage(itemID string) (APIMessageReceipt, bool, err
 	}
 	return latest, found, nil
 }
+
+// EnvelopedAPIMessages are the receipts of the messages that reached an
+// item's agent in an envelope, by the envelope's marker: a history entry
+// that shows a marker was that message, even when its delivery was never
+// linked to the entry.
+func (d *Database) EnvelopedAPIMessages(itemID string) (map[string]APIMessageReceipt, error) {
+	raw, err := d.ListProjection(apiMessagesProjection)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]APIMessageReceipt{}
+	for _, data := range raw {
+		var value APIMessageReceipt
+		if err := json.Unmarshal(data, &value); err != nil {
+			return nil, err
+		}
+		if value.ItemID == itemID && value.Marker != "" {
+			out[value.Marker] = value
+		}
+	}
+	return out, nil
+}

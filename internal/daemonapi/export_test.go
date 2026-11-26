@@ -147,3 +147,11 @@ func (s *Server) ClearUsageBlocker(ctx context.Context, m model.Manifest, blocke
 func AsItemAgent(ctx context.Context, itemID string) context.Context {
 	return context.WithValue(ctx, identityKey{}, identity{principal: principal{kind: credential.Item, itemID: itemID}})
 }
+
+// Messages.
+
+// LinkPrompts links history entries to the messages they were, as
+// GetHistory does.
+func (s *Server) LinkPrompts(itemID string, messages []*v1.ConversationMessage) {
+	s.linkPrompts(itemID, messages)
+}
