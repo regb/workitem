@@ -3,7 +3,6 @@ package app_test
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -117,15 +116,7 @@ func TestArchiveTimeoutRetainsShutdownWarningAndLifecycle(t *testing.T) {
 	id := testutil.ID(t, 222)
 	application.NewID = func() (string, error) { return id, nil }
 	created := createItem(t, application, app.NewWorkItemOptions{Title: "Archive timeout"})
-	runtime := model.AgentRuntime{ID: "timeout-owner", WorkItemID: id, Mode: "headless", Capabilities: model.RuntimeCapabilities{IdleGuard: true}, HostPID: 4321, HostProcessGroup: 4321, HostStartTime: 4321}
-	if err := st.SaveAgentRuntime(context.Background(), id, runtime); err != nil {
-		t.Fatal(err)
-	}
-	control, err := agent.ListenControlSocket(filepath.Join(st.ItemDir(id), "agent", "control.sock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer control.Close()
+	_, control := liveRuntime(t, st, model.AgentRuntime{ID: "timeout-owner", WorkItemID: id, Mode: "headless", Capabilities: model.RuntimeCapabilities{IdleGuard: true}})
 	go func() {
 		req := <-control.Requests()
 		if req.Command.Type != agent.CommandShutdown || !req.Command.RequireIdle {
@@ -153,15 +144,7 @@ func TestShelveStopsAnIdleAgentBeforeReleasingTheCheckout(t *testing.T) {
 	application.NewID = func() (string, error) { return id, nil }
 	createItem(t, application, app.NewWorkItemOptions{Title: "Shelve running"})
 	activateItem(t, application, id)
-	runtime := model.AgentRuntime{ID: "shelve-owner", WorkItemID: id, Mode: "headless", Capabilities: model.RuntimeCapabilities{IdleGuard: true}, HostPID: 4321, HostProcessGroup: 4321, HostStartTime: 4321}
-	if err := st.SaveAgentRuntime(context.Background(), id, runtime); err != nil {
-		t.Fatal(err)
-	}
-	control, err := agent.ListenControlSocket(filepath.Join(st.ItemDir(id), "agent", "control.sock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer control.Close()
+	_, control := liveRuntime(t, st, model.AgentRuntime{ID: "shelve-owner", WorkItemID: id, Mode: "headless", Capabilities: model.RuntimeCapabilities{IdleGuard: true}})
 	requested := make(chan agent.ControlCommand, 1)
 	go func() {
 		req := <-control.Requests()
@@ -230,15 +213,7 @@ func TestArchiveStopsRuntimeBeforeArchiving(t *testing.T) {
 	itemID := testutil.ID(t, 77)
 	application.NewID = func() (string, error) { return itemID, nil }
 	created := createItem(t, application, app.NewWorkItemOptions{Title: "Archive Runtime"})
-	runtime := model.AgentRuntime{ID: "runtime-archive", WorkItemID: itemID, Mode: string(agent.ModeHeadless), HostPID: 4321, HostProcessGroup: 4321, HostStartTime: 4321}
-	if err := st.SaveAgentRuntime(context.Background(), itemID, runtime); err != nil {
-		t.Fatal(err)
-	}
-	server, err := agent.ListenControlSocket(filepath.Join(st.ItemDir(itemID), "agent", "control.sock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer server.Close()
+	runtime, server := liveRuntime(t, st, model.AgentRuntime{ID: "runtime-archive", WorkItemID: itemID, Mode: string(agent.ModeHeadless)})
 	go func() {
 		request := <-server.Requests()
 		if request.Command.Type != agent.CommandShutdown || request.Command.ProtocolVersion != agent.RuntimeProtocolVersion || request.Command.RuntimeID != runtime.ID || request.Command.WorkItemID != itemID {

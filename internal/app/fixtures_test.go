@@ -110,6 +110,23 @@ func startItem(t *testing.T, application *app.App, opts app.NewWorkItemOptions, 
 	return m, runtime
 }
 
+// liveRuntime records runtime as the item's running agent, with host process
+// 4321 (which the test's fake process inspector must report alive), and
+// listens on its control socket.
+func liveRuntime(t *testing.T, st *store.Store, runtime model.AgentRuntime) (model.AgentRuntime, *agent.ControlSocketServer) {
+	t.Helper()
+	runtime.HostPID, runtime.HostProcessGroup, runtime.HostStartTime = 4321, 4321, 4321
+	if err := st.SaveAgentRuntime(context.Background(), runtime.WorkItemID, runtime); err != nil {
+		t.Fatal(err)
+	}
+	control, err := agent.ListenControlSocket(filepath.Join(st.ItemDir(runtime.WorkItemID), "agent", "control.sock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { control.Close() })
+	return runtime, control
+}
+
 // navigationStore counts full event-history reads, which attention commands
 // must not make.
 type navigationStore struct {

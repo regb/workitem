@@ -96,17 +96,30 @@ func TestInspectPrimaryAgentProcessTreatsAbsentTmuxServerAsNormalOfflineState(t 
 	}
 }
 
-func TestRuntimeStatusWarnsForInvalidMode(t *testing.T) {
-	st := &runtimeStore{runtime: &model.AgentRuntime{ID: "runtime-1", WorkItemID: "item-1", Mode: "print", HostPID: 42, HostProcessGroup: 42, HostStartTime: 42}}
-	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1"}, nil
-	}
-	status, err := New(st, process(true), nil, nil, resolve, nil, nil, nil).RuntimeStatus(context.Background(), contract.ResolveOptions{})
-	if err != nil || !status.Online || len(status.Warnings) != 1 || !strings.Contains(status.Warnings[0], "invalid agent runtime mode") {
-		t.Fatalf("status=%+v err=%v", status, err)
-	}
-	if !reflect.DeepEqual(status.Capabilities, agent.Capabilities{}) {
-		t.Fatalf("capabilities=%+v", status.Capabilities)
+func TestRuntimeStatus(t *testing.T) {
+	for _, tc := range []struct {
+		mode    string
+		warning string
+	}{
+		{mode: string(agent.ModeHeadless)},
+		{mode: "print", warning: "invalid agent runtime mode"},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			st := &runtimeStore{runtime: &model.AgentRuntime{ID: "runtime-1", WorkItemID: "item-1", Mode: tc.mode, HostPID: 42, HostProcessGroup: 42, HostStartTime: 42}}
+			resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
+				return model.Manifest{ID: "item-1"}, nil
+			}
+			status, err := New(st, process(true), nil, nil, resolve, nil, nil, nil).RuntimeStatus(context.Background(), contract.ResolveOptions{})
+			if err != nil || !status.Online || !status.Ownership.ProcessAlive || status.Ownership.ControlAvailable || status.Runtime.ID != "runtime-1" {
+				t.Fatalf("status=%+v err=%v", status, err)
+			}
+			if tc.warning == "" && len(status.Warnings) != 0 || tc.warning != "" && (len(status.Warnings) != 1 || !strings.Contains(status.Warnings[0], tc.warning)) {
+				t.Fatalf("warnings=%v", status.Warnings)
+			}
+			if tc.warning != "" && !reflect.DeepEqual(status.Capabilities, agent.Capabilities{}) {
+				t.Fatalf("capabilities=%+v", status.Capabilities)
+			}
+		})
 	}
 }
 
@@ -140,25 +153,6 @@ func TestSubmitControlPopulatesProtocolIdentity(t *testing.T) {
 	}
 }
 
-func TestPortableControlSocketPathKeepsDataRootsIsolated(t *testing.T) {
-	relative := runtimepath.ControlSocket("item-1", "runtime-1")
-	candidate := filepath.Join("/private/var/folders", strings.Repeat("long-runtime-root", 8), filepath.FromSlash(relative))
-	first := runtimepath.PortableSocketPath("darwin", candidate, "/data/root-one", relative)
-	second := runtimepath.PortableSocketPath("darwin", candidate, "/data/root-two", relative)
-	if first == candidate || second == candidate {
-		t.Fatalf("long Darwin path did not use fallback: first=%q second=%q", first, second)
-	}
-	if first == second {
-		t.Fatalf("different data roots share fallback path %q", first)
-	}
-	if again := runtimepath.PortableSocketPath("darwin", candidate, "/data/root-one", relative); again != first {
-		t.Fatalf("fallback path is unstable: %q != %q", again, first)
-	}
-	if len(first) >= 100 || len(second) >= 100 {
-		t.Fatalf("fallback paths remain too long: first=%d second=%d", len(first), len(second))
-	}
-}
-
 func TestObserveOwnershipRejectsReusedPID(t *testing.T) {
 	s := New(&runtimeStore{}, process(true), nil, nil, nil, nil, nil, nil)
 	ownership := s.ObserveOwnership(&model.AgentRuntime{ID: "runtime", HostPID: 42, HostProcessGroup: 42, HostStartTime: 999})
@@ -188,18 +182,6 @@ func TestObserveOwnershipRequiresLiveControlSocket(t *testing.T) {
 	offline := New(&runtimeStore{}, process(false), nil, nil, nil, nil, nil, nil).ObserveOwnership(&model.AgentRuntime{ID: "offline", WorkItemID: "item-1", HostPID: 42})
 	if offline.ProcessAlive || offline.ControlAvailable {
 		t.Fatalf("offline ownership=%+v", offline)
-	}
-}
-
-func TestRuntimeStatus(t *testing.T) {
-	st := &runtimeStore{runtime: &model.AgentRuntime{ID: "runtime-1", WorkItemID: "item-1", Mode: string(agent.ModeHeadless), HostPID: 42, HostProcessGroup: 42, HostStartTime: 42}}
-	resolve := func(context.Context, contract.ResolveOptions) (model.Manifest, error) {
-		return model.Manifest{ID: "item-1"}, nil
-	}
-	s := New(st, process(true), nil, nil, resolve, nil, nil, nil)
-	status, err := s.RuntimeStatus(context.Background(), contract.ResolveOptions{})
-	if err != nil || !status.Online || !status.Ownership.ProcessAlive || status.Ownership.ControlAvailable || status.Runtime.ID != "runtime-1" {
-		t.Fatalf("status=%+v err=%v", status, err)
 	}
 }
 

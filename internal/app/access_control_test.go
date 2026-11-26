@@ -3,12 +3,10 @@ package app
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
 	driverprotocol "github.com/regb/workitem/agentdriver/protocol"
-	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -93,23 +91,4 @@ type modesBackend struct {
 func (b *modesBackend) RuntimeModes(context.Context, string, json.RawMessage) (driverprotocol.RuntimeModes, error) {
 	b.calls++
 	return b.modes, b.err
-}
-
-func TestAgentRuntimeModesAsksTheDriverOnceAndFallsBack(t *testing.T) {
-	reported := driverprotocol.RuntimeModes{Modes: map[driverprotocol.Mode]driverprotocol.ModeCapabilities{driverprotocol.ModeTUI: {Control: driverprotocol.ControlStructured, Terminal: true}}}
-	backend := &modesBackend{modes: reported}
-	a := &App{StaticAgentProfiles: model.AgentProfiles{Default: "pi", Profiles: []model.AgentProfile{{Name: "pi", Driver: "pi"}}}, DriversConfig: map[string]config.DriverDefinitionConfig{"pi": {}}, ConversationBackends: map[string]ConversationBackend{"pi": backend}}
-	for i := 0; i < 3; i++ {
-		if got := a.AgentRuntimeModes(context.Background(), "pi"); len(got.Modes) != 1 || got.Modes[driverprotocol.ModeTUI].Control != driverprotocol.ControlStructured {
-			t.Fatalf("modes = %+v", got)
-		}
-	}
-	if backend.calls != 1 {
-		t.Fatalf("driver asked %d times, want once", backend.calls)
-	}
-	old := &modesBackend{err: errors.New("unsupported operation")}
-	b := &App{StaticAgentProfiles: model.AgentProfiles{Default: "pi", Profiles: []model.AgentProfile{{Name: "pi", Driver: "pi"}}}, DriversConfig: map[string]config.DriverDefinitionConfig{"pi": {}}, ConversationBackends: map[string]ConversationBackend{"pi": old}}
-	if got := b.AgentRuntimeModes(context.Background(), "pi"); got.Modes[driverprotocol.ModeHeadless].Control != driverprotocol.ControlStructured || !got.Modes[driverprotocol.ModeTUI].Terminal {
-		t.Fatalf("older driver did not fall back to legacy modes: %+v", got)
-	}
 }

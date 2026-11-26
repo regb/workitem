@@ -324,4 +324,10 @@ func TestDriverAnswersAreCachedButFailuresAreNot(t *testing.T) {
 	if backend.modesCalls != 3 {
 		t.Fatalf("modes asked %d times, want 3", backend.modesCalls)
 	}
+	// A driver that predates the question gets the legacy modes.
+	older, _, _ := settingsApp(t)
+	older.ConversationBackends = map[string]ConversationBackend{"pi": &modesBackend{err: errors.New("unsupported operation")}}
+	if got := older.AgentRuntimeModes(ctx, "pi"); got.Modes[driverprotocol.ModeHeadless].Control != driverprotocol.ControlStructured || !got.Modes[driverprotocol.ModeTUI].Terminal {
+		t.Fatalf("older driver did not fall back to legacy modes: %+v", got)
+	}
 }
