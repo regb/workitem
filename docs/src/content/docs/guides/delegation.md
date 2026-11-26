@@ -80,6 +80,6 @@ wi access grant --every-item --everything --level view
 wi access grant --item orchestrator --on parser-fix --level integrate
 ```
 
-A refused agent is told which level it lacks and the command to grant it. Deleting items, changing who owns an item, changing access, repositories, profiles and schedules, and stopping the daemon are yours only.
+A refused agent is told which level it lacks and the command to grant it. Deleting items, changing who owns an item, changing access, repositories, profiles and schedules, and stopping the daemon are yours only. So are secrets: an agent may not read secret configuration or settings, another repository's environment (it runs with its own) or the settings of agent profiles, nor reset a repository to its upstream. A control lease an agent's command takes is its own: another principal cannot renew or release it, though another command line's send takes it over, as a browser tab's or a terminal's control is kept.
 
 The credential is not isolation either: an agent that runs as your Unix user can read your own credential. A sandbox mounts the daemon's socket and the agent's credential file but not yours, and sets `WI_API_SOCKET` to where the socket is mounted. See [Endpoint and credentials](../../reference/api/#endpoint-and-credentials).

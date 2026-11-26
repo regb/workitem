@@ -124,7 +124,7 @@ func (f *binaryFixture) tui(repository string) {
 		takeover.Msg.PlanToken = view.Msg.Control.Plan.PlanToken
 		takeover.Msg.Confirm = true
 		taken, err := f.clients.Control.AcquireControl(ctx, takeover)
-		if err != nil || taken.Msg.Control.Lease.ClientId != "other" {
+		if err != nil || taken.Msg.Control.Lease.ClientId != "user:operator/other" {
 			t.Fatalf("confirmed takeover: %v %v", taken, err)
 		}
 		// A browser sending to a detached TUI agent takes the vacant control

@@ -59,7 +59,8 @@ service RepositoryService {
   // DeleteRepositoryFile removes a file, then updates checkouts.
   rpc DeleteRepositoryFile(DeleteRepositoryFileRequest) returns (DeleteRepositoryFileResponse);
   // GetEnvironment reads the repository's variables and the agents running
-  // in its checkouts with older ones.
+  // in its checkouts with older ones. An item's agent may read only its own
+  // item's repository's, which it runs with.
   rpc GetEnvironment(GetEnvironmentRequest) returns (GetEnvironmentResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }

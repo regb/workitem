@@ -152,11 +152,15 @@ func webLabel(who principal, header http.Header) string {
 }
 
 // callerIdentity reads who a call is from, once its credential is checked.
+// The client a caller names is its own: a control lease taken under it
+// belongs to that principal's client, so another principal naming the same
+// client, as every command line does by default, cannot use or renew it.
 func callerIdentity(who principal, header http.Header) identity {
-	value := identity{principal: who, client: header.Get(ClientHeader), holder: header.Get(HolderHeader), label: webLabel(who, header)}
-	if value.client == "" {
-		value.client = "cli"
+	client := header.Get(ClientHeader)
+	if client == "" {
+		client = "cli"
 	}
+	value := identity{principal: who, client: who.String() + "/" + client, holder: header.Get(HolderHeader), label: webLabel(who, header)}
 	if value.holder != model.LeaseHolderTerminal && value.holder != model.LeaseHolderCLI {
 		value.holder = model.LeaseHolderWeb
 	}
@@ -172,6 +176,13 @@ func caller(ctx context.Context) identity { v, _ := ctx.Value(identityKey{}).(id
 
 // requestItem is the item a request names, when it names a valid one.
 func requestItem(message any) string {
+	// A few requests name their item inside a nested request.
+	switch r := message.(type) {
+	case *v1.GetRevisionPatchRequest:
+		return validItem(r.GetComparison().GetItemId())
+	case *v1.GetRevisionReviewFileRequest:
+		return validItem(r.GetComparison().GetItemId())
+	}
 	msg, ok := message.(proto.Message)
 	if !ok {
 		return ""
@@ -182,6 +193,20 @@ func requestItem(message any) string {
 		return ""
 	}
 	if id := ref.Get(field).String(); model.ValidID(id) {
+		return id
+	}
+	return ""
+}
+
+// nestedItem are the calls that name their item inside a nested request,
+// as requestItem reads it.
+var nestedItem = map[string]bool{
+	corev1connect.ReviewServiceGetRevisionPatchProcedure:      true,
+	corev1connect.ReviewServiceGetRevisionReviewFileProcedure: true,
+}
+
+func validItem(id string) string {
+	if model.ValidID(id) {
 		return id
 	}
 	return ""

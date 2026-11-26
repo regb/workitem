@@ -228,12 +228,21 @@ func (s *Server) controlLeaseStarting(ctx context.Context, itemID, leaseID strin
 	}
 	who := caller(ctx)
 	if lease != nil {
-		if lease.ClientID != who.client || leaseID != "" && lease.ID != leaseID {
+		// Command lines take control only to deliver what they send: one
+		// takes over what another holds, as they used to share it, while a
+		// browser tab or a terminal keeps what it holds.
+		handover := takeVacant && leaseID == "" && lease.Holder == model.LeaseHolderCLI && who.holder == model.LeaseHolderCLI
+		if (lease.ClientID != who.client || leaseID != "" && lease.ID != leaseID) && !handover {
 			return nil, s.refuseControl(ctx, itemID, connect.CodePermissionDenied, "caller does not hold the control lease")
 		}
-		return lease, nil
-	}
-	if !takeVacant {
+		if lease.ClientID == who.client {
+			return lease, nil
+		}
+		expected := lease.ID
+		if _, err := s.Local.ReleaseLease(ctx, model.LeaseRequest{ItemID: itemID, Holder: lease.Holder, ClientID: lease.ClientID, ExpectedLeaseID: &expected}); err != nil {
+			return nil, err
+		}
+	} else if !takeVacant {
 		return nil, s.refuseControl(ctx, itemID, connect.CodeFailedPrecondition, "caller has no control lease")
 	}
 	// Taking vacant control may replace the agent with one this caller can
@@ -436,8 +445,15 @@ func (s *Server) SendMessage(ctx context.Context, req *connect.Request[v1.SendMe
 	}
 	// Saying something to an item that has no running place yet starts it,
 	// with the message as its first prompt: one call for one intention.
+	// Starting an active item's agent is what delivering a message means;
+	// activating a backlog item is starting it, which takes control.
 	if !r.RequireOnline {
 		if current, err := s.canonical(ctx, r.ItemId, 0); err == nil && (current.Manifest.State == model.StateBacklog || current.Manifest.State == model.StateActive && current.Manifest.Checkout.Claim == nil) {
+			if current.Manifest.State == model.StateBacklog {
+				if err := s.authorize(ctx, corev1connect.LifecycleServiceStartItemProcedure, r.ItemId); err != nil {
+					return nil, err
+				}
+			}
 			started, err := s.startItem(ctx, r.ItemId, &v1.StartOptions{Prompt: r.Text, Images: r.Images, Mode: r.StartMode, ClientMessageId: r.ClientMessageId}, 0)
 			if err != nil {
 				return nil, err

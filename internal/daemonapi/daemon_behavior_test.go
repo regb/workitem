@@ -3,6 +3,7 @@ package daemonapi
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/model"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -121,7 +123,7 @@ func TestControlRefusalsCarryTheControlStatus(t *testing.T) {
 	abort := connect.NewRequest(&v1.AbortTurnRequest{ItemId: id})
 	abort.Header().Set(ClientHeader, "beta")
 	_, err = f.clients.Agents.AbortTurn(ctx, abort)
-	if connect.CodeOf(err) != connect.CodePermissionDenied || status(err).Lease.GetClientId() != "alpha" {
+	if connect.CodeOf(err) != connect.CodePermissionDenied || status(err).Lease.GetClientId() != "user:operator/alpha" {
 		t.Fatalf("abort by another client: %v", err)
 	}
 	// Releasing by item works without the lease ID, and only for its holder.
@@ -271,5 +273,79 @@ func TestLifecyclePorcelainRefusesStaleRevisions(t *testing.T) {
 	}
 	if _, err := f.clients.Lifecycle.ReopenItem(ctx, connect.NewRequest(&v1.ReopenItemRequest{ItemId: id, ExpectedRevision: after.Msg.Item.Revision})); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// A control lease is its principal's client's: another principal naming
+// the same client, as every command line does by default, holds none of it.
+func TestAControlLeaseBelongsToItsPrincipal(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	repo := f.repo(t)
+	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "lease"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := created.Msg.Item.Id
+	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
+		t.Fatal(err)
+	}
+	asCLI := func(req interface{ Header() http.Header }) {
+		req.Header().Set(HolderHeader, model.LeaseHolderCLI)
+	}
+	acquire := connect.NewRequest(&v1.AcquireControlRequest{ItemId: id})
+	asCLI(acquire)
+	mine, err := f.clients.Control.AcquireControl(ctx, acquire)
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaseID := mine.Msg.Control.Lease.GetId()
+	if leaseID == "" || mine.Msg.Control.Lease.ClientId != "user:operator/cli" {
+		t.Fatalf("operator lease: %v", mine.Msg.Control.Lease)
+	}
+	// Another item's agent, which may manage every item by default, names
+	// the same client.
+	other, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "other"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	agent, _ := f.agentClients(t, other.Msg.Item.Id)
+	if _, err := agent.Control.RenewControl(ctx, connect.NewRequest(&v1.RenewControlRequest{LeaseId: leaseID})); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("renewing another principal's lease: %v", err)
+	}
+	if _, err := agent.Control.ReleaseControl(ctx, connect.NewRequest(&v1.ReleaseControlRequest{ItemId: id})); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("releasing another principal's lease: %v", err)
+	}
+	if _, err := f.clients.Control.RenewControl(ctx, connect.NewRequest(&v1.RenewControlRequest{LeaseId: leaseID})); err != nil {
+		t.Fatalf("renewing one's own lease: %v", err)
+	}
+	// What a command line sends takes over what another command line holds.
+	abort := connect.NewRequest(&v1.AbortTurnRequest{ItemId: id})
+	asCLI(abort)
+	if _, err := agent.Agents.AbortTurn(ctx, abort); err != nil {
+		t.Fatalf("a command line taking over another's control: %v", err)
+	}
+	if current, err := f.api.Local.Lease(ctx, id); err != nil || current == nil || current.ClientID != "item:"+other.Msg.Item.Id+"/cli" {
+		t.Fatalf("lease after the handover: %+v %v", current, err)
+	}
+	// A browser tab keeps what it holds.
+	tab := connect.NewRequest(&v1.AcquireControlRequest{ItemId: id, ClientId: "tab", Confirm: true})
+	tab.Header().Set(ClientHeader, "tab")
+	tab.Header().Set(HolderHeader, "web")
+	view := connect.NewRequest(&v1.GetControlRequest{ItemId: id, ClientId: "tab"})
+	view.Header().Set(ClientHeader, "tab")
+	view.Header().Set(HolderHeader, "web")
+	plan, err := f.clients.Control.GetControl(ctx, view)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tab.Msg.PlanToken = plan.Msg.Control.Plan.PlanToken
+	if _, err := f.clients.Control.AcquireControl(ctx, tab); err != nil {
+		t.Fatal(err)
+	}
+	abort = connect.NewRequest(&v1.AbortTurnRequest{ItemId: id})
+	asCLI(abort)
+	if _, err := agent.Agents.AbortTurn(ctx, abort); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("a command line taking a tab's control: %v", err)
 	}
 }

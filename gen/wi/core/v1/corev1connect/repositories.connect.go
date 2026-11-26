@@ -139,7 +139,8 @@ type RepositoryServiceClient interface {
 	// DeleteRepositoryFile removes a file, then updates checkouts.
 	DeleteRepositoryFile(context.Context, *connect.Request[v1.DeleteRepositoryFileRequest]) (*connect.Response[v1.DeleteRepositoryFileResponse], error)
 	// GetEnvironment reads the repository's variables and the agents running
-	// in its checkouts with older ones.
+	// in its checkouts with older ones. An item's agent may read only its own
+	// item's repository's, which it runs with.
 	GetEnvironment(context.Context, *connect.Request[v1.GetEnvironmentRequest]) (*connect.Response[v1.GetEnvironmentResponse], error)
 	// UpdateEnvironment sets and unsets variables, or replaces them all.
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateEnvironmentRequest]) (*connect.Response[v1.UpdateEnvironmentResponse], error)
@@ -476,7 +477,8 @@ type RepositoryServiceHandler interface {
 	// DeleteRepositoryFile removes a file, then updates checkouts.
 	DeleteRepositoryFile(context.Context, *connect.Request[v1.DeleteRepositoryFileRequest]) (*connect.Response[v1.DeleteRepositoryFileResponse], error)
 	// GetEnvironment reads the repository's variables and the agents running
-	// in its checkouts with older ones.
+	// in its checkouts with older ones. An item's agent may read only its own
+	// item's repository's, which it runs with.
 	GetEnvironment(context.Context, *connect.Request[v1.GetEnvironmentRequest]) (*connect.Response[v1.GetEnvironmentResponse], error)
 	// UpdateEnvironment sets and unsets variables, or replaces them all.
 	UpdateEnvironment(context.Context, *connect.Request[v1.UpdateEnvironmentRequest]) (*connect.Response[v1.UpdateEnvironmentResponse], error)

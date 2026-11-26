@@ -43,11 +43,11 @@ func TestTheDaemonTakesControlForItsOwnSendsAndGivesItBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	own, done = f.api.actOnItself(context.Background(), id, followUpClient, "follow-up", model.Origin{Actor: model.OperatorUser, Cause: "follow-up:f1"})
-	if lease, err := f.api.controlLeaseStarting(own, id, "", true, false); err != nil || lease.ClientID != "tab" {
+	if lease, err := f.api.controlLeaseStarting(own, id, "", true, false); err != nil || lease.ClientID != "user:operator/tab" {
 		t.Fatalf("follow-up displaced the controller: %+v %v", lease, err)
 	}
 	done(nil)
-	if current, err := f.api.Local.Lease(ctx, id); err != nil || current == nil || current.ClientID != "tab" {
+	if current, err := f.api.Local.Lease(ctx, id); err != nil || current == nil || current.ClientID != "user:operator/tab" {
 		t.Fatalf("controller's lease after the follow-up: %+v %v", current, err)
 	}
 }

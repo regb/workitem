@@ -3,6 +3,7 @@ package daemonapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/regb/workitem/internal/remoteurl"
 	"path/filepath"
@@ -422,6 +423,17 @@ func (s *Server) staleAgents(ctx context.Context, repositoryID string, changed *
 	return out
 }
 func (s *Server) GetEnvironment(ctx context.Context, req *connect.Request[v1.GetEnvironmentRequest]) (*connect.Response[v1.GetEnvironmentResponse], error) {
+	// Values may be secrets. An item's agent already runs with its own
+	// repository's; another repository's are for a person.
+	if who := caller(ctx).principal; who.item() {
+		own, err := s.canonical(ctx, who.itemID, 0)
+		if err != nil {
+			return nil, err
+		}
+		if own.Manifest.Repository.ID != req.Msg.RepositoryId {
+			return nil, connect.NewError(connect.CodePermissionDenied, errors.New("reading another repository's environment is for a person, not an item's agent"))
+		}
+	}
 	value, err := s.Local.RepositoryEnvironment(ctx, req.Msg.RepositoryId)
 	return response(&v1.GetEnvironmentResponse{Variables: environmentVars(value.Environment.Vars), Revision: uint32(value.Environment.Revision), ChangedAt: optionalStamp(value.Environment.ChangedAt), StaleAgents: s.staleAgents(ctx, req.Msg.RepositoryId, value.Environment.ChangedAt)}, err)
 }

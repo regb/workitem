@@ -52,13 +52,13 @@ func (s *Server) rememberLease(value *model.ControlLease) {
 	}
 }
 func (s *Server) GetControl(ctx context.Context, req *connect.Request[v1.GetControlRequest]) (*connect.Response[v1.GetControlResponse], error) {
-	request := s.controlRequest(ctx, req.Msg.ItemId, req.Msg.ClientId, false, false)
+	request := s.controlRequest(ctx, req.Msg.ItemId, requestClient(ctx, req.Msg.ClientId), false, false)
 	status, plan, err := s.App.PlanControl(ctx, request)
 	s.rememberLease(status.Lease)
 	return response(&v1.GetControlResponse{Control: s.controlStatus(ctx, status, plan, request.ClientID)}, err)
 }
 func (s *Server) AcquireControl(ctx context.Context, req *connect.Request[v1.AcquireControlRequest]) (*connect.Response[v1.AcquireControlResponse], error) {
-	request := s.controlRequest(ctx, req.Msg.ItemId, req.Msg.ClientId, req.Msg.Confirm, req.Msg.StartAgent)
+	request := s.controlRequest(ctx, req.Msg.ItemId, requestClient(ctx, req.Msg.ClientId), req.Msg.Confirm, req.Msg.StartAgent)
 	if request.ClientID != caller(ctx).client {
 		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("client_id does not match the caller metadata"))
 	}
@@ -202,4 +202,13 @@ func labelOr(label, fallback string) string {
 		return label
 	}
 	return fallback
+}
+
+// requestClient is the client a request names, as the caller principal's,
+// like the one its header names; empty when it names none.
+func requestClient(ctx context.Context, client string) string {
+	if client == "" {
+		return ""
+	}
+	return caller(ctx).principal.String() + "/" + client
 }

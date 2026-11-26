@@ -29,7 +29,8 @@ type AgentProfile struct {
 	Driver string                 `protobuf:"bytes,2,opt,name=driver,proto3" json:"driver,omitempty"`
 	Label  string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
 	// config is the driver's settings, such as executable, model and
-	// reasoning. Its shape belongs to the driver.
+	// reasoning. Its shape belongs to the driver. An item's agent gets none:
+	// GetProfileModels gives it the profile's models.
 	Config *structpb.Struct `protobuf:"bytes,4,opt,name=config,proto3" json:"config,omitempty"`
 	// users counts the open items using the profile.
 	Users         uint32 `protobuf:"varint,5,opt,name=users,proto3" json:"users,omitempty"`

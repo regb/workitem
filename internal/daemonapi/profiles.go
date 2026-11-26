@@ -25,8 +25,15 @@ func (s *Server) ListAgentProfiles(ctx context.Context, req *connect.Request[v1.
 	if choice := value.TitleModel; choice != nil {
 		out.TitleModel = &v1.ModelChoice{Driver: choice.Driver, Model: choice.Model, Reasoning: choice.Reasoning}
 	}
+	// A driver's settings may name commands or hold secrets: an item's agent
+	// sees which profiles there are, and their models through
+	// GetProfileModels, not their settings.
+	agent := caller(ctx).principal.item()
 	for _, p := range value.Profiles {
 		row := profile(p)
+		if agent {
+			row.Config = nil
+		}
 		row.Users = uint32(s.App.AgentProfileUsers(p.Name))
 		out.Profiles = append(out.Profiles, row)
 	}

@@ -39,6 +39,8 @@ var itemLevels = map[string]model.AccessLevel{
 	corev1connect.ReviewServiceGetReviewIntentProcedure:          model.AccessView,
 	corev1connect.ReviewServiceGetReviewThreadsProcedure:         model.AccessView,
 	corev1connect.ReviewServiceGetRevisionReviewProcedure:        model.AccessView,
+	corev1connect.ReviewServiceGetRevisionPatchProcedure:         model.AccessView,
+	corev1connect.ReviewServiceGetRevisionReviewFileProcedure:    model.AccessView,
 	corev1connect.ReviewServiceListReviewCommitsProcedure:        model.AccessView,
 	corev1connect.ReviewServiceListReviewRevisionsProcedure:      model.AccessView,
 	corev1connect.ViewServiceGetItemViewProcedure:                model.AccessView,
@@ -133,8 +135,6 @@ var anyItem = map[string]bool{
 	corev1connect.ControlServiceRenewControlProcedure:             true,
 	corev1connect.JobServiceGetJobProcedure:                       true,
 	corev1connect.JobServiceWatchJobProcedure:                     true,
-	corev1connect.ReviewServiceGetRevisionPatchProcedure:          true,
-	corev1connect.ReviewServiceGetRevisionReviewFileProcedure:     true,
 	corev1connect.RepositoryServiceGetCheckoutSetupProcedure:      true,
 	corev1connect.RepositoryServiceGetEnvironmentProcedure:        true,
 	corev1connect.RepositoryServiceGetRepositoryProcedure:         true,
@@ -200,7 +200,12 @@ func (s *Server) authorize(ctx context.Context, procedure, itemID string) error 
 		return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("an item's agent may not call %s", procedure))
 	}
 	if itemID == "" {
-		return nil
+		// Only a call whose item is optional may name none: it then acts
+		// on no item, or on one its other fields name and check.
+		if optionalItem[procedure] {
+			return nil
+		}
+		return invalid("valid item_id is required")
 	}
 	has, err := s.itemAccess(ctx, who.String(), itemID)
 	if err != nil {

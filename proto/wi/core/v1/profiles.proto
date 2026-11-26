@@ -43,7 +43,8 @@ message AgentProfile {
   string driver = 2;
   string label = 3;
   // config is the driver's settings, such as executable, model and
-  // reasoning. Its shape belongs to the driver.
+  // reasoning. Its shape belongs to the driver. An item's agent gets none:
+  // GetProfileModels gives it the profile's models.
   google.protobuf.Struct config = 4;
   // users counts the open items using the profile.
   uint32 users = 5;

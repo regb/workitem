@@ -34,7 +34,7 @@ func TestEveryProcedureIsClassifiedForItemsAgents(t *testing.T) {
 				if count != 1 {
 					t.Errorf("%s must be in exactly one of itemLevels, usersOnly and anyItem", procedure)
 				}
-				if level && methods.Get(j).Input().Fields().ByName("item_id") == nil {
+				if level && methods.Get(j).Input().Fields().ByName("item_id") == nil && !nestedItem[procedure] {
 					t.Errorf("%s has a level but names no item", procedure)
 				}
 			}
@@ -77,6 +77,36 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 	_, err = agent.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: b}))
 	if !denied(err) {
 		t.Fatalf("viewing another item without access: %v", err)
+	}
+	// Its own repository's environment it already runs with; another's
+	// values, and the profiles' settings, are a person's.
+	if _, err := agent.Repositories.GetEnvironment(ctx, connect.NewRequest(&v1.GetEnvironmentRequest{RepositoryId: repo})); err != nil {
+		t.Fatalf("own repository's environment: %v", err)
+	}
+	if _, err := agent.Repositories.GetEnvironment(ctx, connect.NewRequest(&v1.GetEnvironmentRequest{RepositoryId: "01M8CA5QR6R1R68TKH4QFXKP1H"})); !denied(err) {
+		t.Fatalf("another repository's environment: %v", err)
+	}
+	profiles, profilesErr := agent.Profiles.ListAgentProfiles(ctx, connect.NewRequest(&v1.ListAgentProfilesRequest{}))
+	if profilesErr != nil || len(profiles.Msg.Profiles) == 0 {
+		t.Fatalf("profiles: %v %v", profiles, profilesErr)
+	}
+	for _, p := range profiles.Msg.Profiles {
+		if p.Config != nil {
+			t.Fatalf("an agent read profile %s's settings", p.Name)
+		}
+	}
+	if mine, err := f.clients.Profiles.ListAgentProfiles(ctx, connect.NewRequest(&v1.ListAgentProfilesRequest{})); err != nil || mine.Msg.Profiles[0].Config == nil {
+		t.Fatalf("the operator's profiles: %v %v", mine, err)
+	}
+	// Requests that name their item inside a nested request are held to it.
+	if _, err := agent.Reviews.GetRevisionPatch(ctx, connect.NewRequest(&v1.GetRevisionPatchRequest{Comparison: &v1.GetRevisionReviewRequest{ItemId: b, RevisionId: "r1"}})); !denied(err) {
+		t.Fatalf("another item's revision patch without access: %v", err)
+	}
+	if _, err := agent.Reviews.GetRevisionReviewFile(ctx, connect.NewRequest(&v1.GetRevisionReviewFileRequest{Comparison: &v1.GetRevisionReviewRequest{ItemId: b, RevisionId: "r1"}, Path: "a"})); !denied(err) {
+		t.Fatalf("another item's revision file without access: %v", err)
+	}
+	if _, err := agent.Reviews.GetRevisionPatch(ctx, connect.NewRequest(&v1.GetRevisionPatchRequest{})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("revision patch naming no item: %v", err)
 	}
 	var refusal *connect.Error
 	errors.As(err, &refusal)
@@ -126,6 +156,15 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 	}
 	if _, err := agent.Items.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: b, AddLabels: []string{"x"}})); !denied(err) {
 		t.Fatalf("control with message: %v", err)
+	}
+	// A message to a backlog item would start it, which takes control.
+	_, err = agent.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: b, Text: "start please"}))
+	if !denied(err) {
+		t.Fatalf("starting a backlog item with message access: %v", err)
+	}
+	errors.As(err, &refusal)
+	if detail, _ := refusal.Details()[0].Value(); detail.(*v1.AccessDenied).Needed != v1.AccessLevel_ACCESS_LEVEL_CONTROL {
+		t.Fatalf("detail: %v", detail)
 	}
 	if _, err := agent.Lifecycle.CloseItem(ctx, connect.NewRequest(&v1.CloseItemRequest{ItemId: b, Resolution: v1.Resolution_RESOLUTION_COMPLETED})); !denied(err) {
 		t.Fatalf("close with message: %v", err)
