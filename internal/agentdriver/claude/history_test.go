@@ -348,3 +348,23 @@ func TestHistoryShowsSteeredMessages(t *testing.T) {
 		t.Fatalf("steered message ids: %v", ids)
 	}
 }
+
+func TestHistoryShowsPastedTextAsSent(t *testing.T) {
+	path := historyFixture(t,
+		`{"type":"user","uuid":"u","parentUuid":null,"message":{"content":"\n\n<pasted_content id=\"b3aa\">\n<wi-message-1 from=\"item:A\">\nhello\n</wi-message-1>\n</pasted_content id=\"b3aa\">\n"}}`,
+		`{"type":"user","uuid":"v","parentUuid":"u","message":{"content":[{"type":"text","text":"look: <pasted_content id=\"c1\">\nline\n</pasted_content> and <pasted_content id=\"x\">kept</pasted_content id=\"y\">"}]}}`,
+		`{"type":"assistant","uuid":"a","parentUuid":"v","message":{"content":"<pasted_content id=\"z\">\nmine\n</pasted_content id=\"z\">"}}`)
+	h, err := ReadHistoryPage(context.Background(), path, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := h.Messages[0].Text(); got != "<wi-message-1 from=\"item:A\">\nhello\n</wi-message-1>" {
+		t.Fatalf("pasted message = %q", got)
+	}
+	if got := h.Messages[1].Text(); got != "look: line and <pasted_content id=\"x\">kept</pasted_content id=\"y\">" {
+		t.Fatalf("mixed message = %q", got)
+	}
+	if got := h.Messages[2].Text(); got != "<pasted_content id=\"z\">\nmine\n</pasted_content id=\"z\">" {
+		t.Fatalf("assistant text changed: %q", got)
+	}
+}

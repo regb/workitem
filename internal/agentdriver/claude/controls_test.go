@@ -353,3 +353,13 @@ func TestQueuedPromptWaitsForADialogToClose(t *testing.T) {
 		}
 	}
 }
+
+// Claude hands its prompt hook a long paste in its pasted_content element;
+// the delivery still matches the text wi sent.
+func TestHookDigestMatchesPastedPrompt(t *testing.T) {
+	sent := "line one\nline two\nline three"
+	submitted := "\n\n<pasted_content id=\"b3aa\">\n" + sent + "\n</pasted_content id=\"b3aa\">\n"
+	if promptDigest(unpasted(submitted)) != promptDigest(sent) {
+		t.Fatal("pasted prompt digest differs from the text sent")
+	}
+}

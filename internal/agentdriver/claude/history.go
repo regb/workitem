@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -240,6 +241,9 @@ func readHistoryPage(ctx context.Context, path, leaf, before string, sidechain b
 			}
 		} else {
 			content(record.Message.Content, &message, &result.Truncated)
+		}
+		if message.Role == "user" {
+			unpaste(&message)
 		}
 		if record.Origin.Kind == "task-notification" {
 			taskNotification(&message)
@@ -554,4 +558,33 @@ func elapsedMS(from, to string) int64 {
 		return 0
 	}
 	return elapsed.Milliseconds()
+}
+
+// Claude's TUI records text pasted into its editor, as wi delivers messages
+// to it, inside a pasted_content element the harness adds for the model, and
+// hands its prompt hook the same. The history shows the text as it was sent,
+// and delivery compares the text sent with the text submitted.
+var pastedContent = regexp.MustCompile(`(?s)<pasted_content id="([A-Za-z0-9_-]{1,32})">\n?(.*?)\n?</pasted_content(?: id="([A-Za-z0-9_-]{1,32})")?>`)
+
+// unpasted is text with each pasted_content element replaced by what was
+// pasted.
+func unpasted(text string) string {
+	if !strings.Contains(text, "<pasted_content id=") {
+		return text
+	}
+	return strings.TrimSpace(pastedContent.ReplaceAllStringFunc(text, func(element string) string {
+		match := pastedContent.FindStringSubmatch(element)
+		if match[3] != "" && match[3] != match[1] {
+			return element
+		}
+		return match[2]
+	}))
+}
+
+func unpaste(message *protocol.HistoryMessage) {
+	for i, part := range message.Parts {
+		if part.Text != "" {
+			message.Parts[i].Text = unpasted(part.Text)
+		}
+	}
 }

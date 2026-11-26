@@ -72,7 +72,7 @@ func RunHook(ctx context.Context, path string, input io.Reader) error {
 		return submitDisplay(ctx, path, h, value.displayFields)
 	}
 	if h.Event == "UserPromptSubmit" && value.Prompt != "" {
-		h.PromptDigest = promptDigest(value.Prompt)
+		h.PromptDigest = promptDigest(unpasted(value.Prompt))
 	}
 	data, err := json.Marshal(h)
 	if err != nil {
