@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -7,25 +7,25 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
+	"github.com/regb/workitem/internal/daemonapi"
 )
 
 // One Watch stream carries what a view follows: changes, jobs as they move,
 // an item's live content and heartbeats; it keeps the observation beat
 // running only while open.
 func TestWatchMultiplexesChangesJobsContentAndHeartbeats(t *testing.T) {
-	heartbeat := heartbeatInterval
-	heartbeatInterval = 300 * time.Millisecond
-	t.Cleanup(func() { heartbeatInterval = heartbeat })
-	f := newFixture(t)
+	daemonapi.SetHeartbeatInterval(t, 300*time.Millisecond)
+	f := apitest.New(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.repo(t), Title: "watched"}))
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.Repository(t, "test"), Title: "watched"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := created.Msg.Item.Id
 	watchCtx, stop := context.WithCancel(ctx)
-	stream, err := f.clients.Events.Watch(watchCtx, connect.NewRequest(&v1.WatchRequest{ItemId: id}))
+	stream, err := f.Clients.Events.Watch(watchCtx, connect.NewRequest(&v1.WatchRequest{ItemId: id}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,16 +67,14 @@ func TestWatchMultiplexesChangesJobsContentAndHeartbeats(t *testing.T) {
 		}
 		return len(opened) == 3
 	})
-	f.api.watchMu.Lock()
-	watchers := f.api.watchers
-	f.api.watchMu.Unlock()
+	watchers := f.API().Watchers()
 	if watchers != 1 {
 		t.Fatalf("watchers = %d", watchers)
 	}
 
 	release := make(chan struct{})
-	job := f.api.jobs.start("setup_workspace", id, "", func(ctx context.Context, j *jobRun) error {
-		j.phase("setting up")
+	job := f.API().StartJob("setup_workspace", id, "", func(ctx context.Context, j *daemonapi.JobRun) error {
+		j.Phase("setting up")
 		<-release
 		return nil
 	})
@@ -98,7 +96,7 @@ func TestWatchMultiplexesChangesJobsContentAndHeartbeats(t *testing.T) {
 		return false
 	})
 
-	if _, err := f.clients.Items.AddNote(ctx, connect.NewRequest(&v1.AddNoteRequest{ItemId: id, Text: "changed"})); err != nil {
+	if _, err := f.Clients.Items.AddNote(ctx, connect.NewRequest(&v1.AddNoteRequest{ItemId: id, Text: "changed"})); err != nil {
 		t.Fatal(err)
 	}
 	until("item change", func(e *v1.WatchResponse) bool {
@@ -115,9 +113,7 @@ func TestWatchMultiplexesChangesJobsContentAndHeartbeats(t *testing.T) {
 	for range events {
 	}
 	for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-		f.api.watchMu.Lock()
-		watchers := f.api.watchers
-		f.api.watchMu.Unlock()
+		watchers := f.API().Watchers()
 		if watchers == 0 {
 			break
 		}
@@ -128,8 +124,8 @@ func TestWatchMultiplexesChangesJobsContentAndHeartbeats(t *testing.T) {
 }
 
 func TestWatchRefusesAMissingItem(t *testing.T) {
-	f := newFixture(t)
-	stream, err := f.clients.Events.Watch(context.Background(), connect.NewRequest(&v1.WatchRequest{ItemId: missingItemID}))
+	f := apitest.New(t)
+	stream, err := f.Clients.Events.Watch(context.Background(), connect.NewRequest(&v1.WatchRequest{ItemId: missingItemID}))
 	if err == nil {
 		for stream.Receive() {
 		}

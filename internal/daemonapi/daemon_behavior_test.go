@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -12,63 +12,42 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
+	"github.com/regb/workitem/internal/daemonapi"
 	"github.com/regb/workitem/internal/model"
 	"google.golang.org/protobuf/proto"
 )
 
-func TestListSectionFollowsAttentionThenProblems(t *testing.T) {
-	problem := &v1.ItemObservation{AgentStatus: v1.AgentStatus_AGENT_STATUS_PROBLEM}
-	checkout := &v1.ItemObservation{WorktreeStatus: v1.WorktreeStatus_WORKTREE_STATUS_PROBLEM}
-	for _, test := range []struct {
-		group v1.AttentionGroup
-		o     *v1.ItemObservation
-		want  v1.ListSection
-	}{
-		{v1.AttentionGroup_ATTENTION_GROUP_CLOSED, problem, v1.ListSection_LIST_SECTION_CLOSED},
-		{v1.AttentionGroup_ATTENTION_GROUP_BACKLOG, problem, v1.ListSection_LIST_SECTION_BACKLOG},
-		// A usage-limited agent is a problem, but its item waits.
-		{v1.AttentionGroup_ATTENTION_GROUP_WAITING, problem, v1.ListSection_LIST_SECTION_WAITING},
-		{v1.AttentionGroup_ATTENTION_GROUP_WORKING, checkout, v1.ListSection_LIST_SECTION_NEEDS_FIXING},
-		{v1.AttentionGroup_ATTENTION_GROUP_NEEDS_ATTENTION, problem, v1.ListSection_LIST_SECTION_NEEDS_FIXING},
-		{v1.AttentionGroup_ATTENTION_GROUP_WORKING, &v1.ItemObservation{}, v1.ListSection_LIST_SECTION_IN_PROGRESS},
-		{v1.AttentionGroup_ATTENTION_GROUP_NEEDS_ATTENTION, nil, v1.ListSection_LIST_SECTION_NEEDS_ATTENTION},
-	} {
-		if got := listSection(&v1.ItemSummary{AttentionGroup: test.group, Observation: test.o}); got != test.want {
-			t.Errorf("%v %v: got %v, want %v", test.group, test.o, got, test.want)
-		}
-	}
-}
-
 // Sending to a backlog item starts it, with the message (and its images) as
 // the first prompt; an invalid image is refused before anything starts.
 func TestSendingToABacklogItemStartsIt(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.repo(t), Title: "send starts"}))
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.Repository(t, "test"), Title: "send starts"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := created.Msg.Item.Id
 	bad := &v1.Image{MimeType: "text/plain", Data: []byte("x")}
-	if _, err := f.clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: id, Text: "go", Images: []*v1.Image{bad}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := f.Clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: id, Text: "go", Images: []*v1.Image{bad}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("invalid image: %v", err)
 	}
-	if _, err := f.clients.Lifecycle.StartItem(ctx, connect.NewRequest(&v1.StartItemRequest{ItemId: id, Start: &v1.StartOptions{Images: []*v1.Image{bad}}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err := f.Clients.Lifecycle.StartItem(ctx, connect.NewRequest(&v1.StartItemRequest{ItemId: id, Start: &v1.StartOptions{Images: []*v1.Image{bad}}})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("invalid start image: %v", err)
 	}
-	item, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+	item, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 	if err != nil || item.Msg.Item.State != v1.ItemState_ITEM_STATE_BACKLOG {
 		t.Fatalf("refused send changed the item: %v %v", item, err)
 	}
 	png := &v1.Image{MimeType: "image/png", Data: []byte("\x89PNG\r\n\x1a\n")}
-	sent, err := f.clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: id, Text: "go", Images: []*v1.Image{png}, ClientMessageId: "m1"}))
+	sent, err := f.Clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: id, Text: "go", Images: []*v1.Image{png}, ClientMessageId: "m1"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if sent.Msg.Job == nil || sent.Msg.Job.Kind != "start_item" {
 		t.Fatalf("send did not start the item: %v", sent.Msg)
 	}
-	item, err = f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+	item, err = f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 	if err != nil || item.Msg.Item.State != v1.ItemState_ITEM_STATE_ACTIVE {
 		t.Fatalf("item not active: %v %v", item, err)
 	}
@@ -77,19 +56,19 @@ func TestSendingToABacklogItemStartsIt(t *testing.T) {
 // A refused control call carries the item's control status, so the client
 // can show who holds control without asking again.
 func TestControlRefusalsCarryTheControlStatus(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.repo(t), Title: "refusals"}))
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.Repository(t, "test"), Title: "refusals"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := created.Msg.Item.Id
-	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
+	if _, err := f.Clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
 		t.Fatal(err)
 	}
 	acquire := connect.NewRequest(&v1.AcquireControlRequest{ItemId: id, ClientId: "alpha"})
-	acquire.Header().Set(ClientHeader, "alpha")
-	alpha, err := f.clients.Control.AcquireControl(ctx, acquire)
+	acquire.Header().Set(daemonapi.ClientHeader, "alpha")
+	alpha, err := f.Clients.Control.AcquireControl(ctx, acquire)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,8 +90,8 @@ func TestControlRefusalsCarryTheControlStatus(t *testing.T) {
 	}
 	// Taking control from alpha needs confirmation.
 	take := connect.NewRequest(&v1.AcquireControlRequest{ItemId: id, ClientId: "beta"})
-	take.Header().Set(ClientHeader, "beta")
-	_, err = f.clients.Control.AcquireControl(ctx, take)
+	take.Header().Set(daemonapi.ClientHeader, "beta")
+	_, err = f.Clients.Control.AcquireControl(ctx, take)
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatal(err)
 	}
@@ -121,30 +100,30 @@ func TestControlRefusalsCarryTheControlStatus(t *testing.T) {
 	}
 	// Abort and settings take vacant control, and refuse another holder's.
 	abort := connect.NewRequest(&v1.AbortTurnRequest{ItemId: id})
-	abort.Header().Set(ClientHeader, "beta")
-	_, err = f.clients.Agents.AbortTurn(ctx, abort)
+	abort.Header().Set(daemonapi.ClientHeader, "beta")
+	_, err = f.Clients.Agents.AbortTurn(ctx, abort)
 	if connect.CodeOf(err) != connect.CodePermissionDenied || status(err).Lease.GetClientId() != "user:operator/alpha" {
 		t.Fatalf("abort by another client: %v", err)
 	}
 	// Releasing by item works without the lease ID, and only for its holder.
 	release := connect.NewRequest(&v1.ReleaseControlRequest{ItemId: id})
-	release.Header().Set(ClientHeader, "beta")
-	if _, err := f.clients.Control.ReleaseControl(ctx, release); connect.CodeOf(err) != connect.CodePermissionDenied {
+	release.Header().Set(daemonapi.ClientHeader, "beta")
+	if _, err := f.Clients.Control.ReleaseControl(ctx, release); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("release by another client: %v", err)
 	}
 	release = connect.NewRequest(&v1.ReleaseControlRequest{ItemId: id})
-	release.Header().Set(ClientHeader, "alpha")
-	if _, err := f.clients.Control.ReleaseControl(ctx, release); err != nil {
+	release.Header().Set(daemonapi.ClientHeader, "alpha")
+	if _, err := f.Clients.Control.ReleaseControl(ctx, release); err != nil {
 		t.Fatal(err)
 	}
 	abort = connect.NewRequest(&v1.AbortTurnRequest{ItemId: id})
-	abort.Header().Set(ClientHeader, "beta")
-	if _, err := f.clients.Agents.AbortTurn(ctx, abort); err != nil {
+	abort.Header().Set(daemonapi.ClientHeader, "beta")
+	if _, err := f.Clients.Agents.AbortTurn(ctx, abort); err != nil {
 		t.Fatalf("abort with vacant control: %v", err)
 	}
 	get := connect.NewRequest(&v1.GetControlRequest{ItemId: id, ClientId: "beta"})
-	get.Header().Set(ClientHeader, "beta")
-	now, err := f.clients.Control.GetControl(ctx, get)
+	get.Header().Set(daemonapi.ClientHeader, "beta")
+	now, err := f.Clients.Control.GetControl(ctx, get)
 	if err != nil || !now.Msg.Control.Yours {
 		t.Fatalf("abort did not take vacant control: %v %v", now, err)
 	}
@@ -153,19 +132,19 @@ func TestControlRefusalsCarryTheControlStatus(t *testing.T) {
 // A failed start leaves no agent to observe: the item shows the failure as
 // an agent problem until the next start.
 func TestAFailedStartIsAnAgentProblem(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.repo(t), Title: "failed start"}))
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.Repository(t, "test"), Title: "failed start"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := created.Msg.Item.Id
-	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
+	if _, err := f.Clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
 		t.Fatal(err)
 	}
 	get := func() *v1.ItemObservation {
 		t.Helper()
-		value, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+		value, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -173,10 +152,10 @@ func TestAFailedStartIsAnAgentProblem(t *testing.T) {
 	}
 	finish := func(kind string, fail error) {
 		t.Helper()
-		job := f.api.jobs.start(kind, id, "", func(context.Context, *jobRun) error { return fail })
+		job := f.API().StartJob(kind, id, "", func(context.Context, *daemonapi.JobRun) error { return fail })
 		for deadline := time.Now().Add(5 * time.Second); ; time.Sleep(10 * time.Millisecond) {
-			value, _ := f.api.jobs.get(job.Id)
-			if snapshot, _ := value.snapshot(); terminalJob(snapshot.State) {
+			snapshot, _ := f.API().JobSnapshot(job.Id)
+			if snapshot != nil && daemonapi.TerminalJob(snapshot.State) {
 				return
 			}
 			if time.Now().After(deadline) {
@@ -201,31 +180,31 @@ func TestAFailedStartIsAnAgentProblem(t *testing.T) {
 
 // A close plan says what closing would do now, changing nothing.
 func TestPlanCloseReportsWhatClosingWouldDo(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.repo(t), Title: "plan close"}))
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.Repository(t, "test"), Title: "plan close"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := created.Msg.Item.Id
-	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
+	if _, err := f.Clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
 		t.Fatal(err)
 	}
-	workspace, err := f.clients.Workspaces.EnsureWorkspace(ctx, connect.NewRequest(&v1.EnsureWorkspaceRequest{ItemId: id, SkipSetup: true}))
+	workspace, err := f.Clients.Workspaces.EnsureWorkspace(ctx, connect.NewRequest(&v1.EnsureWorkspaceRequest{ItemId: id, SkipSetup: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(workspace.Msg.Checkout.Claim.Path, "notes.txt"), []byte("work\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	plan, err := f.clients.Lifecycle.PlanClose(ctx, connect.NewRequest(&v1.PlanCloseRequest{ItemId: id}))
+	plan, err := f.Clients.Lifecycle.PlanClose(ctx, connect.NewRequest(&v1.PlanCloseRequest{ItemId: id}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p := plan.Msg; p.AbortsTurn || p.AttachedTerminalClients != 0 || p.CheckoutProblem != "" || len(p.Commits) != 1 || p.Commits[0] != "notes.txt" {
 		t.Fatalf("plan: %v", p)
 	}
-	item, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+	item, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 	if err != nil || item.Msg.Item.State != v1.ItemState_ITEM_STATE_ACTIVE {
 		t.Fatalf("planning changed the item: %v %v", item, err)
 	}
@@ -234,44 +213,44 @@ func TestPlanCloseReportsWhatClosingWouldDo(t *testing.T) {
 // Shelving, closing and reopening refuse a request made against an item
 // that changed since the client read it, as starting does.
 func TestLifecyclePorcelainRefusesStaleRevisions(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.repo(t), Title: "stale"}))
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.Repository(t, "test"), Title: "stale"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id, read := created.Msg.Item.Id, created.Msg.Item.Revision
-	if _, err := f.clients.Items.AddNote(ctx, connect.NewRequest(&v1.AddNoteRequest{ItemId: id, Text: "changed meanwhile"})); err != nil {
+	if _, err := f.Clients.Items.AddNote(ctx, connect.NewRequest(&v1.AddNoteRequest{ItemId: id, Text: "changed meanwhile"})); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.clients.Items.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: id, Title: proto.String("renamed meanwhile")})); err != nil {
+	if _, err := f.Clients.Items.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: id, Title: proto.String("renamed meanwhile")})); err != nil {
 		t.Fatal(err)
 	}
-	current, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+	current, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 	if err != nil || current.Msg.Item.Revision == read {
 		t.Fatalf("revision did not move: %v %v", current, err)
 	}
-	if _, err := f.clients.Lifecycle.ShelveItem(ctx, connect.NewRequest(&v1.ShelveItemRequest{ItemId: id, ExpectedRevision: read})); connect.CodeOf(err) != connect.CodeAborted {
+	if _, err := f.Clients.Lifecycle.ShelveItem(ctx, connect.NewRequest(&v1.ShelveItemRequest{ItemId: id, ExpectedRevision: read})); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("stale shelve: %v", err)
 	}
-	if _, err := f.clients.Lifecycle.CloseItem(ctx, connect.NewRequest(&v1.CloseItemRequest{ItemId: id, Resolution: v1.Resolution_RESOLUTION_ABANDONED, ExpectedRevision: read})); connect.CodeOf(err) != connect.CodeAborted {
+	if _, err := f.Clients.Lifecycle.CloseItem(ctx, connect.NewRequest(&v1.CloseItemRequest{ItemId: id, Resolution: v1.Resolution_RESOLUTION_ABANDONED, ExpectedRevision: read})); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("stale close: %v", err)
 	}
-	closed, err := f.clients.Lifecycle.CloseItem(ctx, connect.NewRequest(&v1.CloseItemRequest{ItemId: id, Resolution: v1.Resolution_RESOLUTION_ABANDONED, ExpectedRevision: current.Msg.Item.Revision}))
+	closed, err := f.Clients.Lifecycle.CloseItem(ctx, connect.NewRequest(&v1.CloseItemRequest{ItemId: id, Resolution: v1.Resolution_RESOLUTION_ABANDONED, ExpectedRevision: current.Msg.Item.Revision}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if closed.Msg.Job != nil {
-		waitJob(t, f.clients, closed.Msg.Job)
+		apitest.Wait(t, f.Clients, closed.Msg.Job)
 	}
-	after, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+	after, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 	if err != nil || after.Msg.Item.State != v1.ItemState_ITEM_STATE_CLOSED {
 		t.Fatalf("not closed: %v %v", after, err)
 	}
-	if _, err := f.clients.Lifecycle.ReopenItem(ctx, connect.NewRequest(&v1.ReopenItemRequest{ItemId: id, ExpectedRevision: read})); connect.CodeOf(err) != connect.CodeAborted {
+	if _, err := f.Clients.Lifecycle.ReopenItem(ctx, connect.NewRequest(&v1.ReopenItemRequest{ItemId: id, ExpectedRevision: read})); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("stale reopen: %v", err)
 	}
-	if _, err := f.clients.Lifecycle.ReopenItem(ctx, connect.NewRequest(&v1.ReopenItemRequest{ItemId: id, ExpectedRevision: after.Msg.Item.Revision})); err != nil {
+	if _, err := f.Clients.Lifecycle.ReopenItem(ctx, connect.NewRequest(&v1.ReopenItemRequest{ItemId: id, ExpectedRevision: after.Msg.Item.Revision})); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -279,23 +258,23 @@ func TestLifecyclePorcelainRefusesStaleRevisions(t *testing.T) {
 // A control lease is its principal's client's: another principal naming
 // the same client, as every command line does by default, holds none of it.
 func TestAControlLeaseBelongsToItsPrincipal(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	repo := f.repo(t)
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "lease"}))
+	repo := f.Repository(t, "test")
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "lease"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := created.Msg.Item.Id
-	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
+	if _, err := f.Clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: id, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
 		t.Fatal(err)
 	}
 	asCLI := func(req interface{ Header() http.Header }) {
-		req.Header().Set(HolderHeader, model.LeaseHolderCLI)
+		req.Header().Set(daemonapi.HolderHeader, model.LeaseHolderCLI)
 	}
 	acquire := connect.NewRequest(&v1.AcquireControlRequest{ItemId: id})
 	asCLI(acquire)
-	mine, err := f.clients.Control.AcquireControl(ctx, acquire)
+	mine, err := f.Clients.Control.AcquireControl(ctx, acquire)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,18 +284,18 @@ func TestAControlLeaseBelongsToItsPrincipal(t *testing.T) {
 	}
 	// Another item's agent, which may manage every item by default, names
 	// the same client.
-	other, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "other"}))
+	other, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "other"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	agent, _ := f.agentClients(t, other.Msg.Item.Id)
+	agent, _ := f.AgentClients(t, other.Msg.Item.Id)
 	if _, err := agent.Control.RenewControl(ctx, connect.NewRequest(&v1.RenewControlRequest{LeaseId: leaseID})); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("renewing another principal's lease: %v", err)
 	}
 	if _, err := agent.Control.ReleaseControl(ctx, connect.NewRequest(&v1.ReleaseControlRequest{ItemId: id})); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("releasing another principal's lease: %v", err)
 	}
-	if _, err := f.clients.Control.RenewControl(ctx, connect.NewRequest(&v1.RenewControlRequest{LeaseId: leaseID})); err != nil {
+	if _, err := f.Clients.Control.RenewControl(ctx, connect.NewRequest(&v1.RenewControlRequest{LeaseId: leaseID})); err != nil {
 		t.Fatalf("renewing one's own lease: %v", err)
 	}
 	// What a command line sends takes over what another command line holds.
@@ -325,22 +304,22 @@ func TestAControlLeaseBelongsToItsPrincipal(t *testing.T) {
 	if _, err := agent.Agents.AbortTurn(ctx, abort); err != nil {
 		t.Fatalf("a command line taking over another's control: %v", err)
 	}
-	if current, err := f.api.Local.Lease(ctx, id); err != nil || current == nil || current.ClientID != "item:"+other.Msg.Item.Id+"/cli" {
+	if current, err := f.API().Local.Lease(ctx, id); err != nil || current == nil || current.ClientID != "item:"+other.Msg.Item.Id+"/cli" {
 		t.Fatalf("lease after the handover: %+v %v", current, err)
 	}
 	// A browser tab keeps what it holds.
 	tab := connect.NewRequest(&v1.AcquireControlRequest{ItemId: id, ClientId: "tab", Confirm: true})
-	tab.Header().Set(ClientHeader, "tab")
-	tab.Header().Set(HolderHeader, "web")
+	tab.Header().Set(daemonapi.ClientHeader, "tab")
+	tab.Header().Set(daemonapi.HolderHeader, "web")
 	view := connect.NewRequest(&v1.GetControlRequest{ItemId: id, ClientId: "tab"})
-	view.Header().Set(ClientHeader, "tab")
-	view.Header().Set(HolderHeader, "web")
-	plan, err := f.clients.Control.GetControl(ctx, view)
+	view.Header().Set(daemonapi.ClientHeader, "tab")
+	view.Header().Set(daemonapi.HolderHeader, "web")
+	plan, err := f.Clients.Control.GetControl(ctx, view)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tab.Msg.PlanToken = plan.Msg.Control.Plan.PlanToken
-	if _, err := f.clients.Control.AcquireControl(ctx, tab); err != nil {
+	if _, err := f.Clients.Control.AcquireControl(ctx, tab); err != nil {
 		t.Fatal(err)
 	}
 	abort = connect.NewRequest(&v1.AbortTurnRequest{ItemId: id})

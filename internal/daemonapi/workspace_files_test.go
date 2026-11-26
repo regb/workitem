@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -9,22 +9,23 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 )
 
-func fileWorkspace(t *testing.T) (*fixture, string, *v1.Checkout) {
+func fileWorkspace(t *testing.T) (*apitest.Fixture, string, *v1.Checkout) {
 	t.Helper()
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	repo := f.repo(t)
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "Workspace files"}))
+	repo := f.Repository(t, "test")
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "Workspace files"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	item := created.Msg.Item.Id
-	if _, err = f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: item, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
+	if _, err = f.Clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: item, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
 		t.Fatal(err)
 	}
-	workspace, err := f.clients.Workspaces.EnsureWorkspace(ctx, connect.NewRequest(&v1.EnsureWorkspaceRequest{ItemId: item, SkipSetup: true}))
+	workspace, err := f.Clients.Workspaces.EnsureWorkspace(ctx, connect.NewRequest(&v1.EnsureWorkspaceRequest{ItemId: item, SkipSetup: true}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -39,7 +40,7 @@ func TestWorkspaceSavesSerializeAndRespectBranchOwnership(t *testing.T) {
 	if err := os.WriteFile(p, []byte("original"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	source, err := f.clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(&v1.GetWorkspaceFileRequest{ItemId: item, Path: "concurrent.txt", ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
+	source, err := f.Clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(&v1.GetWorkspaceFileRequest{ItemId: item, Path: "concurrent.txt", ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +49,7 @@ func TestWorkspaceSavesSerializeAndRespectBranchOwnership(t *testing.T) {
 	for _, text := range []string{"first", "second"} {
 		go func(content string) {
 			<-start
-			_, err := f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(&v1.SaveWorkspaceFileRequest{ItemId: item, Path: "concurrent.txt", Content: content, ExpectedSha256: source.Msg.File.Sha256, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
+			_, err := f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(&v1.SaveWorkspaceFileRequest{ItemId: item, Path: "concurrent.txt", Content: content, ExpectedSha256: source.Msg.File.Sha256, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
 			results <- err
 		}(text)
 	}
@@ -74,7 +75,7 @@ func TestWorkspaceSavesSerializeAndRespectBranchOwnership(t *testing.T) {
 	if out, err := exec.Command("git", "-C", claim.Path, "switch", "-c", "unexpected").CombinedOutput(); err != nil {
 		t.Fatalf("switch: %v %s", err, out)
 	}
-	_, err = f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(&v1.SaveWorkspaceFileRequest{ItemId: item, Path: "concurrent.txt", Content: "not allowed", ExpectedSha256: source.Msg.File.Sha256, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
+	_, err = f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(&v1.SaveWorkspaceFileRequest{ItemId: item, Path: "concurrent.txt", Content: "not allowed", ExpectedSha256: source.Msg.File.Sha256, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("branch mismatch: %v", err)
 	}
@@ -98,7 +99,7 @@ func TestWorkspaceFilesThroughCoreAPI(t *testing.T) {
 	write(p, "old\n")
 	write(".gitignore", "ignored\n")
 	write("ignored", "secret")
-	files, err := f.clients.Workspaces.ListWorkspaceFiles(ctx, connect.NewRequest(&v1.ListWorkspaceFilesRequest{ItemId: item}))
+	files, err := f.Clients.Workspaces.ListWorkspaceFiles(ctx, connect.NewRequest(&v1.ListWorkspaceFilesRequest{ItemId: item}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,46 +115,46 @@ func TestWorkspaceFilesThroughCoreAPI(t *testing.T) {
 	if !found {
 		t.Fatalf("paths: %v", files.Msg.Paths)
 	}
-	source, err := f.clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(&v1.GetWorkspaceFileRequest{ItemId: item, Path: p, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
+	source, err := f.Clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(&v1.GetWorkspaceFileRequest{ItemId: item, Path: p, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	save := &v1.SaveWorkspaceFileRequest{ItemId: item, Path: p, Content: "edited\n", ExpectedSha256: source.Msg.File.Sha256, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}
-	saved, err := f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save))
+	saved, err := f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save))
 	if err != nil || saved.Msg.File.Content != "edited\n" {
 		t.Fatalf("save: %v %v", saved, err)
 	}
-	if _, err = f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeAborted {
+	if _, err = f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("stale content: %v", err)
 	}
 	save.ExpectedSha256 = saved.Msg.File.Sha256
 	save.ExpectedClaimGeneration++
-	if _, err = f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeAborted {
+	if _, err = f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("stale claim: %v", err)
 	}
 	save.ExpectedClaimGeneration--
 	save.Path = ".git/config"
-	if _, err = f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err = f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("metadata: %v", err)
 	}
 	if files.Msg.ClaimId != claim.Id || files.Msg.ClaimGeneration != claim.Generation {
 		t.Fatalf("listed claim: %v", files.Msg)
 	}
 	read := &v1.GetWorkspaceFileRequest{ItemId: item, Path: p, ExpectedClaimId: claim.Id}
-	if _, err = f.clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(read)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err = f.Clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(read)); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("missing claim generation: %v", err)
 	}
 	read.ExpectedClaimGeneration = claim.Generation
 	read.Path = "missing.txt"
-	if missing, err := f.clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(read)); err != nil || missing.Msg.File.Exists {
+	if missing, err := f.Clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(read)); err != nil || missing.Msg.File.Exists {
 		t.Fatalf("missing file: %v %v", missing, err)
 	}
 	save.Path = p
 	save.ExpectedSha256 = ""
-	if _, err = f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err = f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("missing digest: %v", err)
 	}
-	if _, err = f.clients.Workspaces.ReleaseWorkspace(ctx, connect.NewRequest(&v1.ReleaseWorkspaceRequest{ItemId: item})); err == nil {
+	if _, err = f.Clients.Workspaces.ReleaseWorkspace(ctx, connect.NewRequest(&v1.ReleaseWorkspaceRequest{ItemId: item})); err == nil {
 		t.Fatal("released a checkout with uncommitted files")
 	}
 }

@@ -6,13 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"github.com/regb/workitem/internal/apitransport"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/credential"
@@ -37,7 +37,8 @@ func newBinaryFixture(t *testing.T) *binaryFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &binaryFixture{root: root, wi: filepath.Join(root, "wi"), driver: filepath.Join(root, "fake-driver"), source: filepath.Join(root, "source"), t: t}
+	binaries := apitest.Build(t)
+	f := &binaryFixture{root: root, wi: binaries.Wi, driver: binaries.Driver, source: filepath.Join(root, "source"), t: t}
 	t.Cleanup(func() {
 		if f.clients != nil {
 			f.clients.Close()
@@ -58,15 +59,6 @@ func newBinaryFixture(t *testing.T) *binaryFixture {
 		time.Sleep(150 * time.Millisecond)
 		_ = os.RemoveAll(root)
 	})
-	_, file, _, _ := runtime.Caller(0)
-	repository := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-	for _, target := range []struct{ path, pkg string }{{f.wi, "./cmd/wi"}, {f.driver, "./internal/apitest/driver"}} {
-		cmd := exec.Command("go", "build", "-o", target.path, target.pkg)
-		cmd.Dir = repository
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("build %s: %v %s", target.pkg, err, out)
-		}
-	}
 	f.env = testutil.IsolatedEnvironment(os.Environ(), root)
 	for _, part := range []string{"home", "data", "config/wi", "cache", "state", "run", "pi", "tmux", "source"} {
 		if err := os.MkdirAll(filepath.Join(root, part), 0700); err != nil {
@@ -137,31 +129,11 @@ func (f *binaryFixture) json(msg proto.Message, args ...string) {
 }
 func (f *binaryFixture) idle(item string) *v1.Agent {
 	f.t.Helper()
-	deadline := time.Now().Add(8 * time.Second)
-	for {
-		value, err := f.clients.Agents.GetAgent(context.Background(), connect.NewRequest(&v1.GetAgentRequest{ItemId: item}))
-		if err == nil && value.Msg.Agent.Online && value.Msg.Agent.Status == v1.AgentStatus_AGENT_STATUS_IDLE {
-			return value.Msg.Agent
-		}
-		if time.Now().After(deadline) {
-			f.t.Fatalf("agent did not become idle: %v %v", value, err)
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
+	return apitest.WaitIdle(f.t, f.clients, item)
 }
 func (f *binaryFixture) historyReady(item string, count int) {
 	f.t.Helper()
-	deadline := time.Now().Add(8 * time.Second)
-	for {
-		value, err := f.clients.Agents.GetHistory(context.Background(), connect.NewRequest(&v1.GetHistoryRequest{ItemId: item}))
-		if err == nil && len(value.Msg.Messages) >= count {
-			return
-		}
-		if time.Now().After(deadline) {
-			f.t.Fatalf("history did not settle: %v %v", value, err)
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
+	apitest.WaitHistory(f.t, f.clients, item, count)
 }
 
 func TestCLIAPIEndToEnd(t *testing.T) {

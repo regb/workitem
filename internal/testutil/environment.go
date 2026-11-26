@@ -89,3 +89,8 @@ func isolatedRoot() (string, bool) {
 	}
 	return root, true
 }
+
+// IsolatedRoot is the private root RunIsolatedTests created for this test
+// process, if there is one. Files under it are removed when the process's
+// tests end.
+func IsolatedRoot() (string, bool) { return isolatedRoot() }

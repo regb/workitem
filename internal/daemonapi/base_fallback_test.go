@@ -1,26 +1,28 @@
-package daemonapi
+package daemonapi_test
 
 import (
-	"connectrpc.com/connect"
 	"context"
-	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"path/filepath"
 	"testing"
+
+	"connectrpc.com/connect"
+	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 )
 
 func TestCreateFallsBackToLocalBaseWithWarning(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	repository := f.repo(t)
-	initial, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repository, Title: "local base"}))
+	repository := f.Repository(t, "test")
+	initial, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repository, Title: "local base"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = f.clients.Repositories.SetUpstream(ctx, connect.NewRequest(&v1.SetUpstreamRequest{RepositoryId: repository, Url: filepath.Join(f.root, "missing-upstream.git"), Branch: "main"}))
+	_, err = f.Clients.Repositories.SetUpstream(ctx, connect.NewRequest(&v1.SetUpstreamRequest{RepositoryId: repository, Url: filepath.Join(f.Root, "missing-upstream.git"), Branch: "main"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	fallback, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repository, Title: "offline fallback"}))
+	fallback, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repository, Title: "offline fallback"}))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -7,7 +7,9 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"github.com/regb/workitem/internal/credential"
+	"github.com/regb/workitem/internal/daemonapi"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -15,14 +17,14 @@ import (
 // credential, a forged one, or another kind's are refused, and caller
 // metadata changes nothing.
 func TestCallersAreWhoTheirCredentialSays(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
 	info := func(t *testing.T, clients interface {
 		GetInfo(context.Context, *connect.Request[v1.GetInfoRequest]) (*connect.Response[v1.GetInfoResponse], error)
 	}) (*v1.Caller, error) {
 		t.Helper()
 		req := connect.NewRequest(&v1.GetInfoRequest{})
-		req.Header().Set(HolderHeader, "agent")
+		req.Header().Set(daemonapi.HolderHeader, "agent")
 		req.Header().Set("Wi-Endpoint-Access", "operator")
 		value, err := clients.GetInfo(ctx, req)
 		if err != nil {
@@ -30,29 +32,29 @@ func TestCallersAreWhoTheirCredentialSays(t *testing.T) {
 		}
 		return value.Msg.Caller, nil
 	}
-	operator, err := info(t, f.clients.System)
-	if err != nil || operator.Kind != v1.CallerKind_CALLER_KIND_LOCAL_OPERATOR || operator.Principal != OperatorUser || operator.ItemId != "" {
+	operator, err := info(t, f.Clients.System)
+	if err != nil || operator.Kind != v1.CallerKind_CALLER_KIND_LOCAL_OPERATOR || operator.Principal != daemonapi.OperatorUser || operator.ItemId != "" {
 		t.Fatalf("operator: %v %v", operator, err)
 	}
-	web, err := info(t, f.webClients(t).System)
-	if err != nil || web.Kind != v1.CallerKind_CALLER_KIND_WEB_ADAPTER || web.Principal != OperatorUser {
+	web, err := info(t, f.WebClients(t).System)
+	if err != nil || web.Kind != v1.CallerKind_CALLER_KIND_WEB_ADAPTER || web.Principal != daemonapi.OperatorUser {
 		t.Fatalf("web: %v %v", web, err)
 	}
 	forged, _ := credential.New(credential.Operator, "")
 	for name, token := range map[string]string{"none": "", "garbage": "not a credential", "forged operator": forged.Token()} {
 		token := token
-		clients := f.clientsWith(t, func() (string, error) { return token, nil })
+		clients := f.ClientsWith(t, func() (string, error) { return token, nil })
 		if _, err := info(t, clients.System); connect.CodeOf(err) != connect.CodeUnauthenticated {
 			t.Fatalf("%s: %v", name, err)
 		}
 	}
-	repo := f.repo(t)
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "agent identity"}))
+	repo := f.Repository(t, "test")
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "agent identity"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	itemID := created.Msg.Item.Id
-	agent, runtime := f.agentClients(t, itemID)
+	agent, runtime := f.AgentClients(t, itemID)
 	caller, err := info(t, agent.System)
 	if err != nil || caller.Kind != v1.CallerKind_CALLER_KIND_AGENT || caller.Principal != "item:"+itemID || caller.ItemId != itemID {
 		t.Fatalf("agent: %v %v", caller, err)
@@ -64,7 +66,7 @@ func TestCallersAreWhoTheirCredentialSays(t *testing.T) {
 	}
 	stream.Close()
 	// A new runtime taking the item over ends the old one's credential.
-	newer, _ := f.agentClients(t, itemID)
+	newer, _ := f.AgentClients(t, itemID)
 	if _, err := info(t, agent.System); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("replaced runtime: %v", err)
 	}
@@ -73,12 +75,12 @@ func TestCallersAreWhoTheirCredentialSays(t *testing.T) {
 	}
 	// So does the runtime stopping: from the moment it is asked to, as
 	// stopping an agent returns then, before its host records it stopped.
-	current, err := f.api.App.Store.LoadAgentRuntime(itemID)
+	current, err := f.App().Store.LoadAgentRuntime(itemID)
 	if err != nil || current == nil || current.ID == runtime.ID {
 		t.Fatalf("runtime: %v %v", current, err)
 	}
 	current.State = model.AgentRuntimeStopping
-	if err := f.api.App.Store.SaveAgentRuntime(ctx, itemID, *current); err != nil {
+	if err := f.App().Store.SaveAgentRuntime(ctx, itemID, *current); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := info(t, newer.System); connect.CodeOf(err) != connect.CodeUnauthenticated {
@@ -86,7 +88,7 @@ func TestCallersAreWhoTheirCredentialSays(t *testing.T) {
 	}
 	stopped := time.Now().UTC()
 	current.State, current.StoppedAt = model.AgentRuntimeStopped, &stopped
-	if err := f.api.App.Store.SaveAgentRuntime(ctx, itemID, *current); err != nil {
+	if err := f.App().Store.SaveAgentRuntime(ctx, itemID, *current); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := info(t, newer.System); connect.CodeOf(err) != connect.CodeUnauthenticated {
@@ -106,15 +108,15 @@ func TestCallersAreWhoTheirCredentialSays(t *testing.T) {
 // What a caller does is recorded as theirs: an item's agent acts as the
 // item, for the operator; the operator as themselves.
 func TestActionsRecordWhoDidThem(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	repo := f.repo(t)
-	parent, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "parent"}))
+	repo := f.Repository(t, "test")
+	parent, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "parent"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	parentID := parent.Msg.Item.Id
-	agent, _ := f.agentClients(t, parentID)
+	agent, _ := f.AgentClients(t, parentID)
 	child, err := agent.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "child"}))
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +130,7 @@ func TestActionsRecordWhoDidThem(t *testing.T) {
 	}
 	events := func(itemID string) []*v1.ItemEvent {
 		t.Helper()
-		value, err := f.clients.Items.ListItemEvents(ctx, connect.NewRequest(&v1.ListItemEventsRequest{ItemId: itemID}))
+		value, err := f.Clients.Items.ListItemEvents(ctx, connect.NewRequest(&v1.ListItemEventsRequest{ItemId: itemID}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -157,26 +159,26 @@ func TestActionsRecordWhoDidThem(t *testing.T) {
 // Rotating replaces the operator's and wi web's credentials: the old ones
 // stop working, clients reading the files carry on.
 func TestRotatingCredentials(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	before, err := credential.Read(credential.OperatorFile(f.root+"/data"), credential.Operator)
+	before, err := credential.Read(credential.OperatorFile(f.DataRoot()), credential.Operator)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stale := f.clientsWith(t, func() (string, error) { return before.Token(), nil })
+	stale := f.ClientsWith(t, func() (string, error) { return before.Token(), nil })
 	if _, err := stale.System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.clients.System.RotateCredentials(ctx, connect.NewRequest(&v1.RotateCredentialsRequest{})); err != nil {
+	if _, err := f.Clients.System.RotateCredentials(ctx, connect.NewRequest(&v1.RotateCredentialsRequest{})); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := stale.System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
 		t.Fatalf("old credential: %v", err)
 	}
-	if _, err := f.clients.System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); err != nil {
+	if _, err := f.Clients.System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); err != nil {
 		t.Fatalf("a client reading the file: %v", err)
 	}
-	if _, err := f.webClients(t).System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); err != nil {
+	if _, err := f.WebClients(t).System.GetInfo(ctx, connect.NewRequest(&v1.GetInfoRequest{})); err != nil {
 		t.Fatalf("wi web reading its file: %v", err)
 	}
 }

@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -9,9 +9,10 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 )
 
-func reviewWorkspace(t *testing.T) (*fixture, string, *v1.Checkout) {
+func reviewWorkspace(t *testing.T) (*apitest.Fixture, string, *v1.Checkout) {
 	t.Helper()
 	return fileWorkspace(t)
 }
@@ -31,7 +32,7 @@ func TestReviewAndEditorThroughCoreAPI(t *testing.T) {
 	write(p, "old\n")
 	write(".gitignore", "ignored\n")
 	write("ignored", "secret")
-	files, err := f.clients.Workspaces.ListWorkspaceFiles(ctx, connect.NewRequest(&v1.ListWorkspaceFilesRequest{ItemId: item}))
+	files, err := f.Clients.Workspaces.ListWorkspaceFiles(ctx, connect.NewRequest(&v1.ListWorkspaceFilesRequest{ItemId: item}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,30 +48,30 @@ func TestReviewAndEditorThroughCoreAPI(t *testing.T) {
 	if !found {
 		t.Fatalf("paths: %v", files.Msg.Paths)
 	}
-	source, err := f.clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(&v1.GetWorkspaceFileRequest{ItemId: item, Path: p, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
+	source, err := f.Clients.Workspaces.GetWorkspaceFile(ctx, connect.NewRequest(&v1.GetWorkspaceFileRequest{ItemId: item, Path: p, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	save := &v1.SaveWorkspaceFileRequest{ItemId: item, Path: p, Content: "edited\n", ExpectedSha256: source.Msg.File.Sha256, ExpectedClaimId: claim.Id, ExpectedClaimGeneration: claim.Generation}
-	saved, err := f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save))
+	saved, err := f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save))
 	if err != nil || saved.Msg.File.Content != "edited\n" {
 		t.Fatalf("save: %v %v", saved, err)
 	}
-	if _, err = f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeAborted {
+	if _, err = f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("stale content: %v", err)
 	}
 	save.ExpectedSha256 = saved.Msg.File.Sha256
 	save.ExpectedClaimGeneration++
-	if _, err = f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeAborted {
+	if _, err = f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("stale claim: %v", err)
 	}
 	save.ExpectedClaimGeneration--
 	save.Path = ".git/config"
-	if _, err = f.clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+	if _, err = f.Clients.Workspaces.SaveWorkspaceFile(ctx, connect.NewRequest(save)); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("metadata: %v", err)
 	}
 	comparison := v1.ReviewComparison_REVIEW_COMPARISON_ITEM
-	review, err := f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: comparison}))
+	review, err := f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: comparison}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +79,7 @@ func TestReviewAndEditorThroughCoreAPI(t *testing.T) {
 		t.Fatalf("review: %v", review.Msg)
 	}
 	diffReq := &v1.GetReviewFileRequest{ItemId: item, Comparison: comparison, Path: p, ExpectedVersion: review.Msg.Revision.Version}
-	diff, err := f.clients.Reviews.GetReviewFile(ctx, connect.NewRequest(diffReq))
+	diff, err := f.Clients.Reviews.GetReviewFile(ctx, connect.NewRequest(diffReq))
 	if err != nil || diff.Msg.OldFile.Exists || diff.Msg.NewFile.Content != "edited\n" {
 		t.Fatalf("diff: %v %v", diff, err)
 	}
@@ -88,38 +89,38 @@ func TestReviewAndEditorThroughCoreAPI(t *testing.T) {
 			t.Fatalf("config: %v %s", err, out)
 		}
 	}
-	committed, err := f.clients.Workspaces.CommitWorkspace(ctx, connect.NewRequest(&v1.CommitWorkspaceRequest{ItemId: item, Message: "Add reviewed files"}))
+	committed, err := f.Clients.Workspaces.CommitWorkspace(ctx, connect.NewRequest(&v1.CommitWorkspaceRequest{ItemId: item, Message: "Add reviewed files"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.clients.Reviews.GetReviewFile(ctx, connect.NewRequest(diffReq)); connect.CodeOf(err) != connect.CodeAborted {
+	if _, err = f.Clients.Reviews.GetReviewFile(ctx, connect.NewRequest(diffReq)); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("stale revision: %v", err)
 	}
-	history, err := f.clients.Reviews.ListReviewCommits(ctx, connect.NewRequest(&v1.ListReviewCommitsRequest{ItemId: item}))
+	history, err := f.Clients.Reviews.ListReviewCommits(ctx, connect.NewRequest(&v1.ListReviewCommitsRequest{ItemId: item}))
 	if err != nil || len(history.Msg.Commits) != 1 || history.Msg.Commits[0].Sha != committed.Msg.Commit {
 		t.Fatalf("history: %v %v", history, err)
 	}
-	selected, err := f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: committed.Msg.Commit}))
+	selected, err := f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: committed.Msg.Commit}))
 	if err != nil || len(selected.Msg.Files) != 2 {
 		t.Fatalf("commit review: %v %v", selected, err)
 	}
 	for _, sha := range []string{"--all", "HEAD", "0000000000000000000000000000000000000000"} {
-		if _, err = f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: sha})); err == nil {
+		if _, err = f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: sha})); err == nil {
 			t.Fatalf("accepted invalid commit %s", sha)
 		}
 	}
-	if _, err = f.clients.Workspaces.ReleaseWorkspace(ctx, connect.NewRequest(&v1.ReleaseWorkspaceRequest{ItemId: item})); err != nil {
+	if _, err = f.Clients.Workspaces.ReleaseWorkspace(ctx, connect.NewRequest(&v1.ReleaseWorkspaceRequest{ItemId: item})); err != nil {
 		t.Fatal(err)
 	}
-	bare, err := f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item}))
+	bare, err := f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item}))
 	if err != nil || bare.Msg.Revision.WorkingTree || len(bare.Msg.Files) != 2 {
 		t.Fatalf("review without checkout: %v %v", bare, err)
 	}
-	bareDiff, err := f.clients.Reviews.GetReviewFile(ctx, connect.NewRequest(&v1.GetReviewFileRequest{ItemId: item, Path: p, ExpectedVersion: bare.Msg.Revision.Version}))
+	bareDiff, err := f.Clients.Reviews.GetReviewFile(ctx, connect.NewRequest(&v1.GetReviewFileRequest{ItemId: item, Path: p, ExpectedVersion: bare.Msg.Revision.Version}))
 	if err != nil || bareDiff.Msg.NewFile.Content != "edited\n" {
 		t.Fatalf("bare diff: %v %v", bareDiff, err)
 	}
-	if _, err = f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_UNCOMMITTED})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+	if _, err = f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_UNCOMMITTED})); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("missing checkout: %v", err)
 	}
 }

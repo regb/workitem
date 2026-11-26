@@ -14,7 +14,7 @@ func TestEditOwnerFromTheCommandLine(t *testing.T) {
 	parent, other := f.create(t, "Parent"), f.create(t, "Other")
 	f.run(t, "state", "set", "active", parent.Id)
 	operator := f.cfg.API
-	f.cfg.API = f.api.AgentClients(t, parent.Id)
+	f.cfg.API, _ = f.api.AgentClients(t, parent.Id)
 	f.cfg.Env["WI_ID"] = parent.Id
 	var delegated v1.CreateItemResponse
 	f.decode(t, f.run(t, "new", "--title", "Split work", "--json"), &delegated)

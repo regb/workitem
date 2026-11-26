@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -39,14 +39,14 @@ func TestContextHistoryAndCommitSelectionStayWithinThreeBranches(t *testing.T) {
 	git(root, "remote", "add", "upstream", "https://example.invalid/no-network.git")
 	git(root, "config", "branch."+integration+".remote", "upstream")
 	git(root, "config", "branch."+integration+".merge", "refs/heads/main")
-	legacy, err := f.clients.Reviews.ListReviewCommits(ctx, connect.NewRequest(&v1.ListReviewCommitsRequest{ItemId: item}))
+	legacy, err := f.Clients.Reviews.ListReviewCommits(ctx, connect.NewRequest(&v1.ListReviewCommitsRequest{ItemId: item}))
 	if err != nil || len(legacy.Msg.Commits) != 0 {
 		t.Fatalf("legacy history changed: %v %v", legacy, err)
 	}
-	if _, err := f.clients.Workspaces.ReleaseWorkspace(ctx, connect.NewRequest(&v1.ReleaseWorkspaceRequest{ItemId: item})); err != nil {
+	if _, err := f.Clients.Workspaces.ReleaseWorkspace(ctx, connect.NewRequest(&v1.ReleaseWorkspaceRequest{ItemId: item})); err != nil {
 		t.Fatal(err)
 	}
-	graph, err := f.clients.Reviews.ListReviewCommits(ctx, connect.NewRequest(&v1.ListReviewCommitsRequest{ItemId: item, IncludeContext: true}))
+	graph, err := f.Clients.Reviews.ListReviewCommits(ctx, connect.NewRequest(&v1.ListReviewCommitsRequest{ItemId: item, IncludeContext: true}))
 	if err != nil || len(graph.Msg.Commits) != 3 || len(graph.Msg.Branches) != 3 {
 		t.Fatalf("graph without checkout: %v %v", graph, err)
 	}
@@ -59,32 +59,32 @@ func TestContextHistoryAndCommitSelectionStayWithinThreeBranches(t *testing.T) {
 		}
 	}
 	for _, sha := range []string{base, local, remote} {
-		if _, err := f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: sha})); err != nil {
+		if _, err := f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: sha})); err != nil {
 			t.Fatalf("context commit %s: %v", sha, err)
 		}
 	}
-	custom, err := f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: local, BaseCommit: remote}))
+	custom, err := f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: local, BaseCommit: remote}))
 	if err != nil || custom.Msg.Revision.BaseCommit != remote || custom.Msg.Revision.HeadCommit != local {
 		t.Fatalf("custom range: %v %v", custom, err)
 	}
-	standard, err := f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: local}))
+	standard, err := f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: local}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	file := &v1.GetReviewFileRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: local, BaseCommit: remote, Path: "missing.txt", ExpectedVersion: standard.Msg.Revision.Version}
-	if _, err := f.clients.Reviews.GetReviewFile(ctx, connect.NewRequest(file)); connect.CodeOf(err) != connect.CodeAborted {
+	if _, err := f.Clients.Reviews.GetReviewFile(ctx, connect.NewRequest(file)); connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("base change was not fenced: %v", err)
 	}
 	file.ExpectedVersion = custom.Msg.Revision.Version
-	if _, err := f.clients.Reviews.GetReviewFile(ctx, connect.NewRequest(file)); err != nil {
+	if _, err := f.Clients.Reviews.GetReviewFile(ctx, connect.NewRequest(file)); err != nil {
 		t.Fatal(err)
 	}
 	for _, bad := range []string{other, "HEAD", "--all"} {
-		if _, err := f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, BaseCommit: bad})); err == nil {
+		if _, err := f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, BaseCommit: bad})); err == nil {
 			t.Fatalf("unapproved base accepted: %s", bad)
 		}
 	}
-	_, err = f.clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: other}))
+	_, err = f.Clients.Reviews.GetReview(ctx, connect.NewRequest(&v1.GetReviewRequest{ItemId: item, Comparison: v1.ReviewComparison_REVIEW_COMPARISON_COMMIT, Commit: other}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("unrelated commit accepted: %v", err)
 	}

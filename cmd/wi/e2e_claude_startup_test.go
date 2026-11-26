@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -42,12 +43,7 @@ func TestClaudeStartupDelivery(t *testing.T) {
 		t.Skip("tmux unavailable")
 	}
 	f := newBinaryFixture(t)
-	backend := filepath.Join(f.root, "fake-claude")
-	cmd := exec.Command("go", "build", "-o", backend, "./internal/apitest/claude")
-	cmd.Dir = "../.."
-	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build backend: %v %s", err, out)
-	}
+	backend := apitest.Command(t, "./internal/apitest/claude")
 	var added v1.AddRepositoryResponse
 	f.json(&added, "repo", "add", "test", "--from", f.source, "--local")
 	for _, scenario := range []struct{ reject, headless bool }{{}, {reject: true}, {headless: true}} {

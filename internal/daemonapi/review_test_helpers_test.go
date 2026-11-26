@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"os/exec"

@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -9,6 +9,8 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
+	"github.com/regb/workitem/internal/daemonapi"
 )
 
 // fakeUsage stands in for the usage plugin: each check reports its number,
@@ -45,13 +47,13 @@ func (u *fakeUsage) count() int {
 }
 
 func TestUsageAnswersFromTheLastCheckAndRefreshesInTheBackground(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
 	fake := &fakeUsage{}
-	f.api.usage.run = fake.run
+	f.API().SetUsageCheck(fake.run)
 	get := func(refresh, wait bool) *v1.GetUsageResponse {
 		t.Helper()
-		value, err := f.clients.System.GetUsage(ctx, connect.NewRequest(&v1.GetUsageRequest{Refresh: refresh, Wait: wait}))
+		value, err := f.Clients.System.GetUsage(ctx, connect.NewRequest(&v1.GetUsageRequest{Refresh: refresh, Wait: wait}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -99,17 +101,14 @@ func TestUsageAnswersFromTheLastCheckAndRefreshesInTheBackground(t *testing.T) {
 }
 
 func TestBackgroundUsageChecksRunOnlyWhileTheAPIIsInUse(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	fake := &fakeUsage{}
-	s := f.api
-	s.usage.run = fake.run
+	s := f.API()
+	s.SetUsageCheck(fake.run)
 	wait := func() {
 		t.Helper()
 		for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
-			s.usage.mu.Lock()
-			idle := s.usage.running == nil
-			s.usage.mu.Unlock()
-			if idle {
+			if !s.UsageChecking() {
 				return
 			}
 		}
@@ -117,28 +116,28 @@ func TestBackgroundUsageChecksRunOnlyWhileTheAPIIsInUse(t *testing.T) {
 	}
 	now := time.Now()
 	// Nobody has used the API: nothing runs.
-	s.usage.lastActivity.Store(now.Add(-usageIdle - time.Minute).Unix())
-	s.maybeCheckUsage(now)
+	s.SetLastActivity(now.Add(-daemonapi.UsageIdle - time.Minute))
+	s.MaybeCheckUsage(now)
 	wait()
 	if fake.count() != 0 {
 		t.Fatalf("idle daemon checked usage %d times", fake.count())
 	}
 	// In use, with no result yet: a check runs.
-	s.usage.lastActivity.Store(now.Unix())
-	s.maybeCheckUsage(now)
+	s.SetLastActivity(now)
+	s.MaybeCheckUsage(now)
 	wait()
 	if fake.count() != 1 || fake.refresh[0] {
 		t.Fatalf("active check: runs=%d refresh=%v", fake.count(), fake.refresh)
 	}
 	// A result younger than five minutes is kept.
-	s.maybeCheckUsage(time.Now().Add(usageInterval - time.Minute))
+	s.MaybeCheckUsage(time.Now().Add(daemonapi.UsageInterval - time.Minute))
 	wait()
 	if fake.count() != 1 {
 		t.Fatalf("fresh result checked again: %d", fake.count())
 	}
 	// An older one is renewed while the API stays in use.
-	s.usage.lastActivity.Store(time.Now().Add(usageInterval).Unix())
-	s.maybeCheckUsage(time.Now().Add(usageInterval + time.Minute))
+	s.SetLastActivity(time.Now().Add(daemonapi.UsageInterval))
+	s.MaybeCheckUsage(time.Now().Add(daemonapi.UsageInterval + time.Minute))
 	wait()
 	if fake.count() != 2 {
 		t.Fatalf("stale result not renewed: %d", fake.count())
@@ -146,24 +145,22 @@ func TestBackgroundUsageChecksRunOnlyWhileTheAPIIsInUse(t *testing.T) {
 }
 
 func TestAnOldUsageResultIsReadAgain(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
 	fake := &fakeUsage{}
-	f.api.usage.run = fake.run
+	f.API().SetUsageCheck(fake.run)
 	get := func() *v1.GetUsageResponse {
 		t.Helper()
-		value, err := f.clients.System.GetUsage(ctx, connect.NewRequest(&v1.GetUsageRequest{}))
+		value, err := f.Clients.System.GetUsage(ctx, connect.NewRequest(&v1.GetUsageRequest{}))
 		if err != nil {
 			t.Fatal(err)
 		}
 		return value.Msg
 	}
 	get()
-	// A result older than usageFresh is read again from the plugin, whose
+	// A result older than daemonapi.UsageFresh is read again from the plugin, whose
 	// own cache answers, so the page shows what `wi usage` shows.
-	f.api.usage.mu.Lock()
-	f.api.usage.checkedAt = time.Now().Add(-usageFresh - time.Second)
-	f.api.usage.mu.Unlock()
+	f.API().SetUsageResult(nil, time.Now().Add(-daemonapi.UsageFresh-time.Second))
 	if again := get(); again.Quotas[0].Account != "2" || fake.count() != 2 || fake.refresh[1] {
 		t.Fatalf("old result reused: %v runs=%d refresh=%v", again, fake.count(), fake.refresh)
 	}

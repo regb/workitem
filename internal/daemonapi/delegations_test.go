@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 )
@@ -16,10 +17,10 @@ import (
 // follow up, out of the user's list, until the user takes it or the owning
 // item closes and gives it back.
 func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	repo := f.repo(t)
-	parent, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "parent"}))
+	repo := f.Repository(t, "test")
+	parent, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "parent"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -29,12 +30,12 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	}
 	setState := func(state v1.ItemState) {
 		t.Helper()
-		if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: parentID, State: state})); err != nil {
+		if _, err := f.Clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: parentID, State: state})); err != nil {
 			t.Fatal(err)
 		}
 	}
 	setState(v1.ItemState_ITEM_STATE_ACTIVE)
-	agent, _ := f.agentClients(t, parentID)
+	agent, _ := f.AgentClients(t, parentID)
 	delegated := []string{}
 	for i := 0; i < 3; i++ {
 		child, err := agent.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: fmt.Sprintf("child %d", i)}))
@@ -48,7 +49,7 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	}
 	list := func(owner string) map[string]bool {
 		t.Helper()
-		value, err := f.clients.Items.ListItems(ctx, connect.NewRequest(&v1.ListItemsRequest{Owner: owner}))
+		value, err := f.Clients.Items.ListItems(ctx, connect.NewRequest(&v1.ListItemsRequest{Owner: owner}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -72,18 +73,18 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	setState(v1.ItemState_ITEM_STATE_ACTIVE)
 	// Rights reach down the owner chain: what a delegation delegates is its
 	// owner's too.
-	childAgent, _ := f.agentClients(t, delegated[1])
+	childAgent, _ := f.AgentClients(t, delegated[1])
 	grandchild, err := childAgent.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "grandchild"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.clients.Items.RevokeAccess(ctx, connect.NewRequest(&v1.RevokeAccessRequest{EntryId: coordinator.DefaultAccessID})); err != nil {
+	if _, err := f.Clients.Items.RevokeAccess(ctx, connect.NewRequest(&v1.RevokeAccessRequest{EntryId: coordinator.DefaultAccessID})); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := agent.Items.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: grandchild.Msg.Item.Id, AddLabels: []string{"x"}})); err != nil {
 		t.Fatalf("managing a delegation's delegation: %v", err)
 	}
-	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: grandchild.Msg.Item.Id, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_ABANDONED})); err != nil {
+	if _, err := f.Clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: grandchild.Msg.Item.Id, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_ABANDONED})); err != nil {
 		t.Fatal(err)
 	}
 	// Only a person changes an owner.
@@ -99,7 +100,7 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	if _, err := setOwner(agent.Items, delegated[0], model.OperatorUser); connect.CodeOf(err) != connect.CodePermissionDenied {
 		t.Fatalf("an agent changed an owner: %v", err)
 	}
-	taken, err := setOwner(f.clients.Items, delegated[0], model.OperatorUser)
+	taken, err := setOwner(f.Clients.Items, delegated[0], model.OperatorUser)
 	if err != nil || taken.Owner != model.OperatorUser {
 		t.Fatalf("take: %v %v", taken, err)
 	}
@@ -108,27 +109,27 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	}
 	// A person hands an item to another item; no item owns itself, or an
 	// item that owns it.
-	if handed, err := setOwner(f.clients.Items, delegated[0], model.ItemPrincipal(delegated[1])); err != nil || handed.Owner != model.ItemPrincipal(delegated[1]) {
+	if handed, err := setOwner(f.Clients.Items, delegated[0], model.ItemPrincipal(delegated[1])); err != nil || handed.Owner != model.ItemPrincipal(delegated[1]) {
 		t.Fatalf("hand over: %v %v", handed, err)
 	}
-	if _, err := setOwner(f.clients.Items, delegated[1], model.ItemPrincipal(delegated[1])); err == nil {
+	if _, err := setOwner(f.Clients.Items, delegated[1], model.ItemPrincipal(delegated[1])); err == nil {
 		t.Fatal("an item owns itself")
 	}
-	if _, err := setOwner(f.clients.Items, parentID, model.ItemPrincipal(delegated[0])); err == nil {
+	if _, err := setOwner(f.Clients.Items, parentID, model.ItemPrincipal(delegated[0])); err == nil {
 		t.Fatal("an item owns its own owner")
 	}
-	if _, err := setOwner(f.clients.Items, delegated[0], model.OperatorUser); err != nil {
+	if _, err := setOwner(f.Clients.Items, delegated[0], model.OperatorUser); err != nil {
 		t.Fatal(err)
 	}
 	// Closing the owning item gives the rest back, unread.
-	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: parentID, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_COMPLETED})); err != nil {
+	if _, err := f.Clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: parentID, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_COMPLETED})); err != nil {
 		t.Fatal(err)
 	}
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		back := 0
 		for _, id := range delegated {
-			if got, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id})); err == nil && got.Msg.Item.Owner == model.OperatorUser {
+			if got, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id})); err == nil && got.Msg.Item.Owner == model.OperatorUser {
 				back++
 			}
 		}
@@ -140,44 +141,12 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	got, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: delegated[1]}))
+	got, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: delegated[1]}))
 	if err != nil || got.Msg.Item.Owner != model.OperatorUser || !got.Msg.Observation.Unread {
 		t.Fatalf("returned item: %v %v", got, err)
 	}
 	// A closed item owns nothing new.
 	if _, err := agent.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "after close"})); err == nil {
 		t.Fatal("a closed item delegated")
-	}
-}
-
-func TestAnOwnerCountsItsWorkingDelegations(t *testing.T) {
-	busy, idle := v1.AgentStatus_AGENT_STATUS_BUSY, v1.AgentStatus_AGENT_STATUS_IDLE
-	owner := "01K1OWNER0000000000000000"
-	manifest := func(id, ownedBy, state string) model.Manifest {
-		m := model.NewManifest(id, id, id, nil, false, time.Now(), model.Repository{}, model.Checkout{})
-		m.Owner, m.State = ownedBy, state
-		return m
-	}
-	of := model.ItemPrincipal(owner)
-	manifests := []model.Manifest{
-		manifest("01K1BUSY00000000000000000", of, model.StateActive),
-		manifest("01K1BACKGROUND00000000000", of, model.StateActive),
-		manifest("01K1ASKING000000000000000", of, model.StateActive),
-		manifest("01K1IDLE00000000000000000", of, model.StateActive),
-		manifest("01K1BACKLOG00000000000000", of, model.StateBacklog),
-		manifest("01K1OTHER0000000000000000", model.ItemPrincipal("01K1ELSE00000000000000000"), model.StateActive),
-		manifest("01K1MINE00000000000000000", model.OperatorUser, model.StateActive),
-	}
-	observations := map[string]*v1.ItemObservation{
-		"01K1BUSY00000000000000000": {AgentStatus: busy},
-		"01K1BACKGROUND00000000000": {AgentStatus: idle, BackgroundTasks: 1},
-		"01K1ASKING000000000000000": {AgentStatus: busy, Asking: true},
-		"01K1IDLE00000000000000000": {AgentStatus: idle, Unread: true},
-		"01K1BACKLOG00000000000000": {AgentStatus: busy},
-		"01K1OTHER0000000000000000": {AgentStatus: busy},
-		"01K1MINE00000000000000000": {AgentStatus: busy},
-	}
-	if got := countWorking(manifests, owner, func(m model.Manifest) *v1.ItemObservation { return observations[m.ID] }); got != 2 {
-		t.Fatalf("working delegations = %d, want 2", got)
 	}
 }

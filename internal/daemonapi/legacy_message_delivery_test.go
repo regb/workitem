@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -10,13 +10,15 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"github.com/regb/workitem/internal/coordinator"
+	"github.com/regb/workitem/internal/daemonapi"
 )
 
 func TestLegacyMessageReceiptUsesRetainedNativeOutcome(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.repo(t), Title: "legacy delivery"}))
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: f.Repository(t, "test"), Title: "legacy delivery"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,11 +44,11 @@ func TestLegacyMessageReceiptUsesRetainedNativeOutcome(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			now := time.Now().UTC()
 			receipt := coordinator.APIMessageReceipt{ItemID: item, MessageID: tc.name, RuntimeID: "old-runtime", Generation: 1, CreatedAt: now, Delivered: true}
-			if err := f.core.Database().RecordAPIMessage(receipt); err != nil {
+			if err := f.Core().Database().RecordAPIMessage(receipt); err != nil {
 				t.Fatal(err)
 			}
 			for i, state := range tc.states {
-				runtime, command := "old-runtime", messageCommandID(item, tc.name)
+				runtime, command := "old-runtime", daemonapi.MessageCommandID(item, tc.name)
 				if tc.foreignRuntime {
 					runtime = "replacement"
 				}
@@ -62,21 +64,21 @@ func TestLegacyMessageReceiptUsesRetainedNativeOutcome(t *testing.T) {
 				payload, _ := json.Marshal(map[string]any{"runtime_id": runtime, "command_id": command, "delivery_state": state, "reason_code": "pane_changed"})
 				eventID := fmt.Sprintf("legacy-%s-%d", tc.name, i)
 				// The previous ingester retained these facts without the new projection.
-				_, err := f.core.Database().Commit(coordinator.Command{ID: eventID, ProtocolVersion: coordinator.ProtocolVersion, Type: "runtime.event.ingest", Actor: "runtime", ItemID: item, ReceivedAt: now}, []coordinator.PendingEvent{{ID: eventID, ItemID: item, Type: kind, Timestamp: now.Add(time.Duration(i) * time.Millisecond), Actor: "runtime", Payload: payload}}, nil)
+				_, err := f.Core().Database().Commit(coordinator.Command{ID: eventID, ProtocolVersion: coordinator.ProtocolVersion, Type: "runtime.event.ingest", Actor: "runtime", ItemID: item, ReceivedAt: now}, []coordinator.PendingEvent{{ID: eventID, ItemID: item, Type: kind, Timestamp: now.Add(time.Duration(i) * time.Millisecond), Actor: "runtime", Payload: payload}}, nil)
 				if err != nil {
 					t.Fatal(err)
 				}
 			}
-			indexed, err := f.core.Database().CommandDelivery(item, "old-runtime", messageCommandID(item, tc.name))
+			indexed, err := f.Core().Database().CommandDelivery(item, "old-runtime", daemonapi.MessageCommandID(item, tc.name))
 			if err != nil || indexed.State != "" {
 				t.Fatal("fixture unexpectedly populated the new projection", indexed, err)
 			}
-			done, err := f.api.messageReceiptResult(receipt)
+			done, err := f.API().MessageReceiptResult(receipt)
 			if done != tc.done || (tc.errorText == "" && err != nil) || (tc.errorText != "" && (err == nil || !strings.Contains(err.Error(), tc.errorText))) {
 				t.Fatalf("legacy result: done=%v err=%v", done, err)
 			}
 			if tc.errorText != "" {
-				_, err = f.clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: item, ClientMessageId: tc.name, Text: "original task"}))
+				_, err = f.Clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: item, ClientMessageId: tc.name, Text: "original task"}))
 				if err == nil || !strings.Contains(err.Error(), tc.errorText) {
 					t.Fatalf("API concealed retained failure: %v", err)
 				}

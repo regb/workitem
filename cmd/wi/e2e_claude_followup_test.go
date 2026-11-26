@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -21,12 +22,7 @@ func TestClaudeFollowUpAcknowledgesQueueBeforeNativeSubmission(t *testing.T) {
 		t.Skip("tmux unavailable")
 	}
 	f := newBinaryFixture(t)
-	backend := filepath.Join(f.root, "fake-claude")
-	build := exec.Command("go", "build", "-o", backend, "./internal/apitest/claude")
-	build.Dir = "../.."
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build backend: %v %s", err, out)
-	}
+	backend := apitest.Command(t, "./internal/apitest/claude")
 	var repo v1.AddRepositoryResponse
 	f.json(&repo, "repo", "add", "test", "--from", f.source, "--local")
 	for _, mode := range []v1.AgentMode{v1.AgentMode_AGENT_MODE_HEADLESS, v1.AgentMode_AGENT_MODE_TUI} {

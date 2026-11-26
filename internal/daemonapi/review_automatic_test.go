@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -12,17 +12,18 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/lock"
 	"github.com/regb/workitem/internal/model"
 )
 
-func waitReviewRecord(t *testing.T, f *fixture, item string, want func() bool) {
+func waitReviewRecord(t *testing.T, f *apitest.Fixture, item string, want func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for !want() {
 		if time.Now().After(deadline) {
-			state, err := f.core.LoadReview(context.Background(), item)
+			state, err := f.Core().LoadReview(context.Background(), item)
 			t.Fatalf("capture did not finish: %+v %v", state, err)
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -35,7 +36,7 @@ func TestAutomaticReviewCapturesEveryModeAndRetainsNonblockingFailures(t *testin
 			ctx := context.Background()
 			claim := ws.Claim
 			runtime := model.AgentRuntime{ID: "runtime", WorkItemID: item, ConversationID: "conversation", Mode: mode, State: model.AgentRuntimeRunning, WorkspaceClaimID: claim.Id, WorkspaceClaimGeneration: uint64(claim.Generation), StartedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
-			if err := f.api.App.Store.SaveAgentRuntime(ctx, item, runtime); err != nil {
+			if err := f.App().Store.SaveAgentRuntime(ctx, item, runtime); err != nil {
 				t.Fatal(err)
 			}
 			// No driver capability or supported-version opt-in exists. Native terminal
@@ -44,19 +45,19 @@ func TestAutomaticReviewCapturesEveryModeAndRetainsNonblockingFailures(t *testin
 				t.Fatal(err)
 			}
 			event := coordinator.RuntimeSemanticEvent{ID: "settled-one", RuntimeID: runtime.ID, WorkItemID: item, Type: "agent.settled", Timestamp: time.Now().UTC()}
-			if _, err := f.core.LocalClient().IngestRuntimeEvent(ctx, event); err != nil {
+			if _, err := f.Core().LocalClient().IngestRuntimeEvent(ctx, event); err != nil {
 				t.Fatal(err)
 			}
-			waitReviewRecord(t, f, item, func() bool { state, _ := f.core.LoadReview(ctx, item); return len(state.Revisions) == 1 })
-			state, _ := f.core.LoadReview(ctx, item)
+			waitReviewRecord(t, f, item, func() bool { state, _ := f.Core().LoadReview(ctx, item); return len(state.Revisions) == 1 })
+			state, _ := f.Core().LoadReview(ctx, item)
 			if state.Revisions[0].Trigger != "settled" || state.Revisions[0].Base != state.Revisions[0].Head {
 				t.Fatal("captured pre-execution baseline instead of first observed HEAD")
 			}
-			if _, err := f.core.LocalClient().IngestRuntimeEvent(ctx, event); err != nil {
+			if _, err := f.Core().LocalClient().IngestRuntimeEvent(ctx, event); err != nil {
 				t.Fatal(err)
 			}
 			time.Sleep(30 * time.Millisecond)
-			state, _ = f.core.LoadReview(ctx, item)
+			state, _ = f.Core().LoadReview(ctx, item)
 			if len(state.Revisions) != 1 {
 				t.Fatal("duplicate native event caused another capture")
 			}
@@ -69,11 +70,11 @@ func TestAutomaticReviewCapturesEveryModeAndRetainsNonblockingFailures(t *testin
 			event.Timestamp = time.Now().UTC()
 			event.Outcome = "failed"
 			event.Failed = true
-			if _, err := f.core.LocalClient().IngestRuntimeEvent(ctx, event); err != nil {
+			if _, err := f.Core().LocalClient().IngestRuntimeEvent(ctx, event); err != nil {
 				t.Fatal("capture failure rejected agent settlement", err)
 			}
-			waitReviewRecord(t, f, item, func() bool { state, _ := f.core.LoadReview(ctx, item); return len(state.Gaps) == 1 })
-			state, _ = f.core.LoadReview(ctx, item)
+			waitReviewRecord(t, f, item, func() bool { state, _ := f.Core().LoadReview(ctx, item); return len(state.Gaps) == 1 })
+			state, _ = f.Core().LoadReview(ctx, item)
 			if state.Gaps[0].Reason == "" {
 				t.Fatal("missing visible capture failure reason")
 			}
@@ -82,23 +83,23 @@ func TestAutomaticReviewCapturesEveryModeAndRetainsNonblockingFailures(t *testin
 			}
 			event.ID = "settled-after-failure"
 			event.Timestamp = time.Now().UTC()
-			if _, err := f.core.LocalClient().IngestRuntimeEvent(ctx, event); err != nil {
+			if _, err := f.Core().LocalClient().IngestRuntimeEvent(ctx, event); err != nil {
 				t.Fatal(err)
 			}
-			waitReviewRecord(t, f, item, func() bool { state, _ := f.core.LoadReview(ctx, item); return len(state.Revisions) == 2 })
+			waitReviewRecord(t, f, item, func() bool { state, _ := f.Core().LoadReview(ctx, item); return len(state.Revisions) == 2 })
 		})
 	}
 }
 func TestSettlementWithoutCheckoutSilentlySkipsReviewCapture(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	repo := f.repo(t)
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "No checkout"}))
+	repo := f.Repository(t, "test")
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "No checkout"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	f.api.App.CaptureAfterSettlement(ctx, created.Msg.Item.Id)
-	_, found, err := f.core.Database().ReadReviewRecord(created.Msg.Item.Id)
+	f.App().CaptureAfterSettlement(ctx, created.Msg.Item.Id)
+	_, found, err := f.Core().Database().ReadReviewRecord(created.Msg.Item.Id)
 	if err != nil || found {
 		t.Fatal("absent checkout created review noise", err)
 	}
@@ -111,7 +112,7 @@ func TestGitCaptureDoesNotHoldItemOrControllerAdmission(t *testing.T) {
 	f, item, ws := reviewWorkspace(t)
 	ctx := context.Background()
 	body, _ := json.Marshal(coordinator.AgentObservation{WorkItemID: item, Status: "idle"})
-	if _, err := f.core.Database().Commit(coordinator.Command{ID: "idle-observation", Type: "test", ItemID: item}, nil, []coordinator.ProjectionUpdate{{Projection: coordinator.AgentObservationProjection, Key: item, Value: body}}); err != nil {
+	if _, err := f.Core().Database().Commit(coordinator.Command{ID: "idle-observation", Type: "test", ItemID: item}, nil, []coordinator.ProjectionUpdate{{Projection: coordinator.AgentObservationProjection, Key: item, Value: body}}); err != nil {
 		t.Fatal(err)
 	}
 	bin := t.TempDir()
@@ -128,7 +129,7 @@ func TestGitCaptureDoesNotHoldItemOrControllerAdmission(t *testing.T) {
 	}
 	done := make(chan error, 1)
 	go func() {
-		_, err := f.clients.Reviews.CaptureReviewRevision(ctx, connect.NewRequest(&v1.CaptureReviewRevisionRequest{ItemId: item, CaptureId: "paused", ExpectedClaimId: ws.Claim.Id, ExpectedClaimGeneration: ws.Claim.Generation}))
+		_, err := f.Clients.Reviews.CaptureReviewRevision(ctx, connect.NewRequest(&v1.CaptureReviewRevisionRequest{ItemId: item, CaptureId: "paused", ExpectedClaimId: ws.Claim.Id, ExpectedClaimGeneration: ws.Claim.Generation}))
 		done <- err
 	}()
 	defer func() {
@@ -149,11 +150,11 @@ func TestGitCaptureDoesNotHoldItemOrControllerAdmission(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	status, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: item}))
+	status, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: item}))
 	if err != nil || !status.Msg.Observation.Capturing {
 		t.Fatal("capture observation unavailable while Git runs", err)
 	}
-	list, err := f.clients.Items.ListItems(ctx, connect.NewRequest(&v1.ListItemsRequest{Order: v1.ListOrder_LIST_ORDER_ATTENTION}))
+	list, err := f.Clients.Items.ListItems(ctx, connect.NewRequest(&v1.ListItemsRequest{Order: v1.ListOrder_LIST_ORDER_ATTENTION}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,14 +172,14 @@ func TestGitCaptureDoesNotHoldItemOrControllerAdmission(t *testing.T) {
 	}
 	admission, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
-	guard, err := lock.AcquireOperation(admission, f.api.App.Store.LockPath(item))
+	guard, err := lock.AcquireOperation(admission, f.App().Store.LockPath(item))
 	if err != nil {
 		t.Fatal("capture blocked item/control admission", err)
 	}
 	guard.Release()
 	// A send is refused immediately for the ordinary reason (no running agent),
 	// not held until capture finishes.
-	_, err = f.clients.Agents.SendMessage(admission, connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: "normal send", ClientMessageId: "send", Delivery: v1.Delivery_DELIVERY_PROMPT}))
+	_, err = f.Clients.Agents.SendMessage(admission, connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: "normal send", ClientMessageId: "send", Delivery: v1.Delivery_DELIVERY_PROMPT}))
 	if admission.Err() != nil {
 		t.Fatal("send was held by capture", err)
 	}

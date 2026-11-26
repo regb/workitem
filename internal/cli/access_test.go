@@ -15,7 +15,7 @@ func TestAccessFromTheCommandLine(t *testing.T) {
 	}
 	f.run(t, "access", "revoke", "default-every-item")
 	operator := f.cfg.API
-	f.cfg.API = f.api.AgentClients(t, a.Id)
+	f.cfg.API, _ = f.api.AgentClients(t, a.Id)
 	f.errs.Reset()
 	if code := Run(t.Context(), []string{"show", "--item", b.Id}, f.cfg); code == ExitOK || !strings.Contains(f.errs.String(), "wi access grant --item "+a.Id+" --on "+b.Id+" --level view") {
 		t.Fatalf("refusal: %d %s", code, f.errs)
@@ -24,7 +24,7 @@ func TestAccessFromTheCommandLine(t *testing.T) {
 	if out := f.run(t, "access", "grant", "--item", a.Id, "--on", b.Id, "--level", "view"); !strings.Contains(out, "may view item "+b.Id) {
 		t.Fatal(out)
 	}
-	f.cfg.API = f.api.AgentClients(t, a.Id)
+	f.cfg.API, _ = f.api.AgentClients(t, a.Id)
 	f.run(t, "show", "--item", b.Id)
 	f.cfg.API = operator
 	if code := Run(t.Context(), []string{"access", "grant", "--item", a.Id, "--level", "view"}, f.cfg); code != ExitUsage {

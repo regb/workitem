@@ -1,23 +1,24 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
 	"os"
 	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
+	"github.com/regb/workitem/internal/daemonapi"
 )
 
-func jobState(t *testing.T, f *fixture, id string, state v1.JobState) *v1.Job {
+func jobState(t *testing.T, f *apitest.Fixture, id string, state v1.JobState) *v1.Job {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for {
-		value, err := f.clients.Jobs.GetJob(context.Background(), connect.NewRequest(&v1.GetJobRequest{JobId: id}))
+		value, err := f.Clients.Jobs.GetJob(context.Background(), connect.NewRequest(&v1.GetJobRequest{JobId: id}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -31,31 +32,31 @@ func jobState(t *testing.T, f *fixture, id string, state v1.JobState) *v1.Job {
 	}
 }
 func TestCancelJobRetainsPartialOutcome(t *testing.T) {
-	f := newFixture(t)
-	job := f.api.jobs.start("cancel_test", "", "", func(ctx context.Context, j *jobRun) error {
-		path := filepath.Join(f.root, "retained")
+	f := apitest.New(t)
+	job := f.API().StartJob("cancel_test", "", "", func(ctx context.Context, j *daemonapi.JobRun) error {
+		path := filepath.Join(f.Root, "retained")
 		if err := os.WriteFile(path, []byte("durable"), 0600); err != nil {
 			return err
 		}
 		<-ctx.Done()
-		return partial(ctx.Err(), "", "created retained file")
+		return daemonapi.Partial(ctx.Err(), "", "created retained file")
 	})
 	jobState(t, f, job.Id, v1.JobState_JOB_STATE_RUNNING)
-	if _, err := f.clients.Jobs.CancelJob(context.Background(), connect.NewRequest(&v1.CancelJobRequest{JobId: job.Id})); err != nil {
+	if _, err := f.Clients.Jobs.CancelJob(context.Background(), connect.NewRequest(&v1.CancelJobRequest{JobId: job.Id})); err != nil {
 		t.Fatal(err)
 	}
 	final := jobState(t, f, job.Id, v1.JobState_JOB_STATE_CANCELLED)
 	if final.Partial == nil || len(final.Partial.Completed) != 1 || final.Partial.Completed[0] != "created retained file" {
 		t.Fatal(final)
 	}
-	if data, err := os.ReadFile(filepath.Join(f.root, "retained")); err != nil || string(data) != "durable" {
+	if data, err := os.ReadFile(filepath.Join(f.Root, "retained")); err != nil || string(data) != "durable" {
 		t.Fatalf("retained step lost: %s %v", data, err)
 	}
 }
 func TestJobWatcherDisconnectDoesNotCancelTheOperation(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	finish := make(chan struct{})
-	job := f.api.jobs.start("watch_test", "", "", func(ctx context.Context, _ *jobRun) error {
+	job := f.API().StartJob("watch_test", "", "", func(ctx context.Context, _ *daemonapi.JobRun) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -64,7 +65,7 @@ func TestJobWatcherDisconnectDoesNotCancelTheOperation(t *testing.T) {
 		}
 	})
 	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := f.clients.Jobs.WatchJob(ctx, connect.NewRequest(&v1.WatchJobRequest{JobId: job.Id}))
+	stream, err := f.Clients.Jobs.WatchJob(ctx, connect.NewRequest(&v1.WatchJobRequest{JobId: job.Id}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +77,7 @@ func TestJobWatcherDisconnectDoesNotCancelTheOperation(t *testing.T) {
 	jobState(t, f, job.Id, v1.JobState_JOB_STATE_RUNNING)
 	close(finish)
 	jobState(t, f, job.Id, v1.JobState_JOB_STATE_SUCCEEDED)
-	late, err := f.clients.Jobs.WatchJob(context.Background(), connect.NewRequest(&v1.WatchJobRequest{JobId: job.Id}))
+	late, err := f.Clients.Jobs.WatchJob(context.Background(), connect.NewRequest(&v1.WatchJobRequest{JobId: job.Id}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,10 +87,10 @@ func TestJobWatcherDisconnectDoesNotCancelTheOperation(t *testing.T) {
 	}
 }
 func TestDifferentIdempotencyKeysDoNotCoalesceJobs(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	finish := make(chan struct{})
 	var started atomic.Int32
-	run := func(ctx context.Context, _ *jobRun) error {
+	run := func(ctx context.Context, _ *daemonapi.JobRun) error {
 		started.Add(1)
 		select {
 		case <-ctx.Done():
@@ -98,9 +99,9 @@ func TestDifferentIdempotencyKeysDoNotCoalesceJobs(t *testing.T) {
 			return nil
 		}
 	}
-	first := f.api.jobs.startKey("same_kind", "one", "", "", run)
-	same := f.api.jobs.startKey("same_kind", "one", "", "", run)
-	second := f.api.jobs.startKey("same_kind", "two", "", "", run)
+	first := f.API().StartJobKey("same_kind", "one", "", "", run)
+	same := f.API().StartJobKey("same_kind", "one", "", "", run)
+	second := f.API().StartJobKey("same_kind", "two", "", "", run)
 	if first.Id != same.Id || first.Id == second.Id {
 		t.Fatalf("job keys: %v %v %v", first, same, second)
 	}
@@ -112,19 +113,4 @@ func TestDifferentIdempotencyKeysDoNotCoalesceJobs(t *testing.T) {
 	close(finish)
 	jobState(t, f, first.Id, v1.JobState_JOB_STATE_SUCCEEDED)
 	jobState(t, f, second.Id, v1.JobState_JOB_STATE_SUCCEEDED)
-}
-func TestRegistryShutdownRacesWithNewJobs(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	registry := newJobRegistry(ctx)
-	var group sync.WaitGroup
-	for i := 0; i < 20; i++ {
-		group.Add(1)
-		go func() {
-			defer group.Done()
-			registry.start("race", "", "", func(ctx context.Context, _ *jobRun) error { <-ctx.Done(); return ctx.Err() })
-		}()
-	}
-	cancel()
-	registry.wait()
-	group.Wait()
 }

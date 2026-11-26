@@ -3,15 +3,14 @@ package main
 import (
 	"context"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -22,13 +21,7 @@ import (
 func TestAntigravityDriverEndToEnd(t *testing.T) {
 	f := newBinaryFixture(t)
 	ctx := context.Background()
-	_, file, _, _ := runtime.Caller(0)
-	agent := filepath.Join(f.root, "agy")
-	build := exec.Command("go", "build", "-o", agent, "./internal/apitest/acpagent")
-	build.Dir = filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build fake agy: %v %s", err, out)
-	}
+	agent := apitest.Command(t, "./internal/apitest/acpagent")
 	callLog := filepath.Join(f.root, "acp-calls.log")
 	f.env = append(f.env, "ACP_FAKE_LOG="+callLog)
 	// The daemon launches drivers with its own environment: restart it.

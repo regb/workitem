@@ -1,11 +1,13 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
-	"github.com/regb/workitem/internal/apiview"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/regb/workitem/internal/apitest"
+	"github.com/regb/workitem/internal/apiview"
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
@@ -13,34 +15,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestQuotaAvailabilityWaitsForEveryExhaustedWindow(t *testing.T) {
-	soon, later := time.Now().Add(time.Hour), time.Now().Add(24*time.Hour)
-	window := func(remaining float64, reset time.Time) *v1.UsageWindow {
-		return &v1.UsageWindow{RemainingPercent: proto.Float64(remaining), ResetsAt: timestamppb.New(reset)}
-	}
-	available, reset := quotaAvailability(&v1.UsageQuota{Windows: []*v1.UsageWindow{window(0, soon), window(0, later), window(40, soon)}})
-	if available || reset == nil || !reset.Equal(later) {
-		t.Fatalf("exhausted: %v %v", available, reset)
-	}
-	if available, reset := quotaAvailability(&v1.UsageQuota{Windows: []*v1.UsageWindow{window(10, soon), {}}}); !available || reset != nil {
-		t.Fatalf("available: %v %v", available, reset)
-	}
-	if available, _ := quotaAvailability(&v1.UsageQuota{IncludedUsageAllowed: proto.Bool(false)}); available {
-		t.Fatal("a refused subscription is available")
-	}
-}
-
 func TestUsageBlockerClearsAfterACheckPastItsReset(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	repo := f.repo(t)
-	created, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "Limited"}))
+	repo := f.Repository(t, "test")
+	created, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "Limited"}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	id := created.Msg.Item.Id
 	reset := time.Now().Add(-time.Minute)
-	added, err := f.clients.Items.AddBlocker(ctx, connect.NewRequest(&v1.AddBlockerRequest{ItemId: id, Kind: v1.BlockerKind_BLOCKER_KIND_USAGE, Provider: "claude", Until: timestamppb.New(reset), FollowUp: "Continue where you left off."}))
+	added, err := f.Clients.Items.AddBlocker(ctx, connect.NewRequest(&v1.AddBlockerRequest{ItemId: id, Kind: v1.BlockerKind_BLOCKER_KIND_USAGE, Provider: "claude", Until: timestamppb.New(reset), FollowUp: "Continue where you left off."}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,32 +36,30 @@ func TestUsageBlockerClearsAfterACheckPastItsReset(t *testing.T) {
 	quota := func() *v1.GetUsageResponse {
 		return &v1.GetUsageResponse{Enabled: true, Quotas: []*v1.UsageQuota{{Provider: "claude", Windows: []*v1.UsageWindow{{RemainingPercent: proto.Float64(remaining), ResetsAt: timestamppb.New(time.Now().Add(time.Hour))}}}}}
 	}
-	f.api.usage.run = func(context.Context, bool) (*v1.GetUsageResponse, error) {
+	f.API().SetUsageCheck(func(context.Context, bool) (*v1.GetUsageResponse, error) {
 		mu.Lock()
 		defer mu.Unlock()
 		checks++
 		return quota(), nil
-	}
+	})
 	// The last check predates the reset: the daemon checks again.
-	f.api.usage.mu.Lock()
-	f.api.usage.result, f.api.usage.checkedAt = quota(), reset.Add(-time.Minute)
-	f.api.usage.mu.Unlock()
+	f.API().SetUsageResult(quota(), reset.Add(-time.Minute))
 	count := func() int { mu.Lock(); defer mu.Unlock(); return checks }
 	clear := func() []*v1.Blocker {
 		t.Helper()
-		value, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+		value, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		m, err := f.api.App.Store.LoadManifest(value.Msg.Item.Id)
+		m, err := f.App().Store.LoadManifest(value.Msg.Item.Id)
 		if err != nil {
 			t.Fatal(err)
 		}
-		f.api.clearUsageBlocker(ctx, m, blocker, time.Now())
-		for deadline := time.Now().Add(5 * time.Second); f.api.usageSnapshot().Refreshing && time.Now().Before(deadline); {
+		f.API().ClearUsageBlocker(ctx, m, blocker, time.Now())
+		for deadline := time.Now().Add(5 * time.Second); f.API().UsageSnapshot().Refreshing && time.Now().Before(deadline); {
 			time.Sleep(10 * time.Millisecond)
 		}
-		value, err = f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+		value, err = f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -92,13 +75,11 @@ func TestUsageBlockerClearsAfterACheckPastItsReset(t *testing.T) {
 	mu.Lock()
 	remaining = 30
 	mu.Unlock()
-	f.api.usage.mu.Lock()
-	f.api.usage.result, f.api.usage.checkedAt = quota(), time.Now()
-	f.api.usage.mu.Unlock()
+	f.API().SetUsageResult(quota(), time.Now())
 	if blockers := clear(); len(blockers) != 0 {
 		t.Fatalf("quota is back: %v", blockers)
 	}
-	value, err := f.clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
+	value, err := f.Clients.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: id}))
 	if err != nil {
 		t.Fatal(err)
 	}

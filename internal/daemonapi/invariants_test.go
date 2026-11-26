@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -7,20 +7,21 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 )
 
 func TestRepositorySettingRevisionIsStrictAndAtomic(t *testing.T) {
-	f := newFixture(t)
-	repository := f.repo(t)
+	f := apitest.New(t)
+	repository := f.Repository(t, "test")
 	var group sync.WaitGroup
 	codes := make(chan connect.Code, 2)
 	for _, run := range []string{"first", "second"} {
 		group.Add(1)
 		go func(run string) {
 			defer group.Done()
-			_, err := f.clients.Repositories.SetRepositorySetting(context.Background(), connect.NewRequest(&v1.SetRepositorySettingRequest{RepositoryId: repository, Key: "plugins.setup.run", Value: &v1.SettingValue{Value: &v1.SettingValue_StringValue{StringValue: run}}}))
+			_, err := f.Clients.Repositories.SetRepositorySetting(context.Background(), connect.NewRequest(&v1.SetRepositorySettingRequest{RepositoryId: repository, Key: "plugins.setup.run", Value: &v1.SettingValue{Value: &v1.SettingValue_StringValue{StringValue: run}}}))
 			if err == nil {
 				codes <- 0
 			} else {
@@ -46,17 +47,17 @@ func TestRepositorySettingRevisionIsStrictAndAtomic(t *testing.T) {
 	}
 }
 func TestInvalidSetupDoesNotWriteEarlierFields(t *testing.T) {
-	f := newFixture(t)
-	repository := f.repo(t)
-	before, err := f.clients.Repositories.GetCheckoutSetup(context.Background(), connect.NewRequest(&v1.GetCheckoutSetupRequest{RepositoryId: repository}))
+	f := apitest.New(t)
+	repository := f.Repository(t, "test")
+	before, err := f.Clients.Repositories.GetCheckoutSetup(context.Background(), connect.NewRequest(&v1.GetCheckoutSetupRequest{RepositoryId: repository}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = f.clients.Repositories.UpdateCheckoutSetup(context.Background(), connect.NewRequest(&v1.UpdateCheckoutSetupRequest{RepositoryId: repository, ExpectedRevision: before.Msg.Revision, Setup: &v1.CheckoutSetup{Run: "must not be persisted", Trust: 99, TimeoutSeconds: 0}}))
+	_, err = f.Clients.Repositories.UpdateCheckoutSetup(context.Background(), connect.NewRequest(&v1.UpdateCheckoutSetupRequest{RepositoryId: repository, ExpectedRevision: before.Msg.Revision, Setup: &v1.CheckoutSetup{Run: "must not be persisted", Trust: 99, TimeoutSeconds: 0}}))
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("invalid setup: %v", err)
 	}
-	after, err := f.clients.Repositories.GetCheckoutSetup(context.Background(), connect.NewRequest(&v1.GetCheckoutSetupRequest{RepositoryId: repository}))
+	after, err := f.Clients.Repositories.GetCheckoutSetup(context.Background(), connect.NewRequest(&v1.GetCheckoutSetupRequest{RepositoryId: repository}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,65 +66,64 @@ func TestInvalidSetupDoesNotWriteEarlierFields(t *testing.T) {
 	}
 }
 func TestProfileFencesAndDefaultCannotBeDeleted(t *testing.T) {
-	f := newFixture(t)
-	profiles, err := f.clients.Profiles.ListAgentProfiles(context.Background(), connect.NewRequest(&v1.ListAgentProfilesRequest{}))
+	f := apitest.New(t)
+	profiles, err := f.Clients.Profiles.ListAgentProfiles(context.Background(), connect.NewRequest(&v1.ListAgentProfilesRequest{}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = f.clients.Profiles.SetDefaultAgentProfile(context.Background(), connect.NewRequest(&v1.SetDefaultAgentProfileRequest{Name: "test", ExpectedRevision: 0}))
+	_, err = f.Clients.Profiles.SetDefaultAgentProfile(context.Background(), connect.NewRequest(&v1.SetDefaultAgentProfileRequest{Name: "test", ExpectedRevision: 0}))
 	if connect.CodeOf(err) != connect.CodeAborted {
 		t.Fatalf("zero bypassed profile fence: %v", err)
 	}
-	_, err = f.clients.Profiles.DeleteAgentProfile(context.Background(), connect.NewRequest(&v1.DeleteAgentProfileRequest{Name: "test", ExpectedRevision: profiles.Msg.Revision}))
+	_, err = f.Clients.Profiles.DeleteAgentProfile(context.Background(), connect.NewRequest(&v1.DeleteAgentProfileRequest{Name: "test", ExpectedRevision: profiles.Msg.Revision}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("deleted default profile: %v", err)
 	}
 }
 func TestMalformedStartDoesNotCreateAnItem(t *testing.T) {
-	f := newFixture(t)
-	repository := f.repo(t)
-	_, err := f.clients.Lifecycle.CreateAndStartItem(context.Background(), connect.NewRequest(&v1.CreateAndStartItemRequest{Item: &v1.CreateItemRequest{RepositoryId: repository, Title: "must not exist"}, Start: &v1.StartOptions{SendNothing: true, Prompt: "conflict"}}))
+	f := apitest.New(t)
+	repository := f.Repository(t, "test")
+	_, err := f.Clients.Lifecycle.CreateAndStartItem(context.Background(), connect.NewRequest(&v1.CreateAndStartItemRequest{Item: &v1.CreateItemRequest{RepositoryId: repository, Title: "must not exist"}, Start: &v1.StartOptions{SendNothing: true, Prompt: "conflict"}}))
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("invalid start: %v", err)
 	}
-	items, err := f.clients.Items.ListItems(context.Background(), connect.NewRequest(&v1.ListItemsRequest{}))
+	items, err := f.Clients.Items.ListItems(context.Background(), connect.NewRequest(&v1.ListItemsRequest{}))
 	if err != nil || len(items.Msg.Items) != 0 {
 		t.Fatalf("invalid request had effects: %v %v", items, err)
 	}
 }
 func TestDeepWorkActivationHonorsDaemonCapacity(t *testing.T) {
-	f := newFixture(t)
-	f.api.Config.DeepWork.MaxActive = 1
-	repository := f.repo(t)
+	f := apitest.New(t, apitest.WithConfig("[deep_work]\nmax_active = 1\n"))
+	repository := f.Repository(t, "test")
 	create := func(title string) string {
-		value, err := f.clients.Items.CreateItem(context.Background(), connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repository, Title: title, DeepWork: true}))
+		value, err := f.Clients.Items.CreateItem(context.Background(), connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repository, Title: title, DeepWork: true}))
 		if err != nil {
 			t.Fatal(err)
 		}
 		return value.Msg.Item.Id
 	}
 	first, second := create("one"), create("two")
-	if _, err := f.clients.Items.SetItemState(context.Background(), connect.NewRequest(&v1.SetItemStateRequest{ItemId: first, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
+	if _, err := f.Clients.Items.SetItemState(context.Background(), connect.NewRequest(&v1.SetItemStateRequest{ItemId: first, State: v1.ItemState_ITEM_STATE_ACTIVE})); err != nil {
 		t.Fatal(err)
 	}
-	_, err := f.clients.Items.SetItemState(context.Background(), connect.NewRequest(&v1.SetItemStateRequest{ItemId: second, State: v1.ItemState_ITEM_STATE_ACTIVE}))
+	_, err := f.Clients.Items.SetItemState(context.Background(), connect.NewRequest(&v1.SetItemStateRequest{ItemId: second, State: v1.ItemState_ITEM_STATE_ACTIVE}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("capacity bypassed: %v", err)
 	}
-	_, err = f.clients.Items.SetItemState(context.Background(), connect.NewRequest(&v1.SetItemStateRequest{ItemId: second, State: v1.ItemState_ITEM_STATE_ACTIVE, OverrideCapacity: true}))
+	_, err = f.Clients.Items.SetItemState(context.Background(), connect.NewRequest(&v1.SetItemStateRequest{ItemId: second, State: v1.ItemState_ITEM_STATE_ACTIVE, OverrideCapacity: true}))
 	if err != nil {
 		t.Fatalf("operator capacity override: %v", err)
 	}
 }
 func TestProfileChangeNotifiesGlobalFeed(t *testing.T) {
-	f := newFixture(t)
-	profiles, err := f.core.LocalClient().ChangeAgentProfile(context.Background(), coordinator.ChangeAgentProfileCommand{Put: &model.AgentProfile{Name: "other", Driver: "pi"}})
+	f := apitest.New(t)
+	profiles, err := f.Core().LocalClient().ChangeAgentProfile(context.Background(), coordinator.ChangeAgentProfileCommand{Put: &model.AgentProfile{Name: "other", Driver: "pi"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stream, err := f.clients.Events.WatchChanges(ctx, connect.NewRequest(&v1.WatchChangesRequest{}))
+	stream, err := f.Clients.Events.WatchChanges(ctx, connect.NewRequest(&v1.WatchChangesRequest{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +131,7 @@ func TestProfileChangeNotifiesGlobalFeed(t *testing.T) {
 	if !stream.Receive() {
 		t.Fatal(stream.Err())
 	}
-	_, err = f.clients.Profiles.DeleteAgentProfile(ctx, connect.NewRequest(&v1.DeleteAgentProfileRequest{Name: "other", ExpectedRevision: uint32(profiles.Revision)}))
+	_, err = f.Clients.Profiles.DeleteAgentProfile(ctx, connect.NewRequest(&v1.DeleteAgentProfileRequest{Name: "other", ExpectedRevision: uint32(profiles.Revision)}))
 	if err != nil {
 		t.Fatal(err)
 	}

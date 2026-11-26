@@ -5,25 +5,19 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 )
 
 // Exercise Main's plugin host and its API-to-settings JSON conversion. Calling
 // github.Plugin directly misses the default empty-list settings on this path.
 func TestGitHubWaitBinaryWithDefaultEmptyPluginLists(t *testing.T) {
 	f := newBinaryFixture(t)
-	_, source, _, _ := runtime.Caller(0)
-	plugin := filepath.Join(f.root, "wi-github")
-	build := exec.Command("go", "build", "-o", plugin, "./cmd/wi-github")
-	build.Dir = filepath.Clean(filepath.Join(filepath.Dir(source), "..", ".."))
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build GitHub plugin: %v %s", err, out)
-	}
+	plugin := apitest.Command(t, "./cmd/wi-github")
 	state := filepath.Join(f.root, "gh-state.json")
 	writeState := func(value string) {
 		t.Helper()

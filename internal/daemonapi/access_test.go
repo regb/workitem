@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -8,72 +8,26 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 	"github.com/regb/workitem/internal/coordinator"
-	"github.com/regb/workitem/internal/credential"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
+	"github.com/regb/workitem/internal/daemonapi"
 )
-
-// Every procedure is decided for an item's agent: on an item at a level,
-// for a person only, or open to every item. Adding an RPC forces it.
-func TestEveryProcedureIsClassifiedForItemsAgents(t *testing.T) {
-	_ = v1.File_wi_core_v1_items_proto
-	seen := map[string]bool{}
-	defer func() {
-		for procedure := range procedures {
-			if !seen[procedure] {
-				t.Errorf("procedures describes %s, which the API does not have", procedure)
-			}
-		}
-	}()
-	protoregistry.GlobalFiles.RangeFilesByPackage("wi.core.v1", func(file protoreflect.FileDescriptor) bool {
-		services := file.Services()
-		for i := range services.Len() {
-			methods := services.Get(i).Methods()
-			for j := range methods.Len() {
-				procedure := "/" + string(services.Get(i).FullName()) + "/" + string(methods.Get(j).Name())
-				_, level := itemLevels[procedure]
-				_, users := usersOnly[procedure]
-				count := 0
-				for _, in := range []bool{level, users, anyItem[procedure]} {
-					if in {
-						count++
-					}
-				}
-				if count != 1 {
-					t.Errorf("%s must be in exactly one of itemLevels, usersOnly and anyItem", procedure)
-				}
-				rule, described := procedures[procedure]
-				if !described {
-					t.Errorf("%s is not described in procedures", procedure)
-					continue
-				}
-				if level && rule.item == nil {
-					t.Errorf("%s has a level but names no item", procedure)
-				}
-				describedTo(t, procedure, rule, methods.Get(j))
-				seen[procedure] = true
-			}
-		}
-		return true
-	})
-}
 
 // An item's agent may do what its access says: everything on its own item
 // and its delegations, and on others what entries grant, up to a level.
 func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	repo := f.repo(t)
+	repo := f.Repository(t, "test")
 	create := func(title string) string {
-		value, err := f.clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: title}))
+		value, err := f.Clients.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: title}))
 		if err != nil {
 			t.Fatal(err)
 		}
 		return value.Msg.Item.Id
 	}
 	a, b := create("a"), create("b")
-	agent, _ := f.agentClients(t, a)
+	agent, _ := f.AgentClients(t, a)
 	child, err := agent.Items.CreateItem(ctx, connect.NewRequest(&v1.CreateItemRequest{RepositoryId: repo, Title: "c"}))
 	if err != nil {
 		t.Fatal(err)
@@ -87,7 +41,7 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 	if _, err := agent.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: b})); err != nil {
 		t.Fatalf("default access: %v", err)
 	}
-	if _, err := f.clients.Items.RevokeAccess(ctx, connect.NewRequest(&v1.RevokeAccessRequest{EntryId: coordinator.DefaultAccessID})); err != nil {
+	if _, err := f.Clients.Items.RevokeAccess(ctx, connect.NewRequest(&v1.RevokeAccessRequest{EntryId: coordinator.DefaultAccessID})); err != nil {
 		t.Fatal(err)
 	}
 	_, err = agent.Items.GetItem(ctx, connect.NewRequest(&v1.GetItemRequest{ItemId: b}))
@@ -111,7 +65,7 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 			t.Fatalf("an agent read profile %s's settings", p.Name)
 		}
 	}
-	if mine, err := f.clients.Profiles.ListAgentProfiles(ctx, connect.NewRequest(&v1.ListAgentProfilesRequest{})); err != nil || mine.Msg.Profiles[0].Config == nil {
+	if mine, err := f.Clients.Profiles.ListAgentProfiles(ctx, connect.NewRequest(&v1.ListAgentProfilesRequest{})); err != nil || mine.Msg.Profiles[0].Config == nil {
 		t.Fatalf("the operator's profiles: %v %v", mine, err)
 	}
 	// Requests that name their item inside a nested request are held to it.
@@ -130,11 +84,11 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 		t.Fatalf("detail: %v", detail)
 	}
 	// The change feed and jobs name only what it may view.
-	asAgent := context.WithValue(ctx, identityKey{}, identity{principal: principal{kind: credential.Item, itemID: a}})
-	if got := f.api.viewable(asAgent, []string{a, b, c}); len(got) != 2 || got[0] != a || got[1] != c {
+	asAgent := daemonapi.AsItemAgent(ctx, a)
+	if got := f.API().Viewable(asAgent, []string{a, b, c}); len(got) != 2 || got[0] != a || got[1] != c {
 		t.Fatalf("viewable: %v", got)
 	}
-	if jobs := f.api.viewableJobs(asAgent, []*v1.Job{{ItemId: b}, {ItemId: c}, {}}); len(jobs) != 1 || jobs[0].ItemId != c {
+	if jobs := f.API().ViewableJobs(asAgent, []*v1.Job{{ItemId: b}, {ItemId: c}, {}}); len(jobs) != 1 || jobs[0].ItemId != c {
 		t.Fatalf("viewable jobs: %v", jobs)
 	}
 	list, err := agent.Items.ListItems(ctx, connect.NewRequest(&v1.ListItemsRequest{Owner: ""}))
@@ -155,7 +109,7 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 	// A grant lets it as far as its level.
 	grant := func(subject, on string, level v1.AccessLevel) {
 		t.Helper()
-		if _, err := f.clients.Items.GrantAccess(ctx, connect.NewRequest(&v1.GrantAccessRequest{Subject: subject, OnItemId: on, Level: level})); err != nil {
+		if _, err := f.Clients.Items.GrantAccess(ctx, connect.NewRequest(&v1.GrantAccessRequest{Subject: subject, OnItemId: on, Level: level})); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -220,7 +174,7 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 			t.Errorf("%s by an agent: %v", name, err)
 		}
 	}
-	entries, err := f.clients.Items.ListAccess(ctx, connect.NewRequest(&v1.ListAccessRequest{}))
+	entries, err := f.Clients.Items.ListAccess(ctx, connect.NewRequest(&v1.ListAccessRequest{}))
 	if err != nil || len(entries.Msg.Entries) != 2 {
 		t.Fatalf("entries: %v %v", entries, err)
 	}
@@ -236,58 +190,11 @@ func TestItemsAgentsAreHeldToTheirAccess(t *testing.T) {
 	}
 }
 
-// describedTo checks a procedure's description against its request: what it
-// reads exists, and what it locks it names.
-func describedTo(t *testing.T, procedure string, rule procedure, method protoreflect.MethodDescriptor) {
-	t.Helper()
-	kind, err := protoregistry.GlobalTypes.FindMessageByName(method.Input().FullName())
-	if err != nil {
-		t.Fatal(err)
-	}
-	request := kind.New().Interface()
-	func() {
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				t.Errorf("%s: reading its request: %v", procedure, recovered)
-			}
-		}()
-		if rule.item != nil {
-			rule.item(request)
-		}
-		if rule.repository != nil {
-			rule.repository(request)
-		}
-		if rule.lockIf != nil {
-			rule.lockIf(request)
-		}
-	}()
-	fields := method.Input().Fields()
-	if rule.item == nil && fields.ByName("item_id") != nil {
-		t.Errorf("%s names an item_id the description does not read", procedure)
-	}
-	if rule.repository == nil && fields.ByName("repository_id") != nil {
-		t.Errorf("%s names a repository_id the description does not read", procedure)
-	}
-	switch rule.lock {
-	case lockItem:
-		if rule.item == nil {
-			t.Errorf("%s locks an item it does not name", procedure)
-		}
-	case lockRepository:
-		if rule.repository == nil {
-			t.Errorf("%s locks a repository it does not name", procedure)
-		}
-	}
-	if (method.IsStreamingServer() || method.IsStreamingClient()) && rule.lock != lockNone {
-		t.Errorf("%s is a stream, which takes no lock", procedure)
-	}
-}
-
 // A create-and-start names its repository inside its item: the daemon
 // checks it, and holds the repository, as it does for a creation.
 func TestACreateAndStartNamesItsRepository(t *testing.T) {
-	f := newFixture(t)
-	_, err := f.clients.Lifecycle.CreateAndStartItem(context.Background(), connect.NewRequest(&v1.CreateAndStartItemRequest{Item: &v1.CreateItemRequest{RepositoryId: "not-an-id", Title: "x"}}))
+	f := apitest.New(t)
+	_, err := f.Clients.Lifecycle.CreateAndStartItem(context.Background(), connect.NewRequest(&v1.CreateAndStartItemRequest{Item: &v1.CreateItemRequest{RepositoryId: "not-an-id", Title: "x"}}))
 	if connect.CodeOf(err) != connect.CodeInvalidArgument || !strings.Contains(err.Error(), "repository_id") {
 		t.Fatalf("create-and-start with an invalid repository: %v", err)
 	}
