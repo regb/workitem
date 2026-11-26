@@ -1,4 +1,4 @@
-package daemonapi
+package daemonapi_test
 
 import (
 	"context"
@@ -9,13 +9,14 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/apitest"
 )
 
 // A sync's job says what it did: whether the branch moved, and to what.
 func TestASyncReportsWhereItLeftTheRepository(t *testing.T) {
-	f := newFixture(t)
+	f := apitest.New(t)
 	ctx := context.Background()
-	upstream := filepath.Join(f.root, "upstream")
+	upstream := filepath.Join(t.TempDir(), "upstream")
 	git := func(dir string, args ...string) string {
 		t.Helper()
 		out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
@@ -30,20 +31,20 @@ func TestASyncReportsWhereItLeftTheRepository(t *testing.T) {
 	git(upstream, "config", "user.name", "Test")
 	git(upstream, "config", "user.email", "test@example.invalid")
 	git(upstream, "commit", "--allow-empty", "-m", "initial")
-	added, err := f.clients.Repositories.AddRepository(ctx, connect.NewRequest(&v1.AddRepositoryRequest{Name: "synced", Source: upstream, Branch: "main", UpstreamUrl: upstream, UpstreamBranch: "main"}))
+	added, err := f.Clients.Repositories.AddRepository(ctx, connect.NewRequest(&v1.AddRepositoryRequest{Name: "synced", Source: upstream, Branch: "main", UpstreamUrl: upstream, UpstreamBranch: "main"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo := waitJob(t, f.clients, added.Msg.Job).RepositoryId
+	repo := apitest.Wait(t, f.Clients, added.Msg.Job).RepositoryId
 	git(upstream, "commit", "--allow-empty", "-m", "upstream moved")
 	tip := git(upstream, "rev-parse", "HEAD")
 	sync := func() *v1.RepositorySyncResult {
 		t.Helper()
-		started, err := f.clients.Repositories.SyncRepository(ctx, connect.NewRequest(&v1.SyncRepositoryRequest{RepositoryId: repo, Mode: v1.SyncMode_SYNC_MODE_FAST_FORWARD}))
+		started, err := f.Clients.Repositories.SyncRepository(ctx, connect.NewRequest(&v1.SyncRepositoryRequest{RepositoryId: repo, Mode: v1.SyncMode_SYNC_MODE_FAST_FORWARD}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		job := waitJob(t, f.clients, started.Msg.Job)
+		job := apitest.Wait(t, f.Clients, started.Msg.Job)
 		if job.State != v1.JobState_JOB_STATE_SUCCEEDED || job.GetRepositorySync() == nil {
 			t.Fatalf("sync job: %v", job)
 		}
