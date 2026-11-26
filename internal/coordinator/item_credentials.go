@@ -34,8 +34,11 @@ func (d *Database) SaveItemCredential(itemID, runtimeID string, hash [32]byte) e
 
 // VerifyItemCredential reports whether value is the credential of the item's
 // current agent runtime: the one the item's runtime ownership names, until
-// its process ends. A credential outlives neither its runtime nor a newer
-// one taking the item over.
+// it is asked to stop. A credential outlives neither its runtime nor a newer
+// one taking the item over. Stopping already ends it: stopping an agent
+// returns once its runtime is stopping, and its host records it stopped only
+// later, after removing the credential file, so honouring the credential
+// until then would let a stopped agent act.
 func (d *Database) VerifyItemCredential(value credential.Credential) (bool, error) {
 	if value.Kind != credential.Item {
 		return false, nil
@@ -54,5 +57,6 @@ func (d *Database) VerifyItemCredential(value credential.Credential) (bool, erro
 	if err != nil || !found {
 		return false, err
 	}
-	return runtime.ID == stored.RuntimeID && runtime.StoppedAt == nil && runtime.State != model.AgentRuntimeStopped, nil
+	ended := runtime.StoppedAt != nil || runtime.State == model.AgentRuntimeStopping || runtime.State == model.AgentRuntimeStopped
+	return runtime.ID == stored.RuntimeID && !ended, nil
 }

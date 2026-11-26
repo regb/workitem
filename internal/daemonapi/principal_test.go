@@ -71,12 +71,20 @@ func TestCallersAreWhoTheirCredentialSays(t *testing.T) {
 	if _, err := info(t, newer.System); err != nil {
 		t.Fatalf("current runtime: %v", err)
 	}
-	// So does the runtime stopping.
-	stopped := time.Now().UTC()
+	// So does the runtime stopping: from the moment it is asked to, as
+	// stopping an agent returns then, before its host records it stopped.
 	current, err := f.api.App.Store.LoadAgentRuntime(itemID)
 	if err != nil || current == nil || current.ID == runtime.ID {
 		t.Fatalf("runtime: %v %v", current, err)
 	}
+	current.State = model.AgentRuntimeStopping
+	if err := f.api.App.Store.SaveAgentRuntime(ctx, itemID, *current); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := info(t, newer.System); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("stopping runtime: %v", err)
+	}
+	stopped := time.Now().UTC()
 	current.State, current.StoppedAt = model.AgentRuntimeStopped, &stopped
 	if err := f.api.App.Store.SaveAgentRuntime(ctx, itemID, *current); err != nil {
 		t.Fatal(err)
