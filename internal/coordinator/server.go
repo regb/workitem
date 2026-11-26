@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/xdg"
 	"io"
 	"net"
 	"net/http"
@@ -68,10 +69,35 @@ func (s *Server) ConfigureRepositorySettings(registry *options.Registry) {
 }
 
 func NewServer(dataRoot, socketPath string, decoders ...ConversationDecoders) (*Server, error) {
-	return newServer(dataRoot, socketPath, firstConversationDecoders(decoders))
+	runtimeRoot, stateRoot := environmentRoots(dataRoot)
+	return newServer(dataRoot, runtimeRoot, stateRoot, socketPath, firstConversationDecoders(decoders))
 }
 
-func newServer(dataRoot, socketPath string, conversationDecoders ConversationDecoders) (*Server, error) {
+// ServerConfig places a server whose directories are given rather than
+// found in the process environment.
+type ServerConfig struct {
+	// Paths name the data root and its runtime and state directories, where
+	// the server observes runtimes and setups.
+	Paths xdg.Paths
+	// Socket is the public API socket.
+	Socket   string
+	Decoders ConversationDecoders
+	// BuildIdentity is the build the server presents, which its clients,
+	// such as agent runtime hosts, require to be theirs. Empty means this
+	// process's build.
+	BuildIdentity string
+}
+
+// NewServerAt serves config.Paths.DataRoot like NewServer.
+func NewServerAt(config ServerConfig) (*Server, error) {
+	server, err := newServer(config.Paths.DataRoot, config.Paths.DataRuntimeRoot, config.Paths.DataStateRoot, config.Socket, config.Decoders)
+	if err == nil && config.BuildIdentity != "" {
+		server.buildIdentity = config.BuildIdentity
+	}
+	return server, err
+}
+
+func newServer(dataRoot, runtimeRoot, stateRoot, socketPath string, conversationDecoders ConversationDecoders) (*Server, error) {
 	if strings.TrimSpace(socketPath) == "" {
 		return nil, errors.New("socket path is required")
 	}
@@ -97,7 +123,7 @@ func newServer(dataRoot, socketPath string, conversationDecoders ConversationDec
 		database.Close()
 		return nil, fmt.Errorf("index native conversations: %w", err)
 	}
-	observer := NewExternalObserver(database, dataRoot)
+	observer := newExternalObserver(database, runtimeRoot, stateRoot)
 	if err := observer.Reconcile(context.Background()); err != nil {
 		database.Close()
 		return nil, fmt.Errorf("build external observations: %w", err)

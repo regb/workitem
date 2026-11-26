@@ -98,13 +98,32 @@ type ExternalObserver struct {
 	setupRuns store.SetupRuns
 }
 
+// NewExternalObserver observes dataRoot's runtimes and setups at the runtime
+// and state directories the process environment names for it.
 func NewExternalObserver(database *Database, dataRoot string) *ExternalObserver {
-	observer := &ExternalObserver{database: database, process: processpkg.New(), git: gitpkg.New("git"), tmux: tmuxpkg.New("tmux")}
+	runtimeRoot, stateRoot := environmentRoots(dataRoot)
+	return newExternalObserver(database, runtimeRoot, stateRoot)
+}
+
+// environmentRoots are a data root's runtime and state directories as the
+// process environment resolves them, or empty when it cannot.
+func environmentRoots(dataRoot string) (runtimeRoot, stateRoot string) {
 	paths, err := xdg.FromEnv()
 	key, keyErr := dataroot.Key(dataRoot)
-	if err == nil && keyErr == nil {
-		observer.runtimeSocketRoot = filepath.Join(paths.RuntimeDir, "wi", key)
-		observer.setupRuns = store.SetupRuns{Dir: filepath.Join(paths.StateRoot, key, "setup")}
+	if err != nil || keyErr != nil {
+		return "", ""
+	}
+	return filepath.Join(paths.RuntimeDir, "wi", key), filepath.Join(paths.StateRoot, key)
+}
+
+// newExternalObserver observes the runtime sockets under runtimeRoot and the
+// setup records under stateRoot, a data root's DataRuntimeRoot and
+// DataStateRoot.
+func newExternalObserver(database *Database, runtimeRoot, stateRoot string) *ExternalObserver {
+	observer := &ExternalObserver{database: database, process: processpkg.New(), git: gitpkg.New("git"), tmux: tmuxpkg.New("tmux")}
+	if runtimeRoot != "" && stateRoot != "" {
+		observer.runtimeSocketRoot = runtimeRoot
+		observer.setupRuns = store.SetupRuns{Dir: filepath.Join(stateRoot, "setup")}
 	}
 	return observer
 }

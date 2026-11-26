@@ -21,10 +21,7 @@ import (
 	"github.com/regb/workitem/internal/config"
 	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/credential"
-	"github.com/regb/workitem/internal/daemonapi"
-	"github.com/regb/workitem/internal/daemonapp"
-	"github.com/regb/workitem/internal/model"
-	"github.com/regb/workitem/internal/plugin"
+	"github.com/regb/workitem/internal/daemon"
 	"github.com/regb/workitem/internal/plugins/bundled"
 	"github.com/regb/workitem/internal/version"
 	"github.com/regb/workitem/internal/xdg"
@@ -134,56 +131,15 @@ func runDaemonMain(ctx context.Context, args []string, paths xdg.Paths, stdout, 
 		if err != nil {
 			return fail(err)
 		}
-		decoders := coordinator.ConversationDecoders{}
-		for name, configured := range configuredDriverClients(cfg, self, environMap(os.Environ())) {
-			client := configured
-			decoders[name] = func(ctx context.Context, conversation model.Conversation, records []coordinator.ConversationRecord) ([]coordinator.ConversationEventFact, []bool, error) {
-				lines, numbers := make([][]byte, len(records)), make([]uint64, len(records))
-				for i, r := range records {
-					lines[i], numbers[i] = r.Raw, r.Line
-				}
-				facts, decoded, err := client.DecodeConversation(ctx, conversation, numbers, lines)
-				if err != nil {
-					return nil, nil, err
-				}
-				converted := make([]coordinator.ConversationEventFact, len(facts))
-				for i, f := range facts {
-					converted[i] = coordinator.ConversationEventFact{Line: f.Line, Type: f.Type, Role: f.Role, Timestamp: f.Timestamp, StopReason: f.StopReason, UsageProvider: f.UsageProvider, ContentTypes: f.ContentTypes, Terminal: f.Terminal, Failed: f.Failed, BackgroundStarted: f.BackgroundStarted, BackgroundEnded: f.BackgroundEnded, BackgroundLabels: f.BackgroundLabels, BackgroundCalls: f.BackgroundCalls}
-				}
-				return converted, decoded, nil
-			}
-		}
-		core, err := coordinator.NewServer(paths.DataRoot, socket, decoders)
+		d, err := daemon.New(signalCtx, daemon.Options{Paths: paths, Socket: socket, Config: cfg, Host: host, Self: self, Env: environMap(os.Environ())})
 		if err != nil {
 			return fail(err)
 		}
-		defer core.Close()
-		core.ConfigureRepositorySettings(host.Registry.Options())
-		core.SetManaged(cfg.Daemon.Managed)
-		application, err := daemonapp.New(signalCtx, core, paths, cfg, host, self, environMap(os.Environ()))
-		if err != nil {
-			return fail(err)
-		}
-		application.DaemonSocketPath = coordinator.InternalSocketPath(socket)
-		api, err := daemonapi.New(signalCtx, core, application, cfg, host, paths.DataRoot)
-		if err != nil {
-			return fail(err)
-		}
-		core.SetBeforeClose(api.Close)
-		pluginCtx, cancelPlugins := context.WithCancel(signalCtx)
-		defer cancelPlugins()
-		pluginsDone := make(chan struct{})
-		go func() {
-			defer close(pluginsDone)
-			plugin.Runner{Host: host, WiPath: self, LogDir: filepath.Join(paths.DataStateRoot, "plugins")}.Run(pluginCtx)
-		}()
+		defer d.Close()
 		if !jsonOut {
 			fmt.Fprintf(stderr, "wi daemon API listening on %s\n", socket)
 		}
-		err = core.ServeAPI(signalCtx, api.Handler())
-		cancelPlugins()
-		<-pluginsDone
-		if err != nil {
+		if err := d.Serve(signalCtx); err != nil {
 			return fail(err)
 		}
 		return ExitOK

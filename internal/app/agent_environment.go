@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -27,10 +28,11 @@ func (a *App) baseRuntimeEnvironment(ctx context.Context, mode agent.Mode, subje
 			global = candidate
 		}
 	}
+	own := a.ownEnvironment()
 	if len(global) == 0 {
-		global = envFromSlice(os.Environ())
+		global = own
 	}
-	global, scrub, warnings, err := a.Preparation.Environment(ctx, "sanitize", plugin.EnvironmentRequest{Subject: subject, Values: global, Source: envFromSlice(os.Environ())})
+	global, scrub, warnings, err := a.Preparation.Environment(ctx, "sanitize", plugin.EnvironmentRequest{Subject: subject, Values: global, Source: a.ownEnvironment()})
 	if err != nil {
 		return nil, nil, warnings, err
 	}
@@ -41,9 +43,17 @@ func (a *App) baseRuntimeEnvironment(ctx context.Context, mode agent.Mode, subje
 		}
 	}
 	if _, ok := global["PATH"]; !ok {
-		global["PATH"] = os.Getenv("PATH")
+		global["PATH"] = a.ownEnvironment()["PATH"]
 	}
 	return global, scrub, warnings, nil
+}
+
+// ownEnvironment is a fresh copy of the daemon's environment.
+func (a *App) ownEnvironment() map[string]string {
+	if a.Environment == nil {
+		return envFromSlice(os.Environ())
+	}
+	return maps.Clone(a.Environment)
 }
 
 func envFromSlice(entries []string) map[string]string {

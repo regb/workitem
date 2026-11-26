@@ -113,15 +113,18 @@ type realClock struct{}
 func (realClock) Now() time.Time { return time.Now() }
 
 type App struct {
-	Store                 Store
-	Git                   Git
-	Tmux                  Tmux
-	ConversationBackends  map[string]ConversationBackend
-	Preparation           plugin.Pipeline
-	Process               ProcessInspector
-	Clock                 Clock
-	NewID                 func() (string, error)
-	SelfPath              string
+	Store                Store
+	Git                  Git
+	Tmux                 Tmux
+	ConversationBackends map[string]ConversationBackend
+	Preparation          plugin.Pipeline
+	Process              ProcessInspector
+	Clock                Clock
+	NewID                func() (string, error)
+	SelfPath             string
+	// Environment is the daemon's own environment, the base of an agent
+	// runtime's outside tmux. When nil, the process environment is used.
+	Environment           map[string]string
 	Coordinator           *coordinator.Client
 	DaemonSocketPath      string
 	AgentRuntimeStateRoot string

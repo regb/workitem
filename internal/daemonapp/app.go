@@ -31,7 +31,7 @@ func withClient(ctx context.Context, local *coordinator.Client, paths xdg.Paths,
 	a := app.New(native, git.New("git"))
 	a.DeepWorkConfig, a.ItemConfig, a.ListConfig, a.RepoConfig = cfg.DeepWork, cfg.Item, cfg.List, cfg.Repo
 	a.AgentConfig, a.AgentStatusConfig, a.AttentionConfig, a.DriversConfig = cfg.Agent, cfg.AgentStatus, cfg.Attention, cfg.Drivers
-	a.Plugins, a.Tmux, a.SelfPath = host, tmux.New("tmux"), self
+	a.Plugins, a.Tmux, a.SelfPath, a.Environment = host, tmux.New("tmux"), self, env
 	a.AgentRuntimeStateRoot, a.AgentRuntimeSocketRoot = paths.DataStateRoot, paths.DataRuntimeRoot
 	for _, driver := range []string{"pi", "claude", "antigravity"} {
 		a.BundledDriverCommands[driver] = app.BundledDriverCommand{Path: self, Args: []string{"internal-driver", driver}}
