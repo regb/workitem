@@ -29,11 +29,9 @@ const (
 	JobState_JOB_STATE_UNSPECIFIED JobState = 0
 	JobState_JOB_STATE_QUEUED      JobState = 1
 	JobState_JOB_STATE_RUNNING     JobState = 2
-	// WAITING_FOR_APPROVAL is no longer used: no job waits for an approval.
-	JobState_JOB_STATE_WAITING_FOR_APPROVAL JobState = 3
-	JobState_JOB_STATE_SUCCEEDED            JobState = 4
-	JobState_JOB_STATE_FAILED               JobState = 5
-	JobState_JOB_STATE_CANCELLED            JobState = 6
+	JobState_JOB_STATE_SUCCEEDED   JobState = 4
+	JobState_JOB_STATE_FAILED      JobState = 5
+	JobState_JOB_STATE_CANCELLED   JobState = 6
 )
 
 // Enum value maps for JobState.
@@ -42,19 +40,17 @@ var (
 		0: "JOB_STATE_UNSPECIFIED",
 		1: "JOB_STATE_QUEUED",
 		2: "JOB_STATE_RUNNING",
-		3: "JOB_STATE_WAITING_FOR_APPROVAL",
 		4: "JOB_STATE_SUCCEEDED",
 		5: "JOB_STATE_FAILED",
 		6: "JOB_STATE_CANCELLED",
 	}
 	JobState_value = map[string]int32{
-		"JOB_STATE_UNSPECIFIED":          0,
-		"JOB_STATE_QUEUED":               1,
-		"JOB_STATE_RUNNING":              2,
-		"JOB_STATE_WAITING_FOR_APPROVAL": 3,
-		"JOB_STATE_SUCCEEDED":            4,
-		"JOB_STATE_FAILED":               5,
-		"JOB_STATE_CANCELLED":            6,
+		"JOB_STATE_UNSPECIFIED": 0,
+		"JOB_STATE_QUEUED":      1,
+		"JOB_STATE_RUNNING":     2,
+		"JOB_STATE_SUCCEEDED":   4,
+		"JOB_STATE_FAILED":      5,
+		"JOB_STATE_CANCELLED":   6,
 	}
 )
 
@@ -102,8 +98,6 @@ type Job struct {
 	Phase string `protobuf:"bytes,6,opt,name=phase,proto3" json:"phase,omitempty"`
 	// log_tail is the end of the job's log, such as setup command output.
 	LogTail string `protobuf:"bytes,7,opt,name=log_tail,json=logTail,proto3" json:"log_tail,omitempty"`
-	// approval is no longer set: no job waits for an approval.
-	Approval *Approval `protobuf:"bytes,8,opt,name=approval,proto3" json:"approval,omitempty"`
 	// error explains a failure; partial says what was kept.
 	Error         string                 `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
 	Partial       *PartialOutcome        `protobuf:"bytes,10,opt,name=partial,proto3" json:"partial,omitempty"`
@@ -192,13 +186,6 @@ func (x *Job) GetLogTail() string {
 		return x.LogTail
 	}
 	return ""
-}
-
-func (x *Job) GetApproval() *Approval {
-	if x != nil {
-		return x.Approval
-	}
-	return nil
 }
 
 func (x *Job) GetError() string {
@@ -516,110 +503,6 @@ func (x *WatchJobResponse) GetJob() *Job {
 	return nil
 }
 
-type AnswerApprovalRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
-	ChallengeId   string                 `protobuf:"bytes,2,opt,name=challenge_id,json=challengeId,proto3" json:"challenge_id,omitempty"`
-	Decision      ApprovalDecision       `protobuf:"varint,3,opt,name=decision,proto3,enum=wi.core.v1.ApprovalDecision" json:"decision,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AnswerApprovalRequest) Reset() {
-	*x = AnswerApprovalRequest{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AnswerApprovalRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AnswerApprovalRequest) ProtoMessage() {}
-
-func (x *AnswerApprovalRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AnswerApprovalRequest.ProtoReflect.Descriptor instead.
-func (*AnswerApprovalRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *AnswerApprovalRequest) GetJobId() string {
-	if x != nil {
-		return x.JobId
-	}
-	return ""
-}
-
-func (x *AnswerApprovalRequest) GetChallengeId() string {
-	if x != nil {
-		return x.ChallengeId
-	}
-	return ""
-}
-
-func (x *AnswerApprovalRequest) GetDecision() ApprovalDecision {
-	if x != nil {
-		return x.Decision
-	}
-	return ApprovalDecision_APPROVAL_DECISION_UNSPECIFIED
-}
-
-type AnswerApprovalResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Job           *Job                   `protobuf:"bytes,1,opt,name=job,proto3" json:"job,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *AnswerApprovalResponse) Reset() {
-	*x = AnswerApprovalResponse{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *AnswerApprovalResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*AnswerApprovalResponse) ProtoMessage() {}
-
-func (x *AnswerApprovalResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use AnswerApprovalResponse.ProtoReflect.Descriptor instead.
-func (*AnswerApprovalResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *AnswerApprovalResponse) GetJob() *Job {
-	if x != nil {
-		return x.Job
-	}
-	return nil
-}
-
 type CancelJobRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	JobId         string                 `protobuf:"bytes,1,opt,name=job_id,json=jobId,proto3" json:"job_id,omitempty"`
@@ -629,7 +512,7 @@ type CancelJobRequest struct {
 
 func (x *CancelJobRequest) Reset() {
 	*x = CancelJobRequest{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[9]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -641,7 +524,7 @@ func (x *CancelJobRequest) String() string {
 func (*CancelJobRequest) ProtoMessage() {}
 
 func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[9]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -654,7 +537,7 @@ func (x *CancelJobRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobRequest.ProtoReflect.Descriptor instead.
 func (*CancelJobRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{9}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *CancelJobRequest) GetJobId() string {
@@ -673,7 +556,7 @@ type CancelJobResponse struct {
 
 func (x *CancelJobResponse) Reset() {
 	*x = CancelJobResponse{}
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[10]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -685,7 +568,7 @@ func (x *CancelJobResponse) String() string {
 func (*CancelJobResponse) ProtoMessage() {}
 
 func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_jobs_proto_msgTypes[10]
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -698,7 +581,7 @@ func (x *CancelJobResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CancelJobResponse.ProtoReflect.Descriptor instead.
 func (*CancelJobResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{10}
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *CancelJobResponse) GetJob() *Job {
@@ -713,7 +596,7 @@ var File_wi_core_v1_jobs_proto protoreflect.FileDescriptor
 const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\n" +
 	"\x15wi/core/v1/jobs.proto\x12\n" +
-	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17wi/core/v1/common.proto\"\x91\x04\n" +
+	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17wi/core/v1/common.proto\"\xef\x03\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12*\n" +
@@ -721,8 +604,7 @@ const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\aitem_id\x18\x04 \x01(\tR\x06itemId\x12#\n" +
 	"\rrepository_id\x18\x05 \x01(\tR\frepositoryId\x12\x14\n" +
 	"\x05phase\x18\x06 \x01(\tR\x05phase\x12\x19\n" +
-	"\blog_tail\x18\a \x01(\tR\alogTail\x120\n" +
-	"\bapproval\x18\b \x01(\v2\x14.wi.core.v1.ApprovalR\bapproval\x12\x14\n" +
+	"\blog_tail\x18\a \x01(\tR\alogTail\x12\x14\n" +
 	"\x05error\x18\t \x01(\tR\x05error\x124\n" +
 	"\apartial\x18\n" +
 	" \x01(\v2\x1a.wi.core.v1.PartialOutcomeR\apartial\x12\x1a\n" +
@@ -732,7 +614,7 @@ const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\n" +
 	"started_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x12;\n" +
 	"\vfinished_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"&\n" +
+	"finishedAtJ\x04\b\b\x10\tR\bapproval\"&\n" +
 	"\rGetJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"3\n" +
 	"\x0eGetJobResponse\x12!\n" +
@@ -745,31 +627,23 @@ const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\x0fWatchJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"5\n" +
 	"\x10WatchJobResponse\x12!\n" +
-	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\x8b\x01\n" +
-	"\x15AnswerApprovalRequest\x12\x15\n" +
-	"\x06job_id\x18\x01 \x01(\tR\x05jobId\x12!\n" +
-	"\fchallenge_id\x18\x02 \x01(\tR\vchallengeId\x128\n" +
-	"\bdecision\x18\x03 \x01(\x0e2\x1c.wi.core.v1.ApprovalDecisionR\bdecision\";\n" +
-	"\x16AnswerApprovalResponse\x12!\n" +
 	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\")\n" +
 	"\x10CancelJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"6\n" +
 	"\x11CancelJobResponse\x12!\n" +
-	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job*\xbe\x01\n" +
+	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job*\xc0\x01\n" +
 	"\bJobState\x12\x19\n" +
 	"\x15JOB_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10JOB_STATE_QUEUED\x10\x01\x12\x15\n" +
-	"\x11JOB_STATE_RUNNING\x10\x02\x12\"\n" +
-	"\x1eJOB_STATE_WAITING_FOR_APPROVAL\x10\x03\x12\x17\n" +
+	"\x11JOB_STATE_RUNNING\x10\x02\x12\x17\n" +
 	"\x13JOB_STATE_SUCCEEDED\x10\x04\x12\x14\n" +
 	"\x10JOB_STATE_FAILED\x10\x05\x12\x17\n" +
-	"\x13JOB_STATE_CANCELLED\x10\x062\x8a\x03\n" +
+	"\x13JOB_STATE_CANCELLED\x10\x06\"\x04\b\x03\x10\x03*\x1eJOB_STATE_WAITING_FOR_APPROVAL2\xb1\x02\n" +
 	"\n" +
 	"JobService\x12D\n" +
 	"\x06GetJob\x12\x19.wi.core.v1.GetJobRequest\x1a\x1a.wi.core.v1.GetJobResponse\"\x03\x90\x02\x01\x12J\n" +
 	"\bListJobs\x12\x1b.wi.core.v1.ListJobsRequest\x1a\x1c.wi.core.v1.ListJobsResponse\"\x03\x90\x02\x01\x12G\n" +
-	"\bWatchJob\x12\x1b.wi.core.v1.WatchJobRequest\x1a\x1c.wi.core.v1.WatchJobResponse0\x01\x12W\n" +
-	"\x0eAnswerApproval\x12!.wi.core.v1.AnswerApprovalRequest\x1a\".wi.core.v1.AnswerApprovalResponse\x12H\n" +
+	"\bWatchJob\x12\x1b.wi.core.v1.WatchJobRequest\x1a\x1c.wi.core.v1.WatchJobResponse0\x01\x12H\n" +
 	"\tCancelJob\x12\x1c.wi.core.v1.CancelJobRequest\x1a\x1d.wi.core.v1.CancelJobResponseB0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
 var (
@@ -785,53 +659,44 @@ func file_wi_core_v1_jobs_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_jobs_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_wi_core_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_wi_core_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_wi_core_v1_jobs_proto_goTypes = []any{
-	(JobState)(0),                  // 0: wi.core.v1.JobState
-	(*Job)(nil),                    // 1: wi.core.v1.Job
-	(*GetJobRequest)(nil),          // 2: wi.core.v1.GetJobRequest
-	(*GetJobResponse)(nil),         // 3: wi.core.v1.GetJobResponse
-	(*ListJobsRequest)(nil),        // 4: wi.core.v1.ListJobsRequest
-	(*ListJobsResponse)(nil),       // 5: wi.core.v1.ListJobsResponse
-	(*WatchJobRequest)(nil),        // 6: wi.core.v1.WatchJobRequest
-	(*WatchJobResponse)(nil),       // 7: wi.core.v1.WatchJobResponse
-	(*AnswerApprovalRequest)(nil),  // 8: wi.core.v1.AnswerApprovalRequest
-	(*AnswerApprovalResponse)(nil), // 9: wi.core.v1.AnswerApprovalResponse
-	(*CancelJobRequest)(nil),       // 10: wi.core.v1.CancelJobRequest
-	(*CancelJobResponse)(nil),      // 11: wi.core.v1.CancelJobResponse
-	(*Approval)(nil),               // 12: wi.core.v1.Approval
-	(*PartialOutcome)(nil),         // 13: wi.core.v1.PartialOutcome
-	(*timestamppb.Timestamp)(nil),  // 14: google.protobuf.Timestamp
-	(ApprovalDecision)(0),          // 15: wi.core.v1.ApprovalDecision
+	(JobState)(0),                 // 0: wi.core.v1.JobState
+	(*Job)(nil),                   // 1: wi.core.v1.Job
+	(*GetJobRequest)(nil),         // 2: wi.core.v1.GetJobRequest
+	(*GetJobResponse)(nil),        // 3: wi.core.v1.GetJobResponse
+	(*ListJobsRequest)(nil),       // 4: wi.core.v1.ListJobsRequest
+	(*ListJobsResponse)(nil),      // 5: wi.core.v1.ListJobsResponse
+	(*WatchJobRequest)(nil),       // 6: wi.core.v1.WatchJobRequest
+	(*WatchJobResponse)(nil),      // 7: wi.core.v1.WatchJobResponse
+	(*CancelJobRequest)(nil),      // 8: wi.core.v1.CancelJobRequest
+	(*CancelJobResponse)(nil),     // 9: wi.core.v1.CancelJobResponse
+	(*PartialOutcome)(nil),        // 10: wi.core.v1.PartialOutcome
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
 }
 var file_wi_core_v1_jobs_proto_depIdxs = []int32{
 	0,  // 0: wi.core.v1.Job.state:type_name -> wi.core.v1.JobState
-	12, // 1: wi.core.v1.Job.approval:type_name -> wi.core.v1.Approval
-	13, // 2: wi.core.v1.Job.partial:type_name -> wi.core.v1.PartialOutcome
-	14, // 3: wi.core.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	14, // 4: wi.core.v1.Job.started_at:type_name -> google.protobuf.Timestamp
-	14, // 5: wi.core.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
-	1,  // 6: wi.core.v1.GetJobResponse.job:type_name -> wi.core.v1.Job
-	1,  // 7: wi.core.v1.ListJobsResponse.jobs:type_name -> wi.core.v1.Job
-	1,  // 8: wi.core.v1.WatchJobResponse.job:type_name -> wi.core.v1.Job
-	15, // 9: wi.core.v1.AnswerApprovalRequest.decision:type_name -> wi.core.v1.ApprovalDecision
-	1,  // 10: wi.core.v1.AnswerApprovalResponse.job:type_name -> wi.core.v1.Job
-	1,  // 11: wi.core.v1.CancelJobResponse.job:type_name -> wi.core.v1.Job
-	2,  // 12: wi.core.v1.JobService.GetJob:input_type -> wi.core.v1.GetJobRequest
-	4,  // 13: wi.core.v1.JobService.ListJobs:input_type -> wi.core.v1.ListJobsRequest
-	6,  // 14: wi.core.v1.JobService.WatchJob:input_type -> wi.core.v1.WatchJobRequest
-	8,  // 15: wi.core.v1.JobService.AnswerApproval:input_type -> wi.core.v1.AnswerApprovalRequest
-	10, // 16: wi.core.v1.JobService.CancelJob:input_type -> wi.core.v1.CancelJobRequest
-	3,  // 17: wi.core.v1.JobService.GetJob:output_type -> wi.core.v1.GetJobResponse
-	5,  // 18: wi.core.v1.JobService.ListJobs:output_type -> wi.core.v1.ListJobsResponse
-	7,  // 19: wi.core.v1.JobService.WatchJob:output_type -> wi.core.v1.WatchJobResponse
-	9,  // 20: wi.core.v1.JobService.AnswerApproval:output_type -> wi.core.v1.AnswerApprovalResponse
-	11, // 21: wi.core.v1.JobService.CancelJob:output_type -> wi.core.v1.CancelJobResponse
-	17, // [17:22] is the sub-list for method output_type
-	12, // [12:17] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	10, // 1: wi.core.v1.Job.partial:type_name -> wi.core.v1.PartialOutcome
+	11, // 2: wi.core.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	11, // 3: wi.core.v1.Job.started_at:type_name -> google.protobuf.Timestamp
+	11, // 4: wi.core.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
+	1,  // 5: wi.core.v1.GetJobResponse.job:type_name -> wi.core.v1.Job
+	1,  // 6: wi.core.v1.ListJobsResponse.jobs:type_name -> wi.core.v1.Job
+	1,  // 7: wi.core.v1.WatchJobResponse.job:type_name -> wi.core.v1.Job
+	1,  // 8: wi.core.v1.CancelJobResponse.job:type_name -> wi.core.v1.Job
+	2,  // 9: wi.core.v1.JobService.GetJob:input_type -> wi.core.v1.GetJobRequest
+	4,  // 10: wi.core.v1.JobService.ListJobs:input_type -> wi.core.v1.ListJobsRequest
+	6,  // 11: wi.core.v1.JobService.WatchJob:input_type -> wi.core.v1.WatchJobRequest
+	8,  // 12: wi.core.v1.JobService.CancelJob:input_type -> wi.core.v1.CancelJobRequest
+	3,  // 13: wi.core.v1.JobService.GetJob:output_type -> wi.core.v1.GetJobResponse
+	5,  // 14: wi.core.v1.JobService.ListJobs:output_type -> wi.core.v1.ListJobsResponse
+	7,  // 15: wi.core.v1.JobService.WatchJob:output_type -> wi.core.v1.WatchJobResponse
+	9,  // 16: wi.core.v1.JobService.CancelJob:output_type -> wi.core.v1.CancelJobResponse
+	13, // [13:17] is the sub-list for method output_type
+	9,  // [9:13] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_jobs_proto_init() }
@@ -846,7 +711,7 @@ func file_wi_core_v1_jobs_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_jobs_proto_rawDesc), len(file_wi_core_v1_jobs_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   11,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

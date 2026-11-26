@@ -117,7 +117,6 @@ var webRefused = map[string]string{
 	corev1connect.ItemServiceResolveItemProcedure:                  "plumbing or operator command the page does not use",
 	corev1connect.ItemServiceSetItemStateProcedure:                 "plumbing or operator command the page does not use",
 	corev1connect.ItemServiceUpdateItemProcedure:                   "plumbing or operator command the page does not use",
-	corev1connect.JobServiceAnswerApprovalProcedure:                "plumbing or operator command the page does not use",
 	corev1connect.RepositoryServiceArchiveRepositoryProcedure:      "irreversible for the page's purposes; the CLI archives",
 	corev1connect.RepositoryServiceGetRepositorySettingsProcedure:  "plumbing or operator command the page does not use",
 	corev1connect.RepositoryServiceGetRepositoryStatusProcedure:    "plumbing or operator command the page does not use",

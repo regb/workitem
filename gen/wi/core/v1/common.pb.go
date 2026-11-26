@@ -41,7 +41,6 @@ package corev1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -322,56 +321,6 @@ func (AgentMode) EnumDescriptor() ([]byte, []int) {
 	return file_wi_core_v1_common_proto_rawDescGZIP(), []int{4}
 }
 
-// ApprovalDecision answers an Approval.
-type ApprovalDecision int32
-
-const (
-	ApprovalDecision_APPROVAL_DECISION_UNSPECIFIED ApprovalDecision = 0
-	ApprovalDecision_APPROVAL_DECISION_ALLOW       ApprovalDecision = 1
-	ApprovalDecision_APPROVAL_DECISION_DENY        ApprovalDecision = 2
-)
-
-// Enum value maps for ApprovalDecision.
-var (
-	ApprovalDecision_name = map[int32]string{
-		0: "APPROVAL_DECISION_UNSPECIFIED",
-		1: "APPROVAL_DECISION_ALLOW",
-		2: "APPROVAL_DECISION_DENY",
-	}
-	ApprovalDecision_value = map[string]int32{
-		"APPROVAL_DECISION_UNSPECIFIED": 0,
-		"APPROVAL_DECISION_ALLOW":       1,
-		"APPROVAL_DECISION_DENY":        2,
-	}
-)
-
-func (x ApprovalDecision) Enum() *ApprovalDecision {
-	p := new(ApprovalDecision)
-	*p = x
-	return p
-}
-
-func (x ApprovalDecision) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (ApprovalDecision) Descriptor() protoreflect.EnumDescriptor {
-	return file_wi_core_v1_common_proto_enumTypes[5].Descriptor()
-}
-
-func (ApprovalDecision) Type() protoreflect.EnumType {
-	return &file_wi_core_v1_common_proto_enumTypes[5]
-}
-
-func (x ApprovalDecision) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use ApprovalDecision.Descriptor instead.
-func (ApprovalDecision) EnumDescriptor() ([]byte, []int) {
-	return file_wi_core_v1_common_proto_rawDescGZIP(), []int{5}
-}
-
 // RepositoryRef names a registered repository.
 type RepositoryRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -490,87 +439,6 @@ func (x *PartialOutcome) GetWarnings() []string {
 	return nil
 }
 
-// Approval is a question an operation needs a person to answer before it
-// continues, such as trusting a checkout's .envrc. It is bound to what it
-// asks about: an answer applies to this challenge only.
-type Approval struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	ChallengeId string                 `protobuf:"bytes,1,opt,name=challenge_id,json=challengeId,proto3" json:"challenge_id,omitempty"`
-	Question    string                 `protobuf:"bytes,2,opt,name=question,proto3" json:"question,omitempty"`
-	// path is the file the question concerns, when there is one.
-	Path string `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
-	// digest identifies the content approved, so a changed file asks again.
-	Digest        string                 `protobuf:"bytes,4,opt,name=digest,proto3" json:"digest,omitempty"`
-	ExpiresAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *Approval) Reset() {
-	*x = Approval{}
-	mi := &file_wi_core_v1_common_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Approval) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Approval) ProtoMessage() {}
-
-func (x *Approval) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_common_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Approval.ProtoReflect.Descriptor instead.
-func (*Approval) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_common_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *Approval) GetChallengeId() string {
-	if x != nil {
-		return x.ChallengeId
-	}
-	return ""
-}
-
-func (x *Approval) GetQuestion() string {
-	if x != nil {
-		return x.Question
-	}
-	return ""
-}
-
-func (x *Approval) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *Approval) GetDigest() string {
-	if x != nil {
-		return x.Digest
-	}
-	return ""
-}
-
-func (x *Approval) GetExpiresAt() *timestamppb.Timestamp {
-	if x != nil {
-		return x.ExpiresAt
-	}
-	return nil
-}
-
 // Image is image content sent to or shown from an agent.
 type Image struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -583,7 +451,7 @@ type Image struct {
 
 func (x *Image) Reset() {
 	*x = Image{}
-	mi := &file_wi_core_v1_common_proto_msgTypes[3]
+	mi := &file_wi_core_v1_common_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -595,7 +463,7 @@ func (x *Image) String() string {
 func (*Image) ProtoMessage() {}
 
 func (x *Image) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_common_proto_msgTypes[3]
+	mi := &file_wi_core_v1_common_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -608,7 +476,7 @@ func (x *Image) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Image.ProtoReflect.Descriptor instead.
 func (*Image) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_common_proto_rawDescGZIP(), []int{3}
+	return file_wi_core_v1_common_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *Image) GetMimeType() string {
@@ -637,21 +505,14 @@ var File_wi_core_v1_common_proto protoreflect.FileDescriptor
 const file_wi_core_v1_common_proto_rawDesc = "" +
 	"\n" +
 	"\x17wi/core/v1/common.proto\x12\n" +
-	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"3\n" +
+	"wi.core.v1\"3\n" +
 	"\rRepositoryRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"c\n" +
 	"\x0ePartialOutcome\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x1c\n" +
 	"\tcompleted\x18\x02 \x03(\tR\tcompleted\x12\x1a\n" +
-	"\bwarnings\x18\x03 \x03(\tR\bwarnings\"\xb0\x01\n" +
-	"\bApproval\x12!\n" +
-	"\fchallenge_id\x18\x01 \x01(\tR\vchallengeId\x12\x1a\n" +
-	"\bquestion\x18\x02 \x01(\tR\bquestion\x12\x12\n" +
-	"\x04path\x18\x03 \x01(\tR\x04path\x12\x16\n" +
-	"\x06digest\x18\x04 \x01(\tR\x06digest\x129\n" +
-	"\n" +
-	"expires_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\"J\n" +
+	"\bwarnings\x18\x03 \x03(\tR\bwarnings\"J\n" +
 	"\x05Image\x12\x1b\n" +
 	"\tmime_type\x18\x01 \x01(\tR\bmimeType\x12\x12\n" +
 	"\x04data\x18\x02 \x01(\fR\x04data\x12\x10\n" +
@@ -681,11 +542,7 @@ const file_wi_core_v1_common_proto_rawDesc = "" +
 	"\tAgentMode\x12\x1a\n" +
 	"\x16AGENT_MODE_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eAGENT_MODE_TUI\x10\x01\x12\x17\n" +
-	"\x13AGENT_MODE_HEADLESS\x10\x02*n\n" +
-	"\x10ApprovalDecision\x12!\n" +
-	"\x1dAPPROVAL_DECISION_UNSPECIFIED\x10\x00\x12\x1b\n" +
-	"\x17APPROVAL_DECISION_ALLOW\x10\x01\x12\x1a\n" +
-	"\x16APPROVAL_DECISION_DENY\x10\x02B0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
+	"\x13AGENT_MODE_HEADLESS\x10\x02B0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
 var (
 	file_wi_core_v1_common_proto_rawDescOnce sync.Once
@@ -699,28 +556,24 @@ func file_wi_core_v1_common_proto_rawDescGZIP() []byte {
 	return file_wi_core_v1_common_proto_rawDescData
 }
 
-var file_wi_core_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_wi_core_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_wi_core_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_wi_core_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_wi_core_v1_common_proto_goTypes = []any{
-	(ItemState)(0),                // 0: wi.core.v1.ItemState
-	(Resolution)(0),               // 1: wi.core.v1.Resolution
-	(AgentStatus)(0),              // 2: wi.core.v1.AgentStatus
-	(WorktreeStatus)(0),           // 3: wi.core.v1.WorktreeStatus
-	(AgentMode)(0),                // 4: wi.core.v1.AgentMode
-	(ApprovalDecision)(0),         // 5: wi.core.v1.ApprovalDecision
-	(*RepositoryRef)(nil),         // 6: wi.core.v1.RepositoryRef
-	(*PartialOutcome)(nil),        // 7: wi.core.v1.PartialOutcome
-	(*Approval)(nil),              // 8: wi.core.v1.Approval
-	(*Image)(nil),                 // 9: wi.core.v1.Image
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(ItemState)(0),         // 0: wi.core.v1.ItemState
+	(Resolution)(0),        // 1: wi.core.v1.Resolution
+	(AgentStatus)(0),       // 2: wi.core.v1.AgentStatus
+	(WorktreeStatus)(0),    // 3: wi.core.v1.WorktreeStatus
+	(AgentMode)(0),         // 4: wi.core.v1.AgentMode
+	(*RepositoryRef)(nil),  // 5: wi.core.v1.RepositoryRef
+	(*PartialOutcome)(nil), // 6: wi.core.v1.PartialOutcome
+	(*Image)(nil),          // 7: wi.core.v1.Image
 }
 var file_wi_core_v1_common_proto_depIdxs = []int32{
-	10, // 0: wi.core.v1.Approval.expires_at:type_name -> google.protobuf.Timestamp
-	1,  // [1:1] is the sub-list for method output_type
-	1,  // [1:1] is the sub-list for method input_type
-	1,  // [1:1] is the sub-list for extension type_name
-	1,  // [1:1] is the sub-list for extension extendee
-	0,  // [0:1] is the sub-list for field type_name
+	0, // [0:0] is the sub-list for method output_type
+	0, // [0:0] is the sub-list for method input_type
+	0, // [0:0] is the sub-list for extension type_name
+	0, // [0:0] is the sub-list for extension extendee
+	0, // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_common_proto_init() }
@@ -733,8 +586,8 @@ func file_wi_core_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_common_proto_rawDesc), len(file_wi_core_v1_common_proto_rawDesc)),
-			NumEnums:      6,
-			NumMessages:   4,
+			NumEnums:      5,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

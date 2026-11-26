@@ -77,7 +77,7 @@ func TestSendingToAStoppedAgentLoadsItsEnvrcWithoutAsking(t *testing.T) {
 		if job.State == v1.JobState_JOB_STATE_SUCCEEDED {
 			break
 		}
-		if job.State == v1.JobState_JOB_STATE_FAILED || job.State == v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL || time.Now().After(deadline) {
+		if job.State == v1.JobState_JOB_STATE_FAILED || time.Now().After(deadline) {
 			t.Fatalf("send job: %v", job)
 		}
 	}

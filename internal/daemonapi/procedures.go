@@ -138,7 +138,6 @@ var procedures = map[string]procedure{
 	c.JobServiceGetJobProcedure:         noItem,
 	c.JobServiceListJobsProcedure:       {item: itemField, optionalItem: true},
 	c.JobServiceWatchJobProcedure:       noItem,
-	c.JobServiceAnswerApprovalProcedure: noItem,
 	c.JobServiceCancelJobProcedure:      noItem,
 
 	// Reviews.

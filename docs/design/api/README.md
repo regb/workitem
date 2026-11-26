@@ -39,14 +39,14 @@ under `proto/wi/core/v1/`.
 
 | File | Services |
 | --- | --- |
-| `common.proto` | Shared enums and messages: states, statuses, agent mode, approvals, partial outcomes |
+| `common.proto` | Shared enums and messages: states, statuses, agent mode, partial outcomes |
 | `items.proto` | `ItemService`: items, lists in the requested order, search, edits, attention state, blockers, notes, attachments, history |
 | `lifecycle.proto` | `LifecycleService`: create and start, start, shelve, close, reopen |
 | `workspaces.proto` | `WorkspaceService`: claim and setup, commit, release, uncommitted files, file search, reading and saving checkout files |
 | `agents.proto` | `AgentService`, `ControlService`: agent state, start, stop, restart, messages, conversation, live content, settings, title suggestions, control leases |
 | `repositories.proto` | `RepositoryService`: registration, upstream and sync, integrating an item, settings, checkout setup, files, variables |
 | `profiles.proto` | `AgentProfileService`: agent profiles and drivers |
-| `jobs.proto` | `JobService`: long operations, progress, approvals, cancellation |
+| `jobs.proto` | `JobService`: long operations, progress, cancellation |
 | `events.proto` | `EventService`: the change feed |
 | `system.proto` | `SystemService`: info, health, diagnostics, config, plugin registry, shutdown |
 | `views.proto` | `ViewService`: composite reads, such as everything a conversation page shows for an item, at one point in time |
@@ -137,7 +137,7 @@ Job summaries are persisted in the daemon database before publication. A
 disconnected client does not stop its job. Execution does not resume after
 a daemon restart: every unfinished summary becomes `FAILED` with error
 `interrupted by a daemon restart`. Its last recorded progress and partial
-outcome remain available, but approvals are cleared. Explicit cancellation
+outcome remain available. Explicit cancellation
 remains `CANCELLED`. History keeps the latest 500 finished summaries plus
 all unfinished jobs. Evicted IDs return `NOT_FOUND`.
 
@@ -183,7 +183,7 @@ What `wi web`'s credential may call is a table in the daemon, `internal/daemonap
 | `AgentService` | messages, `AbortTurn`, `AnswerQuestion`, history, live content, settings, `RestartAgent`, `SuggestTitle` | `StartAgent`, `StopAgent` (plumbing; the page uses the porcelain) |
 | `ControlService` | all | |
 | `ViewService`, `EventService` | all: `GetItemView`, `Watch`, `WatchChanges` | |
-| `JobService` | `GetJob`, `ListJobs`, `WatchJob`, `CancelJob` | `AnswerApproval` (no job asks any more) |
+| `JobService` | all: `GetJob`, `ListJobs`, `WatchJob`, `CancelJob` | |
 | `WorkspaceService` | files, documents, uncommitted changes, `CommitWorkspace` | `EnsureWorkspace`, `GetWorkspace`, `ReleaseWorkspace`, `SetupWorkspace` (plumbing) |
 | `ReviewService` | everything the review panel does | `GetRevisionPatch` (unused) |
 | `RepositoryService` | list, add, files, checkout setup, environment, `IntegrateItem` | `ReadRepositoryFile` (stored files can hold secrets); `ArchiveRepository`, `RestoreRepository` (irreversible for the page's purposes); renaming, upstream, sync and raw settings (operator commands) |

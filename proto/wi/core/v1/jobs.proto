@@ -11,12 +11,12 @@ option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
 // them, such as setting up a checkout, starting an agent, synchronizing a
 // repository, integrating an item, or starting an item. A job keeps running when its client
 // disconnects. Its final state is read through the domain services, such as
-// ItemService.GetItem; the job reports progress, approvals and outcome.
+// ItemService.GetItem; the job reports progress and outcome.
 // Summaries are committed to the daemon database before being published.
-// Summaries survive restart; execution and approval challenges do not resume.
+// Summaries survive restart; execution does not resume.
 // A job unfinished when the daemon stops is recovered as FAILED with error
 // "interrupted by a daemon restart", preserving its last recorded progress and
-// partial outcome and clearing approvals. History retains the latest 500
+// partial outcome. History retains the latest 500
 // finished summaries plus all unfinished jobs. Older IDs return NOT_FOUND.
 service JobService {
   rpc GetJob(GetJobRequest) returns (GetJobResponse) {
@@ -30,9 +30,6 @@ service JobService {
   // first message is the current state, so a late watcher misses nothing
   // that matters.
   rpc WatchJob(WatchJobRequest) returns (stream WatchJobResponse);
-  // AnswerApproval is kept for compatibility. No job waits for an approval
-  // any more, so it always fails with FAILED_PRECONDITION.
-  rpc AnswerApproval(AnswerApprovalRequest) returns (AnswerApprovalResponse);
   // CancelJob asks a running job to stop. Steps already done are kept and
   // reported as its partial outcome.
   rpc CancelJob(CancelJobRequest) returns (CancelJobResponse);
@@ -43,8 +40,8 @@ enum JobState {
   JOB_STATE_UNSPECIFIED = 0;
   JOB_STATE_QUEUED = 1;
   JOB_STATE_RUNNING = 2;
-  // WAITING_FOR_APPROVAL is no longer used: no job waits for an approval.
-  JOB_STATE_WAITING_FOR_APPROVAL = 3;
+  reserved 3;
+  reserved "JOB_STATE_WAITING_FOR_APPROVAL";
   JOB_STATE_SUCCEEDED = 4;
   JOB_STATE_FAILED = 5;
   JOB_STATE_CANCELLED = 6;
@@ -66,8 +63,8 @@ message Job {
   string phase = 6;
   // log_tail is the end of the job's log, such as setup command output.
   string log_tail = 7;
-  // approval is no longer set: no job waits for an approval.
-  Approval approval = 8;
+  reserved 8;
+  reserved "approval";
   // error explains a failure; partial says what was kept.
   string error = 9;
   PartialOutcome partial = 10;
@@ -100,16 +97,6 @@ message WatchJobRequest {
 }
 
 message WatchJobResponse {
-  Job job = 1;
-}
-
-message AnswerApprovalRequest {
-  string job_id = 1;
-  string challenge_id = 2;
-  ApprovalDecision decision = 3;
-}
-
-message AnswerApprovalResponse {
   Job job = 1;
 }
 

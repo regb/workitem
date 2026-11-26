@@ -39,9 +39,6 @@ const (
 	JobServiceListJobsProcedure = "/wi.core.v1.JobService/ListJobs"
 	// JobServiceWatchJobProcedure is the fully-qualified name of the JobService's WatchJob RPC.
 	JobServiceWatchJobProcedure = "/wi.core.v1.JobService/WatchJob"
-	// JobServiceAnswerApprovalProcedure is the fully-qualified name of the JobService's AnswerApproval
-	// RPC.
-	JobServiceAnswerApprovalProcedure = "/wi.core.v1.JobService/AnswerApproval"
 	// JobServiceCancelJobProcedure is the fully-qualified name of the JobService's CancelJob RPC.
 	JobServiceCancelJobProcedure = "/wi.core.v1.JobService/CancelJob"
 )
@@ -55,9 +52,6 @@ type JobServiceClient interface {
 	// first message is the current state, so a late watcher misses nothing
 	// that matters.
 	WatchJob(context.Context, *connect.Request[v1.WatchJobRequest]) (*connect.ServerStreamForClient[v1.WatchJobResponse], error)
-	// AnswerApproval is kept for compatibility. No job waits for an approval
-	// any more, so it always fails with FAILED_PRECONDITION.
-	AnswerApproval(context.Context, *connect.Request[v1.AnswerApprovalRequest]) (*connect.Response[v1.AnswerApprovalResponse], error)
 	// CancelJob asks a running job to stop. Steps already done are kept and
 	// reported as its partial outcome.
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
@@ -94,12 +88,6 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(jobServiceMethods.ByName("WatchJob")),
 			connect.WithClientOptions(opts...),
 		),
-		answerApproval: connect.NewClient[v1.AnswerApprovalRequest, v1.AnswerApprovalResponse](
-			httpClient,
-			baseURL+JobServiceAnswerApprovalProcedure,
-			connect.WithSchema(jobServiceMethods.ByName("AnswerApproval")),
-			connect.WithClientOptions(opts...),
-		),
 		cancelJob: connect.NewClient[v1.CancelJobRequest, v1.CancelJobResponse](
 			httpClient,
 			baseURL+JobServiceCancelJobProcedure,
@@ -111,11 +99,10 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // jobServiceClient implements JobServiceClient.
 type jobServiceClient struct {
-	getJob         *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
-	listJobs       *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
-	watchJob       *connect.Client[v1.WatchJobRequest, v1.WatchJobResponse]
-	answerApproval *connect.Client[v1.AnswerApprovalRequest, v1.AnswerApprovalResponse]
-	cancelJob      *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
+	getJob    *connect.Client[v1.GetJobRequest, v1.GetJobResponse]
+	listJobs  *connect.Client[v1.ListJobsRequest, v1.ListJobsResponse]
+	watchJob  *connect.Client[v1.WatchJobRequest, v1.WatchJobResponse]
+	cancelJob *connect.Client[v1.CancelJobRequest, v1.CancelJobResponse]
 }
 
 // GetJob calls wi.core.v1.JobService.GetJob.
@@ -133,11 +120,6 @@ func (c *jobServiceClient) WatchJob(ctx context.Context, req *connect.Request[v1
 	return c.watchJob.CallServerStream(ctx, req)
 }
 
-// AnswerApproval calls wi.core.v1.JobService.AnswerApproval.
-func (c *jobServiceClient) AnswerApproval(ctx context.Context, req *connect.Request[v1.AnswerApprovalRequest]) (*connect.Response[v1.AnswerApprovalResponse], error) {
-	return c.answerApproval.CallUnary(ctx, req)
-}
-
 // CancelJob calls wi.core.v1.JobService.CancelJob.
 func (c *jobServiceClient) CancelJob(ctx context.Context, req *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {
 	return c.cancelJob.CallUnary(ctx, req)
@@ -152,9 +134,6 @@ type JobServiceHandler interface {
 	// first message is the current state, so a late watcher misses nothing
 	// that matters.
 	WatchJob(context.Context, *connect.Request[v1.WatchJobRequest], *connect.ServerStream[v1.WatchJobResponse]) error
-	// AnswerApproval is kept for compatibility. No job waits for an approval
-	// any more, so it always fails with FAILED_PRECONDITION.
-	AnswerApproval(context.Context, *connect.Request[v1.AnswerApprovalRequest]) (*connect.Response[v1.AnswerApprovalResponse], error)
 	// CancelJob asks a running job to stop. Steps already done are kept and
 	// reported as its partial outcome.
 	CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error)
@@ -187,12 +166,6 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(jobServiceMethods.ByName("WatchJob")),
 		connect.WithHandlerOptions(opts...),
 	)
-	jobServiceAnswerApprovalHandler := connect.NewUnaryHandler(
-		JobServiceAnswerApprovalProcedure,
-		svc.AnswerApproval,
-		connect.WithSchema(jobServiceMethods.ByName("AnswerApproval")),
-		connect.WithHandlerOptions(opts...),
-	)
 	jobServiceCancelJobHandler := connect.NewUnaryHandler(
 		JobServiceCancelJobProcedure,
 		svc.CancelJob,
@@ -207,8 +180,6 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 			jobServiceListJobsHandler.ServeHTTP(w, r)
 		case JobServiceWatchJobProcedure:
 			jobServiceWatchJobHandler.ServeHTTP(w, r)
-		case JobServiceAnswerApprovalProcedure:
-			jobServiceAnswerApprovalHandler.ServeHTTP(w, r)
 		case JobServiceCancelJobProcedure:
 			jobServiceCancelJobHandler.ServeHTTP(w, r)
 		default:
@@ -230,10 +201,6 @@ func (UnimplementedJobServiceHandler) ListJobs(context.Context, *connect.Request
 
 func (UnimplementedJobServiceHandler) WatchJob(context.Context, *connect.Request[v1.WatchJobRequest], *connect.ServerStream[v1.WatchJobResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.JobService.WatchJob is not implemented"))
-}
-
-func (UnimplementedJobServiceHandler) AnswerApproval(context.Context, *connect.Request[v1.AnswerApprovalRequest]) (*connect.Response[v1.AnswerApprovalResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.JobService.AnswerApproval is not implemented"))
 }
 
 func (UnimplementedJobServiceHandler) CancelJob(context.Context, *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {

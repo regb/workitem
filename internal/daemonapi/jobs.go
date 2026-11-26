@@ -82,7 +82,6 @@ func newPersistentJobRegistry(ctx context.Context, db *coordinator.Database) (*j
 		if !terminalJob(job.State) {
 			job.State = v1.JobState_JOB_STATE_FAILED
 			job.Error = "interrupted by a daemon restart"
-			job.Approval = nil
 			job.FinishedAt = stamp(time.Now())
 			if err := r.persist(job); err != nil {
 				return nil, err
@@ -225,7 +224,6 @@ func (r *jobRegistry) startKey(kind, key, item, repo string, run func(context.Co
 		err := run(ctx, job)
 		job.change(func(v *v1.Job) {
 			v.FinishedAt = stamp(time.Now())
-			v.Approval = nil
 			if err == nil {
 				v.State = v1.JobState_JOB_STATE_SUCCEEDED
 				v.Phase = "finished"
@@ -333,11 +331,6 @@ func (s *Server) WatchJob(ctx context.Context, req *connect.Request[v1.WatchJobR
 	}
 }
 
-// AnswerApproval remains in the API for compatibility: no job pauses for an
-// approval any more, so there is never a challenge to answer.
-func (s *Server) AnswerApproval(context.Context, *connect.Request[v1.AnswerApprovalRequest]) (*connect.Response[v1.AnswerApprovalResponse], error) {
-	return nil, precondition("no job is waiting for an approval")
-}
 func (s *Server) CancelJob(ctx context.Context, req *connect.Request[v1.CancelJobRequest]) (*connect.Response[v1.CancelJobResponse], error) {
 	job, err := s.jobs.get(req.Msg.JobId)
 	if err != nil {

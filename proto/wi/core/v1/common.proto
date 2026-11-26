@@ -33,7 +33,6 @@ syntax = "proto3";
 //     carry a PartialOutcome, so the retained result stays visible.
 package wi.core.v1;
 
-import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/regb/workitem/gen/wi/core/v1;corev1";
 
@@ -95,26 +94,6 @@ message PartialOutcome {
   // completed describes the steps that succeeded, for display.
   repeated string completed = 2;
   repeated string warnings = 3;
-}
-
-// Approval is a question an operation needs a person to answer before it
-// continues, such as trusting a checkout's .envrc. It is bound to what it
-// asks about: an answer applies to this challenge only.
-message Approval {
-  string challenge_id = 1;
-  string question = 2;
-  // path is the file the question concerns, when there is one.
-  string path = 3;
-  // digest identifies the content approved, so a changed file asks again.
-  string digest = 4;
-  google.protobuf.Timestamp expires_at = 5;
-}
-
-// ApprovalDecision answers an Approval.
-enum ApprovalDecision {
-  APPROVAL_DECISION_UNSPECIFIED = 0;
-  APPROVAL_DECISION_ALLOW = 1;
-  APPROVAL_DECISION_DENY = 2;
 }
 
 // Image is image content sent to or shown from an agent.

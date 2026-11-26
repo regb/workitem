@@ -119,7 +119,6 @@ var usersOnly = map[string]string{
 	corev1connect.ScheduleServicePutScheduleProcedure:                "changing schedules",
 	corev1connect.ScheduleServiceDeleteScheduleProcedure:             "changing schedules",
 	corev1connect.ScheduleServiceRunScheduleProcedure:                "running a schedule",
-	corev1connect.JobServiceAnswerApprovalProcedure:                  "answering a job's approval",
 	corev1connect.JobServiceCancelJobProcedure:                       "cancelling a job",
 }
 

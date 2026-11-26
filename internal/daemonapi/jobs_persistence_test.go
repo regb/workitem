@@ -20,7 +20,9 @@ func TestJobsRecoverUnfinishedAndKeepFinished(t *testing.T) {
 		{Id: "complete", Kind: "test", State: v1.JobState_JOB_STATE_SUCCEEDED, CreatedAt: stamp(time.Now()), FinishedAt: stamp(time.Now())},
 		{Id: "running", Kind: "test", ItemId: "subject", State: v1.JobState_JOB_STATE_RUNNING, CreatedAt: stamp(time.Now()), Phase: "retained phase", LogTail: "retained log", Partial: &v1.PartialOutcome{Completed: []string{"claimed workspace"}}},
 		{Id: "queued", Kind: "test", State: v1.JobState_JOB_STATE_QUEUED, CreatedAt: stamp(time.Now())},
-		{Id: "approval", Kind: "test", State: v1.JobState_JOB_STATE_WAITING_FOR_APPROVAL, CreatedAt: stamp(time.Now()), Approval: &v1.Approval{ChallengeId: "old"}},
+		// A job an older daemon saved waiting for an approval, a state since
+		// removed, is unfinished: it is recovered as failed too.
+		{Id: "approval", Kind: "test", State: v1.JobState(3), CreatedAt: stamp(time.Now())},
 	}
 	for _, job := range original {
 		raw, _ := proto.Marshal(job)
@@ -57,7 +59,7 @@ func TestJobsRecoverUnfinishedAndKeepFinished(t *testing.T) {
 			}
 			continue
 		}
-		if after.State != v1.JobState_JOB_STATE_FAILED || after.Error != "interrupted by a daemon restart" || after.Approval != nil || after.FinishedAt == nil {
+		if after.State != v1.JobState_JOB_STATE_FAILED || after.Error != "interrupted by a daemon restart" || after.FinishedAt == nil {
 			t.Fatal(after)
 		}
 		if after.Phase != before.Phase || after.LogTail != before.LogTail || !proto.Equal(after.Partial, before.Partial) {
