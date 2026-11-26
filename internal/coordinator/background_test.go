@@ -150,3 +150,19 @@ func TestAnOwnerWorksWhileADelegationWorks(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeToolResultAndInterruptionIndex(t *testing.T) {
+	index := ConversationIndex{}
+	attention := AttentionActivity{}
+	at := time.Now()
+	applyConversationFact(&index, &attention, ConversationEventFact{Role: "user", Timestamp: at, ContentTypes: []string{"text"}})
+	applyConversationFact(&index, &attention, ConversationEventFact{Role: "assistant", Timestamp: at.Add(time.Second), ContentTypes: []string{"tool_use"}})
+	applyConversationFact(&index, &attention, ConversationEventFact{Role: "user", Timestamp: at.Add(2 * time.Second), ContentTypes: []string{"tool_result"}})
+	if index.LastUserPrompt.Timestamp != at || index.LastToolActivity == nil || !index.LastToolActivity.Timestamp.Equal(at.Add(2*time.Second)) {
+		t.Fatalf("%+v", index)
+	}
+	applyConversationFact(&index, &attention, ConversationEventFact{Role: "user", Timestamp: at.Add(3 * time.Second), Terminal: true, Failed: true, StopReason: "interrupted"})
+	if inferIndexedConversationTurnState(index) != "failed" {
+		t.Fatalf("%+v", index)
+	}
+}

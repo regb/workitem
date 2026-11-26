@@ -2,8 +2,6 @@ package coordinator
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"os"
 	"testing"
@@ -11,121 +9,113 @@ import (
 
 	"github.com/regb/workitem/internal/model"
 	processpkg "github.com/regb/workitem/internal/process"
-	"github.com/regb/workitem/internal/store"
 )
 
+// The observer builds an item's agent observation from its verified runtime,
+// its conversation and live runtime activity. The steps share one item.
 func TestExternalObserverVerifiesRuntimeAndBuildsAgentProjection(t *testing.T) {
-	root, itemID := t.TempDir(), importTestID
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC()
-	manifest := model.NewManifest(itemID, "observer", "Observer", nil, false, now, model.Repository{}, model.Checkout{})
-	manifest.State = model.StateActive
+	itemID, now := importTestID, time.Now().UTC()
+	manifest := testManifest(itemID, "observer", "Observer", now)
 	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: "session-1", Locator: "sessions/pi/session-1.jsonl"}
-	if err := native.CreateItem(context.Background(), manifest); err != nil {
-		t.Fatal(err)
-	}
+	db, root := itemDatabase(t, manifest)
 	processInfo, err := processpkg.New().Info(os.Getpid())
 	if err != nil {
 		t.Fatal(err)
 	}
 	runtime := model.AgentRuntime{ID: "runtime-test", WorkItemID: itemID, State: model.AgentRuntimeRunning, HostPID: os.Getpid(), HostProcessGroup: processInfo.PGRP, HostStartTime: processInfo.StartTime, StartedAt: now, UpdatedAt: now}
-	if err := native.SaveAgentRuntime(context.Background(), itemID, runtime); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	encodedManifest, _ := json.Marshal(manifest)
-	digest := sha256.Sum256(encodedManifest)
-	if _, err := db.SyncImportedManifests(map[string]ImportedManifest{itemID: {Manifest: manifest, Digest: hex.EncodeToString(digest[:])}}, true); err != nil {
-		t.Fatal(err)
-	}
-	last := now.Add(-time.Second)
-	piIndex := ConversationIndex{WorkItemID: itemID, ConversationID: "session-1", Source: "items/" + itemID + "/sessions/pi/session-1.jsonl", ObservedAt: now, InferredTurnState: "idle", LastTurnActivity: &ConversationEventFact{Timestamp: last, Role: "assistant", Terminal: true}}
-	encodedIndex, _ := json.Marshal(piIndex)
-	safeRuntime := runtime
-	encodedRuntime, _ := json.Marshal(safeRuntime)
-	if err := db.UpdateProjections([]ProjectionUpdate{{Projection: ConversationProjection, Key: itemID, Value: encodedIndex}, {Projection: RuntimeOwnershipProjection, Key: itemID, Value: encodedRuntime}}); err != nil {
-		t.Fatal(err)
-	}
 	observer := NewExternalObserver(db, root)
-	if err := observer.Reconcile(context.Background()); err != nil {
-		t.Fatal(err)
+	ctx := context.Background()
+	put := func(values map[string]any) {
+		t.Helper()
+		var updates []ProjectionUpdate
+		for projection, value := range values {
+			encoded, _ := json.Marshal(value)
+			updates = append(updates, ProjectionUpdate{Projection: projection, Key: itemID, Value: encoded})
+		}
+		if err := db.UpdateProjections(updates); err != nil {
+			t.Fatal(err)
+		}
 	}
-	var projection AgentObservation
-	found, err := db.ReadProjection(AgentObservationProjection, itemID, &projection)
-	if err != nil || !found || projection.Status != "idle" || !projection.ProcessOnline || projection.Worktree == nil || projection.Worktree.Status != "absent" || projection.WorktreeObservedAt.IsZero() {
-		t.Fatalf("projection=%+v found=%v err=%v", projection, found, err)
+	observed := func() AgentObservation {
+		t.Helper()
+		var projection AgentObservation
+		if found, err := db.ReadProjection(AgentObservationProjection, itemID, &projection); err != nil || !found {
+			t.Fatalf("found=%v err=%v", found, err)
+		}
+		return projection
 	}
-	worktreeObservedAt := projection.WorktreeObservedAt
-	if err := observer.ReconcileRuntime(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if found, err = db.ReadProjection(AgentObservationProjection, itemID, &projection); err != nil || !found || projection.Worktree == nil || !projection.WorktreeObservedAt.Equal(worktreeObservedAt) {
-		t.Fatalf("runtime-only projection=%+v found=%v err=%v", projection, found, err)
-	}
+	piIndex := ConversationIndex{WorkItemID: itemID, ConversationID: "session-1", Source: "items/" + itemID + "/sessions/pi/session-1.jsonl", ObservedAt: now, InferredTurnState: "idle", LastTurnActivity: &ConversationEventFact{Timestamp: now.Add(-time.Second), Role: "assistant", Terminal: true}}
+	put(map[string]any{ConversationProjection: piIndex, RuntimeOwnershipProjection: runtime})
+	var external AgentObservation
 
-	externalObservedAt := projection.ObservedAt
+	t.Run("a verified runtime and a finished conversation", func(t *testing.T) {
+		if err := observer.Reconcile(ctx); err != nil {
+			t.Fatal(err)
+		}
+		external = observed()
+		if external.Status != "idle" || !external.ProcessOnline || external.Worktree == nil || external.Worktree.Status != "absent" || external.WorktreeObservedAt.IsZero() {
+			t.Fatalf("projection=%+v", external)
+		}
+		if err := observer.ReconcileRuntime(ctx); err != nil {
+			t.Fatal(err)
+		}
+		runtimeOnly := observed()
+		if runtimeOnly.Worktree == nil || !runtimeOnly.WorktreeObservedAt.Equal(external.WorktreeObservedAt) {
+			t.Fatalf("runtime-only reconciliation changed the worktree observation: %+v", runtimeOnly)
+		}
+		external = runtimeOnly
+	})
+
 	promptAt := now.Add(time.Second)
-	piIndex.InferredTurnState = "incomplete"
-	piIndex.LastTurnActivity = &ConversationEventFact{Timestamp: promptAt, Role: "user"}
-	piIndex.LastUserPrompt = piIndex.LastTurnActivity
-	activity := AttentionActivity{WorkItemID: itemID, LastRequestedAt: &promptAt, ObservedAt: promptAt, Source: piIndex.Source}
-	encodedIndex, _ = json.Marshal(piIndex)
-	encodedActivity, _ := json.Marshal(activity)
-	if err := db.UpdateProjections([]ProjectionUpdate{{Projection: ConversationProjection, Key: itemID, Value: encodedIndex}, {Projection: AttentionActivityProjection, Key: itemID, Value: encodedActivity}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := observer.ReconcileActionability(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if found, err = db.ReadProjection(AgentObservationProjection, itemID, &projection); err != nil || !found || projection.Status != "busy" || projection.Activity.LastRequestedAt == nil || !projection.Activity.LastRequestedAt.Equal(promptAt) || projection.Worktree == nil || !projection.ObservedAt.Equal(externalObservedAt) {
-		t.Fatalf("refreshed projection=%+v found=%v err=%v", projection, found, err)
-	}
+	t.Run("a new prompt makes it busy", func(t *testing.T) {
+		piIndex.InferredTurnState = "incomplete"
+		piIndex.LastTurnActivity = &ConversationEventFact{Timestamp: promptAt, Role: "user"}
+		piIndex.LastUserPrompt = piIndex.LastTurnActivity
+		put(map[string]any{ConversationProjection: piIndex, AttentionActivityProjection: AttentionActivity{WorkItemID: itemID, LastRequestedAt: &promptAt, ObservedAt: promptAt, Source: piIndex.Source}})
+		if err := observer.ReconcileActionability(ctx); err != nil {
+			t.Fatal(err)
+		}
+		got := observed()
+		if got.Status != "busy" || got.Activity.LastRequestedAt == nil || !got.Activity.LastRequestedAt.Equal(promptAt) || got.Worktree == nil || !got.ObservedAt.Equal(external.ObservedAt) {
+			t.Fatalf("refreshed projection=%+v", got)
+		}
+	})
 
-	settledAt := promptAt.Add(time.Second)
-	piIndex.InferredTurnState = "idle"
-	piIndex.LastTurnActivity = &ConversationEventFact{Timestamp: settledAt, Role: "assistant", Terminal: true}
-	staleAt := settledAt.Add(time.Second)
-	staleRuntime := RuntimeActivity{WorkItemID: itemID, RuntimeID: "runtime-old", TurnState: "busy", LastEventAt: &staleAt, LastRequestedAt: &staleAt, ObservedAt: staleAt, Source: "daemon.runtime.live"}
-	encodedIndex, _ = json.Marshal(piIndex)
-	encodedStaleRuntime, _ := json.Marshal(staleRuntime)
-	if err := db.UpdateProjections([]ProjectionUpdate{{Projection: ConversationProjection, Key: itemID, Value: encodedIndex}, {Projection: RuntimeActivityProjection, Key: itemID, Value: encodedStaleRuntime}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := observer.ReconcileActionability(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if found, err = db.ReadProjection(AgentObservationProjection, itemID, &projection); err != nil || !found || projection.Status != "idle" || projection.Reason != "latest assistant answer is terminal" {
-		t.Fatalf("stale owner activity remained actionable: projection=%+v found=%v err=%v", projection, found, err)
-	}
+	staleAt := promptAt.Add(2 * time.Second)
+	t.Run("a replaced runtime's activity is ignored", func(t *testing.T) {
+		piIndex.InferredTurnState = "idle"
+		piIndex.LastTurnActivity = &ConversationEventFact{Timestamp: promptAt.Add(time.Second), Role: "assistant", Terminal: true}
+		put(map[string]any{ConversationProjection: piIndex, RuntimeActivityProjection: RuntimeActivity{WorkItemID: itemID, RuntimeID: "runtime-old", TurnState: "busy", LastEventAt: &staleAt, LastRequestedAt: &staleAt, ObservedAt: staleAt, Source: "daemon.runtime.live"}})
+		if err := observer.ReconcileActionability(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if got := observed(); got.Status != "idle" || got.Reason != "latest assistant answer is terminal" {
+			t.Fatalf("stale owner activity remained actionable: %+v", got)
+		}
+	})
 
 	// Actionability reconciliation must compare live activity with canonical
 	// runtime ownership, not the potentially stale owner cached in an earlier
 	// agent observation. Otherwise a current settled event can be overwritten
 	// by the native session's incomplete fallback after runtime replacement.
-	piIndex.InferredTurnState = "incomplete"
-	piIndex.LastTurnActivity = &ConversationEventFact{Timestamp: promptAt, Role: "user"}
-	currentSettledAt := staleAt.Add(time.Second)
-	currentRuntime := RuntimeActivity{WorkItemID: itemID, RuntimeID: runtime.ID, TurnState: "idle", LastEventAt: &currentSettledAt, LastCompletedAt: &currentSettledAt, ObservedAt: currentSettledAt, Source: "daemon.runtime.live"}
-	projection.Runtime = &model.AgentRuntime{ID: "runtime-old", WorkItemID: itemID}
-	projection.Status = "busy"
-	projection.Reason = "latest conversation activity is incomplete and runtime ownership is online"
-	encodedIndex, _ = json.Marshal(piIndex)
-	encodedCurrentRuntime, _ := json.Marshal(currentRuntime)
-	encodedProjection, _ := json.Marshal(projection)
-	if err := db.UpdateProjections([]ProjectionUpdate{{Projection: ConversationProjection, Key: itemID, Value: encodedIndex}, {Projection: RuntimeActivityProjection, Key: itemID, Value: encodedCurrentRuntime}, {Projection: AgentObservationProjection, Key: itemID, Value: encodedProjection}}); err != nil {
-		t.Fatal(err)
-	}
-	if err := observer.ReconcileActionability(context.Background()); err != nil {
-		t.Fatal(err)
-	}
-	if found, err = db.ReadProjection(AgentObservationProjection, itemID, &projection); err != nil || !found || projection.Status != "idle" || projection.Reason != "live runtime event reports settled work" || projection.Runtime == nil || projection.Runtime.ID != runtime.ID {
-		t.Fatalf("current settled activity was not restored from canonical ownership: projection=%+v found=%v err=%v", projection, found, err)
-	}
+	t.Run("canonical ownership, not the cached owner, decides", func(t *testing.T) {
+		piIndex.InferredTurnState = "incomplete"
+		piIndex.LastTurnActivity = &ConversationEventFact{Timestamp: promptAt, Role: "user"}
+		settledAt := staleAt.Add(time.Second)
+		cached := observed()
+		cached.Runtime = &model.AgentRuntime{ID: "runtime-old", WorkItemID: itemID}
+		cached.Status = "busy"
+		cached.Reason = "latest conversation activity is incomplete and runtime ownership is online"
+		put(map[string]any{
+			ConversationProjection:     piIndex,
+			RuntimeActivityProjection:  RuntimeActivity{WorkItemID: itemID, RuntimeID: runtime.ID, TurnState: "idle", LastEventAt: &settledAt, LastCompletedAt: &settledAt, ObservedAt: settledAt, Source: "daemon.runtime.live"},
+			AgentObservationProjection: cached,
+		})
+		if err := observer.ReconcileActionability(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if got := observed(); got.Status != "idle" || got.Reason != "live runtime event reports settled work" || got.Runtime == nil || got.Runtime.ID != runtime.ID {
+			t.Fatalf("current settled activity was not restored from canonical ownership: %+v", got)
+		}
+	})
 }

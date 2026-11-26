@@ -11,36 +11,101 @@ import (
 	"github.com/regb/workitem/internal/model"
 )
 
-func TestInputReadinessDoesNotSettleAnActiveAgentLoop(t *testing.T) {
-	activity := RuntimeActivity{AgentState: "active", TurnState: "busy", RuntimeState: model.AgentRuntimeRunning}
-	observation := AgentObservation{Status: "busy", TurnState: "incomplete"}
-	for _, tt := range []struct{ readiness, want string }{{"ready", "busy"}, {"blocked", "problem"}, {"waiting_input", "problem"}, {"busy", "busy"}} {
-		applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: tt.readiness, ReasonCode: "interaction_required", Timestamp: time.Now()}, activity)
-		if observation.Status != tt.want {
-			t.Fatalf("readiness=%s observation=%+v want=%s", tt.readiness, observation, tt.want)
-		}
+// liveActivity is the activity the events leave, from base.
+func liveActivity(base RuntimeActivity, events ...RuntimeSemanticEvent) RuntimeActivity {
+	for _, event := range events {
+		applyRuntimeActivity(&base, runtimeEventHeader{Type: event.Type, Timestamp: event.Timestamp, Failed: event.Failed, Outcome: event.Outcome, Readiness: event.Readiness, ReasonCode: event.ReasonCode, UsageProvider: event.UsageProvider}, importTestID, "owner")
+	}
+	return base
+}
+
+// A live runtime event moves the prior observation, given the activity it
+// leaves, to a status.
+func TestLiveRuntimeObservation(t *testing.T) {
+	now := time.Now()
+	status := func(readiness, reason string) RuntimeSemanticEvent {
+		return RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: readiness, ReasonCode: reason, Timestamp: now}
+	}
+	ready := func(kind, readiness, reason string) RuntimeSemanticEvent {
+		return RuntimeSemanticEvent{Type: kind, Readiness: readiness, ReasonCode: reason, Timestamp: now}
+	}
+	failed := func(kind string) RuntimeSemanticEvent {
+		return RuntimeSemanticEvent{Type: kind, Failed: true, Timestamp: now}
+	}
+	started := RuntimeSemanticEvent{Type: agent.EventAgentStarted, Timestamp: now}
+	usage := RuntimeSemanticEvent{Type: agent.EventAgentSettled, Failed: true, Outcome: "failed", ReasonCode: "usage_limit", UsageProvider: "codex", Timestamp: now}
+	prompt := status("awaiting_confirmation", "execution_pending")
+	active := RuntimeActivity{AgentState: "active", TurnState: "busy", RuntimeState: model.AgentRuntimeRunning}
+	settled := RuntimeActivity{AgentState: "settled", TurnState: "idle", RuntimeState: model.AgentRuntimeRunning}
+	busy := AgentObservation{Status: "busy", TurnState: "incomplete"}
+	idle := AgentObservation{Status: "idle", TurnState: "idle"}
+	problem := AgentObservation{Status: "problem", TurnState: "failed"}
+	type row struct {
+		name     string
+		prior    AgentObservation
+		activity RuntimeActivity
+		event    RuntimeSemanticEvent
+		want     string
+		turn     string
+		check    func(AgentObservation) bool
+	}
+	rows := []row{
+		{name: "input readiness does not settle an active loop", prior: busy, activity: active, event: status("ready", "interaction_required"), want: "busy"},
+		{name: "blocked input in an active loop", prior: busy, activity: active, event: status("blocked", "interaction_required"), want: "problem"},
+		{name: "required interaction in an active loop", prior: busy, activity: active, event: status("waiting_input", "interaction_required"), want: "problem"},
+		{name: "busy readiness after required interaction", prior: AgentObservation{Status: "problem", TurnState: "incomplete"}, activity: active, event: status("busy", "interaction_required"), want: "busy"},
+		{name: "a session that never started", prior: AgentObservation{Status: "idle"}, event: status("waiting_input", "session_start_pending"), want: "problem"},
+		{name: "a question answered", prior: AgentObservation{Status: "idle", TurnState: "incomplete"}, activity: active, event: status("busy", "active_turn"), want: "busy"},
+		{name: "a received prompt is work at once", prior: idle, activity: liveActivity(RuntimeActivity{AgentState: "settled", TurnState: "idle"}, prompt), event: prompt, want: "busy"},
+		{name: "a command still being confirmed is not yet work", prior: idle, event: status("awaiting_confirmation", "command_submitted"), want: "idle"},
+		{name: "a usage limit says so", activity: liveActivity(RuntimeActivity{}, usage), event: usage, want: "problem", check: func(o AgentObservation) bool {
+			return o.Reason == driverprotocol.RuntimeReasonText("usage_limit") && o.FailureProvider == "codex"
+		}},
+	}
+	for _, reason := range []string{"editor_not_empty", "editor_not_visible"} {
+		rows = append(rows,
+			row{name: reason + " in a settled agent is no problem", prior: idle, activity: settled, event: status("waiting_input", reason), want: "idle"},
+			row{name: reason + " does not hide an active turn", prior: busy, activity: active, event: status("waiting_input", reason), want: "busy"})
+	}
+	for _, reason := range []string{"question_pending", "plan_approval_pending", "permission_pending"} {
+		rows = append(rows, row{name: reason + " mid-turn needs attention, not a fix", prior: busy, activity: active, event: status("waiting_input", reason), want: "idle", check: func(o AgentObservation) bool { return o.Reason != "" }})
+	}
+	for _, kind := range []string{agent.EventAgentSettled, agent.EventTurnEnded} {
+		rows = append(rows,
+			row{name: "failed " + kind, prior: AgentObservation{Status: "busy"}, activity: liveActivity(RuntimeActivity{}, failed(kind)), event: failed(kind), want: "problem", turn: "failed"},
+			row{name: "a start after failed " + kind, prior: problem, activity: liveActivity(RuntimeActivity{}, failed(kind), started), event: started, want: "busy"})
+	}
+	for _, kind := range []string{agent.EventRuntimeReady, agent.EventRuntimeStatus} {
+		late, fresh := ready(kind, "ready", "headless_ready"), ready(kind, "busy", "active_turn")
+		rows = append(rows,
+			row{name: "late " + kind + " keeps a failed turn", prior: problem, activity: liveActivity(RuntimeActivity{}, failed(agent.EventAgentSettled), late), event: late, want: "problem", turn: "failed"},
+			row{name: "busy " + kind + " after a failed turn is fresh work", prior: problem, activity: liveActivity(RuntimeActivity{}, failed(agent.EventAgentSettled), fresh), event: fresh, want: "busy", turn: "incomplete"})
+	}
+	for _, tt := range rows {
+		t.Run(tt.name, func(t *testing.T) {
+			observation := tt.prior
+			applyLiveRuntimeObservation(&observation, tt.event, tt.activity)
+			if observation.Status != tt.want || (tt.turn != "" && observation.TurnState != tt.turn) || (tt.check != nil && !tt.check(observation)) {
+				t.Fatalf("observation=%+v, want status %s turn %q", observation, tt.want, tt.turn)
+			}
+		})
 	}
 }
 
-func TestADraftInTheEditorIsNotAProblem(t *testing.T) {
-	for _, reason := range []string{"editor_not_empty", "editor_not_visible"} {
-		event := RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: "waiting_input", ReasonCode: reason, Timestamp: time.Now()}
-		idle := AgentObservation{Status: "idle", TurnState: "idle"}
-		applyLiveRuntimeObservation(&idle, event, RuntimeActivity{AgentState: "settled", TurnState: "idle", RuntimeState: model.AgentRuntimeRunning})
-		if idle.Status != "idle" {
-			t.Fatalf("%s made a settled agent a problem: %+v", reason, idle)
-		}
-		busy := AgentObservation{Status: "busy", TurnState: "incomplete"}
-		applyLiveRuntimeObservation(&busy, event, RuntimeActivity{AgentState: "active", TurnState: "busy", RuntimeState: model.AgentRuntimeRunning})
-		if busy.Status != "busy" {
-			t.Fatalf("%s hid an active turn: %+v", reason, busy)
-		}
+// Runtime activity records a failure's reason until the next turn, and a
+// received prompt as a request.
+func TestRuntimeActivityFromLiveEvents(t *testing.T) {
+	at := time.Now()
+	activity := liveActivity(RuntimeActivity{}, RuntimeSemanticEvent{Type: agent.EventAgentSettled, Timestamp: at, Failed: true, Outcome: "failed", ReasonCode: "usage_limit", UsageProvider: "codex"})
+	if activity.AgentState != "failed" || activity.FailureReason != "usage_limit" || activity.FailureProvider != "codex" {
+		t.Fatalf("activity=%+v", activity)
 	}
-	// A session that never started still needs the operator.
-	stuck := AgentObservation{Status: "idle"}
-	applyLiveRuntimeObservation(&stuck, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: "waiting_input", ReasonCode: "session_start_pending", Timestamp: time.Now()}, RuntimeActivity{})
-	if stuck.Status != "problem" {
-		t.Fatalf("pending session start was not a problem: %+v", stuck)
+	if activity = liveActivity(activity, RuntimeSemanticEvent{Type: agent.EventAgentStarted, Timestamp: at.Add(time.Second)}); activity.FailureReason != "" || activity.FailureProvider != "" {
+		t.Fatalf("stale failure reason: %+v", activity)
+	}
+	prompted := liveActivity(RuntimeActivity{AgentState: "settled", TurnState: "idle"}, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Timestamp: at, Readiness: "awaiting_confirmation", ReasonCode: "execution_pending"})
+	if prompted.TurnState != "busy" || prompted.LastRequestedAt == nil {
+		t.Fatalf("prompted=%+v", prompted)
 	}
 }
 
@@ -91,22 +156,6 @@ func TestCurrentInputBlockTakesPriorityWithoutHidingLaterSettlement(t *testing.T
 	}
 	if observation.Status != "idle" {
 		t.Fatalf("old input block masked settlement: %+v", observation)
-	}
-}
-
-func TestAQuestionMidTurnNeedsAttentionNotAFix(t *testing.T) {
-	for _, reason := range []string{"question_pending", "plan_approval_pending", "permission_pending"} {
-		observation := AgentObservation{Status: "busy", TurnState: "incomplete"}
-		activity := RuntimeActivity{AgentState: "active", TurnState: "busy", RuntimeState: model.AgentRuntimeRunning}
-		applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: "waiting_input", ReasonCode: reason, Timestamp: time.Now()}, activity)
-		if observation.Status != "idle" || observation.Reason == "" {
-			t.Fatalf("%s: %+v", reason, observation)
-		}
-		// Answering resumes the turn.
-		applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: "busy", ReasonCode: "active_turn", Timestamp: time.Now()}, activity)
-		if observation.Status != "busy" {
-			t.Fatalf("%s answered: %+v", reason, observation)
-		}
 	}
 }
 
@@ -204,48 +253,7 @@ func TestAnAgentBeforeItsFirstTurnIsOnlyAProblemWhenItsRuntimeIsGone(t *testing.
 	}
 }
 
-// A turn that stopped on a usage limit says so instead of a generic failure.
-func TestAUsageLimitIsReportedAsSuch(t *testing.T) {
-	activity := RuntimeActivity{}
-	at := time.Now()
-	header := runtimeEventHeader{Type: agent.EventAgentSettled, Timestamp: at, Failed: true, Outcome: "failed", ReasonCode: "usage_limit", UsageProvider: "codex"}
-	if !applyRuntimeActivity(&activity, header, importTestID, "owner") || activity.AgentState != "failed" || activity.FailureReason != "usage_limit" || activity.FailureProvider != "codex" {
-		t.Fatalf("activity=%+v", activity)
-	}
-	observation := AgentObservation{}
-	applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: agent.EventAgentSettled, Failed: true, ReasonCode: "usage_limit", UsageProvider: "codex", Timestamp: at}, activity)
-	// The driver names whose quota ran out; the daemon waits on it.
-	if observation.Status != "problem" || observation.Reason != driverprotocol.RuntimeReasonText("usage_limit") || observation.FailureProvider != "codex" {
-		t.Fatalf("observation=%+v", observation)
-	}
-	// The next turn clears it.
-	applyRuntimeActivity(&activity, runtimeEventHeader{Type: agent.EventAgentStarted, Timestamp: at.Add(time.Second)}, importTestID, "owner")
-	if activity.FailureReason != "" || activity.FailureProvider != "" {
-		t.Fatalf("stale failure reason: %+v", activity)
-	}
-}
 
-// A prompt the agent received is work in progress at once, not after the
-// model's first output: the picker shows it moving the moment it is sent.
-func TestAReceivedPromptIsWorkInProgress(t *testing.T) {
-	at := time.Now()
-	activity := RuntimeActivity{AgentState: "settled", TurnState: "idle"}
-	header := runtimeEventHeader{Type: agent.EventRuntimeStatus, Timestamp: at, Readiness: "awaiting_confirmation", ReasonCode: "execution_pending"}
-	if !applyRuntimeActivity(&activity, header, importTestID, "owner") || activity.TurnState != "busy" || activity.LastRequestedAt == nil {
-		t.Fatalf("activity=%+v", activity)
-	}
-	observation := AgentObservation{Status: "idle", TurnState: "idle"}
-	applyLiveRuntimeObservation(&observation, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: "awaiting_confirmation", ReasonCode: "execution_pending", Timestamp: at}, activity)
-	if observation.Status != "busy" {
-		t.Fatalf("observation=%+v", observation)
-	}
-	// A command still being confirmed is not yet the agent's.
-	submitted := AgentObservation{Status: "idle", TurnState: "idle"}
-	applyLiveRuntimeObservation(&submitted, RuntimeSemanticEvent{Type: agent.EventRuntimeStatus, Readiness: "awaiting_confirmation", ReasonCode: "command_submitted", Timestamp: at}, RuntimeActivity{})
-	if submitted.Status != "idle" {
-		t.Fatalf("submitted=%+v", submitted)
-	}
-}
 
 // Without live events, an unfinished turn reads busy only while the agent
 // shows activity, or while a tool call awaits its result; a turn that died

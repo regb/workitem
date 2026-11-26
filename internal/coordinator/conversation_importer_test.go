@@ -3,8 +3,6 @@ package coordinator
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -15,13 +13,28 @@ import (
 	"github.com/regb/workitem/internal/model"
 )
 
-func TestConversationImporterIndexesIncrementallyWithoutConversationContent(t *testing.T) {
-	root, itemID, sessionID := t.TempDir(), importTestID, "01KZYHHK91GWS6FZFQZQTT1KJ2"
-	relative := filepath.Join("sessions", "pi", sessionID+".jsonl")
-	path := filepath.Join(root, "items", itemID, relative)
+const testSessionID = "01KZYHHK91GWS6FZFQZQTT1KJ2"
+
+// conversationFixture imports an item whose primary conversation, of driver,
+// holds contents. It returns the conversation's file path and its source.
+func conversationFixture(t *testing.T, driver string, contents []byte) (*Database, string, string, string) {
+	t.Helper()
+	relative := filepath.Join("sessions", driver, testSessionID+".jsonl")
+	manifest := testManifest(importTestID, driver+"-index", "Conversation index", time.Now().UTC())
+	manifest.PrimaryConversation = &model.Conversation{Driver: driver, ID: testSessionID, Locator: relative}
+	db, root := itemDatabase(t, manifest)
+	path := filepath.Join(root, "items", importTestID, relative)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(path, contents, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return db, root, path, filepath.Join("items", importTestID, relative)
+}
+
+func TestConversationImporterIndexesIncrementallyWithoutConversationContent(t *testing.T) {
+	itemID := importTestID
 	at := time.Now().UTC().Truncate(time.Microsecond)
 	values := []map[string]any{
 		{"type": "message", "timestamp": at.Format(time.RFC3339Nano), "message": map[string]any{"role": "user", "content": []map[string]any{{"type": "text", "text": "PRIVATE_USER_PROMPT"}}}},
@@ -35,21 +48,7 @@ func TestConversationImporterIndexesIncrementallyWithoutConversationContent(t *t
 		contents.Write(encoded)
 		contents.WriteByte('\n')
 	}
-	if err := os.WriteFile(path, contents.Bytes(), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	manifest := model.NewManifest(itemID, "pi-index", "Pi index", nil, false, at, model.Repository{}, model.Checkout{})
-	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: sessionID, Locator: relative}
-	encodedManifest, _ := json.Marshal(manifest)
-	digest := sha256.Sum256(encodedManifest)
-	if _, err := db.SyncImportedManifests(map[string]ImportedManifest{itemID: {Manifest: manifest, Digest: hex.EncodeToString(digest[:])}}, true); err != nil {
-		t.Fatal(err)
-	}
+	db, root, _, _ := conversationFixture(t, "pi", contents.Bytes())
 	first, err := ImportConversations(context.Background(), db, root, testConversationDecoders)
 	if err != nil || first.FilesImported != 1 || first.EntriesScanned != 4 || first.MalformedLines != 0 {
 		t.Fatalf("first=%+v err=%v", first, err)
@@ -120,27 +119,8 @@ func testConversationLineDecoder(_ model.Conversation, line uint64, raw []byte) 
 // does for meta and side-chain entries. The import must still advance:
 // otherwise it re-decodes the same records on every pass.
 func TestConversationImporterAdvancesPastRecordsWithoutFacts(t *testing.T) {
-	root, itemID, sessionID := t.TempDir(), importTestID, "01KZYHHK91GWS6FZFQZQTT1KJ2"
-	relative := filepath.Join("sessions", "claude", sessionID+".jsonl")
-	path := filepath.Join(root, "items", itemID, relative)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("{\"meta\":true}\n{\"role\":\"user\"}\n{\"meta\":true}\n{\"role\":\"assistant\"}\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	manifest := model.NewManifest(itemID, "claude-index", "Claude index", nil, false, time.Now().UTC(), model.Repository{}, model.Checkout{})
-	manifest.PrimaryConversation = &model.Conversation{Driver: "claude", ID: sessionID, Locator: relative}
-	encodedManifest, _ := json.Marshal(manifest)
-	digest := sha256.Sum256(encodedManifest)
-	if _, err := db.SyncImportedManifests(map[string]ImportedManifest{itemID: {Manifest: manifest, Digest: hex.EncodeToString(digest[:])}}, true); err != nil {
-		t.Fatal(err)
-	}
+	itemID := importTestID
+	db, root, _, _ := conversationFixture(t, "claude", []byte("{\"meta\":true}\n{\"role\":\"user\"}\n{\"meta\":true}\n{\"role\":\"assistant\"}\n"))
 	calls := 0
 	decoders := ConversationDecoders{"claude": func(_ context.Context, _ model.Conversation, records []ConversationRecord) ([]ConversationEventFact, []bool, error) {
 		calls++
@@ -189,32 +169,12 @@ func (l *racingLock) Lock() {
 func (l *racingLock) Unlock() { l.mu.Unlock() }
 
 func TestConversationImportsDecodeOutsideTheLockWithoutApplyingTwice(t *testing.T) {
-	root, itemID, sessionID := t.TempDir(), importTestID, "01KZYHHK91GWS6FZFQZQTT1KJ2"
-	relative := filepath.Join("sessions", "pi", sessionID+".jsonl")
-	path := filepath.Join(root, "items", itemID, relative)
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		t.Fatal(err)
-	}
 	at := time.Now().UTC()
 	line := func(role string, offset time.Duration) string {
 		encoded, _ := json.Marshal(map[string]any{"type": "message", "timestamp": at.Add(offset).Format(time.RFC3339Nano), "message": map[string]any{"role": role, "stopReason": "stop"}})
 		return string(encoded) + "\n"
 	}
-	if err := os.WriteFile(path, []byte(line("user", 0)+line("assistant", time.Second)), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	manifest := model.NewManifest(itemID, "pi-race", "Pi race", nil, false, at, model.Repository{}, model.Checkout{})
-	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: sessionID, Locator: relative}
-	encodedManifest, _ := json.Marshal(manifest)
-	digest := sha256.Sum256(encodedManifest)
-	if _, err := db.SyncImportedManifests(map[string]ImportedManifest{itemID: {Manifest: manifest, Digest: hex.EncodeToString(digest[:])}}, true); err != nil {
-		t.Fatal(err)
-	}
+	db, root, _, source := conversationFixture(t, "pi", []byte(line("user", 0)+line("assistant", time.Second)))
 	lock := &racingLock{race: func() {
 		if _, err := ImportConversations(context.Background(), db, root, testConversationDecoders); err != nil {
 			t.Error(err)
@@ -224,8 +184,40 @@ func TestConversationImportsDecodeOutsideTheLockWithoutApplyingTwice(t *testing.
 	if err != nil || len(report.Warnings) != 0 || report.FilesImported != 0 {
 		t.Fatalf("racing import report=%+v err=%v", report, err)
 	}
-	checkpoint, found, err := db.SourceCheckpoint(filepath.Join("items", itemID, relative))
+	checkpoint, found, err := db.SourceCheckpoint(source)
 	if err != nil || !found || checkpoint.RecordsImported != 2 {
 		t.Fatalf("records applied twice or lost: %+v found=%v err=%v", checkpoint, found, err)
+	}
+}
+
+// A malformed line is skipped and counted; a line still being written is left
+// for the next import.
+func TestConversationImporterSkipsMalformedAndWaitsForPartialLines(t *testing.T) {
+	at := time.Now().UTC()
+	line := func(role string, offset time.Duration) string {
+		encoded, _ := json.Marshal(map[string]any{"type": "message", "timestamp": at.Add(offset).Format(time.RFC3339Nano), "message": map[string]any{"role": role, "stopReason": "stop"}})
+		return string(encoded) + "\n"
+	}
+	last := line("assistant", time.Second)
+	db, root, path, _ := conversationFixture(t, "pi", []byte(line("user", 0)+"{truncated\n"+last[:10]))
+	first, err := ImportConversations(context.Background(), db, root, testConversationDecoders)
+	if err != nil || first.EntriesScanned != 1 || first.MalformedLines != 1 {
+		t.Fatalf("first=%+v err=%v", first, err)
+	}
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := file.WriteString(last[10:]); err != nil {
+		t.Fatal(err)
+	}
+	file.Close()
+	second, err := ImportConversations(context.Background(), db, root, testConversationDecoders)
+	if err != nil || second.EntriesScanned != 1 || second.MalformedLines != 0 {
+		t.Fatalf("second=%+v err=%v", second, err)
+	}
+	var index ConversationIndex
+	if ok, err := db.ReadProjection(ConversationProjection, importTestID, &index); err != nil || !ok || index.EntriesScanned != 2 || index.MalformedLines != 1 || index.LastTerminalAssistant == nil {
+		t.Fatalf("index=%+v ok=%v err=%v", index, ok, err)
 	}
 }
