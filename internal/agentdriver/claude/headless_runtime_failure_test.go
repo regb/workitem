@@ -13,6 +13,8 @@ import (
 	"time"
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestHeadlessRuntimeFailurePaths(t *testing.T) {
@@ -30,7 +32,7 @@ func TestHeadlessRuntimeFailurePaths(t *testing.T) {
 		{scenario: "hold"},
 	} {
 		t.Run(tc.scenario, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := testutil.ShortTempDir(t)
 			backend := filepath.Join(dir, "backend")
 			if err := os.WriteFile(backend, []byte("#!/bin/sh\nWI_CLAUDE_HEADLESS_TEST=1 exec "+quote(os.Args[0])+" -test.run=TestClaudeHeadlessBackendProcess -- \"$@\"\n"), 0700); err != nil {
 				t.Fatal(err)

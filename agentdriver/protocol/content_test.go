@@ -6,10 +6,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestContentSnapshotsAreBoundedReadOnlyAndOwnerScoped(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "content.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	server, err := ListenContent(path, "runtime", "item", true)
 	if err != nil {
 		t.Fatal(err)

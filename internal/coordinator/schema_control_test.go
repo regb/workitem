@@ -7,10 +7,12 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestSchemaSkewCannotStopOrMutateDaemon(t *testing.T) {
-	root, runtime := t.TempDir(), t.TempDir()
+	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
 	socket, err := SocketPath(runtime, root)
 	if err != nil {
 		t.Fatal(err)
@@ -60,7 +62,7 @@ func TestSchemaSkewCannotStopOrMutateDaemon(t *testing.T) {
 }
 
 func TestStatusRetainsSchemaOnBuildMismatch(t *testing.T) {
-	root, runtime := t.TempDir(), t.TempDir()
+	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
 	socket, _ := SocketPath(runtime, root)
 	server, err := NewServer(root, socket)
 	if err != nil {

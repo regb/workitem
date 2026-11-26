@@ -13,10 +13,12 @@ import (
 
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestServerStatusAndShutdown(t *testing.T) {
-	root, runtime := t.TempDir(), t.TempDir()
+	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
 	socket, err := SocketPath(runtime, root)
 	if err != nil {
 		t.Fatal(err)
@@ -125,7 +127,7 @@ func TestActivityBarrierIndexesPromptBeforeReturningSnapshot(t *testing.T) {
 	if err := seedRoot(context.Background(), root); err != nil {
 		t.Fatal(err)
 	}
-	socket, _ := SocketPath(t.TempDir(), root)
+	socket, _ := SocketPath(testutil.ShortTempDir(t), root)
 	server, err := NewServer(root, socket, testConversationDecoders)
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +154,7 @@ func TestActivityBarrierIndexesPromptBeforeReturningSnapshot(t *testing.T) {
 }
 
 func TestServerRejectsProtocolMismatch(t *testing.T) {
-	root, runtime := t.TempDir(), t.TempDir()
+	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
 	socket, _ := SocketPath(runtime, root)
 	server, err := NewServer(root, socket)
 	if err != nil {
@@ -179,7 +181,7 @@ func TestServerRejectsProtocolMismatch(t *testing.T) {
 }
 
 func TestServerRefusesToReplaceNonSocket(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "wi", "blocked.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "wi", "blocked.sock")
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +200,7 @@ func TestServerRefusesToReplaceNonSocket(t *testing.T) {
 // A managed daemon belongs to a service manager: no client, of this build or
 // another, can shut it down or replace it, and it says so.
 func TestManagedServerRefusesShutdown(t *testing.T) {
-	root, runtime := t.TempDir(), t.TempDir()
+	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
 	socket, err := SocketPath(runtime, root)
 	if err != nil {
 		t.Fatal(err)

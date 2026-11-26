@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestControlContentValidation(t *testing.T) {
@@ -53,7 +55,7 @@ func TestControlContentValidation(t *testing.T) {
 }
 
 func TestControlTransportSupportsImageLimit(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "control.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "control.sock")
 	server, err := ListenControl(path)
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +82,7 @@ func TestControlTransportSupportsImageLimit(t *testing.T) {
 }
 
 func TestControlServerValidatesDirectClients(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "control.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "control.sock")
 	server, err := ListenControl(path)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +124,7 @@ func TestEventLimitRemainsOneMiB(t *testing.T) {
 // A command refused because the agent was at work stays recognizable as such
 // on the client's side, with the driver's own message.
 func TestControlTransportKeepsNotIdleRefusals(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "control.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "control.sock")
 	server, err := ListenControl(path)
 	if err != nil {
 		t.Fatal(err)

@@ -5,10 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestBootstrapHandshake(t *testing.T) {
-	server, err := Listen(filepath.Join(t.TempDir(), "bootstrap.sock"))
+	server, err := Listen(filepath.Join(testutil.ShortTempDir(t), "bootstrap.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -40,7 +42,7 @@ func TestBootstrapHandshake(t *testing.T) {
 }
 
 func TestConversationOperationHandshake(t *testing.T) {
-	server, err := Listen(filepath.Join(t.TempDir(), "bootstrap.sock"))
+	server, err := Listen(filepath.Join(testutil.ShortTempDir(t), "bootstrap.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}

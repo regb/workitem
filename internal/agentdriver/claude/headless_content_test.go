@@ -8,10 +8,12 @@ import (
 	"testing"
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestHeadlessAPIContentAndParallelToolPrivacy(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "content.sock")
+	socket := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	server, err := protocol.ListenContent(socket, "runtime", "item", false)
 	if err != nil {
 		t.Fatal(err)

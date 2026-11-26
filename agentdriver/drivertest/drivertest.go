@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -71,7 +72,13 @@ func RunRuntime(t TestingT, suite RuntimeSuite) {
 	if strings.TrimSpace(suite.Driver) == "" || suite.Launch == nil {
 		t.Fatalf("driver name and launch function are required")
 	}
-	dir := t.TempDir()
+	// Runtime sockets need a short directory: macOS limits Unix socket paths to
+	// 104 bytes, which t.TempDir() under the default TMPDIR easily exceeds.
+	dir, err := os.MkdirTemp(socketTempRoot(), "wi-drv-")
+	if err != nil {
+		t.Fatalf("create runtime directory: %v", err)
+	}
+	defer os.RemoveAll(dir)
 	controlPath, eventPath := filepath.Join(dir, "control.sock"), filepath.Join(dir, "events.sock")
 	events, err := driverprotocol.ListenEvents(eventPath)
 	if err != nil {
@@ -149,6 +156,14 @@ readyEvent:
 	case <-ctx.Done():
 		t.Fatalf("driver shutdown: %v", ctx.Err())
 	}
+}
+
+// socketTempRoot prefers /tmp, whose short path leaves room for socket names.
+func socketTempRoot() string {
+	if info, err := os.Stat("/tmp"); err == nil && info.IsDir() {
+		return "/tmp"
+	}
+	return os.TempDir()
 }
 
 func ErrorResponse(err error) driverprotocol.Response {

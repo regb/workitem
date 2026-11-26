@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestControlTransport(t *testing.T) {
-	server, err := ListenControl(filepath.Join(t.TempDir(), "control.sock"))
+	server, err := ListenControl(filepath.Join(testutil.ShortTempDir(t), "control.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,7 +34,7 @@ func TestControlTransport(t *testing.T) {
 }
 
 func TestControlServerCloseWaitsForActiveHandlers(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "control.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "control.sock")
 	server, err := ListenControl(path)
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +58,7 @@ func TestControlServerCloseWaitsForActiveHandlers(t *testing.T) {
 }
 
 func TestEventServerCloseInterruptsPartialRequest(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "events.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "events.sock")
 	server, err := ListenEvents(path)
 	if err != nil {
 		t.Fatal(err)
@@ -79,7 +81,7 @@ func TestEventServerCloseInterruptsPartialRequest(t *testing.T) {
 }
 
 func TestEventTransportReportsRetryableRelayFailure(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "events.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "events.sock")
 	server, err := ListenEvents(path)
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +98,7 @@ func TestEventTransportReportsRetryableRelayFailure(t *testing.T) {
 }
 
 func TestEventTransportReportsRejection(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "events.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "events.sock")
 	server, err := ListenEvents(path)
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +120,7 @@ func TestEventTransportReportsRejection(t *testing.T) {
 // Clients treat a runtime socket's path as readiness: once it exists, a dial
 // must reach a listening socket rather than one that is only bound.
 func TestRuntimeSocketPathAppearsOnlyWhenListening(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.ShortTempDir(t)
 	for attempt := 0; attempt < 200; attempt++ {
 		path := filepath.Join(dir, "control.sock")
 		dialed := make(chan error, 1)
@@ -163,7 +165,7 @@ func TestRuntimeSocketPathAppearsOnlyWhenListening(t *testing.T) {
 }
 
 func TestRuntimeSocketReplacesStalePath(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "events.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "events.sock")
 	if err := os.WriteFile(path, []byte("stale"), 0o600); err != nil {
 		t.Fatal(err)
 	}

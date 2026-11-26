@@ -8,10 +8,12 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestDisplayStreamOrderingAndTranscriptLag(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "content.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	server, err := protocol.ListenContent(path, "runtime", "item", false)
 	if err != nil {
 		t.Fatal(err)
@@ -73,7 +75,7 @@ func TestDisplayStreamOrderingAndTranscriptLag(t *testing.T) {
 	}
 }
 func TestDisplayHookDoesNotUseSemanticEndpoint(t *testing.T) {
-	hookPath := filepath.Join(t.TempDir(), "hook.sock")
+	hookPath := filepath.Join(testutil.ShortTempDir(t), "hook.sock")
 	server, err := protocol.ListenControl(displaySocketPath(hookPath))
 	if err != nil {
 		t.Fatal(err)

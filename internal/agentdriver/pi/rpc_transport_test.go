@@ -246,7 +246,7 @@ func startRuntimeTestEventRelay(t *testing.T, path string, client *coordinator.C
 
 func startRuntimeTestDaemon(t *testing.T, itemID, runtimeID string) (string, *coordinator.Client) {
 	t.Helper()
-	root, runtimeDir := t.TempDir(), t.TempDir()
+	root, runtimeDir := t.TempDir(), testutil.ShortTempDir(t)
 	native := store.New(root)
 	if err := native.Ensure(); err != nil {
 		t.Fatal(err)

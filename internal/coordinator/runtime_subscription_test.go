@@ -10,10 +10,12 @@ import (
 
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestRuntimeEventLongPollWakesAfterCommittedEvent(t *testing.T) {
-	root, runtimeDir := t.TempDir(), t.TempDir()
+	root, runtimeDir := t.TempDir(), testutil.ShortTempDir(t)
 	native := store.New(root)
 	if err := native.Ensure(); err != nil {
 		t.Fatal(err)

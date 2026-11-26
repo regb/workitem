@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestConversationLaunchArgsPreserveNativeContent(t *testing.T) {
@@ -70,7 +72,7 @@ func TestConversationLaunchArgsPreserveNativeContent(t *testing.T) {
 func TestSharedRuntimeSetupBothModes(t *testing.T) {
 	for _, mode := range []protocol.Mode{protocol.ModeTUI, protocol.ModeHeadless} {
 		t.Run(string(mode), func(t *testing.T) {
-			root := t.TempDir()
+			root := testutil.ShortTempDir(t)
 			locator := filepath.Join(root, "sessions", uuid("shared")+".jsonl")
 			control := filepath.Join(root, "control.sock")
 			request := protocol.LaunchRequest{AppendSystemPrompt: "Custom Wi context\nPreserve this text.", Runtime: protocol.Runtime{Mode: mode, ID: "runtime", WorkItemID: "item", CWD: root, ControlSocketPath: control}, Conversation: protocol.Conversation{Locator: locator}, Environment: map[string]string{"HOME": root, "CLAUDE_CONFIG_DIR": filepath.Join(root, ".claude"), "TMUX": "private socket", "TMUX_PANE": "%1", "TMUX_TMPDIR": root, "WI_ID": "item"}, Skills: []protocol.Skill{{Name: "wi", Files: []protocol.SkillFile{{Path: "SKILL.md", Data: []byte("fixture skill")}}}}}
@@ -114,7 +116,7 @@ func TestSystemPromptAppendOnCreateAndResume(t *testing.T) {
 	for _, mode := range []protocol.Mode{protocol.ModeTUI, protocol.ModeHeadless} {
 		for _, resume := range []bool{false, true} {
 			for _, prompt := range []string{"Custom instructions\nPreserve this text.", "", "   "} {
-				root := t.TempDir()
+				root := testutil.ShortTempDir(t)
 				locator := filepath.Join(root, uuid("prompt")+".jsonl")
 				if resume {
 					if err := os.WriteFile(locator, []byte("existing native history"), 0600); err != nil {
@@ -170,7 +172,7 @@ func TestSystemPromptAppendOnCreateAndResume(t *testing.T) {
 }
 
 func TestSharedRuntimeSetupFailureClosesEndpoints(t *testing.T) {
-	root := t.TempDir()
+	root := testutil.ShortTempDir(t)
 	control := filepath.Join(root, "control.sock")
 	r := protocol.LaunchRequest{Runtime: protocol.Runtime{Mode: protocol.ModeHeadless, ID: "runtime", WorkItemID: "item", CWD: root, ControlSocketPath: control}, Conversation: protocol.Conversation{Locator: filepath.Join(root, uuid("bad-skill")+".jsonl")}, Environment: map[string]string{"HOME": root, "CLAUDE_CONFIG_DIR": filepath.Join(root, ".claude")}, Skills: []protocol.Skill{{Name: "../invalid"}}}
 	if _, err := prepareRuntime(r, Config{Executable: "sh"}); err == nil {

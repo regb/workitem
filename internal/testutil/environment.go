@@ -35,10 +35,8 @@ func IsolatedEnvironment(base []string, root string) []string {
 // data root or sockets. Explicit helper-process children reuse the parent's
 // namespace so their test bootstrap and runtime variables remain intact.
 func RunIsolatedTests(run func() int) int {
-	if root := os.Getenv(testProcessRoot); filepath.IsAbs(root) && strings.HasPrefix(filepath.Base(root), "wi-tests-") {
-		if info, err := os.Lstat(root); err == nil && info.IsDir() && info.Mode().Perm() == 0700 {
-			return run()
-		}
+	if _, ok := isolatedRoot(); ok {
+		return run()
 	}
 	root, err := os.MkdirTemp("/tmp", "wi-tests-")
 	if err != nil {
@@ -76,4 +74,18 @@ func RunIsolatedTests(run func() int) int {
 		}
 	}
 	return run()
+}
+
+// isolatedRoot reports the private root RunIsolatedTests created for this test
+// process (or its helper-process parent), if there is one.
+func isolatedRoot() (string, bool) {
+	root := os.Getenv(testProcessRoot)
+	if !filepath.IsAbs(root) || !strings.HasPrefix(filepath.Base(root), "wi-tests-") {
+		return "", false
+	}
+	info, err := os.Lstat(root)
+	if err != nil || !info.IsDir() || info.Mode().Perm() != 0700 {
+		return "", false
+	}
+	return root, true
 }

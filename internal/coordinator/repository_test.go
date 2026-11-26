@@ -11,6 +11,8 @@ import (
 
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func repositoryTestCommand(id, name string) RegisterRepositoryCommand {
@@ -19,7 +21,7 @@ func repositoryTestCommand(id, name string) RegisterRepositoryCommand {
 }
 
 func TestRepositoryRegistrationThroughOperatorEndpoint(t *testing.T) {
-	root, runtime := t.TempDir(), t.TempDir()
+	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
 	socket, err := SocketPath(runtime, root)
 	if err != nil {
 		t.Fatal(err)

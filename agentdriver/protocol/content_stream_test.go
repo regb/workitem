@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 // follow subscribes and applies every event to a local snapshot, sending each
@@ -46,7 +48,7 @@ func settle(t *testing.T, values <-chan Content, sequence uint64) Content {
 }
 
 func TestContentStreamReproducesTheServerSnapshot(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "content.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	server, err := ListenContent(path, "runtime", "item", true)
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +79,7 @@ func TestContentStreamReproducesTheServerSnapshot(t *testing.T) {
 }
 
 func TestContentStreamEventsAreMinimal(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "content.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	server, err := ListenContent(path, "runtime", "item", true)
 	if err != nil {
 		t.Fatal(err)
@@ -125,7 +127,7 @@ func TestContentStreamEventsAreMinimal(t *testing.T) {
 }
 
 func TestSlowContentSubscribersAreDisconnected(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "content.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	server, err := ListenContent(path, "runtime", "item", true)
 	if err != nil {
 		t.Fatal(err)
@@ -162,7 +164,7 @@ func TestSlowContentSubscribersAreDisconnected(t *testing.T) {
 }
 
 func TestContentStreamDetectsSnapshotOnlyServers(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "content.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatal(err)
@@ -185,7 +187,7 @@ func TestContentStreamDetectsSnapshotOnlyServers(t *testing.T) {
 }
 
 func TestClosingTheContentServerEndsStreams(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "content.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	server, err := ListenContent(path, "runtime", "item", true)
 	if err != nil {
 		t.Fatal(err)

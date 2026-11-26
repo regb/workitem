@@ -12,13 +12,15 @@ import (
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/skills"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestRealBinaryPassesTemporaryBundledSkillThroughDriver(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the real binary")
 	}
-	root := t.TempDir()
+	root := testutil.ShortTempDir(t)
 	binary := filepath.Join(root, "wi")
 	build := exec.Command("go", "build", "-o", binary, "./cmd/wi")
 	build.Dir = filepath.Join("..", "..")

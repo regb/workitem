@@ -11,6 +11,8 @@ import (
 
 	"github.com/regb/workitem/agentdriver/protocol"
 	"github.com/regb/workitem/skills"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestValidReasoningLevel(t *testing.T) {
@@ -25,7 +27,7 @@ func TestValidReasoningLevel(t *testing.T) {
 }
 
 func TestDriverLaunchesConfiguredPiWithTemporarySkill(t *testing.T) {
-	dir := t.TempDir()
+	dir := testutil.ShortTempDir(t)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(dir, "cache"))
 	tmp := filepath.Join(dir, "temp skills")
 	if err := os.Mkdir(tmp, 0700); err != nil {

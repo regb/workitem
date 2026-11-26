@@ -11,6 +11,8 @@ import (
 	"time"
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 const askedInput = `{"questions":[{"question":"Which color?","header":"Color","multiSelect":false,"options":[{"label":"Red"},{"label":"Blue"}]}]}`
@@ -79,7 +81,7 @@ func TestHeadlessHoldsAQuestionUntilItIsAnswered(t *testing.T) {
 }
 
 func TestTUIQuestionHookWaitsForTheRuntimesAnswer(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "hooks.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "hooks.sock")
 	server, err := protocol.ListenControl(path)
 	if err != nil {
 		t.Fatal(err)

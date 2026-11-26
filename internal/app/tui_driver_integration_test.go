@@ -26,7 +26,7 @@ func TestAgentExecTUIDriverUsesPublicControlAndEventProtocol(t *testing.T) {
 	t.Setenv("WI_DAEMON_SOCKET", "/private/daemon.sock")
 	t.Setenv("WI_DAEMON_PROTOCOL", "private")
 	t.Setenv("WI_BUILD_IDENTITY", "private")
-	root, runtimeDir := t.TempDir(), t.TempDir()
+	root, runtimeDir := t.TempDir(), testutil.ShortTempDir(t)
 	st := store.New(root)
 	if err := st.Ensure(); err != nil {
 		t.Fatal(err)

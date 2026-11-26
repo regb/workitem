@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestNativeTurnIdentityFencesLateHooks(t *testing.T) {
@@ -40,7 +42,7 @@ func TestNativeTurnIdentityFencesLateHooks(t *testing.T) {
 }
 func TestFreshTranscriptFailureIsNotDiscardedAsHistory(t *testing.T) {
 	epoch := time.Now()
-	dir := t.TempDir()
+	dir := testutil.ShortTempDir(t)
 	server, err := protocol.ListenContent(filepath.Join(dir, "content.sock"), "runtime", "item", false)
 	if err != nil {
 		t.Fatal(err)

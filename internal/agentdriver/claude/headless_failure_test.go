@@ -11,6 +11,8 @@ import (
 	"time"
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestHeadlessSanitizedNativeFrames(t *testing.T) {
@@ -23,7 +25,7 @@ func TestHeadlessSanitizedNativeFrames(t *testing.T) {
 	defer cancel()
 	frames := make(chan headlessRead, 1)
 	go readHeadlessFrames(ctx, input, frames)
-	socket := filepath.Join(t.TempDir(), "content.sock")
+	socket := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	content, err := protocol.ListenContent(socket, "runtime", "item", false)
 	if err != nil {
 		t.Fatal(err)

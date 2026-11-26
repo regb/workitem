@@ -9,14 +9,12 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestContentEndpointIsRuntimeScopedAfterCrash(t *testing.T) {
-	root, err := os.MkdirTemp("/tmp", "wi-content-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(root)
+	root := testutil.ShortTempDir(t)
 	old := ContentSocketPath(filepath.Join(root, "old-owner.sock"))
 	next := ContentSocketPath(filepath.Join(root, "next-owner.sock"))
 	if old == next {
@@ -42,7 +40,7 @@ func TestContentEndpointIsRuntimeScopedAfterCrash(t *testing.T) {
 }
 
 func TestContentVersionDoesNotFollowBootstrapVersion(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "content.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	server, err := ListenContent(path, "runtime", "item", true)
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +70,7 @@ func TestContentVersionDoesNotFollowBootstrapVersion(t *testing.T) {
 }
 
 func TestContentTruncationPreservesUnicodeAndResets(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "content.sock")
+	path := filepath.Join(testutil.ShortTempDir(t), "content.sock")
 	server, err := ListenContent(path, "runtime", "item", true)
 	if err != nil {
 		t.Fatal(err)

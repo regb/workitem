@@ -13,6 +13,8 @@ import (
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/store"
 	bolt "go.etcd.io/bbolt"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func attentionTestDatabase(t *testing.T) (*Database, string) {
@@ -181,7 +183,7 @@ func TestAttentionActivityTransport(t *testing.T) {
 	if err := db.Close(); err != nil {
 		t.Fatal(err)
 	}
-	socket := filepath.Join(t.TempDir(), "daemon.sock")
+	socket := filepath.Join(testutil.ShortTempDir(t), "daemon.sock")
 	server, err := NewServer(root, socket)
 	if err != nil {
 		t.Fatal(err)

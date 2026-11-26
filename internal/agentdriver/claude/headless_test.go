@@ -16,6 +16,8 @@ import (
 	"time"
 
 	protocol "github.com/regb/workitem/agentdriver/protocol"
+
+	"github.com/regb/workitem/internal/testutil"
 )
 
 func TestHeadlessFrameReader(t *testing.T) {
@@ -269,7 +271,7 @@ func TestHeadlessUncertainDeliveryNeverRetries(t *testing.T) {
 func TestHeadlessRuntimeMultiTurnAndShutdown(t *testing.T) {
 	for _, ignore := range []bool{false, true} {
 		t.Run(fmt.Sprint(ignore), func(t *testing.T) {
-			dir := t.TempDir()
+			dir := testutil.ShortTempDir(t)
 			backend := filepath.Join(dir, "backend")
 			script := "#!/bin/sh\nWI_CLAUDE_HEADLESS_TEST=1 exec " + quote(os.Args[0]) + " -test.run=TestClaudeHeadlessBackendProcess -- \"$@\"\n"
 			if err := os.WriteFile(backend, []byte(script), 0700); err != nil {
