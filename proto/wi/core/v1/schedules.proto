@@ -35,13 +35,16 @@ message Schedule {
   uint32 revision = 2;
   string repository_id = 3;
   // cron is a five-field cron expression (minute hour day-of-month month
-  // day-of-week), or a descriptor such as @daily, in the daemon's local time
-  // zone.
+  // day-of-week), or a descriptor such as @daily, read in time_zone.
   string cron = 4;
+  // time_zone is the IANA time zone, such as Europe/Paris, the cron
+  // expression and the text's date and time are read in; empty is the
+  // daemon's local time zone.
+  string time_zone = 17;
   // title is the new item's title; empty generates one from the prompt, as
   // for a new item started from the dashboard. title and prompt may use
-  // {{date}}, {{time}}, {{datetime}}, {{weekday}} (the firing's local time)
-  // and {{repo}} (the repository's name).
+  // {{date}}, {{time}}, {{datetime}}, {{weekday}} (the firing's time in
+  // time_zone) and {{repo}} (the repository's name).
   string title = 5;
   string prompt = 6;
   // agent_profile names the profile the new item's agent uses.

@@ -21,7 +21,7 @@ import (
 const scheduleTick = 30 * time.Second
 
 func scheduleMessage(value model.Schedule) *v1.Schedule {
-	out := &v1.Schedule{Id: value.ID, Revision: value.Revision, RepositoryId: value.RepositoryID, Cron: value.Cron, Title: value.Title, Prompt: value.Prompt, AgentProfile: value.AgentProfile, AgentSettings: value.AgentSettings, Labels: append([]string{}, value.Labels...), Enabled: value.Enabled, CreatedAt: timestamppb.New(value.CreatedAt), UpdatedAt: timestamppb.New(value.UpdatedAt), LastItemId: value.LastItemID, LastError: value.LastError}
+	out := &v1.Schedule{Id: value.ID, Revision: value.Revision, RepositoryId: value.RepositoryID, Cron: value.Cron, TimeZone: value.TimeZone, Title: value.Title, Prompt: value.Prompt, AgentProfile: value.AgentProfile, AgentSettings: value.AgentSettings, Labels: append([]string{}, value.Labels...), Enabled: value.Enabled, CreatedAt: timestamppb.New(value.CreatedAt), UpdatedAt: timestamppb.New(value.UpdatedAt), LastItemId: value.LastItemID, LastError: value.LastError}
 	if value.NextRunAt != nil {
 		out.NextRunAt = timestamppb.New(*value.NextRunAt)
 	}
@@ -55,7 +55,7 @@ func (s *Server) PutSchedule(ctx context.Context, req *connect.Request[v1.PutSch
 	if r == nil {
 		return nil, invalid("schedule is required")
 	}
-	value := model.Schedule{ID: r.Id, RepositoryID: r.RepositoryId, Cron: r.Cron, Title: r.Title, Prompt: r.Prompt, AgentProfile: r.AgentProfile, AgentSettings: r.AgentSettings, Labels: r.Labels, Enabled: r.Enabled}
+	value := model.Schedule{ID: r.Id, RepositoryID: r.RepositoryId, Cron: r.Cron, TimeZone: r.TimeZone, Title: r.Title, Prompt: r.Prompt, AgentProfile: r.AgentProfile, AgentSettings: r.AgentSettings, Labels: r.Labels, Enabled: r.Enabled}
 	if err := value.Validate(); err != nil {
 		return nil, invalid(err.Error())
 	}
@@ -125,8 +125,12 @@ func (s *Server) fireSchedule(ctx context.Context, value model.Schedule, at time
 	if repo, err := s.repo(ctx, value.RepositoryID); err == nil {
 		repoName = repo.Name
 	}
-	title := model.RenderScheduleText(value.Title, at, repoName)
-	prompt := model.RenderScheduleText(value.Prompt, at, repoName)
+	location, err := value.Location()
+	if err != nil {
+		location = time.Local
+	}
+	title := model.RenderScheduleText(value.Title, at, location, repoName)
+	prompt := model.RenderScheduleText(value.Prompt, at, location, repoName)
 	request := &v1.CreateAndStartItemRequest{
 		Item:  &v1.CreateItemRequest{RepositoryId: value.RepositoryID, Title: title, GenerateTitle: title == "", Description: prompt, Labels: value.Labels, AgentProfile: value.AgentProfile, AgentSettings: value.AgentSettings, RequestId: key},
 		Start: &v1.StartOptions{Prompt: prompt, Mode: v1.AgentMode_AGENT_MODE_HEADLESS, ClientMessageId: key},

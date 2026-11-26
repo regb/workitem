@@ -30,13 +30,16 @@ type Schedule struct {
 	Revision     uint32 `protobuf:"varint,2,opt,name=revision,proto3" json:"revision,omitempty"`
 	RepositoryId string `protobuf:"bytes,3,opt,name=repository_id,json=repositoryId,proto3" json:"repository_id,omitempty"`
 	// cron is a five-field cron expression (minute hour day-of-month month
-	// day-of-week), or a descriptor such as @daily, in the daemon's local time
-	// zone.
+	// day-of-week), or a descriptor such as @daily, read in time_zone.
 	Cron string `protobuf:"bytes,4,opt,name=cron,proto3" json:"cron,omitempty"`
+	// time_zone is the IANA time zone, such as Europe/Paris, the cron
+	// expression and the text's date and time are read in; empty is the
+	// daemon's local time zone.
+	TimeZone string `protobuf:"bytes,17,opt,name=time_zone,json=timeZone,proto3" json:"time_zone,omitempty"`
 	// title is the new item's title; empty generates one from the prompt, as
 	// for a new item started from the dashboard. title and prompt may use
-	// {{date}}, {{time}}, {{datetime}}, {{weekday}} (the firing's local time)
-	// and {{repo}} (the repository's name).
+	// {{date}}, {{time}}, {{datetime}}, {{weekday}} (the firing's time in
+	// time_zone) and {{repo}} (the repository's name).
 	Title  string `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
 	Prompt string `protobuf:"bytes,6,opt,name=prompt,proto3" json:"prompt,omitempty"`
 	// agent_profile names the profile the new item's agent uses.
@@ -113,6 +116,13 @@ func (x *Schedule) GetRepositoryId() string {
 func (x *Schedule) GetCron() string {
 	if x != nil {
 		return x.Cron
+	}
+	return ""
+}
+
+func (x *Schedule) GetTimeZone() string {
+	if x != nil {
+		return x.TimeZone
 	}
 	return ""
 }
@@ -554,12 +564,13 @@ var File_wi_core_v1_schedules_proto protoreflect.FileDescriptor
 const file_wi_core_v1_schedules_proto_rawDesc = "" +
 	"\n" +
 	"\x1awi/core/v1/schedules.proto\x12\n" +
-	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb5\x05\n" +
+	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xd2\x05\n" +
 	"\bSchedule\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\brevision\x18\x02 \x01(\rR\brevision\x12#\n" +
 	"\rrepository_id\x18\x03 \x01(\tR\frepositoryId\x12\x12\n" +
-	"\x04cron\x18\x04 \x01(\tR\x04cron\x12\x14\n" +
+	"\x04cron\x18\x04 \x01(\tR\x04cron\x12\x1b\n" +
+	"\ttime_zone\x18\x11 \x01(\tR\btimeZone\x12\x14\n" +
 	"\x05title\x18\x05 \x01(\tR\x05title\x12\x16\n" +
 	"\x06prompt\x18\x06 \x01(\tR\x06prompt\x12#\n" +
 	"\ragent_profile\x18\a \x01(\tR\fagentProfile\x12\x16\n" +

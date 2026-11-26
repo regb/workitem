@@ -82,6 +82,7 @@ func rpcPutSchedule(ctx context.Context, action string, args []string, cfg Confi
 	fs := newFlagSet("schedule "+action, cfg.Stderr)
 	repo := fs.String("repo", "", "repository name or ID")
 	cron := fs.String("cron", "", "cron expression")
+	timeZone := fs.String("time-zone", "", "IANA time zone for the cron expression; empty is the daemon's")
 	title := fs.String("title", "", "item title; empty generates one")
 	prompt := fs.String("prompt", "", "prompt text")
 	promptFile := fs.String("prompt-file", "", "read the prompt from a file")
@@ -130,6 +131,9 @@ func rpcPutSchedule(ctx context.Context, action string, args []string, cfg Confi
 	}
 	if set["cron"] {
 		value.Cron = *cron
+	}
+	if set["time-zone"] {
+		value.TimeZone = *timeZone
 	}
 	if set["title"] {
 		value.Title = *title
@@ -235,7 +239,11 @@ func renderSchedules(w io.Writer, schedules []*v1.Schedule) error {
 		if !s.Enabled {
 			state = "disabled"
 		}
-		fmt.Fprintf(w, "%s  %s  %s  %s\n", s.Id, s.Cron, state, s.RepositoryId)
+		when := s.Cron
+		if s.TimeZone != "" {
+			when += " (" + s.TimeZone + ")"
+		}
+		fmt.Fprintf(w, "%s  %s  %s  %s\n", s.Id, when, state, s.RepositoryId)
 		title := s.Title
 		if title == "" {
 			title = "(generated)"

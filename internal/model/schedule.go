@@ -25,6 +25,9 @@ type Schedule struct {
 	Revision     uint32 `json:"revision"`
 	RepositoryID string `json:"repository_id"`
 	Cron         string `json:"cron"`
+	// TimeZone is the IANA time zone the cron expression and the text's
+	// date and time are read in; empty is the daemon's local one.
+	TimeZone     string `json:"time_zone,omitempty"`
 	Title        string `json:"title,omitempty"`
 	Prompt       string `json:"prompt"`
 	AgentProfile string `json:"agent_profile"`
@@ -46,7 +49,7 @@ type Schedule struct {
 var cronParser = cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
 
 // ParseCron parses a standard five-field cron expression, or a descriptor
-// such as @daily, in the daemon's local time zone.
+// such as @daily. A schedule reads it in its time zone.
 func ParseCron(expression string) (cron.Schedule, error) {
 	expression = strings.TrimSpace(expression)
 	if expression == "" {
@@ -82,6 +85,9 @@ func (s Schedule) Validate() error {
 	if _, err := ParseCron(s.Cron); err != nil {
 		return err
 	}
+	if _, err := s.Location(); err != nil {
+		return err
+	}
 	if _, err := NormalizeLabels(s.Labels); err != nil {
 		return err
 	}
@@ -98,7 +104,11 @@ func (s Schedule) Next(t time.Time) *time.Time {
 	if err != nil {
 		return nil
 	}
-	next := value.Next(t.Local())
+	location, err := s.Location()
+	if err != nil {
+		return nil
+	}
+	next := value.Next(t.In(location))
 	if next.IsZero() {
 		return nil
 	}
@@ -116,11 +126,24 @@ func (s Schedule) Due(now time.Time) (fire bool, due time.Time, next *time.Time)
 	return now.Sub(*s.NextRunAt) <= ScheduleGrace, *s.NextRunAt, s.Next(now)
 }
 
+// Location is the time zone the schedule is read in: its own, or the
+// daemon's local one.
+func (s Schedule) Location() (*time.Location, error) {
+	if s.TimeZone == "" {
+		return time.Local, nil
+	}
+	location, err := time.LoadLocation(s.TimeZone)
+	if err != nil || s.TimeZone == "Local" {
+		return nil, fmt.Errorf("invalid time zone %q: use an IANA name such as Europe/Paris, or none for the daemon's", s.TimeZone)
+	}
+	return location, nil
+}
+
 // RenderScheduleText fills a title or prompt template: {{date}}, {{time}},
-// {{datetime}}, {{weekday}} in the daemon's local time, and {{repo}}.
+// {{datetime}}, {{weekday}} in the given time zone, and {{repo}}.
 // Other text, including unknown placeholders, is kept as written.
-func RenderScheduleText(template string, at time.Time, repository string) string {
-	local := at.Local()
+func RenderScheduleText(template string, at time.Time, location *time.Location, repository string) string {
+	local := at.In(location)
 	return strings.NewReplacer(
 		"{{date}}", local.Format("2006-01-02"),
 		"{{time}}", local.Format("15:04"),
