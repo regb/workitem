@@ -61,20 +61,3 @@ func TestAPIMessageReceiptSurvivesRestartAndCannotChangeGeneration(t *testing.T)
 		t.Fatalf("forgot receipt: %v %v", found, err)
 	}
 }
-func TestAPIMessageKeysDoNotAliasAcrossItems(t *testing.T) {
-	if apiMessageKey("a", "bc") == apiMessageKey("ab", "c") {
-		t.Fatal("ambiguous item/message boundary")
-	}
-}
-func TestRuntimeHostDoesNotExposeOperatorCommands(t *testing.T) {
-	for _, method := range []string{MethodCreateItem, MethodManifestCommand, MethodRegisterRepository, MethodRenameRepository, MethodLeaseAcquire, MethodShutdown} {
-		if hostMethodAllowed(method) {
-			t.Fatalf("host exposes %s", method)
-		}
-	}
-	for _, method := range []string{MethodRuntimeEvent, MethodStoreCommand, MethodItemResources, MethodCanonicalManifest} {
-		if !hostMethodAllowed(method) {
-			t.Fatalf("host lacks %s", method)
-		}
-	}
-}

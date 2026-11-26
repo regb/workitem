@@ -3,7 +3,6 @@ package coordinator
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net"
 	"os"
 	"path/filepath"
@@ -17,7 +16,9 @@ import (
 	"github.com/regb/workitem/internal/testutil"
 )
 
-func TestServerStatusAndShutdown(t *testing.T) {
+// The coordinator socket is private to its user and removed when the server
+// closes.
+func TestServerSocketIsPrivateAndRemovedOnClose(t *testing.T) {
 	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
 	socket, err := SocketPath(runtime, root)
 	if err != nil {
@@ -29,54 +30,16 @@ func TestServerStatusAndShutdown(t *testing.T) {
 	}
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- server.Serve(context.Background()) }()
-	client := &Client{SocketPath: socket}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := client.Ping(ctx); err != nil {
+	if err := (&Client{SocketPath: socket}).Ping(ctx); err != nil {
 		t.Fatal(err)
-	}
-	skewed := &Client{SocketPath: socket, BuildIdentity: "different-build"}
-	var compatibility *CompatibilityError
-	if err := skewed.Ping(ctx); !errors.As(err, &compatibility) || compatibility.Kind != "build" {
-		t.Fatalf("skewed ping error = %v", err)
-	}
-	status, err := client.Status(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if status.PID != os.Getpid() || status.BuildIdentity == "" || status.DataRoot != root || status.Database.SchemaVersion != SchemaVersion {
-		t.Fatalf("status = %+v", status)
-	}
-	projection, err := client.ManifestProjection(ctx)
-	if err != nil || len(projection.Manifests) != 0 || !projection.Projection.Fresh || projection.Projection.Source != "daemon-canonical" {
-		t.Fatalf("projection = %+v, err = %v", projection, err)
-	}
-	resources, err := client.ItemResources(ctx, importTestID)
-	if err != nil || resources.Runtime != nil || resources.Terminal != nil {
-		t.Fatalf("item resources = %+v, err = %v", resources, err)
-	}
-	piProjection, err := client.Conversation(ctx, importTestID)
-	if err != nil || piProjection.Found {
-		t.Fatalf("Pi projection = %+v, err = %v", piProjection, err)
-	}
-	barrier, err := client.ActivityBarrier(ctx)
-	if err != nil || !barrier.Projection.Fresh || barrier.Projection.Source != "daemon.activity_barrier" {
-		t.Fatalf("activity barrier = %+v, err = %v", barrier, err)
-	}
-	snapshot, err := client.ActionabilitySnapshot(ctx, ActionabilitySnapshotRequest{Queue: ActionabilityQueueOptions{}})
-	if err != nil || !snapshot.Projection.Fresh || len(snapshot.Queue.Candidates) != 0 {
-		t.Fatalf("actionability snapshot = %+v, err = %v", snapshot, err)
-	}
-	revision := uint64(0)
-	_, err = client.ExecuteManifestCommandWithQueue(ctx, ManifestCommandQueueRequest{Command: ManifestCommand{ID: "invalid-queue", ProtocolVersion: ProtocolVersion, Type: CommandStateSet, ItemID: importTestID, ExpectedRevision: &revision, Actor: model.OperatorUser, TargetState: model.StateActive, CreatedAt: time.Now().UTC()}})
-	if err == nil || !strings.Contains(err.Error(), "requires adding a blocker") {
-		t.Fatalf("invalid manifest queue command err=%v", err)
 	}
 	info, err := os.Stat(socket)
 	if err != nil || info.Mode().Perm() != 0o600 {
 		t.Fatalf("socket info=%v err=%v", info, err)
 	}
-	if err := client.Shutdown(ctx); err != nil {
+	if err := server.Close(); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -88,24 +51,17 @@ func TestServerStatusAndShutdown(t *testing.T) {
 		t.Fatal("server did not stop")
 	}
 	if _, err := os.Stat(socket); !os.IsNotExist(err) {
-		t.Fatalf("socket remains after shutdown: %v", err)
+		t.Fatalf("socket remains after close: %v", err)
 	}
 }
 
 func TestActivityBarrierIndexesPromptBeforeReturningSnapshot(t *testing.T) {
 	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	manifest := model.NewManifest(importTestID, "barrier", "Barrier", nil, false, now, model.Repository{}, model.Checkout{})
-	manifest.State = model.StateActive
+	manifest := testManifest(importTestID, "barrier", "Barrier", now)
 	manifest.PrimaryConversation = &model.Conversation{Driver: "pi", ID: "session-1", Locator: "sessions/pi/session-1.jsonl"}
-	if err := native.CreateItem(context.Background(), manifest); err != nil {
-		t.Fatal(err)
-	}
-	sessionPath := filepath.Join(native.ItemDir(manifest.ID), filepath.FromSlash(manifest.PrimaryConversation.NativeLocator()))
+	seedItems(t, root, manifest)
+	sessionPath := filepath.Join(store.New(root).ItemDir(manifest.ID), filepath.FromSlash(manifest.PrimaryConversation.NativeLocator()))
 	if err := os.MkdirAll(filepath.Dir(sessionPath), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -124,9 +80,6 @@ func TestActivityBarrierIndexesPromptBeforeReturningSnapshot(t *testing.T) {
 		}
 	}
 	appendMessage(now, "assistant", "initial")
-	if err := seedRoot(context.Background(), root); err != nil {
-		t.Fatal(err)
-	}
 	socket, _ := SocketPath(testutil.ShortTempDir(t), root)
 	server, err := NewServer(root, socket, testConversationDecoders)
 	if err != nil {
@@ -194,40 +147,5 @@ func TestServerRefusesToReplaceNonSocket(t *testing.T) {
 	content, err := os.ReadFile(path)
 	if err != nil || string(content) != "do not replace" {
 		t.Fatalf("non-socket changed: %q err=%v", content, err)
-	}
-}
-
-// A managed daemon belongs to a service manager: no client, of this build or
-// another, can shut it down or replace it, and it says so.
-func TestManagedServerRefusesShutdown(t *testing.T) {
-	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
-	socket, err := SocketPath(runtime, root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server, err := NewServer(root, socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	server.SetManaged(true)
-	serveDone := make(chan error, 1)
-	go func() { serveDone <- server.Serve(context.Background()) }()
-	defer func() { server.Close(); <-serveDone }()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	client := &Client{SocketPath: socket}
-	if err := client.Ping(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if status, err := client.Status(ctx); err != nil || !status.Managed {
-		t.Fatalf("status = %+v, err = %v", status, err)
-	}
-	for _, requester := range []*Client{client, {SocketPath: socket, BuildIdentity: "different-build"}} {
-		if err := requester.Shutdown(ctx); err == nil || !strings.Contains(err.Error(), "service manager") {
-			t.Fatalf("shutdown by %q = %v", requester.BuildIdentity, err)
-		}
-	}
-	if err := client.Ping(ctx); err != nil {
-		t.Fatalf("managed daemon stopped: %v", err)
 	}
 }

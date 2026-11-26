@@ -19,18 +19,9 @@ import (
 
 func attentionTestDatabase(t *testing.T) (*Database, string) {
 	t.Helper()
-	root := t.TempDir()
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	manifest := model.NewManifest(importTestID, "attention", "Attention", nil, false, time.Now().UTC(), model.Repository{}, model.Checkout{})
-	if _, err := db.SyncImportedManifests(map[string]ImportedManifest{importTestID: {Manifest: manifest, Digest: "fixture"}}, true); err != nil {
-		t.Fatal(err)
-	}
-	return db, root
+	return itemDatabase(t, model.NewManifest(importTestID, "attention", "Attention", nil, false, time.Now().UTC(), model.Repository{}, model.Checkout{}))
 }
+
 func attentionEventCommand(t *testing.T, db *Database, kind string, at time.Time) (StoreCommand, json.RawMessage) {
 	t.Helper()
 	canonical, err := db.CanonicalManifest(importTestID)

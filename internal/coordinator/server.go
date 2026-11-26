@@ -57,9 +57,8 @@ type Server struct {
 	wg                         sync.WaitGroup
 }
 
-// SetManaged marks a daemon a service manager owns, before Serve. It refuses
-// requests to shut down, from any client: the service manager stops and
-// restarts it, and a client of another build must not replace it.
+// SetManaged marks a daemon a service manager owns, before Serve. Its status
+// reports it.
 func (s *Server) SetManaged(managed bool) { s.managed = managed }
 
 // ConfigureRepositorySettings installs trusted declarative schemas before Serve.
@@ -515,7 +514,7 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		return nil, &ProtocolError{Code: "schema_mismatch", Message: fmt.Sprintf("client database schema %d cannot control daemon schema %d; use a matching wi build", request.SchemaVersion, SchemaVersion)}
 
 	}
-	if request.BuildIdentity != "" && request.BuildIdentity != s.buildIdentity && request.Method != MethodStatus && request.Method != MethodShutdown && request.Method != MethodRuntimeEvent {
+	if request.BuildIdentity != "" && request.BuildIdentity != s.buildIdentity && request.Method != MethodStatus && request.Method != MethodRuntimeEvent {
 		return nil, &ProtocolError{Code: "build_mismatch", Message: "client and daemon builds differ; restart the older process"}
 
 	}
@@ -538,13 +537,6 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 		}
 		status.Access = access
 		result = status
-	case MethodShutdown:
-		if s.managed {
-			return nil, &ProtocolError{Code: "managed_daemon", Message: ManagedDaemonMessage}
-
-		}
-		result = map[string]any{"stopping": true}
-		defer func() { go s.Close() }()
 	case MethodConversation:
 		var itemRequest ItemRequest
 		if err := json.Unmarshal(request.Payload, &itemRequest); err != nil || !model.ValidID(itemRequest.ItemID) {
@@ -717,13 +709,15 @@ func (s *Server) dispatch(ctx context.Context, request Request, access string) (
 			return nil, &ProtocolError{Code: "invalid_request", Message: "valid item_id, limit, and wait_millis are required"}
 
 		}
+		// Take the waiter before reading, so an event committed after the read
+		// still wakes this poll.
+		waiter := s.runtimeEventWaiter()
 		eventsResult, err := s.database.RuntimeEvents(eventsRequest.ItemID, eventsRequest.AfterSequence, eventsRequest.Limit)
 		if err != nil {
 			return nil, protocolErr("database_error", err)
 
 		}
 		if len(eventsResult.Events) == 0 && eventsRequest.WaitMillis > 0 {
-			waiter := s.runtimeEventWaiter()
 			timer := time.NewTimer(time.Duration(eventsRequest.WaitMillis) * time.Millisecond)
 			select {
 			case <-waiter:

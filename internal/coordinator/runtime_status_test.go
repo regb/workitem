@@ -4,31 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/regb/workitem/internal/model"
-	"github.com/regb/workitem/internal/store"
 	"testing"
 	"time"
 )
 
 func TestRuntimeReadinessReasonsPersistAndAreOwnerFenced(t *testing.T) {
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	m := model.NewManifest(importTestID, "status", "Status", nil, false, now, model.Repository{}, model.Checkout{})
 	m.State = model.StateActive
-	if err := native.CreateItem(context.Background(), m); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
+	db, _ := itemDatabase(t, m)
 	seedRuntimeOwner(t, db, importTestID, "runtime-1")
 	event := RuntimeSemanticEvent{ID: "status:1", RuntimeID: "runtime-1", WorkItemID: importTestID, Type: "runtime.status", Timestamp: now.Add(2 * time.Second), Readiness: "waiting_input", ReasonCode: "session_start_pending"}
 	if _, err := IngestRuntimeEvent(context.Background(), db, event); err != nil {

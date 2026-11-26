@@ -24,7 +24,7 @@ func eventTypes(t *testing.T, db *Database, itemID string) []string {
 func TestClearedBlockerArmsItsFollowUpUntilSentOrDropped(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	a := importTestID
-	db := blockerTestDB(t, now, a)
+	db, _ := itemDatabase(t, testItems(now, a)...)
 	if _, err := runCommand(t, db, ManifestCommand{ID: "wait", Type: CommandBlockerAdd, ItemID: a, Blockers: []model.Blocker{{Kind: model.BlockerExternal, Event: "review", FollowUp: "Address the review"}, {Kind: model.BlockerExternal, Event: "ci"}}, CreatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +67,7 @@ func TestClearedBlockerArmsItsFollowUpUntilSentOrDropped(t *testing.T) {
 func TestFollowUpIsDroppedWhenOperatorDropsPromptsOrCloses(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	a, b, c := importTestID, "01KZYHGDCECSFS4BJ2SNTQP49W", "01KZYHGDCECSFS4BJ2SNTQP49X"
-	db := blockerTestDB(t, now, a, b, c)
+	db, _ := itemDatabase(t, testItems(now, a, b, c)...)
 	until := now.Add(time.Hour)
 	for _, id := range []string{a, b, c} {
 		if _, err := runCommand(t, db, ManifestCommand{ID: "wait-" + id, Type: CommandBlockerAdd, ItemID: id, Blockers: []model.Blocker{{Kind: model.BlockerTime, Until: &until, FollowUp: "go"}}, CreatedAt: now}); err != nil {
@@ -117,7 +117,7 @@ func TestFollowUpIsDroppedWhenOperatorDropsPromptsOrCloses(t *testing.T) {
 func TestUsageBlockerIsSingleAndClearedForUsageOrByPrompt(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	a := importTestID
-	db := blockerTestDB(t, now, a)
+	db, _ := itemDatabase(t, testItems(now, a)...)
 	reset := now.Add(time.Hour)
 	usage := model.Blocker{Kind: model.BlockerUsage, Provider: "claude", Until: &reset, FollowUp: "Continue where you left off."}
 	if _, err := runCommand(t, db, ManifestCommand{ID: "usage-1", Type: CommandBlockerAdd, ItemID: a, Blockers: []model.Blocker{usage, {Kind: model.BlockerExternal, Event: "review"}}, CreatedAt: now}); err != nil {

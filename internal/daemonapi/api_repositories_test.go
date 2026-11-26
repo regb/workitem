@@ -159,6 +159,18 @@ func TestRepositoriesRegistryAndConfiguration(t *testing.T) {
 		}
 		refused(t, connect.CodeFailedPrecondition, clients.Repositories.ReadRepositoryFile, &v1.ReadRepositoryFileRequest{RepositoryId: repository, Path: ".env"})
 	})
+
+	// A base relative to a checkout means nothing in the bare store: the
+	// client resolves it in its own checkout and sends a commit.
+	t.Run("a contextual base is refused", func(t *testing.T) {
+		for _, base := range []string{"HEAD", "HEAD~1", "@", "@{-1}", "-", "main@{0}"} {
+			refused(t, connect.CodeFailedPrecondition, clients.Items.CreateItem, &v1.CreateItemRequest{RepositoryId: repository, Title: "contextual " + base, Base: base})
+		}
+		integration := call(t, clients.Items.CreateItem, &v1.CreateItemRequest{RepositoryId: repository, Title: "integration base", Base: "^"}).Item
+		if latest := newItem(t, f, repository, "default base"); integration.CreatedFromCommit != latest.CreatedFromCommit {
+			t.Fatalf("^ means the integration branch: %s, want %s", integration.CreatedFromCommit, latest.CreatedFromCommit)
+		}
+	})
 }
 
 func reposSetting(settings *v1.GetRepositorySettingsResponse, key string) *v1.RepositorySetting {

@@ -8,28 +8,12 @@ import (
 	"time"
 
 	"github.com/regb/workitem/internal/model"
-	"github.com/regb/workitem/internal/store"
 )
 
 func TestCommandDeliverySurvivesRestartAndRejectsStaleOwners(t *testing.T) {
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	m := model.NewManifest(importTestID, "delivery", "Delivery", nil, false, now, model.Repository{}, model.Checkout{})
-	if err := native.CreateItem(context.Background(), m); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = db.Close() }()
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
+	db, root := itemDatabase(t, m)
 	seedRuntimeOwner(t, db, m.ID, "runtime")
 	event := RuntimeSemanticEvent{WorkItemID: m.ID, RuntimeID: "runtime", CommandID: "command", Type: "queue.changed", RequestID: "request"}
 	for i, state := range []string{"queued", "submitted", "not_sent", "queued"} {

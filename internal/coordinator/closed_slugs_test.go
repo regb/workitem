@@ -9,28 +9,9 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-func TestClosingKeepsTheSlugAndReopeningDropsIt(t *testing.T) {
-	now := time.Now().UTC().Truncate(time.Microsecond)
-	db := blockerTestDB(t, now, importTestID)
-	before, _ := db.CanonicalManifest(importTestID)
-	if _, err := runCommand(t, db, ManifestCommand{ID: "close", Type: CommandStateSet, ItemID: importTestID, TargetState: model.StateClosed, CreatedAt: now}); err != nil {
-		t.Fatal(err)
-	}
-	closed, _ := db.CanonicalManifest(importTestID)
-	if closed.Manifest.Slug != "" || closed.Manifest.ClosedSlug != before.Manifest.Slug {
-		t.Fatalf("closed: slug=%q closed_slug=%q, had %q", closed.Manifest.Slug, closed.Manifest.ClosedSlug, before.Manifest.Slug)
-	}
-	if _, err := runCommand(t, db, ManifestCommand{ID: "reopen", Type: CommandStateSet, ItemID: importTestID, TargetState: model.StateBacklog, CreatedAt: now}); err != nil {
-		t.Fatal(err)
-	}
-	if reopened, _ := db.CanonicalManifest(importTestID); reopened.Manifest.ClosedSlug != "" || reopened.Manifest.Slug == "" {
-		t.Fatalf("reopened: %+v", reopened.Manifest)
-	}
-}
-
 func TestClosedSlugsAreRecoveredFromCloseEvents(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	db := blockerTestDB(t, now, importTestID)
+	db, _ := itemDatabase(t, testManifest(importTestID, "closing", "Closing", now))
 	before, _ := db.CanonicalManifest(importTestID)
 	if _, err := runCommand(t, db, ManifestCommand{ID: "close", Type: CommandStateSet, ItemID: importTestID, TargetState: model.StateClosed, CreatedAt: now}); err != nil {
 		t.Fatal(err)

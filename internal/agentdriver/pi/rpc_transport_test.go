@@ -287,7 +287,7 @@ func startRuntimeTestDaemon(t *testing.T, itemID, runtimeID string) (string, *co
 	go func() { done <- server.Serve(context.Background()) }()
 	client := &coordinator.Client{SocketPath: socket}
 	t.Cleanup(func() {
-		_ = client.Shutdown(context.Background())
+		_ = server.Close()
 		select {
 		case <-done:
 		case <-time.After(3 * time.Second):

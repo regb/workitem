@@ -90,27 +90,12 @@ func TestCleanupOrphanedStagesRemovesUncommittedPayload(t *testing.T) {
 }
 
 func TestCreateItemCommandRejectsCanonicalClaimCollision(t *testing.T) {
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	existing := model.NewManifest(importTestID, "collision", "Existing", nil, false, now, model.Repository{}, model.Checkout{})
-	if err := native.CreateItem(context.Background(), existing); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
+	db, _ := itemDatabase(t, existing)
 	newID := "01KZYHGDCECSFS4BJ2SNTQP49W"
 	candidate := model.NewManifest(newID, "collision", "Candidate", nil, false, now, model.Repository{}, model.Checkout{})
-	_, err = db.ExecuteCreateItemCommand(CreateItemCommand{ID: "collision-command", ProtocolVersion: ProtocolVersion, Manifest: candidate, DescriptionDigest: DescriptionDigest(""), Actor: model.OperatorUser, CreatedAt: now})
+	_, err := db.ExecuteCreateItemCommand(CreateItemCommand{ID: "collision-command", ProtocolVersion: ProtocolVersion, Manifest: candidate, DescriptionDigest: DescriptionDigest(""), Actor: model.OperatorUser, CreatedAt: now})
 	if err == nil || !strings.Contains(err.Error(), "slug") {
 		t.Fatalf("expected slug collision, got %v", err)
 	}

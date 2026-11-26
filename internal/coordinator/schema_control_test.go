@@ -2,62 +2,48 @@ package coordinator
 
 import (
 	"context"
-	"encoding/json"
-	"net"
+	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/regb/workitem/internal/testutil"
 )
 
-func TestSchemaSkewCannotStopOrMutateDaemon(t *testing.T) {
-	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
-	socket, err := SocketPath(runtime, root)
+// A runtime host of another schema can neither read nor change durable
+// state; health reads and runtime events stay open to hosts that predate the
+// handshake. A host of another build is refused too.
+func TestSchemaSkewCannotMutateDaemon(t *testing.T) {
+	server, err := NewServer(t.TempDir(), filepath.Join(testutil.ShortTempDir(t), "daemon.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := NewServer(root, socket)
+	defer server.Close()
+	ctx := context.Background()
+	before, err := server.status()
 	if err != nil {
 		t.Fatal(err)
 	}
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(context.Background()) }()
-	t.Cleanup(func() { server.Close(); <-done })
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	client := &Client{SocketPath: socket}
-	before, err := client.Status(ctx)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, schema := range []uint64{0, SchemaVersion - 1, SchemaVersion + 1} {
-		for _, method := range []string{MethodShutdown, MethodCreateItem, MethodManifestCommand, MethodEditItem, MethodStoreCommand, MethodSetRepositoryArchived} {
-			conn, err := net.DialTimeout("unix", socket, time.Second)
-			if err != nil {
-				t.Fatal(err)
-			}
-			conn.SetDeadline(time.Now().Add(time.Second))
-			request := Request{ProtocolVersion: ProtocolVersion, SchemaVersion: schema, BuildIdentity: "old-build", ID: "skewed", Method: method}
-			if err := json.NewEncoder(conn).Encode(request); err != nil {
-				conn.Close()
-				t.Fatal(err)
-			}
-			var response Response
-			err = json.NewDecoder(conn).Decode(&response)
-			conn.Close()
-			if err != nil || response.OK || response.Error == nil || response.Error.Code != "schema_mismatch" {
-				t.Fatalf("schema=%d method=%s response=%+v error=%v", schema, method, response, err)
-			}
+	refused := func(request Request, code string) {
+		t.Helper()
+		var protocolErr *ProtocolError
+		if _, err := server.dispatch(ctx, request, AccessRuntimeHost); !errors.As(err, &protocolErr) || protocolErr.Code != code {
+			t.Fatalf("schema=%d build=%q method=%s: err=%v, want %s", request.SchemaVersion, request.BuildIdentity, request.Method, err, code)
 		}
 	}
-	after, err := client.Status(ctx)
-	if err != nil || before.PID != after.PID || before.Database.GlobalSequence != after.Database.GlobalSequence {
-		t.Fatalf("daemon changed: before=%+v after=%+v error=%v", before, after, err)
+	for _, schema := range []uint64{0, SchemaVersion - 1, SchemaVersion + 1} {
+		for _, method := range []string{MethodStoreCommand, MethodCanonicalManifest, MethodListManifests, MethodRepositorySource} {
+			refused(Request{ProtocolVersion: ProtocolVersion, SchemaVersion: schema, BuildIdentity: "old-build", ID: "skewed", Method: method}, "schema_mismatch")
+		}
+		if _, err := server.dispatch(ctx, Request{ProtocolVersion: ProtocolVersion, SchemaVersion: schema, ID: "health", Method: MethodPing}, AccessRuntimeHost); err != nil {
+			t.Fatalf("schema %d health read: %v", schema, err)
+		}
 	}
-	// Same-schema rebuilds can still replace the daemon normally.
-	if err := (&Client{SocketPath: socket, BuildIdentity: "another-build"}).Shutdown(ctx); err != nil {
-		t.Fatal(err)
+	refused(Request{ProtocolVersion: ProtocolVersion, SchemaVersion: SchemaVersion, BuildIdentity: "other-build", ID: "skewed", Method: MethodStoreCommand}, "build_mismatch")
+	after, err := server.status()
+	if err != nil || before.Database.GlobalSequence != after.Database.GlobalSequence {
+		t.Fatalf("daemon changed: before=%+v after=%+v error=%v", before, after, err)
 	}
 }
 

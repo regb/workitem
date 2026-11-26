@@ -9,29 +9,13 @@ import (
 
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/model"
-	"github.com/regb/workitem/internal/store"
 )
 
 func TestLiveAgentLoopDoesNotSettleOnIntermediateFailures(t *testing.T) {
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	m := model.NewManifest(importTestID, "loop", "Loop", nil, false, now, model.Repository{}, model.Checkout{})
 	m.State = model.StateActive
-	if err := native.CreateItem(context.Background(), m); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
+	db, root := itemDatabase(t, m)
 	seedRuntimeOwner(t, db, importTestID, "owner")
 	observer := NewExternalObserver(db, root)
 	sequence := 0

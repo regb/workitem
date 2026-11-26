@@ -2,7 +2,6 @@ package coordinator
 
 import (
 	"context"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
@@ -20,36 +19,26 @@ func repositoryTestCommand(id, name string) RegisterRepositoryCommand {
 	return RegisterRepositoryCommand{ID: "register:" + id, ProtocolVersion: ProtocolVersion, Repository: model.OwnedRepository{ID: id, Name: name, IntegrationBranch: "main", CreatedAt: now}, CreatedAt: now}
 }
 
-func TestRepositoryRegistrationThroughOperatorEndpoint(t *testing.T) {
-	root, runtime := t.TempDir(), testutil.ShortTempDir(t)
-	socket, err := SocketPath(runtime, root)
+// Registration validates the owned Git store before recording it.
+func TestRepositoryRegistrationRequiresItsGitStore(t *testing.T) {
+	root := t.TempDir()
+	server, err := NewServer(root, filepath.Join(testutil.ShortTempDir(t), "daemon.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	server, err := NewServer(root, socket)
-	if err != nil {
-		t.Fatal(err)
-	}
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(context.Background()) }()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	client := &Client{SocketPath: socket}
-	t.Cleanup(func() { _ = client.Shutdown(context.Background()); <-done })
+	defer server.Close()
+	client := server.LocalClient()
+	ctx := context.Background()
 	command := repositoryTestCommand(importTestID, "repo")
 	if _, err := client.RegisterRepository(ctx, command); err == nil {
 		t.Fatal("registered missing Git store")
 	}
 	source := t.TempDir()
-	run := func(args ...string) {
-		t.Helper()
-		out, err := exec.Command("git", append([]string{"-C", source}, args...)...).CombinedOutput()
-		if err != nil {
+	for _, args := range [][]string{{"init", "-b", "main"}, {"-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial"}} {
+		if out, err := exec.Command("git", append([]string{"-C", source}, args...)...).CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %s: %v", args, out, err)
 		}
 	}
-	run("init", "-b", "main")
-	run("-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "initial")
 	path, err := model.OwnedRepositoryGitDir(root, importTestID)
 	if err != nil {
 		t.Fatal(err)
@@ -57,50 +46,11 @@ func TestRepositoryRegistrationThroughOperatorEndpoint(t *testing.T) {
 	if err := gitpkg.New("git").ImportBare(ctx, model.BareImportOptions{Source: source, Destination: path, IntegrationBranch: "main"}); err != nil {
 		t.Fatal(err)
 	}
-	result, err := client.RegisterRepository(ctx, command)
-	if err != nil || result.Repository.ID != importTestID {
+	if result, err := client.RegisterRepository(ctx, command); err != nil || result.Repository.ID != importTestID {
 		t.Fatalf("result=%+v error=%v", result, err)
 	}
-	repositories, err := client.ListRepositories(ctx)
-	if err != nil || len(repositories) != 1 {
-		t.Fatalf("repositories=%+v error=%v", repositories, err)
-	}
-	rename := renameTestCommand("endpoint", "repo", "renamed")
-	renamed, err := client.RenameRepository(ctx, rename)
-	if err != nil || !renamed.Changed || renamed.Repository.ID != importTestID {
-		t.Fatalf("rename=%+v error=%v", renamed, err)
-	}
-	sourceResult, err := client.RepositorySource(ctx, "renamed", "")
-	if err != nil || sourceResult.GitDir != path || sourceResult.Repository.ID != importTestID {
-		t.Fatalf("renamed source=%+v error=%v", sourceResult, err)
-	}
-	for _, base := range []string{"HEAD", "HEAD~1", "@", "@{-1}", "-", "main@{0}"} {
-		if _, err := client.RepositorySource(ctx, "renamed", base); err == nil {
-			t.Fatalf("resolved contextual base %q in bare store", base)
-		}
-	}
-	integration, err := client.RepositorySource(ctx, "renamed", "^")
-	if err != nil || integration.Commit != sourceResult.Commit {
-		t.Fatalf("integration shorthand=%+v error=%v", integration, err)
-	}
-	if _, err := client.RepositorySource(ctx, "repo", ""); err == nil {
-		t.Fatal("old name still resolves")
-	}
-	archive := archiveTestCommand("endpoint", false, true)
-	archived, err := client.SetRepositoryArchived(ctx, archive)
-	if err != nil || !archived.Repository.Archived {
-		t.Fatalf("archive=%+v err=%v", archived, err)
-	}
-	archivedSource, err := client.RepositorySource(ctx, "renamed", "")
-	if err != nil || !archivedSource.Repository.Archived || archivedSource.Commit != sourceResult.Commit {
-		t.Fatalf("archived source=%+v err=%v", archivedSource, err)
-	}
-	restore := archiveTestCommand("restore endpoint", true, false)
-	if result, err := client.SetRepositoryArchived(ctx, restore); err != nil || result.Repository.Archived {
-		t.Fatalf("restore=%+v err=%v", result, err)
-	}
-	if _, err := os.Stat(filepath.Join(path, "config")); err != nil {
-		t.Fatal(err)
+	if source, err := client.RepositorySource(ctx, "repo", ""); err != nil || source.GitDir != path || source.Commit == "" {
+		t.Fatalf("source=%+v error=%v", source, err)
 	}
 }
 

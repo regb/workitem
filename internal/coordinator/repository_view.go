@@ -2,7 +2,6 @@ package coordinator
 
 import (
 	"context"
-	"fmt"
 	gitpkg "github.com/regb/workitem/internal/git"
 	"github.com/regb/workitem/internal/model"
 	"path/filepath"
@@ -34,29 +33,11 @@ func (c *Client) ListRepositoryViews(ctx context.Context) ([]RepositoryView, err
 	err := c.Call(ctx, MethodListRepositories, struct {
 		ObserveUpstream bool `json:"observe_upstream"`
 	}{true}, &result)
-	if err == nil {
-		for _, view := range result {
-			if view.UpstreamSource != "git" {
-				return nil, fmt.Errorf("daemon does not support Git-owned tracking; restart it before using repository commands")
-			}
-		}
-	}
 	return result, err
-}
-func (c *Client) requireGitTracking(ctx context.Context, selector string) error {
-	var result RepositorySourceResult
-	err := c.Call(ctx, MethodRepositorySource, RepositorySourceRequest{Selector: selector, MetadataOnly: true, ObserveUpstream: true}, &result)
-	if err == nil && result.Repository.UpstreamSource != "git" {
-		return fmt.Errorf("daemon does not support Git-owned tracking; restart it before using repository commands")
-	}
-	return err
 }
 
 func (c *Client) RepositoryViewSource(ctx context.Context, selector, revision string) (RepositorySourceResult, error) {
 	var result RepositorySourceResult
 	err := c.Call(ctx, MethodRepositorySource, RepositorySourceRequest{Selector: selector, Revision: revision, ObserveUpstream: true}, &result)
-	if err == nil && result.Repository.UpstreamSource != "git" {
-		return result, fmt.Errorf("daemon does not support Git-owned tracking; restart it before using repository commands")
-	}
 	return result, err
 }

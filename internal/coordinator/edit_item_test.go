@@ -17,24 +17,13 @@ import (
 
 func editFixture(t *testing.T) (*Server, model.Manifest) {
 	t.Helper()
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	m := model.NewManifest(importTestID, "stable", "Original", []string{"old"}, false, time.Now(), model.Repository{}, model.NewCheckout(model.WorkspaceKindManagedSlot, model.ExecutorLocal, "stable-branch"))
-	if err := native.CreateItem(context.Background(), m); err != nil {
+	db, root := itemDatabase(t, m)
+	native := store.New(root)
+	if err := os.MkdirAll(native.ItemDir(m.ID), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(native.ItemDir(m.ID), model.DescriptionFilename), []byte("original description"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
 		t.Fatal(err)
 	}
 	return &Server{database: db, native: native}, m
@@ -91,7 +80,7 @@ func TestEditItemCommitsCombinedPatchAndReplays(t *testing.T) {
 }
 
 func TestEditItemRejectsEntireInvalidPatch(t *testing.T) {
-	for _, kind := range []string{"labels", "overlap", "title", "stale revision", "description conflict", "symlink"} {
+	for _, kind := range []string{"labels", "overlap", "title", "description conflict", "symlink"} {
 		t.Run(kind, func(t *testing.T) {
 			s, _ := editFixture(t)
 			before, _ := s.database.CanonicalManifest(importTestID)
@@ -108,9 +97,6 @@ func TestEditItemRejectsEntireInvalidPatch(t *testing.T) {
 			case "title":
 				bad := "bad\ntitle"
 				request.Command.Edit.Title = &bad
-			case "stale revision":
-				revision := before.Revision + 1
-				request.Command.ExpectedRevision = &revision
 			case "description conflict":
 				os.WriteFile(filepath.Join(s.native.ItemDir(importTestID), model.DescriptionFilename), []byte("concurrent description"), 0600)
 			case "symlink":

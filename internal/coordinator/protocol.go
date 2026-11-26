@@ -28,7 +28,6 @@ const (
 const (
 	MethodPing                  = "ping"
 	MethodStatus                = "status"
-	MethodShutdown              = "shutdown"
 	MethodListRepositories      = "list_repositories"
 	MethodRegisterRepository    = "register_repository"
 	MethodRenameRepository      = "rename_repository"

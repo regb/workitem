@@ -81,7 +81,7 @@ func TestAgentExecTUIDriverUsesPublicControlAndEventProtocol(t *testing.T) {
 	serverDone := make(chan error, 1)
 	go func() { serverDone <- server.Serve(context.Background()) }()
 	client := &coordinator.Client{SocketPath: socket}
-	t.Cleanup(func() { _ = client.Shutdown(context.Background()); <-serverDone })
+	t.Cleanup(func() { _ = server.Close(); <-serverDone })
 
 	loaded, err := st.LoadManifest(itemID)
 	if err != nil || loaded.PrimaryConversation == nil || loaded.PrimaryConversation.ID != conversationID {

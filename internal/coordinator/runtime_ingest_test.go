@@ -10,29 +10,13 @@ import (
 
 	"github.com/regb/workitem/internal/agent"
 	"github.com/regb/workitem/internal/model"
-	"github.com/regb/workitem/internal/store"
 )
 
 func TestLiveRuntimeEventImmediatelyUpdatesActionability(t *testing.T) {
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	manifest := model.NewManifest(importTestID, "live", "Live", nil, false, now, model.Repository{}, model.Checkout{})
 	manifest.State = model.StateActive
-	if err := native.CreateItem(context.Background(), manifest); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
+	db, _ := itemDatabase(t, manifest)
 	seedRuntimeOwner(t, db, importTestID, "runtime-1")
 	started := RuntimeSemanticEvent{ID: "runtime-1:event-1", RuntimeID: "runtime-1", WorkItemID: importTestID, Type: "turn.started", Timestamp: now.Add(time.Second), RequestID: "request-1"}
 	result, err := IngestRuntimeEvent(context.Background(), db, started)
@@ -66,25 +50,10 @@ func TestLiveRuntimeEventImmediatelyUpdatesActionability(t *testing.T) {
 }
 
 func TestRuntimeReadyFromNewOwnerResetsPreviousBusyState(t *testing.T) {
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	manifest := model.NewManifest(importTestID, "handoff", "Handoff", nil, false, now, model.Repository{}, model.Checkout{})
 	manifest.State = model.StateActive
-	if err := native.CreateItem(context.Background(), manifest); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
+	db, _ := itemDatabase(t, manifest)
 	seedRuntimeOwner(t, db, importTestID, "runtime-old")
 	if _, err := IngestRuntimeEvent(context.Background(), db, RuntimeSemanticEvent{ID: "runtime-old:event-1", RuntimeID: "runtime-old", WorkItemID: importTestID, Type: "turn.started", Timestamp: now.Add(time.Second)}); err != nil {
 		t.Fatal(err)
@@ -107,45 +76,19 @@ func TestRuntimeReadyFromNewOwnerResetsPreviousBusyState(t *testing.T) {
 	if observation.Status != "idle" || observation.TurnState != "idle" || observation.Reason != "runtime is ready" {
 		t.Fatalf("new runtime inherited stale observation: %+v", observation)
 	}
-	_, err = IngestRuntimeEvent(context.Background(), db, RuntimeSemanticEvent{ID: "runtime-old:event-2", RuntimeID: "runtime-old", WorkItemID: importTestID, Type: "turn.started", Timestamp: now.Add(3 * time.Second)})
+	_, err := IngestRuntimeEvent(context.Background(), db, RuntimeSemanticEvent{ID: "runtime-old:event-2", RuntimeID: "runtime-old", WorkItemID: importTestID, Type: "turn.started", Timestamp: now.Add(3 * time.Second)})
 	var mismatch *RuntimeOwnerMismatchError
 	if !errors.As(err, &mismatch) {
 		t.Fatalf("superseded runtime event error = %v", err)
 	}
 }
 
-func seedRuntimeOwner(t *testing.T, db *Database, itemID, runtimeID string) {
-	t.Helper()
-	encoded, err := json.Marshal(model.AgentRuntime{ID: runtimeID, WorkItemID: itemID, State: model.AgentRuntimeRunning})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := db.UpdateProjections([]ProjectionUpdate{{Projection: RuntimeOwnershipProjection, Key: itemID, Value: encoded}}); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // Setting changes and accepted aborts settle commands without being work.
 func TestSettingOutcomesLeaveAgentStatusUnchanged(t *testing.T) {
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	manifest := model.NewManifest(importTestID, "settings", "Settings", nil, false, now, model.Repository{}, model.Checkout{})
 	manifest.State = model.StateActive
-	if err := native.CreateItem(context.Background(), manifest); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
+	db, _ := itemDatabase(t, manifest)
 	seedRuntimeOwner(t, db, importTestID, "runtime-1")
 	events := []RuntimeSemanticEvent{
 		{ID: "runtime-1:ready", Type: agent.EventRuntimeReady, Timestamp: now.Add(time.Second)},
@@ -173,25 +116,10 @@ func TestSettingOutcomesLeaveAgentStatusUnchanged(t *testing.T) {
 // Reported settings update the runtime record, are kept in the event history
 // and survive a host snapshot of the same runtime; they are not agent work.
 func TestReportedSettingsUpdateTheRuntimeRecord(t *testing.T) {
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	manifest := model.NewManifest(importTestID, "settings", "Settings", nil, false, now, model.Repository{}, model.Checkout{})
 	manifest.State = model.StateActive
-	if err := native.CreateItem(context.Background(), manifest); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
+	db, _ := itemDatabase(t, manifest)
 	seedRuntimeOwner(t, db, importTestID, "runtime-1")
 	ingest := func(id string, settings map[string]string) error {
 		_, err := IngestRuntimeEvent(context.Background(), db, RuntimeSemanticEvent{ID: id, RuntimeID: "runtime-1", WorkItemID: importTestID, Type: agent.EventSettingsChanged, Timestamp: now, Settings: settings})

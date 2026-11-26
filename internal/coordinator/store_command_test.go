@@ -13,24 +13,10 @@ import (
 )
 
 func TestStoreCommandsCommitCanonicalStateWithoutSensitivePayloads(t *testing.T) {
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
 	now := time.Now().UTC()
 	manifest := model.NewManifest(importTestID, "generic", "Generic", nil, false, now, model.Repository{}, model.Checkout{})
-	if err := native.CreateItem(context.Background(), manifest); err != nil {
-		t.Fatal(err)
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
+	db, root := itemDatabase(t, manifest)
+	native := store.New(root)
 
 	canonical, _ := db.CanonicalManifest(importTestID)
 	manifest.Title = "Updated"
@@ -48,8 +34,8 @@ func TestStoreCommandsCommitCanonicalStateWithoutSensitivePayloads(t *testing.T)
 	if current.Manifest.Title != "Updated" {
 		t.Fatalf("canonical manifest=%+v", current.Manifest)
 	}
-	if disk, err := native.LoadManifest(importTestID); err != nil || disk.Title != "Generic" {
-		t.Fatalf("canonical manifest was written to disk: %+v err=%v", disk, err)
+	if _, err := os.Stat(native.ManifestPath(importTestID)); !os.IsNotExist(err) {
+		t.Fatalf("canonical manifest was written to disk: %v", err)
 	}
 
 	sentinel := "private-event-path-and-error-sentinel-92d1"

@@ -97,7 +97,7 @@ func (c *Client) Call(ctx context.Context, method string, payload any, result an
 			return fmt.Errorf("decode coordinator status: %w", err)
 		}
 	}
-	if method != MethodShutdown && method != MethodRuntimeEvent && response.BuildIdentity != buildIdentity {
+	if method != MethodRuntimeEvent && response.BuildIdentity != buildIdentity {
 		return &CompatibilityError{Kind: "build", Expected: buildIdentity, Actual: response.BuildIdentity}
 	}
 	if !response.OK {
@@ -136,10 +136,6 @@ func (c *Client) Status(ctx context.Context) (Status, error) {
 	var status Status
 	err := c.Call(ctx, MethodStatus, nil, &status)
 	return status, err
-}
-
-func (c *Client) Shutdown(ctx context.Context) error {
-	return c.Call(ctx, MethodShutdown, nil, nil)
 }
 
 func (c *Client) ManifestProjection(ctx context.Context) (ManifestProjectionResult, error) {
@@ -246,25 +242,16 @@ func (c *Client) SetRepositoryArchived(ctx context.Context, command SetRepositor
 
 func (c *Client) SetRepositoryUpstream(ctx context.Context, command SetRepositoryUpstreamCommand) (SetRepositoryUpstreamResult, error) {
 	var result SetRepositoryUpstreamResult
-	if err := c.requireGitTracking(ctx, command.RepositoryID); err != nil {
-		return result, err
-	}
 	err := c.Call(ctx, MethodSetRepositoryUpstream, command, &result)
 	return result, err
 }
 func (c *Client) RepositoryStatus(ctx context.Context, request RepositoryStatusRequest) (RepositoryStatusResult, error) {
 	var result RepositoryStatusResult
-	if err := c.requireGitTracking(ctx, request.Selector); err != nil {
-		return result, err
-	}
 	err := c.Call(ctx, MethodRepositoryStatus, request, &result)
 	return result, err
 }
 func (c *Client) SyncRepository(ctx context.Context, request RepositorySyncRequest) (RepositorySyncResult, error) {
 	var result RepositorySyncResult
-	if err := c.requireGitTracking(ctx, request.Selector); err != nil {
-		return result, err
-	}
 	err := c.Call(ctx, MethodRepositorySync, request, &result)
 	return result, err
 }

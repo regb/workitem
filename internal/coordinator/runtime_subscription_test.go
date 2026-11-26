@@ -4,109 +4,100 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net"
+	"path/filepath"
 	"testing"
 	"time"
-
-	"github.com/regb/workitem/internal/model"
-	"github.com/regb/workitem/internal/store"
 
 	"github.com/regb/workitem/internal/testutil"
 )
 
-func TestRuntimeEventLongPollWakesAfterCommittedEvent(t *testing.T) {
-	root, runtimeDir := t.TempDir(), testutil.ShortTempDir(t)
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now().UTC()
-	manifest := model.NewManifest(importTestID, "subscription", "Subscription", nil, false, now, model.Repository{}, model.Checkout{})
-	manifest.State = model.StateActive
-	if err := native.CreateItem(context.Background(), manifest); err != nil {
-		t.Fatal(err)
-	}
-	if err := seedRoot(context.Background(), root); err != nil {
-		t.Fatal(err)
-	}
-	seedDB, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	seedRuntimeOwner(t, seedDB, importTestID, "runtime-sub")
-	if err := seedDB.Close(); err != nil {
-		t.Fatal(err)
-	}
-	socket, _ := SocketPath(runtimeDir, root)
-	server, err := NewServer(root, socket)
+func runtimeTestServer(t *testing.T, now time.Time) *Server {
+	t.Helper()
+	root := t.TempDir()
+	seedItems(t, root, testManifest(importTestID, "subscription", "Subscription", now))
+	server, err := NewServer(root, filepath.Join(testutil.ShortTempDir(t), "daemon.sock"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = server.Close() })
-	done := make(chan error, 1)
-	go func() { done <- server.Serve(context.Background()) }()
-	client := &Client{SocketPath: socket}
+	seedRuntimeOwner(t, server.database, importTestID, "runtime-sub")
+	return server
+}
+
+// A poll after the current sequence waits for the next event and returns it
+// well before its wait ends.
+func TestRuntimeEventLongPollWakesOnTheNextEvent(t *testing.T) {
+	now := time.Now().UTC()
+	client := runtimeTestServer(t, now).LocalClient()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	resultCh := make(chan RuntimeEventsResult, 1)
-	errCh := make(chan error, 1)
+	ingest := func(id string, at time.Time) {
+		t.Helper()
+		if _, err := client.IngestRuntimeEvent(ctx, RuntimeSemanticEvent{ID: id, RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "turn.started", Timestamp: at}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ingest("runtime-sub:event-1", now)
+	current, err := client.RuntimeEvents(ctx, RuntimeEventsRequest{ItemID: importTestID, Limit: 10})
+	if err != nil || len(current.Events) != 1 {
+		t.Fatalf("current=%+v err=%v", current, err)
+	}
+	type outcome struct {
+		result RuntimeEventsResult
+		err    error
+	}
+	polled := make(chan outcome, 1)
 	go func() {
-		result, err := client.RuntimeEvents(ctx, RuntimeEventsRequest{ItemID: importTestID, AfterSequence: 0, Limit: 10, WaitMillis: 3000})
-		if err != nil {
-			errCh <- err
-			return
-		}
-		resultCh <- result
+		result, err := client.RuntimeEvents(ctx, RuntimeEventsRequest{ItemID: importTestID, AfterSequence: current.LastSequence, Limit: 10, WaitMillis: 30000})
+		polled <- outcome{result, err}
 	}()
-	time.Sleep(50 * time.Millisecond)
-	event := RuntimeSemanticEvent{ID: "runtime-sub:event-1", RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "turn.started", Timestamp: now.Add(time.Second)}
-	if _, err := client.IngestRuntimeEvent(ctx, event); err != nil {
-		t.Fatal(err)
-	}
+	ingest("runtime-sub:event-2", now.Add(time.Second))
 	select {
-	case err := <-errCh:
-		t.Fatal(err)
-	case result := <-resultCh:
-		if len(result.Events) != 1 || result.Events[0].ID != event.ID {
-			t.Fatalf("result=%+v", result)
+	case got := <-polled:
+		if got.err != nil || len(got.result.Events) != 1 || got.result.Events[0].Sequence <= current.LastSequence {
+			t.Fatalf("result=%+v err=%v", got.result, got.err)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("long poll did not wake after runtime event")
+	case <-ctx.Done():
+		t.Fatal("long poll did not wake on the next runtime event")
 	}
-	olderBuildClient := &Client{SocketPath: socket, BuildIdentity: "older-build"}
-	if _, err := olderBuildClient.IngestRuntimeEvent(ctx, RuntimeSemanticEvent{ID: "runtime-sub:event-2", RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "agent.settled", Timestamp: now.Add(2 * time.Second)}); err != nil {
-		t.Fatalf("current runtime event from older build was rejected: %v", err)
+}
+
+// Runtime events from a host keep the runtime-owner fence whatever its build;
+// only a persistence failure is worth retrying.
+func TestRuntimeHostEventsAreFencedAndRetryable(t *testing.T) {
+	now := time.Now().UTC()
+	server := runtimeTestServer(t, now)
+	ctx := context.Background()
+	send := func(build string, schema uint64, event RuntimeSemanticEvent) error {
+		payload, _ := json.Marshal(event)
+		_, err := server.dispatch(ctx, Request{ProtocolVersion: ProtocolVersion, SchemaVersion: schema, BuildIdentity: build, ID: event.ID, Method: MethodRuntimeEvent, Payload: payload}, AccessRuntimeHost)
+		return err
 	}
-	// Existing runtime hosts predate the schema-control handshake. Compact
-	// events still work, but retain the normal runtime-owner fence.
-	conn, err := net.DialTimeout("unix", socket, time.Second)
-	if err != nil {
-		t.Fatal(err)
+	event := func(id, runtime, typ string, offset time.Duration) RuntimeSemanticEvent {
+		return RuntimeSemanticEvent{ID: id, RuntimeID: runtime, WorkItemID: importTestID, Type: typ, Timestamp: now.Add(offset)}
 	}
-	conn.SetDeadline(time.Now().Add(time.Second))
-	legacyPayload, _ := json.Marshal(RuntimeSemanticEvent{ID: "runtime-sub:event-3", RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "agent.settled", Timestamp: now.Add(3 * time.Second)})
-	if err := json.NewEncoder(conn).Encode(Request{ProtocolVersion: ProtocolVersion, BuildIdentity: "older-build", ID: "legacy-runtime", Method: MethodRuntimeEvent, Payload: legacyPayload}); err != nil {
-		conn.Close()
-		t.Fatal(err)
+	// Hosts of an older build, or predating the schema handshake, still report.
+	if err := send("older-build", SchemaVersion, event("runtime-sub:event-1", "runtime-sub", "turn.started", time.Second)); err != nil {
+		t.Fatalf("runtime event from an older build was rejected: %v", err)
 	}
-	var legacyResponse Response
-	err = json.NewDecoder(conn).Decode(&legacyResponse)
-	conn.Close()
-	if err != nil || !legacyResponse.OK {
-		t.Fatalf("legacy runtime response=%+v error=%v", legacyResponse, err)
+	if err := send("older-build", 0, event("runtime-sub:event-2", "runtime-sub", "agent.settled", 2*time.Second)); err != nil {
+		t.Fatalf("runtime event from a host without schema was rejected: %v", err)
 	}
-	_, err = client.IngestRuntimeEvent(ctx, RuntimeSemanticEvent{ID: "stale:event-1", RuntimeID: "stale", WorkItemID: importTestID, Type: "turn.started", Timestamp: now.Add(3 * time.Second)})
-	var protocolErr *ProtocolError
-	if !errors.As(err, &protocolErr) || protocolErr.Code != "runtime_owner_mismatch" {
+	code := func(err error) string {
+		var protocolErr *ProtocolError
+		if !errors.As(err, &protocolErr) {
+			return ""
+		}
+		return protocolErr.Code
+	}
+	if err := send("", SchemaVersion, event("stale:event-1", "stale", "turn.started", 3*time.Second)); code(err) != "runtime_owner_mismatch" {
 		t.Fatalf("stale runtime error = %v", err)
+	}
+	if err := send("", SchemaVersion, event("runtime-sub:invalid", "runtime-sub", "unknown", 0)); code(err) != "runtime_event_error" {
+		t.Fatalf("invalid event error = %v", err)
 	}
 	// Validation and ownership rejection are permanent. Persistence/read errors
 	// must not tell a live producer to disable its event feed.
-	invalid := RuntimeSemanticEvent{ID: "runtime-sub:invalid", RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "unknown", Timestamp: now}
-	_, err = client.IngestRuntimeEvent(ctx, invalid)
-	if !errors.As(err, &protocolErr) || protocolErr.Code != "runtime_event_error" {
-		t.Fatalf("invalid event error = %v", err)
-	}
 	var saved RuntimeActivity
 	if _, err := server.database.ReadProjection(RuntimeActivityProjection, importTestID, &saved); err != nil {
 		t.Fatal(err)
@@ -114,22 +105,15 @@ func TestRuntimeEventLongPollWakesAfterCommittedEvent(t *testing.T) {
 	if err := server.database.UpdateProjections([]ProjectionUpdate{{Projection: RuntimeActivityProjection, Key: importTestID, Value: []byte("{broken")}}); err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.IngestRuntimeEvent(ctx, RuntimeSemanticEvent{ID: "runtime-sub:retry", RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "agent.settled", Timestamp: now.Add(4 * time.Second)})
-	if !errors.As(err, &protocolErr) || protocolErr.Code != "database_error" {
+	retry := event("runtime-sub:retry", "runtime-sub", "agent.settled", 4*time.Second)
+	if err := send("", SchemaVersion, retry); code(err) != "database_error" {
 		t.Fatalf("database failure became definitive rejection: %v", err)
 	}
 	restored, _ := json.Marshal(saved)
 	if err := server.database.UpdateProjections([]ProjectionUpdate{{Projection: RuntimeActivityProjection, Key: importTestID, Value: restored}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := client.IngestRuntimeEvent(ctx, RuntimeSemanticEvent{ID: "runtime-sub:retry", RuntimeID: "runtime-sub", WorkItemID: importTestID, Type: "agent.settled", Timestamp: now.Add(4 * time.Second)}); err != nil {
+	if err := send("", SchemaVersion, retry); err != nil {
 		t.Fatalf("repaired event could not be retried: %v", err)
-	}
-
-	if err := client.Shutdown(ctx); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-done; err != nil {
-		t.Fatal(err)
 	}
 }

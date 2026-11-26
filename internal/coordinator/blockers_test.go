@@ -1,7 +1,6 @@
 package coordinator
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"strings"
@@ -12,31 +11,6 @@ import (
 	"github.com/regb/workitem/internal/store"
 	bolt "go.etcd.io/bbolt"
 )
-
-func blockerTestDB(t *testing.T, now time.Time, ids ...string) *Database {
-	t.Helper()
-	root := t.TempDir()
-	native := store.New(root)
-	if err := native.Ensure(); err != nil {
-		t.Fatal(err)
-	}
-	for index, id := range ids {
-		manifest := model.NewManifest(id, "blocker-"+string(rune('a'+index)), "Blocker", nil, false, now, model.Repository{}, model.Checkout{})
-		manifest.State = model.StateActive
-		if err := native.CreateItem(context.Background(), manifest); err != nil {
-			t.Fatal(err)
-		}
-	}
-	db, err := OpenDatabase(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if _, err := seedManifests(context.Background(), db, root); err != nil {
-		t.Fatal(err)
-	}
-	return db
-}
 
 func runCommand(t *testing.T, db *Database, command ManifestCommand) (ManifestCommandResult, error) {
 	t.Helper()
@@ -71,7 +45,7 @@ func clearedCauses(t *testing.T, db *Database, itemID string) map[string]map[str
 func TestBlockersAreTypedClearedByConditionAndRefuseCycles(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	a, b := importTestID, "01KZYHGDCECSFS4BJ2SNTQP49W"
-	db := blockerTestDB(t, now, a, b)
+	db, _ := itemDatabase(t, testItems(now, a, b)...)
 
 	onB, err := runCommand(t, db, ManifestCommand{ID: "a-on-b", Type: CommandBlockerAdd, ItemID: a, Blockers: []model.Blocker{{Kind: model.BlockerItem, ItemID: b}}, CreatedAt: now})
 	if err != nil || len(onB.Manifest.Blockers) != 1 || !onB.Manifest.Waiting(now) {
@@ -149,7 +123,7 @@ func TestBlockersAreTypedClearedByConditionAndRefuseCycles(t *testing.T) {
 
 func TestClosingClearsOwnBlockers(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
-	db := blockerTestDB(t, now, importTestID)
+	db, _ := itemDatabase(t, testItems(now, importTestID)...)
 	if _, err := runCommand(t, db, ManifestCommand{ID: "review", Type: CommandBlockerAdd, ItemID: importTestID, Blockers: []model.Blocker{{Kind: model.BlockerExternal, Event: "review"}}, CreatedAt: now}); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +141,7 @@ func TestClosingClearsOwnBlockers(t *testing.T) {
 func TestBlockedItemsLeaveQueueUntilAResponseIsUnread(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	a, b := importTestID, "01KZYHGDCECSFS4BJ2SNTQP49W"
-	db := blockerTestDB(t, now, a, b)
+	db, _ := itemDatabase(t, testItems(now, a, b)...)
 	completed := now.Add(-time.Minute)
 	for _, id := range []string{a, b} {
 		encoded, _ := json.Marshal(AgentObservation{WorkItemID: id, Status: "idle", Activity: AttentionActivity{WorkItemID: id, LastRequestedAt: &completed, LastCompletedAt: &completed}, ObservedAt: now})
@@ -298,7 +272,7 @@ func TestSchemaFiveUpgradeReplacesWaitingWithBlockerAndKeepsBackup(t *testing.T)
 func TestWaitAddsSeveralBlockersAtomicallyWithMetadata(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	a, b := importTestID, "01KZYHGDCECSFS4BJ2SNTQP49W"
-	db := blockerTestDB(t, now, a, b)
+	db, _ := itemDatabase(t, testItems(now, a, b)...)
 	until := now.Add(time.Hour)
 	meta := map[string]string{"source": "github", "pr": "https://github.com/acme/api/pull/42"}
 	if _, err := runCommand(t, db, ManifestCommand{ID: "invalid-pair", Type: CommandBlockerAdd, ItemID: a, Blockers: []model.Blocker{{Kind: model.BlockerTime, Until: &until}, {Kind: model.BlockerItem, ItemID: a}}, CreatedAt: now}); err == nil {
@@ -389,7 +363,7 @@ func TestSchemaSixUpgradeTurnsReasonsIntoEventNames(t *testing.T) {
 func TestPromptEndsSnoozeButNotItemOrEventWaits(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Microsecond)
 	a, b := importTestID, "01KZYHGDCECSFS4BJ2SNTQP49W"
-	db := blockerTestDB(t, now, a, b)
+	db, _ := itemDatabase(t, testItems(now, a, b)...)
 	until := now.Add(24 * time.Hour)
 	if _, err := runCommand(t, db, ManifestCommand{ID: "snooze", Type: CommandBlockerAdd, ItemID: a, Blockers: []model.Blocker{{Kind: model.BlockerTime, Until: &until}, {Kind: model.BlockerItem, ItemID: b}, {Kind: model.BlockerExternal, Event: "review"}}, CreatedAt: now}); err != nil {
 		t.Fatal(err)
