@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
+	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/model"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -350,7 +351,7 @@ func rpcNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	start := fs.Bool("start", false, "start item")
 	force := fs.Bool("force", false, "override deep-work capacity when starting")
 	prompt := fs.String("prompt", "", "first prompt")
-	mode := fs.String("agent-mode", "tui", "tui or headless")
+	mode := fs.String("agent-mode", defaultAgentMode(cfg), "tui or headless")
 	modelName := fs.String("model", "", "model")
 	reasoning := fs.String("reasoning", "", "reasoning")
 	deep := fs.Bool("deep", false, "deep work")
@@ -566,6 +567,16 @@ func rpcStateValue(value string) (v1.ItemState, error) {
 		return 0, usageErr{fmt.Errorf("unknown state %q", value)}
 	}
 	return v, nil
+}
+
+// defaultAgentMode is the mode an agent starts in unless --agent-mode says
+// otherwise: a native TUI for a person, headless for an item's agent, which
+// drives the agents it starts through messages rather than a terminal.
+func defaultAgentMode(cfg Config) string {
+	if strings.TrimSpace(cfg.Env[credential.FileVariable]) != "" {
+		return "headless"
+	}
+	return "tui"
 }
 func rpcMode(value string) (v1.AgentMode, error) {
 	switch value {

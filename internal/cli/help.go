@@ -194,7 +194,7 @@ var helpDocs = map[string]helpDoc{
 		Usage:   []string{"wi new --title <text> [options]", "wi new --untitled [options]"},
 		Description: []string{
 			"Normally creates a work item in backlog. Durable metadata and DESCRIPTION.md are written immediately; no terminal session, conversation or agent process is started. Creation runs in the daemon through the API. Items begin with an absent managed-slot checkout. Select a registered repository with --repo NAME, or inherit the current item’s repository. Without --base, the immutable starting commit comes from the registered integration branch, with no fallback to HEAD. When the repository has an upstream and repo.follow_upstream is fast-forward (the default), the branch is first fetched and fast-forwarded like wi repo sync; if that fails or the histories diverged, the item starts from the local branch with a warning. An explicit --base never fetches.",
-			"With --start, the item moves to active and an unattached agent receives the global agent.startup_message through runtime control. --prompt supplies that message and implies --start; it never changes DESCRIPTION.md. --desc-file remains the durable task description. TUI mode is the default: it creates the normal tmux runtime for later entry but does not switch or attach the caller. Use --agent-mode headless for an explicitly headless runtime. If startup or delivery fails, the command reports the durable partial outcome instead of deleting the item.",
+			"With --start, the item moves to active and an unattached agent receives the global agent.startup_message through runtime control. --prompt supplies that message and implies --start; it never changes DESCRIPTION.md. --desc-file remains the durable task description. TUI mode is the default (headless when an item's agent runs the command): it creates the normal tmux runtime for later entry but does not switch or attach the caller. Use --agent-mode headless for an explicitly headless runtime. If startup or delivery fails, the command reports the durable partial outcome instead of deleting the item.",
 			"Run by an item's agent, wi new delegates: the new item is owned by the agent's item, whose agent follows it up and is sent a notice when it finishes a turn or waits on a question. It is left out of your list; the owning item's page shows it, and wi edit --owner me takes it.",
 			"Use --desc-file for a backlog item's self-contained multiline description. Labels are repeatable and augment defaults from user config and WI_ITEM_DEFAULT_LABELS; use --no-default-labels to opt out. Deep work is a built-in attribute, not a label.",
 		},
@@ -207,7 +207,7 @@ var helpDocs = map[string]helpDoc{
 			{"--agent <name>", "Select a named agent profile; omitted uses default_agent from config."},
 			{"--model <model>", "Choose the item's model, overriding the profile's. Stored as given; the driver checks it when the agent starts."},
 			{"--reasoning <level>", "Choose the item's reasoning level: off, minimal, low, medium, high, xhigh, or max. Drivers and models accept a subset."},
-			{"--agent-mode <mode>", "With --start or --prompt, start tui (default) or headless."},
+			{"--agent-mode <mode>", "With --start or --prompt, start tui (default) or headless (default for an item's agent)."},
 			{"--slug <slug>", "Set the initial active slug; must be unique."},
 			{"--label <label>", "Add a label after inherited defaults; repeatable."},
 			{"--no-default-labels", "Do not inherit user or repository default labels."},
@@ -534,7 +534,7 @@ var helpDocs = map[string]helpDoc{
 			"To create and start an item, use wi new --title TEXT --start.",
 		},
 		Options: []helpOption{
-			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless mode."},
+			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless mode (default for an item's agent)."},
 			{"--model <model>", "Save the item's model before starting, as wi agent settings set model=MODEL does."},
 			{"--reasoning <level>", "Save the item's reasoning level before starting."},
 			{"--force", "Override the deep-work active limit."},
@@ -646,7 +646,7 @@ var helpDocs = map[string]helpDoc{
 		Description: []string{"Ensures the selected primary-agent runtime of an active item like wi start, without changing lifecycle state or waiting. Backlog items must use wi start. JSON output never attaches."},
 		Options: []helpOption{
 			{"--item <selector>", "Select an item explicitly."},
-			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless Headless mode."},
+			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless mode (default for an item's agent)."},
 			{"--skip-setup", "Start the agent without setting up a new checkout claim."},
 		},
 		Examples: []string{`wi resume`, `wi resume --item auth`},
@@ -661,7 +661,7 @@ var helpDocs = map[string]helpDoc{
 		},
 		Options: []helpOption{
 			{"--backlog", "Return the item to the backlog without starting it."},
-			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless mode."},
+			{"--agent-mode <tui|headless>", "Start native TUI (default) or headless mode (default for an item's agent)."},
 			{"--model <model>", "Save the item's model before starting."},
 			{"--reasoning <level>", "Save the item's reasoning level before starting."},
 			{"--force", "Override the deep-work active limit."},

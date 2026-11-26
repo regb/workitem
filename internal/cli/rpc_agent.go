@@ -74,7 +74,7 @@ func rpcWorkspace(ctx context.Context, args []string, cfg Config, jsonOut bool) 
 func rpcLifecycle(ctx context.Context, command string, args []string, cfg Config, jsonOut bool) error {
 	fs := newFlagSet(command, cfg.Stderr)
 	selected := fs.String("item", "", "item")
-	mode := fs.String("agent-mode", "tui", "agent mode")
+	mode := fs.String("agent-mode", defaultAgentMode(cfg), "agent mode")
 	force := fs.Bool("force", false, "force busy stop")
 	skip := fs.Bool("skip-setup", false, "skip setup")
 	resolution := fs.String("resolution", "completed", "resolution")

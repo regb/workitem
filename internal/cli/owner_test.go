@@ -40,3 +40,12 @@ func TestEditOwnerFromTheCommandLine(t *testing.T) {
 		t.Fatal("a taken item is not in the user's list")
 	}
 }
+
+func TestAgentsStartHeadlessByDefault(t *testing.T) {
+	if got := defaultAgentMode(Config{Env: map[string]string{}}); got != "tui" {
+		t.Fatalf("person default = %q", got)
+	}
+	if got := defaultAgentMode(Config{Env: map[string]string{"WI_ITEM_CREDENTIAL_FILE": "/state/credential"}}); got != "headless" {
+		t.Fatalf("agent default = %q", got)
+	}
+}
