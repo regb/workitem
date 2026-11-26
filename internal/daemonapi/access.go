@@ -3,6 +3,7 @@ package daemonapi
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -96,6 +97,7 @@ var itemLevels = map[string]model.AccessLevel{
 var usersOnly = map[string]string{
 	corev1connect.ItemServiceDeleteItemProcedure:                     "deleting an item",
 	corev1connect.ItemServiceListAccessProcedure:                     "reading access",
+	corev1connect.ItemServiceCheckAccessProcedure:                    "reading access",
 	corev1connect.ItemServiceGrantAccessProcedure:                    "granting access",
 	corev1connect.ItemServiceRevokeAccessProcedure:                   "revoking access",
 	corev1connect.SystemServiceShutdownProcedure:                     "stopping the daemon",
@@ -340,4 +342,56 @@ func jobItems(jobs []*v1.Job) []string {
 		}
 	}
 	return out
+}
+
+// CheckAccess says what an item's agent may do to each of the items asked
+// about.
+func (s *Server) CheckAccess(ctx context.Context, req *connect.Request[v1.CheckAccessRequest]) (*connect.Response[v1.CheckAccessResponse], error) {
+	subject := strings.TrimSpace(req.Msg.Subject)
+	if model.PrincipalItem(subject) == "" {
+		return nil, invalid("subject must be an item's agent, item:<id>")
+	}
+	if len(req.Msg.ItemIds) > 200 {
+		return nil, invalid("at most 200 items at a time")
+	}
+	out := &v1.CheckAccessResponse{Access: []*v1.ItemAccess{}}
+	for _, id := range req.Msg.ItemIds {
+		if !model.ValidID(id) {
+			return nil, invalid("valid item_ids are required")
+		}
+		level, err := s.itemAccess(ctx, subject, id)
+		if err != nil {
+			return nil, err
+		}
+		out.Access = append(out.Access, &v1.ItemAccess{ItemId: id, Level: v1.AccessLevel(level)})
+	}
+	return response(out, nil)
+}
+
+// mentionPattern finds the items a message mentions, as the web writes them:
+// [title](wi:<id>) or [title](wi:<id> "slug").
+var mentionPattern = regexp.MustCompile(`\]\(wi:([0-9A-HJKMNP-TV-Z]{26})(?: "[^"]*")?\)`)
+
+// grantMentioned lets an item's agent read the items a person's message to
+// it mentions: its item gains view access to each it could not view. A
+// level it has is never lowered, and an agent's message grants nothing.
+func (s *Server) grantMentioned(ctx context.Context, itemID, text string) {
+	actor := model.ActorFrom(ctx)
+	if actor == "" || model.PrincipalItem(actor) != "" {
+		return
+	}
+	subject := model.ItemPrincipal(itemID)
+	seen := map[string]bool{itemID: true}
+	for _, match := range mentionPattern.FindAllStringSubmatch(text, 64) {
+		mentioned := match[1]
+		if seen[mentioned] {
+			continue
+		}
+		seen[mentioned] = true
+		level, err := s.itemAccess(ctx, subject, mentioned)
+		if err != nil || level >= model.AccessView {
+			continue
+		}
+		_, _ = s.Core.Database().GrantAccess(model.AccessEntry{Subject: subject, ItemID: mentioned, Level: model.AccessView, GrantedBy: actor, GrantedAt: time.Now().UTC()})
+	}
 }

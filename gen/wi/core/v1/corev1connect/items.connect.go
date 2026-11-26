@@ -73,6 +73,8 @@ const (
 	ItemServiceReadAttachmentProcedure = "/wi.core.v1.ItemService/ReadAttachment"
 	// ItemServiceListAccessProcedure is the fully-qualified name of the ItemService's ListAccess RPC.
 	ItemServiceListAccessProcedure = "/wi.core.v1.ItemService/ListAccess"
+	// ItemServiceCheckAccessProcedure is the fully-qualified name of the ItemService's CheckAccess RPC.
+	ItemServiceCheckAccessProcedure = "/wi.core.v1.ItemService/CheckAccess"
 	// ItemServiceGrantAccessProcedure is the fully-qualified name of the ItemService's GrantAccess RPC.
 	ItemServiceGrantAccessProcedure = "/wi.core.v1.ItemService/GrantAccess"
 	// ItemServiceRevokeAccessProcedure is the fully-qualified name of the ItemService's RevokeAccess
@@ -126,6 +128,10 @@ type ItemServiceClient interface {
 	// ListAccess lists what items' agents may do to other items. An item's
 	// agent may always manage its own item and the items it delegated.
 	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
+	// CheckAccess says what an item's agent may do to items: the level its
+	// own item, its delegations and the access entries give it on each. Only a
+	// user may read access.
+	CheckAccess(context.Context, *connect.Request[v1.CheckAccessRequest]) (*connect.Response[v1.CheckAccessResponse], error)
 	// GrantAccess lets an item's agent, or every item's, act on an item or on
 	// every item, up to a level. Granting again replaces the level. Only a
 	// user may change access.
@@ -261,6 +267,13 @@ func NewItemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		checkAccess: connect.NewClient[v1.CheckAccessRequest, v1.CheckAccessResponse](
+			httpClient,
+			baseURL+ItemServiceCheckAccessProcedure,
+			connect.WithSchema(itemServiceMethods.ByName("CheckAccess")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
 		grantAccess: connect.NewClient[v1.GrantAccessRequest, v1.GrantAccessResponse](
 			httpClient,
 			baseURL+ItemServiceGrantAccessProcedure,
@@ -296,6 +309,7 @@ type itemServiceClient struct {
 	listNotes      *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
 	readAttachment *connect.Client[v1.ReadAttachmentRequest, v1.ReadAttachmentResponse]
 	listAccess     *connect.Client[v1.ListAccessRequest, v1.ListAccessResponse]
+	checkAccess    *connect.Client[v1.CheckAccessRequest, v1.CheckAccessResponse]
 	grantAccess    *connect.Client[v1.GrantAccessRequest, v1.GrantAccessResponse]
 	revokeAccess   *connect.Client[v1.RevokeAccessRequest, v1.RevokeAccessResponse]
 }
@@ -390,6 +404,11 @@ func (c *itemServiceClient) ListAccess(ctx context.Context, req *connect.Request
 	return c.listAccess.CallUnary(ctx, req)
 }
 
+// CheckAccess calls wi.core.v1.ItemService.CheckAccess.
+func (c *itemServiceClient) CheckAccess(ctx context.Context, req *connect.Request[v1.CheckAccessRequest]) (*connect.Response[v1.CheckAccessResponse], error) {
+	return c.checkAccess.CallUnary(ctx, req)
+}
+
 // GrantAccess calls wi.core.v1.ItemService.GrantAccess.
 func (c *itemServiceClient) GrantAccess(ctx context.Context, req *connect.Request[v1.GrantAccessRequest]) (*connect.Response[v1.GrantAccessResponse], error) {
 	return c.grantAccess.CallUnary(ctx, req)
@@ -446,6 +465,10 @@ type ItemServiceHandler interface {
 	// ListAccess lists what items' agents may do to other items. An item's
 	// agent may always manage its own item and the items it delegated.
 	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
+	// CheckAccess says what an item's agent may do to items: the level its
+	// own item, its delegations and the access entries give it on each. Only a
+	// user may read access.
+	CheckAccess(context.Context, *connect.Request[v1.CheckAccessRequest]) (*connect.Response[v1.CheckAccessResponse], error)
 	// GrantAccess lets an item's agent, or every item's, act on an item or on
 	// every item, up to a level. Granting again replaces the level. Only a
 	// user may change access.
@@ -577,6 +600,13 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	itemServiceCheckAccessHandler := connect.NewUnaryHandler(
+		ItemServiceCheckAccessProcedure,
+		svc.CheckAccess,
+		connect.WithSchema(itemServiceMethods.ByName("CheckAccess")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
 	itemServiceGrantAccessHandler := connect.NewUnaryHandler(
 		ItemServiceGrantAccessProcedure,
 		svc.GrantAccess,
@@ -627,6 +657,8 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 			itemServiceReadAttachmentHandler.ServeHTTP(w, r)
 		case ItemServiceListAccessProcedure:
 			itemServiceListAccessHandler.ServeHTTP(w, r)
+		case ItemServiceCheckAccessProcedure:
+			itemServiceCheckAccessHandler.ServeHTTP(w, r)
 		case ItemServiceGrantAccessProcedure:
 			itemServiceGrantAccessHandler.ServeHTTP(w, r)
 		case ItemServiceRevokeAccessProcedure:
@@ -710,6 +742,10 @@ func (UnimplementedItemServiceHandler) ReadAttachment(context.Context, *connect.
 
 func (UnimplementedItemServiceHandler) ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.ListAccess is not implemented"))
+}
+
+func (UnimplementedItemServiceHandler) CheckAccess(context.Context, *connect.Request[v1.CheckAccessRequest]) (*connect.Response[v1.CheckAccessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.CheckAccess is not implemented"))
 }
 
 func (UnimplementedItemServiceHandler) GrantAccess(context.Context, *connect.Request[v1.GrantAccessRequest]) (*connect.Response[v1.GrantAccessResponse], error) {

@@ -38,7 +38,9 @@ service AgentService {
   rpc RestartAgent(RestartAgentRequest) returns (RestartAgentResponse);
   // SendMessage prompts an idle agent, steers a busy one, or queues a
   // follow-up for the end of its turn. When the agent is not running, it is
-  // started first.
+  // started first. A person's message that mentions other items, as
+  // [title](wi:<id>), lets the agent read them: its item gains view access
+  // to each it could not view.
   rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
   // AbortTurn stops the agent's current turn.
   rpc AbortTurn(AbortTurnRequest) returns (AbortTurnResponse);

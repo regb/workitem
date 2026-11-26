@@ -99,7 +99,9 @@ type AgentServiceClient interface {
 	RestartAgent(context.Context, *connect.Request[v1.RestartAgentRequest]) (*connect.Response[v1.RestartAgentResponse], error)
 	// SendMessage prompts an idle agent, steers a busy one, or queues a
 	// follow-up for the end of its turn. When the agent is not running, it is
-	// started first.
+	// started first. A person's message that mentions other items, as
+	// [title](wi:<id>), lets the agent read them: its item gains view access
+	// to each it could not view.
 	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
 	// AbortTurn stops the agent's current turn.
 	AbortTurn(context.Context, *connect.Request[v1.AbortTurnRequest]) (*connect.Response[v1.AbortTurnResponse], error)
@@ -321,7 +323,9 @@ type AgentServiceHandler interface {
 	RestartAgent(context.Context, *connect.Request[v1.RestartAgentRequest]) (*connect.Response[v1.RestartAgentResponse], error)
 	// SendMessage prompts an idle agent, steers a busy one, or queues a
 	// follow-up for the end of its turn. When the agent is not running, it is
-	// started first.
+	// started first. A person's message that mentions other items, as
+	// [title](wi:<id>), lets the agent read them: its item gains view access
+	// to each it could not view.
 	SendMessage(context.Context, *connect.Request[v1.SendMessageRequest]) (*connect.Response[v1.SendMessageResponse], error)
 	// AbortTurn stops the agent's current turn.
 	AbortTurn(context.Context, *connect.Request[v1.AbortTurnRequest]) (*connect.Response[v1.AbortTurnResponse], error)

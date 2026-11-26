@@ -39,6 +39,7 @@ var webProcedures = map[string]bool{
 	corev1connect.EventServiceWatchChangesProcedure:                  true,
 	corev1connect.EventServiceWatchProcedure:                         true,
 	corev1connect.ItemServiceListAccessProcedure:                     true,
+	corev1connect.ItemServiceCheckAccessProcedure:                    true,
 	corev1connect.ItemServiceGrantAccessProcedure:                    true,
 	corev1connect.ItemServiceRevokeAccessProcedure:                   true,
 	corev1connect.ItemServiceAddBlockerProcedure:                     true,

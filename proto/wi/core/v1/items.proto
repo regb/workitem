@@ -71,6 +71,12 @@ service ItemService {
   rpc ListAccess(ListAccessRequest) returns (ListAccessResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // CheckAccess says what an item's agent may do to items: the level its
+  // own item, its delegations and the access entries give it on each. Only a
+  // user may read access.
+  rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
   // GrantAccess lets an item's agent, or every item's, act on an item or on
   // every item, up to a level. Granting again replaces the level. Only a
   // user may change access.
@@ -649,6 +655,23 @@ message ListAccessRequest {}
 
 message ListAccessResponse {
   repeated AccessEntry entries = 1;
+}
+
+message CheckAccessRequest {
+  // subject is the item's agent, "item:<id>".
+  string subject = 1;
+  repeated string item_ids = 2;
+}
+
+message CheckAccessResponse {
+  // access is the subject's level on each item asked about, in order.
+  repeated ItemAccess access = 1;
+}
+
+// ItemAccess is what an item's agent may do to one item.
+message ItemAccess {
+  string item_id = 1;
+  AccessLevel level = 2;
 }
 
 message GrantAccessRequest {

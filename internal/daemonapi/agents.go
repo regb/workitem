@@ -270,6 +270,7 @@ func agentBusy(err error) bool {
 
 func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 	sender := model.ActorFrom(ctx)
+	s.grantMentioned(ctx, r.ItemId, r.Text)
 	// What another item's agent sends is recorded, so its envelope is kept
 	// for retries and its history entry can name its sender.
 	if r.ClientMessageId == "" && model.PrincipalItem(sender) != "" {

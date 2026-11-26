@@ -86,6 +86,7 @@ var procedures = map[string]procedure{
 	c.ItemServiceListNotesProcedure:      readItem,
 	c.ItemServiceReadAttachmentProcedure: readItem,
 	c.ItemServiceListAccessProcedure:     noItem,
+	c.ItemServiceCheckAccessProcedure:    noItem,
 	c.ItemServiceGrantAccessProcedure:    noItem,
 	c.ItemServiceRevokeAccessProcedure:   noItem,
 
