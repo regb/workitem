@@ -26,7 +26,7 @@ var (
 // jobs, an item's live content and heartbeats. Each part runs on its own;
 // the first to fail ends the stream, and the client reconnects.
 func (s *Server) Watch(ctx context.Context, req *connect.Request[v1.WatchRequest], stream *connect.ServerStream[v1.WatchResponse]) error {
-	if err := s.authorize(ctx, corev1connect.EventServiceWatchProcedure, requestItem(req.Msg)); err != nil {
+	if err := s.authorize(ctx, corev1connect.EventServiceWatchProcedure, requestItem(corev1connect.EventServiceWatchProcedure, req.Msg)); err != nil {
 		return err
 	}
 	if req.Msg.ItemId != "" {

@@ -202,7 +202,7 @@ func (s *Server) authorize(ctx context.Context, procedure, itemID string) error 
 	if itemID == "" {
 		// Only a call whose item is optional may name none: it then acts
 		// on no item, or on one its other fields name and check.
-		if optionalItem[procedure] {
+		if procedures[procedure].optionalItem {
 			return nil
 		}
 		return invalid("valid item_id is required")

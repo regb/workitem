@@ -25,8 +25,6 @@ import (
 	"github.com/regb/workitem/internal/model"
 	"github.com/regb/workitem/internal/plugin"
 	"github.com/regb/workitem/internal/store"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -174,52 +172,6 @@ type identityKey struct{}
 
 func caller(ctx context.Context) identity { v, _ := ctx.Value(identityKey{}).(identity); return v }
 
-// requestItem is the item a request names, when it names a valid one.
-func requestItem(message any) string {
-	// A few requests name their item inside a nested request.
-	switch r := message.(type) {
-	case *v1.GetRevisionPatchRequest:
-		return validItem(r.GetComparison().GetItemId())
-	case *v1.GetRevisionReviewFileRequest:
-		return validItem(r.GetComparison().GetItemId())
-	}
-	msg, ok := message.(proto.Message)
-	if !ok {
-		return ""
-	}
-	ref := msg.ProtoReflect()
-	field := ref.Descriptor().Fields().ByName("item_id")
-	if field == nil || field.Kind() != protoreflect.StringKind {
-		return ""
-	}
-	if id := ref.Get(field).String(); model.ValidID(id) {
-		return id
-	}
-	return ""
-}
-
-// nestedItem are the calls that name their item inside a nested request,
-// as requestItem reads it.
-var nestedItem = map[string]bool{
-	corev1connect.ReviewServiceGetRevisionPatchProcedure:      true,
-	corev1connect.ReviewServiceGetRevisionReviewFileProcedure: true,
-}
-
-func validItem(id string) string {
-	if model.ValidID(id) {
-		return id
-	}
-	return ""
-}
-
-// optionalItem are the calls whose item_id may be empty: ReleaseControl
-// names its item by lease_id instead, and the lists narrow to an item only
-// when given one.
-var optionalItem = map[string]bool{
-	corev1connect.ControlServiceReleaseControlProcedure: true,
-	corev1connect.JobServiceListJobsProcedure:           true,
-}
-
 func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -234,42 +186,33 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 			if who.web() && !webAllowed(req.Spec().Procedure) {
 				return nil, connect.NewError(connect.CodePermissionDenied, errors.New("the web endpoint does not allow this operation"))
 			}
-			if err := s.authorize(ctx, req.Spec().Procedure, requestItem(req.Any())); err != nil {
+			rule, described := procedures[req.Spec().Procedure]
+			if !described {
+				return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("%s is not described to the daemon", req.Spec().Procedure))
+			}
+			itemID, err := rule.itemOf(req.Any())
+			if err != nil {
+				return nil, err
+			}
+			repositoryID, err := rule.repositoryOf(req.Any())
+			if err != nil {
+				return nil, err
+			}
+			if err := s.authorize(ctx, req.Spec().Procedure, itemID); err != nil {
 				return nil, err
 			}
 			if err := refineForItems(who, req.Any()); err != nil {
 				return nil, err
 			}
-			method := req.Spec().Procedure[strings.LastIndex(req.Spec().Procedure, "/")+1:]
-			readOnly := strings.HasPrefix(method, "Get") || strings.HasPrefix(method, "List") || strings.HasPrefix(method, "Search") || strings.HasPrefix(method, "Resolve") || method == "SuggestTitle"
-			if msg, ok := req.Any().(proto.Message); ok {
-				ref := msg.ProtoReflect()
-				if repoField := ref.Descriptor().Fields().ByName("repository_id"); repoField != nil {
-					repositoryID := ref.Get(repoField).String()
-					if !model.ValidID(repositoryID) {
-						return nil, invalid("valid repository_id is required")
-					}
-					if !readOnly {
-						unlock := s.lock("repository:" + repositoryID)
-						defer unlock()
-					}
+			if rule.lockIf == nil || rule.lockIf(req.Any()) {
+				switch {
+				case rule.lock == lockItem && itemID != "":
+					defer s.lock(itemID)()
+				case rule.lock == lockRepository:
+					defer s.lock("repository:" + repositoryID)()
+				case rule.lock == lockProfiles:
+					defer s.lock(":profiles")()
 				}
-				field := ref.Descriptor().Fields().ByName("item_id")
-				optional := field != nil && optionalItem[req.Spec().Procedure] && ref.Get(field).String() == ""
-				if field != nil && field.Kind() == protoreflect.StringKind && !optional {
-					id := ref.Get(field).String()
-					if !model.ValidID(id) {
-						return nil, invalid("valid item_id is required")
-					}
-					if !readOnly && !strings.HasPrefix(req.Spec().Procedure, "/wi.core.v1.ReviewService/") {
-						unlock := s.lock(id)
-						defer unlock()
-					}
-				}
-			}
-			if !readOnly && strings.HasPrefix(req.Spec().Procedure, "/wi.core.v1.AgentProfileService/") {
-				unlock := s.lock(":profiles")
-				defer unlock()
 			}
 			result, err := next(ctx, req)
 			if storeErr := s.jobs.healthError(); storeErr != nil {

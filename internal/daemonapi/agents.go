@@ -738,7 +738,7 @@ func live(value driver.Content, generation uint32) *v1.LiveContent {
 	return out
 }
 func (s *Server) WatchLiveContent(ctx context.Context, req *connect.Request[v1.WatchLiveContentRequest], stream *connect.ServerStream[v1.WatchLiveContentResponse]) error {
-	if err := s.authorize(ctx, corev1connect.AgentServiceWatchLiveContentProcedure, requestItem(req.Msg)); err != nil {
+	if err := s.authorize(ctx, corev1connect.AgentServiceWatchLiveContentProcedure, requestItem(corev1connect.AgentServiceWatchLiveContentProcedure, req.Msg)); err != nil {
 		return err
 	}
 	if _, err := s.canonical(ctx, req.Msg.ItemId, 0); err != nil {

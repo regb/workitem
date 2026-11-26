@@ -781,7 +781,7 @@ func (s *Server) ListNotes(ctx context.Context, req *connect.Request[v1.ListNote
 	return response(out, err)
 }
 func (s *Server) ReadAttachment(ctx context.Context, req *connect.Request[v1.ReadAttachmentRequest], stream *connect.ServerStream[v1.ReadAttachmentResponse]) error {
-	if err := s.authorize(ctx, corev1connect.ItemServiceReadAttachmentProcedure, requestItem(req.Msg)); err != nil {
+	if err := s.authorize(ctx, corev1connect.ItemServiceReadAttachmentProcedure, requestItem(corev1connect.ItemServiceReadAttachmentProcedure, req.Msg)); err != nil {
 		return err
 	}
 	notes, err := s.ListNotes(ctx, connect.NewRequest(&v1.ListNotesRequest{ItemId: req.Msg.ItemId}))
