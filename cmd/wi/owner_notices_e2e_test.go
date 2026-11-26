@@ -89,4 +89,12 @@ func TestOwningItemsAreNoticedOfTheirDelegations(t *testing.T) {
 	// A question is noticed too.
 	f.run("send", child.Item.Id, "please ask me something")
 	await(2, "waiting on a question")
+	// An owner whose agent stopped still hears: the notice starts it.
+	f.run("agent", "runtime", "stop", "--item", parent.Item.Id, "--force")
+	f.run("agent", "answer", "--item", child.Item.Id, "Red")
+	// The test agent starts a fresh history when it restarts.
+	await(1, "Chosen: Red")
+	if agent := f.idle(parent.Item.Id); !agent.Online {
+		t.Fatal("the notice did not start the owner's agent")
+	}
 }

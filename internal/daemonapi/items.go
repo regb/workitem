@@ -301,11 +301,6 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 	if err != nil {
 		return nil, err
 	}
-	byID := map[string]model.Manifest{}
-	for _, m := range manifests {
-		byID[m.ID] = m
-	}
-	lookup := func(id string) (model.Manifest, bool) { m, ok := byID[id]; return m, ok }
 	// An item asking its user to file something needs them, delegated or not.
 	proposing := map[string]bool{}
 	if pending, err := s.Core.Database().ListProposals("", true); err == nil {
@@ -336,10 +331,9 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 			}
 		}
 		row := s.summary(ctx, m)
-		// Items an item owns are its agent's to follow up, not its user's,
-		// unless no active owner can, or its agent needs a person: a
-		// problem or a question.
-		if r.Owner == "" && m.Delegated() && model.FollowedUp(m, lookup) && row.Observation.GetAgentStatus() != v1.AgentStatus_AGENT_STATUS_PROBLEM && !row.Observation.GetAsking() && !proposing[m.ID] {
+		// Items an item owns are its agent's to follow up: their attention
+		// goes to it, as notices. A proposal, though, is for the user.
+		if r.Owner == "" && m.Delegated() && !proposing[m.ID] {
 			continue
 		}
 		if r.Order == v1.ListOrder_LIST_ORDER_ATTENTION {

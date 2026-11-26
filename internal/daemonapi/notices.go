@@ -18,8 +18,10 @@ import (
 // on a question, the daemon sends the owning item's agent a notice. The
 // notice is a message from the delegation, so it arrives in the usual
 // envelope; it waits for the owner's current turn rather than interrupting
-// it. No notice is sent for a turn the owner is already waiting on with
-// wi send --wait: the reply is that command's result.
+// it, and starts the owner's agent when it is not running. No notice is sent
+// for a turn the owner is already waiting on with wi send --wait, the reply
+// being that command's result, nor to a closed owner, which gave its
+// delegations back to its own owner when it closed.
 
 // noticeClient is the control client notices are sent under when no client
 // holds the owning item's control.
@@ -99,12 +101,11 @@ func (s *Server) noticeOwner(ctx context.Context, event coordinator.RuntimeSeman
 	if ownerID == "" {
 		return nil
 	}
+	// A closed owner gave its delegations back when it closed; no notice
+	// wakes it again. Any other owner gets the notice, its agent started
+	// if it is not running, as a message to it would.
 	owner, err := s.canonical(ctx, ownerID, 0)
-	if err != nil || owner.Manifest.State != model.StateActive {
-		return err
-	}
-	runtime, err := s.App.AgentRuntimeStatus(ctx, resolve(ownerID))
-	if err != nil || !runtime.Online {
+	if err != nil || owner.Manifest.State == model.StateClosed {
 		return err
 	}
 	if kind == "settled" {
@@ -121,7 +122,10 @@ func (s *Server) noticeOwner(ctx context.Context, event coordinator.RuntimeSeman
 		delivery = v1.Delivery_DELIVERY_FOLLOW_UP
 	}
 	unlock := s.lock(ownerID)
-	sent, err := s.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: ownerID, Text: text, Delivery: delivery, RequireOnline: true, ClientMessageId: "notice-" + event.ID}))
+	if running, _ := s.App.AgentRuntimeStatus(ctx, resolve(ownerID)); !running.Online {
+		delivery = v1.Delivery_DELIVERY_UNSPECIFIED
+	}
+	sent, err := s.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: ownerID, Text: text, Delivery: delivery, ClientMessageId: "notice-" + event.ID, StartMode: v1.AgentMode_AGENT_MODE_HEADLESS}))
 	unlock()
 	var job *v1.Job
 	if err == nil {

@@ -92,21 +92,6 @@ func OwnerChain(m Manifest, lookup func(string) (Manifest, bool)) []Manifest {
 	return chain
 }
 
-// FollowedUp reports whether a delegated item's owners can follow it up:
-// every item up its chain is active, the last one owned by a person.
-func FollowedUp(m Manifest, lookup func(string) (Manifest, bool)) bool {
-	chain := OwnerChain(m, lookup)
-	if len(chain) == 0 || chain[len(chain)-1].Delegated() {
-		return false
-	}
-	for _, owner := range chain {
-		if owner.State != StateActive {
-			return false
-		}
-	}
-	return true
-}
-
 // Delegated reports an item another item owns.
 func (m Manifest) Delegated() bool { return PrincipalItem(m.Owner) != "" }
 

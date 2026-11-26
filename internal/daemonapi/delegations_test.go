@@ -64,11 +64,10 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	if theirs := list(model.ItemPrincipal(parentID)); len(theirs) != len(delegated) {
 		t.Fatalf("the parent's delegations: %v", theirs)
 	}
-	// An owner that is not active cannot follow them up: they are the user's
-	// to see.
+	// Whatever its owner's state, a delegation's attention goes to its owner.
 	setState(v1.ItemState_ITEM_STATE_BACKLOG)
-	if mine := list(""); !mine[delegated[0]] {
-		t.Fatal("an inactive owner's delegation is hidden")
+	if mine := list(""); mine[delegated[0]] {
+		t.Fatal("a shelved owner's delegation is in the user's list")
 	}
 	setState(v1.ItemState_ITEM_STATE_ACTIVE)
 	// Rights reach down the owner chain: what a delegation delegates is its
