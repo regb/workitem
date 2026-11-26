@@ -134,10 +134,17 @@ message ListJobsRequest {
   string item_id = 1;
   // running_only omits finished jobs.
   bool running_only = 2;
+  // page_size bounds the page: zero, or more than 500, is 500.
+  uint32 page_size = 3;
+  // page_token continues from next_page_token. Offset-based, best-effort
+  // under concurrent changes; later pages may shift.
+  string page_token = 4;
 }
 
 message ListJobsResponse {
   repeated Job jobs = 1;
+  // next_page_token continues the list; empty on its last page.
+  string next_page_token = 2;
 }
 
 message WatchJobRequest {

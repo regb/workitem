@@ -32,8 +32,12 @@ func (s *Server) ListReviewRevisions(ctx context.Context, req *connect.Request[v
 	if err != nil {
 		return nil, checkpointError(err)
 	}
-	out := &v1.ListReviewRevisionsResponse{Version: uint32(state.Version)}
-	for _, r := range state.Revisions {
+	start, end, next, err := page(req.Msg.PageToken, req.Msg.PageSize, len(state.Revisions), maxPage)
+	if err != nil {
+		return nil, err
+	}
+	out := &v1.ListReviewRevisionsResponse{Version: uint32(state.Version), NextPageToken: next}
+	for _, r := range state.Revisions[start:end] {
 		out.Revisions = append(out.Revisions, codeRevision(r))
 	}
 	for _, g := range state.Gaps {

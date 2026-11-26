@@ -1381,8 +1381,13 @@ func (x *ReviewMerge) GetCreatedAt() *timestamppb.Timestamp {
 }
 
 type ListReviewRevisionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ItemId string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	// page_size bounds the page: zero, or more than 500, is 500.
+	PageSize uint32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// page_token continues from next_page_token. Offset-based, best-effort
+	// under concurrent changes; later pages may shift.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1424,13 +1429,30 @@ func (x *ListReviewRevisionsRequest) GetItemId() string {
 	return ""
 }
 
+func (x *ListReviewRevisionsRequest) GetPageSize() uint32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListReviewRevisionsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListReviewRevisionsResponse struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Revisions []*CodeRevision        `protobuf:"bytes,1,rep,name=revisions,proto3" json:"revisions,omitempty"`
 	// version is the review records' version, the fence for mutations.
-	Version       uint32         `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	CaptureGaps   []*CaptureGap  `protobuf:"bytes,3,rep,name=capture_gaps,json=captureGaps,proto3" json:"capture_gaps,omitempty"`
-	Merges        []*ReviewMerge `protobuf:"bytes,4,rep,name=merges,proto3" json:"merges,omitempty"`
+	Version uint32 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	// capture_gaps and merges are all of them, on each page.
+	CaptureGaps []*CaptureGap  `protobuf:"bytes,3,rep,name=capture_gaps,json=captureGaps,proto3" json:"capture_gaps,omitempty"`
+	Merges      []*ReviewMerge `protobuf:"bytes,4,rep,name=merges,proto3" json:"merges,omitempty"`
+	// next_page_token continues the list; empty on its last page.
+	NextPageToken string `protobuf:"bytes,5,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1491,6 +1513,13 @@ func (x *ListReviewRevisionsResponse) GetMerges() []*ReviewMerge {
 		return x.Merges
 	}
 	return nil
+}
+
+func (x *ListReviewRevisionsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 type CaptureReviewRevisionRequest struct {
@@ -1939,8 +1968,13 @@ func (x *GetRevisionReviewFileResponse) GetFile() *GetReviewFileResponse {
 }
 
 type GetReviewThreadsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ItemId string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	// page_size bounds the page: zero, or more than 500, is 500.
+	PageSize uint32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// page_token continues from next_page_token. Offset-based, best-effort
+	// under concurrent changes; later pages may shift.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1982,11 +2016,29 @@ func (x *GetReviewThreadsRequest) GetItemId() string {
 	return ""
 }
 
+func (x *GetReviewThreadsRequest) GetPageSize() uint32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *GetReviewThreadsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type GetReviewThreadsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Threads       []*ReviewThread        `protobuf:"bytes,1,rep,name=threads,proto3" json:"threads,omitempty"`
-	Rounds        []*ReviewRound         `protobuf:"bytes,2,rep,name=rounds,proto3" json:"rounds,omitempty"`
-	Version       uint32                 `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// threads are a page of the item's threads, oldest first.
+	Threads []*ReviewThread `protobuf:"bytes,1,rep,name=threads,proto3" json:"threads,omitempty"`
+	// rounds are all of them, on each page.
+	Rounds  []*ReviewRound `protobuf:"bytes,2,rep,name=rounds,proto3" json:"rounds,omitempty"`
+	Version uint32         `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	// next_page_token continues the list; empty on its last page.
+	NextPageToken string `protobuf:"bytes,4,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2040,6 +2092,13 @@ func (x *GetReviewThreadsResponse) GetVersion() uint32 {
 		return x.Version
 	}
 	return 0
+}
+
+func (x *GetReviewThreadsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 type GetReviewDraftsRequest struct {
@@ -3931,14 +3990,18 @@ const file_wi_core_v1_reviews_proto_rawDesc = "" +
 	"\x06before\x18\x05 \x01(\tR\x06before\x12\x14\n" +
 	"\x05after\x18\x06 \x01(\tR\x05after\x129\n" +
 	"\n" +
-	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"5\n" +
+	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"q\n" +
 	"\x1aListReviewRevisionsRequest\x12\x17\n" +
-	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"\xdb\x01\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\rR\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\x83\x02\n" +
 	"\x1bListReviewRevisionsResponse\x126\n" +
 	"\trevisions\x18\x01 \x03(\v2\x18.wi.core.v1.CodeRevisionR\trevisions\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\rR\aversion\x129\n" +
 	"\fcapture_gaps\x18\x03 \x03(\v2\x16.wi.core.v1.CaptureGapR\vcaptureGaps\x12/\n" +
-	"\x06merges\x18\x04 \x03(\v2\x17.wi.core.v1.ReviewMergeR\x06merges\"\xbe\x01\n" +
+	"\x06merges\x18\x04 \x03(\v2\x17.wi.core.v1.ReviewMergeR\x06merges\x12&\n" +
+	"\x0fnext_page_token\x18\x05 \x01(\tR\rnextPageToken\"\xbe\x01\n" +
 	"\x1cCaptureReviewRevisionRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x1d\n" +
 	"\n" +
@@ -3971,13 +4034,17 @@ const file_wi_core_v1_reviews_proto_rawDesc = "" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12)\n" +
 	"\x10expected_version\x18\x03 \x01(\tR\x0fexpectedVersion\"V\n" +
 	"\x1dGetRevisionReviewFileResponse\x125\n" +
-	"\x04file\x18\x01 \x01(\v2!.wi.core.v1.GetReviewFileResponseR\x04file\"2\n" +
+	"\x04file\x18\x01 \x01(\v2!.wi.core.v1.GetReviewFileResponseR\x04file\"n\n" +
 	"\x17GetReviewThreadsRequest\x12\x17\n" +
-	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"\x99\x01\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\rR\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"\xc1\x01\n" +
 	"\x18GetReviewThreadsResponse\x122\n" +
 	"\athreads\x18\x01 \x03(\v2\x18.wi.core.v1.ReviewThreadR\athreads\x12/\n" +
 	"\x06rounds\x18\x02 \x03(\v2\x17.wi.core.v1.ReviewRoundR\x06rounds\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\rR\aversion\"1\n" +
+	"\aversion\x18\x03 \x01(\rR\aversion\x12&\n" +
+	"\x0fnext_page_token\x18\x04 \x01(\tR\rnextPageToken\"1\n" +
 	"\x16GetReviewDraftsRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"d\n" +
 	"\x17GetReviewDraftsResponse\x12/\n" +

@@ -3,7 +3,6 @@ package daemonapi
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -11,7 +10,6 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -418,23 +416,11 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 		}
 		filtered = append(filtered, row)
 	}
-	out.Items = filtered
-	offset := 0
-	if r.PageToken != "" {
-		data, err := base64.RawURLEncoding.DecodeString(r.PageToken)
-		if err != nil {
-			return nil, invalid("invalid page_token")
-		}
-		offset, err = strconv.Atoi(string(data))
-		if err != nil || offset < 0 || offset > len(out.Items) {
-			return nil, invalid("invalid page_token")
-		}
+	start, end, next, err := page(r.PageToken, r.PageSize, len(filtered), 0)
+	if err != nil {
+		return nil, err
 	}
-	out.Items = out.Items[offset:]
-	if r.PageSize > 0 && len(out.Items) > int(r.PageSize) {
-		out.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(offset + int(r.PageSize))))
-		out.Items = out.Items[:r.PageSize]
-	}
+	out.Items, out.NextPageToken = filtered[start:end], next
 	return response(out, nil)
 }
 func (s *Server) SearchItems(ctx context.Context, req *connect.Request[v1.SearchItemsRequest]) (*connect.Response[v1.SearchItemsResponse], error) {
@@ -690,24 +676,12 @@ func (s *Server) ListItemEvents(ctx context.Context, req *connect.Request[v1.Lis
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	out := &v1.ListItemEventsResponse{}
-	offset := 0
-	if req.Msg.PageToken != "" {
-		data, e := base64.RawURLEncoding.DecodeString(req.Msg.PageToken)
-		if e != nil {
-			return nil, invalid("invalid page_token")
-		}
-		offset, e = strconv.Atoi(string(data))
-		if e != nil || offset < 0 || offset > len(events) {
-			return nil, invalid("invalid page_token")
-		}
+	start, end, next, err := page(req.Msg.PageToken, req.Msg.PageSize, len(events), 0)
+	if err != nil {
+		return nil, err
 	}
-	end := len(events)
-	if req.Msg.PageSize > 0 && end > offset+int(req.Msg.PageSize) {
-		end = offset + int(req.Msg.PageSize)
-		out.NextPageToken = base64.RawURLEncoding.EncodeToString([]byte(strconv.Itoa(end)))
-	}
-	for _, e := range events[offset:end] {
+	out := &v1.ListItemEventsResponse{NextPageToken: next}
+	for _, e := range events[start:end] {
 		out.Events = append(out.Events, &v1.ItemEvent{Id: e.ID, Type: e.Type, Actor: e.Actor, ForUser: e.For, Cause: e.Cause, Time: stamp(e.Timestamp), PayloadJson: string(e.Payload)})
 	}
 	return response(out, nil)
@@ -776,8 +750,12 @@ func (s *Server) ListNotes(ctx context.Context, req *connect.Request[v1.ListNote
 		return nil, rpcError(err)
 	}
 	notes, err := itemnotes.Read(s.App.Store.ItemDir(req.Msg.ItemId))
-	out := &v1.ListNotesResponse{Notes: []*v1.Note{}, Attachments: []*v1.CurrentAttachment{}}
-	for _, n := range notes {
+	start, end, next, pageErr := page(req.Msg.PageToken, req.Msg.PageSize, len(notes), maxPage)
+	if pageErr != nil {
+		return nil, pageErr
+	}
+	out := &v1.ListNotesResponse{Notes: []*v1.Note{}, Attachments: []*v1.CurrentAttachment{}, NextPageToken: next}
+	for _, n := range notes[start:end] {
 		out.Notes = append(out.Notes, note(n))
 	}
 	for _, a := range itemnotes.Attachments(notes) {
@@ -789,13 +767,17 @@ func (s *Server) ReadAttachment(ctx context.Context, req *connect.Request[v1.Rea
 	if err := s.authorize(ctx, corev1connect.ItemServiceReadAttachmentProcedure, requestItem(corev1connect.ItemServiceReadAttachmentProcedure, req.Msg)); err != nil {
 		return err
 	}
-	notes, err := s.ListNotes(ctx, connect.NewRequest(&v1.ListNotesRequest{ItemId: req.Msg.ItemId}))
+	if _, err := s.canonical(ctx, req.Msg.ItemId, 0); err != nil {
+		return rpcError(err)
+	}
+	// Every note is searched, not a page of them.
+	notes, err := itemnotes.Read(s.App.Store.ItemDir(req.Msg.ItemId))
 	if err != nil {
-		return err
+		return rpcError(err)
 	}
 	var meta *v1.Attachment
-	for _, n := range notes.Msg.Notes {
-		if a := n.Attachment; a != nil && a.Sha256 == req.Msg.Sha256 {
+	for _, n := range notes {
+		if a := note(n).Attachment; a != nil && a.Sha256 == req.Msg.Sha256 {
 			meta = a
 		}
 	}

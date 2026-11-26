@@ -645,7 +645,12 @@ type ListJobsRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	ItemId string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	// running_only omits finished jobs.
-	RunningOnly   bool `protobuf:"varint,2,opt,name=running_only,json=runningOnly,proto3" json:"running_only,omitempty"`
+	RunningOnly bool `protobuf:"varint,2,opt,name=running_only,json=runningOnly,proto3" json:"running_only,omitempty"`
+	// page_size bounds the page: zero, or more than 500, is 500.
+	PageSize uint32 `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// page_token continues from next_page_token. Offset-based, best-effort
+	// under concurrent changes; later pages may shift.
+	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -694,9 +699,25 @@ func (x *ListJobsRequest) GetRunningOnly() bool {
 	return false
 }
 
+func (x *ListJobsRequest) GetPageSize() uint32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListJobsRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
+	}
+	return ""
+}
+
 type ListJobsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Jobs          []*Job                 `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Jobs  []*Job                 `protobuf:"bytes,1,rep,name=jobs,proto3" json:"jobs,omitempty"`
+	// next_page_token continues the list; empty on its last page.
+	NextPageToken string `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -736,6 +757,13 @@ func (x *ListJobsResponse) GetJobs() []*Job {
 		return x.Jobs
 	}
 	return nil
+}
+
+func (x *ListJobsResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 type WatchJobRequest struct {
@@ -964,12 +992,16 @@ const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\rGetJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"3\n" +
 	"\x0eGetJobResponse\x12!\n" +
-	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"M\n" +
+	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\"\x89\x01\n" +
 	"\x0fListJobsRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12!\n" +
-	"\frunning_only\x18\x02 \x01(\bR\vrunningOnly\"7\n" +
+	"\frunning_only\x18\x02 \x01(\bR\vrunningOnly\x12\x1b\n" +
+	"\tpage_size\x18\x03 \x01(\rR\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x04 \x01(\tR\tpageToken\"_\n" +
 	"\x10ListJobsResponse\x12#\n" +
-	"\x04jobs\x18\x01 \x03(\v2\x0f.wi.core.v1.JobR\x04jobs\"(\n" +
+	"\x04jobs\x18\x01 \x03(\v2\x0f.wi.core.v1.JobR\x04jobs\x12&\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"(\n" +
 	"\x0fWatchJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"5\n" +
 	"\x10WatchJobResponse\x12!\n" +

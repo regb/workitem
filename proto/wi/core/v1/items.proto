@@ -582,6 +582,11 @@ message AttachResponse {
 
 message ListNotesRequest {
   string item_id = 1;
+  // page_size bounds the page: zero, or more than 500, is 500.
+  uint32 page_size = 2;
+  // page_token continues from next_page_token. Offset-based, best-effort
+  // under concurrent changes; later pages may shift.
+  string page_token = 3;
 }
 
 // CurrentAttachment is an attachment name's latest content.
@@ -591,8 +596,12 @@ message CurrentAttachment {
 }
 
 message ListNotesResponse {
+  // notes are a page of the item's notes, oldest first.
   repeated Note notes = 1;
+  // attachments are every attachment name's latest content, on each page.
   repeated CurrentAttachment attachments = 2;
+  // next_page_token continues the list; empty on its last page.
+  string next_page_token = 3;
 }
 
 message ReadAttachmentRequest {

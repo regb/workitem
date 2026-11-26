@@ -261,14 +261,22 @@ message ReviewMerge {
 
 message ListReviewRevisionsRequest {
   string item_id = 1;
+  // page_size bounds the page: zero, or more than 500, is 500.
+  uint32 page_size = 2;
+  // page_token continues from next_page_token. Offset-based, best-effort
+  // under concurrent changes; later pages may shift.
+  string page_token = 3;
 }
 
 message ListReviewRevisionsResponse {
   repeated CodeRevision revisions = 1;
   // version is the review records' version, the fence for mutations.
   uint32 version = 2;
+  // capture_gaps and merges are all of them, on each page.
   repeated CaptureGap capture_gaps = 3;
   repeated ReviewMerge merges = 4;
+  // next_page_token continues the list; empty on its last page.
+  string next_page_token = 5;
 }
 
 message CaptureReviewRevisionRequest {
@@ -321,12 +329,21 @@ message GetRevisionReviewFileResponse {
 
 message GetReviewThreadsRequest {
   string item_id = 1;
+  // page_size bounds the page: zero, or more than 500, is 500.
+  uint32 page_size = 2;
+  // page_token continues from next_page_token. Offset-based, best-effort
+  // under concurrent changes; later pages may shift.
+  string page_token = 3;
 }
 
 message GetReviewThreadsResponse {
+  // threads are a page of the item's threads, oldest first.
   repeated ReviewThread threads = 1;
+  // rounds are all of them, on each page.
   repeated ReviewRound rounds = 2;
   uint32 version = 3;
+  // next_page_token continues the list; empty on its last page.
+  string next_page_token = 4;
 }
 
 message GetReviewDraftsRequest {

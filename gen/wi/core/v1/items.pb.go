@@ -3717,8 +3717,13 @@ func (x *AttachResponse) GetNote() *Note {
 }
 
 type ListNotesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ItemId string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	// page_size bounds the page: zero, or more than 500, is 500.
+	PageSize uint32 `protobuf:"varint,2,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	// page_token continues from next_page_token. Offset-based, best-effort
+	// under concurrent changes; later pages may shift.
+	PageToken     string `protobuf:"bytes,3,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3756,6 +3761,20 @@ func (*ListNotesRequest) Descriptor() ([]byte, []int) {
 func (x *ListNotesRequest) GetItemId() string {
 	if x != nil {
 		return x.ItemId
+	}
+	return ""
+}
+
+func (x *ListNotesRequest) GetPageSize() uint32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+func (x *ListNotesRequest) GetPageToken() string {
+	if x != nil {
+		return x.PageToken
 	}
 	return ""
 }
@@ -3814,9 +3833,13 @@ func (x *CurrentAttachment) GetTime() *timestamppb.Timestamp {
 }
 
 type ListNotesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Notes         []*Note                `protobuf:"bytes,1,rep,name=notes,proto3" json:"notes,omitempty"`
-	Attachments   []*CurrentAttachment   `protobuf:"bytes,2,rep,name=attachments,proto3" json:"attachments,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// notes are a page of the item's notes, oldest first.
+	Notes []*Note `protobuf:"bytes,1,rep,name=notes,proto3" json:"notes,omitempty"`
+	// attachments are every attachment name's latest content, on each page.
+	Attachments []*CurrentAttachment `protobuf:"bytes,2,rep,name=attachments,proto3" json:"attachments,omitempty"`
+	// next_page_token continues the list; empty on its last page.
+	NextPageToken string `protobuf:"bytes,3,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3863,6 +3886,13 @@ func (x *ListNotesResponse) GetAttachments() []*CurrentAttachment {
 		return x.Attachments
 	}
 	return nil
+}
+
+func (x *ListNotesResponse) GetNextPageToken() string {
+	if x != nil {
+		return x.NextPageToken
+	}
+	return ""
 }
 
 type ReadAttachmentRequest struct {
@@ -4700,17 +4730,21 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\x04text\x18\x04 \x01(\tR\x04text\x12#\n" +
 	"\rcheckout_path\x18\x05 \x01(\tR\fcheckoutPath\"6\n" +
 	"\x0eAttachResponse\x12$\n" +
-	"\x04note\x18\x01 \x01(\v2\x10.wi.core.v1.NoteR\x04note\"+\n" +
+	"\x04note\x18\x01 \x01(\v2\x10.wi.core.v1.NoteR\x04note\"g\n" +
 	"\x10ListNotesRequest\x12\x17\n" +
-	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"{\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x1b\n" +
+	"\tpage_size\x18\x02 \x01(\rR\bpageSize\x12\x1d\n" +
+	"\n" +
+	"page_token\x18\x03 \x01(\tR\tpageToken\"{\n" +
 	"\x11CurrentAttachment\x126\n" +
 	"\n" +
 	"attachment\x18\x01 \x01(\v2\x16.wi.core.v1.AttachmentR\n" +
 	"attachment\x12.\n" +
-	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"|\n" +
+	"\x04time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\"\xa4\x01\n" +
 	"\x11ListNotesResponse\x12&\n" +
 	"\x05notes\x18\x01 \x03(\v2\x10.wi.core.v1.NoteR\x05notes\x12?\n" +
-	"\vattachments\x18\x02 \x03(\v2\x1d.wi.core.v1.CurrentAttachmentR\vattachments\"H\n" +
+	"\vattachments\x18\x02 \x03(\v2\x1d.wi.core.v1.CurrentAttachmentR\vattachments\x12&\n" +
+	"\x0fnext_page_token\x18\x03 \x01(\tR\rnextPageToken\"H\n" +
 	"\x15ReadAttachmentRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x16\n" +
 	"\x06sha256\x18\x02 \x01(\tR\x06sha256\"f\n" +

@@ -39,7 +39,7 @@ func rpcReviewDiscussion(ctx context.Context, command string, args []string, cfg
 		return err
 	}
 	if command == "threads" || command == "thread" {
-		out, err := cfg.API.Reviews.GetReviewThreads(ctx, rpcRequest(cfg, &v1.GetReviewThreadsRequest{ItemId: id}))
+		out, err := allThreads(ctx, cfg, id)
 		if err != nil {
 			return err
 		}
@@ -50,15 +50,15 @@ func rpcReviewDiscussion(ctx context.Context, command string, args []string, cfg
 			}
 			selected = fs.Arg(0)
 		}
-		kept := out.Msg.Threads[:0]
-		for _, t := range out.Msg.Threads {
+		kept := out.Threads[:0]
+		for _, t := range out.Threads {
 			if selected != "" && t.Id != selected || *unresolved && (t.Status == v1.ThreadStatus_THREAD_STATUS_RESOLVED || t.Status == v1.ThreadStatus_THREAD_STATUS_WITHDRAWN) {
 				continue
 			}
 			kept = append(kept, t)
 		}
-		out.Msg.Threads = kept
-		return rpcEmit(cfg, jsonOut, out.Msg)
+		out.Threads = kept
+		return rpcEmit(cfg, jsonOut, out)
 	}
 	if command == "drafts" {
 		out, err := cfg.API.Reviews.GetReviewDrafts(ctx, rpcRequest(cfg, &v1.GetReviewDraftsRequest{ItemId: id}))
@@ -104,12 +104,12 @@ func rpcReviewDiscussion(ctx context.Context, command string, args []string, cfg
 		if fs.NArg() != 1 {
 			return errors.New("resolution requires tN")
 		}
-		threads, err := cfg.API.Reviews.GetReviewThreads(ctx, rpcRequest(cfg, &v1.GetReviewThreadsRequest{ItemId: id}))
+		threads, err := allThreads(ctx, cfg, id)
 		if err != nil {
 			return err
 		}
 		found := false
-		for _, t := range threads.Msg.Threads {
+		for _, t := range threads.Threads {
 			if t.Id == fs.Arg(0) {
 				if anchor.RevisionId == "" {
 					anchor = t.Anchor

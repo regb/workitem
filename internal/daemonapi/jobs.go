@@ -307,7 +307,12 @@ func (s *Server) GetJob(ctx context.Context, req *connect.Request[v1.GetJobReque
 	return response(&v1.GetJobResponse{Job: value}, nil)
 }
 func (s *Server) ListJobs(ctx context.Context, req *connect.Request[v1.ListJobsRequest]) (*connect.Response[v1.ListJobsResponse], error) {
-	return response(&v1.ListJobsResponse{Jobs: s.viewableJobs(ctx, s.jobs.list(req.Msg.ItemId, req.Msg.RunningOnly))}, nil)
+	jobs := s.viewableJobs(ctx, s.jobs.list(req.Msg.ItemId, req.Msg.RunningOnly))
+	start, end, next, err := page(req.Msg.PageToken, req.Msg.PageSize, len(jobs), maxPage)
+	if err != nil {
+		return nil, err
+	}
+	return response(&v1.ListJobsResponse{Jobs: jobs[start:end], NextPageToken: next}, nil)
 }
 func (s *Server) WatchJob(ctx context.Context, req *connect.Request[v1.WatchJobRequest], stream *connect.ServerStream[v1.WatchJobResponse]) error {
 	job, err := s.jobs.get(req.Msg.JobId)

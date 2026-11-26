@@ -41,8 +41,12 @@ func (s *Server) GetReviewThreads(ctx context.Context, req *connect.Request[v1.G
 	if err != nil {
 		return nil, checkpointError(err)
 	}
-	out := &v1.GetReviewThreadsResponse{Version: uint32(state.Version)}
-	for _, t := range state.Threads {
+	start, end, next, err := page(req.Msg.PageToken, req.Msg.PageSize, len(state.Threads), maxPage)
+	if err != nil {
+		return nil, err
+	}
+	out := &v1.GetReviewThreadsResponse{Version: uint32(state.Version), NextPageToken: next}
+	for _, t := range state.Threads[start:end] {
 		thread := &v1.ReviewThread{Id: t.ID, Anchor: reviewAnchor(t.Anchor), Status: threadStatus(t.Status())}
 		for _, m := range t.Messages {
 			thread.Messages = append(thread.Messages, &v1.ReviewMessage{Id: m.ID, Role: reviewRole(m.Role), Body: m.Body, RevisionId: m.Revision, RoundId: m.Round, Addressed: m.Addressed, Resolution: threadResolution(m.Resolution), CreatedAt: stamp(m.CreatedAt)})

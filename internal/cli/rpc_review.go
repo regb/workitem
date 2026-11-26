@@ -80,7 +80,7 @@ func rpcReview(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 		fmt.Fprintf(cfg.Stdout, "Captured %s at %s\n", out.Msg.Revision.Id, out.Msg.Revision.Commit)
 		return nil
 	}
-	list, err := cfg.API.Reviews.ListReviewRevisions(ctx, rpcRequest(cfg, &v1.ListReviewRevisionsRequest{ItemId: id}))
+	list, err := allRevisions(ctx, cfg, id)
 	if err != nil {
 		return err
 	}
@@ -89,9 +89,9 @@ func rpcReview(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 			return errors.New("review listing takes no positional arguments")
 		}
 		if jsonOut {
-			return rpcEmit(cfg, true, list.Msg)
+			return rpcEmit(cfg, true, list)
 		}
-		for _, r := range list.Msg.Revisions {
+		for _, r := range list.Revisions {
 			fmt.Fprintf(cfg.Stdout, "%s  %s  %s\n", r.Id, r.Commit, r.ObservedBranch)
 		}
 		return nil
@@ -99,10 +99,10 @@ func rpcReview(ctx context.Context, args []string, cfg Config, jsonOut bool) err
 	if command != "diff" {
 		return fmt.Errorf("unknown review command %q", command)
 	}
-	if len(list.Msg.Revisions) == 0 {
+	if len(list.Revisions) == 0 {
 		return errors.New("no captured revision")
 	}
-	target := list.Msg.Revisions[len(list.Msg.Revisions)-1].Id
+	target := list.Revisions[len(list.Revisions)-1].Id
 	from := ""
 	if fs.NArg() == 1 {
 		target = fs.Arg(0)

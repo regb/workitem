@@ -750,21 +750,21 @@ func rpcNotes(ctx context.Context, command string, args []string, cfg Config, js
 		}
 		return rpcEmit(cfg, jsonOut, value.Msg)
 	case "notes", "attachments":
-		value, err := cfg.API.Items.ListNotes(ctx, rpcRequest(cfg, &v1.ListNotesRequest{ItemId: id}))
+		value, err := allNotes(ctx, cfg, id)
 		if err != nil {
 			return err
 		}
 		if command == "attachments" && !jsonOut {
-			if len(value.Msg.Attachments) == 0 {
+			if len(value.Attachments) == 0 {
 				fmt.Fprintln(cfg.Stdout, "no attachments")
 			}
-			for _, current := range value.Msg.Attachments {
+			for _, current := range value.Attachments {
 				a := current.Attachment
 				fmt.Fprintf(cfg.Stdout, "%s  %d bytes  %s\n", a.Name, a.Size, a.Sha256)
 			}
 			return nil
 		}
-		return rpcEmit(cfg, jsonOut, value.Msg)
+		return rpcEmit(cfg, jsonOut, value)
 	case "attachment":
 		pos := fs.Args()
 		if len(pos) > 0 && pos[0] == "cat" {
