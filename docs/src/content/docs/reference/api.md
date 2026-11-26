@@ -68,7 +68,7 @@ A failed call answers with an HTTP error status and a JSON body such as `{"code"
 | `AgentProfileService` | Agent profiles, the default profile, drivers, the models and reasoning levels a profile offers |
 | `ReviewService` | Code review: revisions captured after each agent turn, comparisons, threads, drafts, rounds, replies, approvals, round notifications |
 | `ScheduleService` | Schedules that start a new item in a repository on a cron schedule |
-| `JobService` | Long operations: progress, approvals, cancellation |
+| `JobService` | Long operations: progress and cancellation |
 | `EventService` | The change feed |
 | `SystemService` | Daemon information, health, diagnostics, effective configuration, plugin registry, shutdown, subscription usage |
 | `ViewService` | Composite reads, such as everything a conversation page shows for an item |
@@ -101,7 +101,7 @@ The daemon enforces lifecycle invariants in the plumbing itself, so no order of 
 
 **Idempotency keys.** Creations that must not happen twice take a key: `CreateItemRequest.request_id` returns the item a first attempt created, and `client_message_id` keeps a message from being delivered twice to the same item. The ID is also echoed on the live content stream, so the client can match the message to its history entry.
 
-**Jobs.** Operations that can outlive the request, such as setting up a checkout, starting an agent or an item, restarting an agent, shelving, closing, reopening, integrating an item and synchronizing a repository, return a `Job`. A job keeps running when its client disconnects; `JobService.WatchJob` streams its state, phase, log tail and outcome, starting with its current state. A job that needs a person's answer, such as trusting a checkout's `.envrc`, waits in `JOB_STATE_WAITING_FOR_APPROVAL` until `AnswerApproval`; the question expires after ten minutes and is bound to the file's content, so a changed file asks again. The final state is read from the domain services, such as `ItemService.GetItem`. Job summaries are saved in the daemon's database: a job still running when the daemon stops ends as failed with "interrupted by a daemon restart", keeping its last progress and partial outcome, and stays readable. The daemon keeps the latest 500 finished jobs; older IDs return `NOT_FOUND`. `CreateItem` stays synchronous.
+**Jobs.** Operations that can outlive the request, such as setting up a checkout, starting an agent or an item, restarting an agent, shelving, closing, reopening, integrating an item and synchronizing a repository, return a `Job`. A job keeps running when its client disconnects; `JobService.WatchJob` streams its state, phase, log tail and outcome, starting with its current state. The final state is read from the domain services, such as `ItemService.GetItem`. Job summaries are saved in the daemon's database: a job still running when the daemon stops ends as failed with "interrupted by a daemon restart", keeping its last progress and partial outcome, and stays readable. The daemon keeps the latest 500 finished jobs; older IDs return `NOT_FOUND`. `CreateItem` stays synchronous.
 
 **Partial outcomes.** When a durable step succeeded before a later one failed, such as an item created whose agent did not start, the error carries a `PartialOutcome` detail naming the item and what was kept. A job reports the same in its `partial` field. Clients show it rather than assume nothing happened.
 

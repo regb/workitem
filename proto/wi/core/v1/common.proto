@@ -20,15 +20,15 @@ syntax = "proto3";
 //     Client-side policy, such as default labels, label filters or a custom
 //     ranking, is applied by the client and sent explicitly.
 //   - The caller's identity travels in request metadata, not in messages:
-//     an operator (local socket peer or authenticated remote client), a web
-//     adapter acting for a browser tab, or an agent scoped to its item. The
-//     daemon checks permissions per method.
+//     every call presents a credential, the operator's, wi web's (which may
+//     name the user it acts for), or an item's agent's. The daemon checks
+//     permissions per method, and an item's agent against its access.
 //   - Mutations that depend on what the caller read carry expected_revision
 //     or expected_generation; a stale one fails with ABORTED, meaning re-read
 //     and retry. FAILED_PRECONDITION means the current state does not allow
 //     the operation, such as releasing a checkout while the agent runs.
 //   - Operations that can outlive a request start a Job and return it;
-//     JobService reports progress and asks approvals.
+//     JobService reports their progress and cancels them.
 //   - A failure after a durable step succeeded returns an error whose details
 //     carry a PartialOutcome, so the retained result stays visible.
 package wi.core.v1;

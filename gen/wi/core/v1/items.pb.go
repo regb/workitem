@@ -949,14 +949,12 @@ func (x *FollowUp) GetClearedAt() *timestamppb.Timestamp {
 // ItemObservation is what the daemon last observed about an item's agent and
 // checkout. Observations can be stale; they never replace durable intent.
 type ItemObservation struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Snapshot work in progress; independent of agent state and control admission.
-	Capturing   bool        `protobuf:"varint,13,opt,name=capturing,proto3" json:"capturing,omitempty"`
-	AgentStatus AgentStatus `protobuf:"varint,1,opt,name=agent_status,json=agentStatus,proto3,enum=wi.core.v1.AgentStatus" json:"agent_status,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	AgentStatus AgentStatus            `protobuf:"varint,1,opt,name=agent_status,json=agentStatus,proto3,enum=wi.core.v1.AgentStatus" json:"agent_status,omitempty"`
 	// agent_reason explains a problem, or a question the agent is asking.
 	AgentReason string `protobuf:"bytes,2,opt,name=agent_reason,json=agentReason,proto3" json:"agent_reason,omitempty"`
-	// asking means the agent paused its turn on a question answered in its
-	// terminal.
+	// asking means the agent paused its turn on a question, answered with
+	// AgentService.AnswerQuestion or in its terminal.
 	Asking         bool           `protobuf:"varint,3,opt,name=asking,proto3" json:"asking,omitempty"`
 	WorktreeStatus WorktreeStatus `protobuf:"varint,4,opt,name=worktree_status,json=worktreeStatus,proto3,enum=wi.core.v1.WorktreeStatus" json:"worktree_status,omitempty"`
 	WorktreeReason string         `protobuf:"bytes,5,opt,name=worktree_reason,json=worktreeReason,proto3" json:"worktree_reason,omitempty"`
@@ -971,6 +969,9 @@ type ItemObservation struct {
 	// attention only for an unread response.
 	NeedsAttention bool               `protobuf:"varint,10,opt,name=needs_attention,json=needsAttention,proto3" json:"needs_attention,omitempty"`
 	Activity       *AttentionActivity `protobuf:"bytes,11,opt,name=activity,proto3" json:"activity,omitempty"`
+	// capturing means a review snapshot is being captured, independent of
+	// the agent's state and of control.
+	Capturing bool `protobuf:"varint,13,opt,name=capturing,proto3" json:"capturing,omitempty"`
 	// background_tasks counts background work an idle agent waits on, such as
 	// a background command or subagent; each re-activates the agent when it
 	// completes. While it is nonzero the agent counts as working.
@@ -1015,13 +1016,6 @@ func (x *ItemObservation) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ItemObservation.ProtoReflect.Descriptor instead.
 func (*ItemObservation) Descriptor() ([]byte, []int) {
 	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *ItemObservation) GetCapturing() bool {
-	if x != nil {
-		return x.Capturing
-	}
-	return false
 }
 
 func (x *ItemObservation) GetAgentStatus() AgentStatus {
@@ -1099,6 +1093,13 @@ func (x *ItemObservation) GetActivity() *AttentionActivity {
 		return x.Activity
 	}
 	return nil
+}
+
+func (x *ItemObservation) GetCapturing() bool {
+	if x != nil {
+		return x.Capturing
+	}
+	return false
 }
 
 func (x *ItemObservation) GetBackgroundTasks() uint32 {
@@ -4470,8 +4471,7 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"blocked_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tblockedAt\x129\n" +
 	"\n" +
 	"cleared_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tclearedAt\"\xb5\x05\n" +
-	"\x0fItemObservation\x12\x1c\n" +
-	"\tcapturing\x18\r \x01(\bR\tcapturing\x12:\n" +
+	"\x0fItemObservation\x12:\n" +
 	"\fagent_status\x18\x01 \x01(\x0e2\x17.wi.core.v1.AgentStatusR\vagentStatus\x12!\n" +
 	"\fagent_reason\x18\x02 \x01(\tR\vagentReason\x12\x16\n" +
 	"\x06asking\x18\x03 \x01(\bR\x06asking\x12C\n" +
@@ -4484,7 +4484,8 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"observedAt\x12'\n" +
 	"\x0fneeds_attention\x18\n" +
 	" \x01(\bR\x0eneedsAttention\x129\n" +
-	"\bactivity\x18\v \x01(\v2\x1d.wi.core.v1.AttentionActivityR\bactivity\x12)\n" +
+	"\bactivity\x18\v \x01(\v2\x1d.wi.core.v1.AttentionActivityR\bactivity\x12\x1c\n" +
+	"\tcapturing\x18\r \x01(\bR\tcapturing\x12)\n" +
 	"\x10background_tasks\x18\x0e \x01(\rR\x0fbackgroundTasks\x12:\n" +
 	"\n" +
 	"background\x18\x0f \x03(\v2\x1a.wi.core.v1.BackgroundTaskR\n" +

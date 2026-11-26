@@ -190,13 +190,11 @@ message FollowUp {
 // ItemObservation is what the daemon last observed about an item's agent and
 // checkout. Observations can be stale; they never replace durable intent.
 message ItemObservation {
- // Snapshot work in progress; independent of agent state and control admission.
- bool capturing = 13;
   AgentStatus agent_status = 1;
   // agent_reason explains a problem, or a question the agent is asking.
   string agent_reason = 2;
-  // asking means the agent paused its turn on a question answered in its
-  // terminal.
+  // asking means the agent paused its turn on a question, answered with
+  // AgentService.AnswerQuestion or in its terminal.
   bool asking = 3;
   WorktreeStatus worktree_status = 4;
   string worktree_reason = 5;
@@ -211,6 +209,9 @@ message ItemObservation {
   // attention only for an unread response.
   bool needs_attention = 10;
   AttentionActivity activity = 11;
+  // capturing means a review snapshot is being captured, independent of
+  // the agent's state and of control.
+  bool capturing = 13;
   // background_tasks counts background work an idle agent waits on, such as
   // a background command or subagent; each re-activates the agent when it
   // completes. While it is nonzero the agent counts as working.
