@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/apitest"
+	"github.com/regb/workitem/internal/coordinator"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -183,5 +184,22 @@ func TestSystemSchedulesStartItemsLikeTheDashboard(t *testing.T) {
 	}
 	if err := refused(t, connect.CodeNotFound, clients.Schedules.RunSchedule, &v1.RunScheduleRequest{Id: schedule.Id}); !strings.Contains(err.Error(), "schedule") {
 		t.Fatalf("running a deleted schedule: %v", err)
+	}
+}
+
+// A managed daemon belongs to its service manager: it refuses to be shut
+// down through the API, says why, and keeps serving.
+func TestManagedDaemonRefusesShutdown(t *testing.T) {
+	t.Parallel()
+	f := apitest.New(t, apitest.WithConfig("[daemon]\nmanaged = true\n"))
+	if info := call(t, f.Clients.System.GetInfo, &v1.GetInfoRequest{}); !info.Managed {
+		t.Fatalf("daemon is not managed: %v", info)
+	}
+	err := refused(t, connect.CodeFailedPrecondition, f.Clients.System.Shutdown, &v1.ShutdownRequest{})
+	if !strings.Contains(err.Error(), coordinator.ManagedDaemonMessage) {
+		t.Fatalf("refusal does not say why: %v", err)
+	}
+	if health := call(t, f.Clients.System.GetHealth, &v1.GetHealthRequest{}); !health.Healthy {
+		t.Fatalf("daemon stopped answering: %v", health)
 	}
 }
