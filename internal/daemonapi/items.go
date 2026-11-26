@@ -301,13 +301,6 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 	if err != nil {
 		return nil, err
 	}
-	// An item asking its user to file something needs them, delegated or not.
-	proposing := map[string]bool{}
-	if pending, err := s.Core.Database().ListProposals("", true); err == nil {
-		for _, p := range pending {
-			proposing[p.ItemID] = true
-		}
-	}
 	out := &v1.ListItemsResponse{Items: []*v1.ItemSummary{}}
 	for _, m := range manifests {
 		if !visible(m) {
@@ -332,8 +325,8 @@ func (s *Server) ListItems(ctx context.Context, req *connect.Request[v1.ListItem
 		}
 		row := s.summary(ctx, m)
 		// Items an item owns are its agent's to follow up: their attention
-		// goes to it, as notices. A proposal, though, is for the user.
-		if r.Owner == "" && m.Delegated() && !proposing[m.ID] {
+		// goes to it, as notices.
+		if r.Owner == "" && m.Delegated() {
 			continue
 		}
 		if r.Order == v1.ListOrder_LIST_ORDER_ATTENTION {
@@ -465,6 +458,21 @@ func (s *Server) UpdateItem(ctx context.Context, req *connect.Request[v1.UpdateI
 	}
 	if r.SnoozedUntil != nil && r.ClearSnooze {
 		return nil, invalid("snoozed_until and clear_snooze conflict")
+	}
+	if r.Owner != "" {
+		if err := s.checkOwner(ctx, c.Manifest, r.Owner); err != nil {
+			return nil, err
+		}
+		changed, err := s.command(ctx, r.ItemId, coordinator.CommandOwnerSet, r.ExpectedRevision, func(cmd *coordinator.ManifestCommand) { cmd.Owner = r.Owner })
+		if err != nil {
+			return nil, rpcError(err)
+		}
+		if !metadataEdited(r) {
+			return response(&v1.UpdateItemResponse{Item: item(changed.Manifest, changed.Revision)}, nil)
+		}
+		if c, err = s.canonical(ctx, r.ItemId, 0); err != nil {
+			return nil, rpcError(err)
+		}
 	}
 	edit := &coordinator.MetadataEdit{Title: r.Title, AddLabels: r.AddLabels, RemoveLabels: r.RemoveLabels, DeepWork: r.DeepWork, Priority: r.Priority, Pinned: r.Pinned, ClearSnooze: r.ClearSnooze}
 	if r.SnoozedUntil != nil {
@@ -806,18 +814,39 @@ func listSection(row *v1.ItemSummary) v1.ListSection {
 	return v1.ListSection_LIST_SECTION_NEEDS_ATTENTION
 }
 
-// TakeOwnership gives an item to the user calling: a person takes work an
-// agent delegated. An item's agent cannot take items; it creates its own.
-func (s *Server) TakeOwnership(ctx context.Context, req *connect.Request[v1.TakeOwnershipRequest]) (*connect.Response[v1.TakeOwnershipResponse], error) {
-	who := caller(ctx).principal
-	if who.item() {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("an item's agent cannot take ownership of items"))
+// metadataEdited reports an update that changes more than the owner.
+func metadataEdited(r *v1.UpdateItemRequest) bool {
+	return r.Title != nil || r.Description != nil || len(r.AddLabels) > 0 || len(r.RemoveLabels) > 0 || r.DeepWork != nil || r.Priority != nil || r.Pinned != nil || r.SnoozedUntil != nil || r.ClearSnooze
+}
+
+// checkOwner allows giving an item another owner: only a person decides
+// who an item is for, the owner must be a person or an open item, and no
+// item may end up owning itself through its delegations.
+func (s *Server) checkOwner(ctx context.Context, target model.Manifest, owner string) error {
+	if caller(ctx).principal.item() {
+		return connect.NewError(connect.CodePermissionDenied, errors.New("changing an item's owner is for a person, not an item's agent"))
 	}
-	result, err := s.command(ctx, req.Msg.ItemId, coordinator.CommandOwnerSet, req.Msg.ExpectedRevision, func(c *coordinator.ManifestCommand) {
-		c.Owner = who.String()
-	})
+	if !model.ValidPrincipal(owner) {
+		return invalid(fmt.Sprintf("invalid owner %q: use user:operator or item:<id>", owner))
+	}
+	ownerID := model.PrincipalItem(owner)
+	if ownerID == "" {
+		return nil
+	}
+	if ownerID == target.ID {
+		return invalid("an item cannot own itself")
+	}
+	other, err := s.canonical(ctx, ownerID, 0)
 	if err != nil {
-		return nil, rpcError(err)
+		return rpcError(err)
 	}
-	return response(&v1.TakeOwnershipResponse{Item: item(result.Manifest, result.Revision)}, nil)
+	if other.Manifest.State == model.StateClosed {
+		return precondition(fmt.Sprintf("item %s is closed and cannot own items", ownerID))
+	}
+	for _, up := range model.OwnerChain(other.Manifest, s.manifestLookup(ctx)) {
+		if up.ID == target.ID {
+			return precondition(fmt.Sprintf("item %s is owned, through its owners, by %s: it cannot own it", ownerID, target.ID))
+		}
+	}
+	return nil
 }

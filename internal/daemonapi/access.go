@@ -30,7 +30,6 @@ var itemLevels = map[string]model.AccessLevel{
 	corev1connect.ItemServiceGetItemProcedure:                    model.AccessView,
 	corev1connect.ItemServiceListItemEventsProcedure:             model.AccessView,
 	corev1connect.ItemServiceListNotesProcedure:                  model.AccessView,
-	corev1connect.ItemServiceListProposalsProcedure:              model.AccessView,
 	corev1connect.ItemServiceReadAttachmentProcedure:             model.AccessView,
 	corev1connect.JobServiceListJobsProcedure:                    model.AccessView,
 	corev1connect.LifecycleServicePlanCloseProcedure:             model.AccessView,
@@ -57,7 +56,6 @@ var itemLevels = map[string]model.AccessLevel{
 	corev1connect.ItemServiceClearBlockerProcedure:         model.AccessMessage,
 	corev1connect.ItemServiceDeferItemProcedure:            model.AccessMessage,
 	corev1connect.ItemServiceMarkReadProcedure:             model.AccessMessage,
-	corev1connect.ItemServiceProposeItemProcedure:          model.AccessMessage,
 	corev1connect.ReviewServiceDeleteReviewDraftsProcedure: model.AccessMessage,
 	corev1connect.ReviewServiceNotifyReviewRoundProcedure:  model.AccessMessage,
 	corev1connect.ReviewServiceReplyReviewThreadsProcedure: model.AccessMessage,
@@ -95,9 +93,6 @@ var itemLevels = map[string]model.AccessLevel{
 // are whose, what is filed or deleted, and the installation itself.
 var usersOnly = map[string]string{
 	corev1connect.ItemServiceDeleteItemProcedure:                     "deleting an item",
-	corev1connect.ItemServiceTakeOwnershipProcedure:                  "taking ownership",
-	corev1connect.ItemServiceFileProposalProcedure:                   "filing a proposal",
-	corev1connect.ItemServiceDismissProposalProcedure:                "dismissing a proposal",
 	corev1connect.ItemServiceListAccessProcedure:                     "reading access",
 	corev1connect.ItemServiceGrantAccessProcedure:                    "granting access",
 	corev1connect.ItemServiceRevokeAccessProcedure:                   "revoking access",

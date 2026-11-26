@@ -50,14 +50,11 @@ Keep corrections within the original objective in this item. File independent di
 
 ## When an agent creates items
 
-Agents create items in two ways, and the words you use tell them which:
+An item an agent creates with `wi new`, whether you asked it to file something for later or it split off part of its work, is a delegation, owned by the agent's item. The item's page shows its open delegations above the composer, and all of them, closed ones too, in its details.
 
-- **File** ("file an item for this", "log it for later"): the agent proposes the item with `wi new --propose`. Nothing is created yet: the proposal waits for you as a card in that item's conversation, and the item is marked unread so it comes to your attention; `wi proposal list` lists every pending one. Filing it (`wi proposal file ID`, optionally with your own title, description or labels) creates it as yours; `wi proposal dismiss ID` declines it. The agent is not interrupted either way.
-- **Delegate** ("hand this off", "split this into items"): the agent creates the item itself with `wi new`, to follow up on as part of its own work.
+An item an agent creates is its item's, not yours: the agent delegated it, and follows it up. When a delegation's turn ends, or it waits on a question, the owning item's agent receives a notice from it, quoting its reply or naming the question, so it can answer, merge or close it; no notice is sent for a turn it already waits on with `wi send --wait`. A notice waits for the owner's current turn instead of interrupting it, and starts the owner's agent when it is not running; a closed owner gets none, having given its delegations back when it closed. It is left out of your list and attention queue, since its attention goes to its owner; `wi list --delegated-by ITEM` shows what an item delegated. The item that delegated it manages it, and so does whatever owns that item. A follow-up message on a blocker is sent as whoever set the blocker, so one an agent set reaches the item as that agent's message.
 
-An item an agent creates is its item's, not yours: the agent delegated it, and follows it up. When a delegation's turn ends, or it waits on a question, the owning item's agent receives a notice from it, quoting its reply or naming the question, so it can answer, merge or close it; no notice is sent for a turn it already waits on with `wi send --wait`. A notice waits for the owner's current turn instead of interrupting it, and starts the owner's agent when it is not running; a closed owner gets none, having given its delegations back when it closed. It is left out of your list and attention queue, since its attention goes to its owner, unless it proposes an item for you; `wi list --delegated-by ITEM` shows what an item delegated. The item that delegated it manages it, and so does whatever owns that item. A follow-up message on a blocker is sent as whoever set the blocker, so one an agent set reaches the item as that agent's message.
-
-- **Take one over**: `wi own --item ITEM` makes a delegated item yours, detached from the agent; it then appears in your list.
+- **Take one over**: "Take it" in its details, or `wi edit --owner me --item ITEM`, makes it yours; it then appears in your list. `wi edit --owner OTHER-ITEM` hands an item to another item's agent instead.
 - **When the delegating item closes**, its unfinished delegations come back to you, marked unread.
 
 Agents talk to each other with `wi send`:
@@ -83,6 +80,6 @@ wi access grant --every-item --everything --level view
 wi access grant --item orchestrator --on parser-fix --level integrate
 ```
 
-A refused agent is told which level it lacks and the command to grant it. Deleting items, taking ownership, filing proposals, changing access, repositories, profiles and schedules, and stopping the daemon are yours only.
+A refused agent is told which level it lacks and the command to grant it. Deleting items, changing who owns an item, changing access, repositories, profiles and schedules, and stopping the daemon are yours only.
 
 The credential is not isolation either: an agent that runs as your Unix user can read your own credential. A sandbox mounts the daemon's socket and the agent's credential file but not yours, and sets `WI_API_SOCKET` to where the socket is mounted. See [Endpoint and credentials](../../reference/api/#endpoint-and-credentials).

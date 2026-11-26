@@ -193,7 +193,6 @@ func requestItem(message any) string {
 var optionalItem = map[string]bool{
 	corev1connect.ControlServiceReleaseControlProcedure: true,
 	corev1connect.JobServiceListJobsProcedure:           true,
-	corev1connect.ItemServiceListProposalsProcedure:     true,
 }
 
 func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {

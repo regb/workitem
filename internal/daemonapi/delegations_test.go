@@ -86,16 +86,39 @@ func TestAgentsDelegateTheItemsTheyCreate(t *testing.T) {
 	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: grandchild.Msg.Item.Id, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_ABANDONED})); err != nil {
 		t.Fatal(err)
 	}
-	// Only a person takes an item over.
-	if _, err := agent.Items.TakeOwnership(ctx, connect.NewRequest(&v1.TakeOwnershipRequest{ItemId: delegated[0]})); connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("an agent took an item: %v", err)
+	// Only a person changes an owner.
+	setOwner := func(clients interface {
+		UpdateItem(context.Context, *connect.Request[v1.UpdateItemRequest]) (*connect.Response[v1.UpdateItemResponse], error)
+	}, id, owner string) (*v1.Item, error) {
+		value, err := clients.UpdateItem(ctx, connect.NewRequest(&v1.UpdateItemRequest{ItemId: id, Owner: owner}))
+		if err != nil {
+			return nil, err
+		}
+		return value.Msg.Item, nil
 	}
-	taken, err := f.clients.Items.TakeOwnership(ctx, connect.NewRequest(&v1.TakeOwnershipRequest{ItemId: delegated[0]}))
-	if err != nil || taken.Msg.Item.Owner != model.OperatorUser {
+	if _, err := setOwner(agent.Items, delegated[0], model.OperatorUser); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("an agent changed an owner: %v", err)
+	}
+	taken, err := setOwner(f.clients.Items, delegated[0], model.OperatorUser)
+	if err != nil || taken.Owner != model.OperatorUser {
 		t.Fatalf("take: %v %v", taken, err)
 	}
 	if !list("")[delegated[0]] {
 		t.Fatal("a taken item is not in the user's list")
+	}
+	// A person hands an item to another item; no item owns itself, or an
+	// item that owns it.
+	if handed, err := setOwner(f.clients.Items, delegated[0], model.ItemPrincipal(delegated[1])); err != nil || handed.Owner != model.ItemPrincipal(delegated[1]) {
+		t.Fatalf("hand over: %v %v", handed, err)
+	}
+	if _, err := setOwner(f.clients.Items, delegated[1], model.ItemPrincipal(delegated[1])); err == nil {
+		t.Fatal("an item owns itself")
+	}
+	if _, err := setOwner(f.clients.Items, parentID, model.ItemPrincipal(delegated[0])); err == nil {
+		t.Fatal("an item owns its own owner")
+	}
+	if _, err := setOwner(f.clients.Items, delegated[0], model.OperatorUser); err != nil {
+		t.Fatal(err)
 	}
 	// Closing the owning item gives the rest back, unread.
 	if _, err := f.clients.Items.SetItemState(ctx, connect.NewRequest(&v1.SetItemStateRequest{ItemId: parentID, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_COMPLETED})); err != nil {

@@ -18,7 +18,7 @@ type Origin struct {
 	// user, the end of an item's owner chain for an item's agent.
 	For string `json:"for,omitempty"`
 	// Cause links what led to it, when not a caller's own request:
-	// "schedule:<id>", "blocker:<id>", "proposal:<id>".
+	// "schedule:<id>", "follow-up:<id>", "notice:<kind>", "closed:<id>".
 	Cause string `json:"cause,omitempty"`
 }
 

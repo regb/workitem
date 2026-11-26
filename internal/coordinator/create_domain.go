@@ -78,7 +78,7 @@ func (d *Database) executeCreateItemCommand(command CreateItemCommand) (CreateIt
 		return CreateItemResult{}, err
 	}
 	// An item is its creator's: an item's agent delegates the work it
-	// creates, unless the creation names another owner (a filed proposal).
+	// creates, unless the creation names another owner.
 	if normalized.Owner == "" && command.Actor != model.SystemActor {
 		normalized.Owner = command.Actor
 	}

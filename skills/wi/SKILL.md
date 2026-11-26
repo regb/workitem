@@ -63,23 +63,17 @@ Adding an attachment automatically adds a corresponding note.
 
 Notes and attachments are a log of the item's important activity, read without the session. Adding to it is always explicit and should reflect very high-level activity on the item. Prompts, session messages, and tool output are never added automatically. 
 
-## Filing and delegating work items
+## Filing work items
 
-You act as your work item: every `wi` command you run is recorded as done by it, and you never need to sign anything. There are two ways to create items, and the user's words tell you which:
+You act as your work item: every `wi` command you run is recorded as done by it, and you never need to sign anything. Create a new work item with its description in a markdown file:
 
-- **File** ("file an item for this", "log it for later", "open a ticket"): the item is for the user. Propose it; nothing is created until the user files it, possibly with edits, or dismisses it. Do not wait for the answer.
+```bash
+wi new --title "Item title" --desc-file DESC_FILE
+```
 
-  ```bash
-  wi new --propose --title "Item title" --desc-file DESC_FILE
-  ```
+The item is owned by your item: it is a delegation, kept out of the user's main list and shown on your item's page, where the user can take it over. Whether the user asked you to file it for later or you split off part of your work, it is the same command. When a delegation you started finishes a turn or waits on a question, you receive a notice from it; follow it up, and merge or close it when its work is done.
 
-- **Delegate** ("hand this off", "split this into items", "have another agent do X"): the item is yours. It is created at once, owned by your item, and kept out of the user's list: you follow it up.
-
-  ```bash
-  wi new --title "Item title" --desc-file DESC_FILE
-  ```
-
-When unsure, propose: the user can always file it. Both default to the repo of the current work item; with plain `wi new`, use `--repo REPO_NAME` for another repo. Neither starts the item unless you pass `--start` or `--prompt`.
+It defaults to the repo of the current work item; use `--repo REPO_NAME` to file it in another repo. It is not started unless you pass `--start` or `--prompt`.
 
 The title should be short (3 to 5 words ideally) and help quickly recognize the item.
 Titles are ephemeral, they don't need to capture fully the task but contain enough hints that they can be differentiated among currently active items.

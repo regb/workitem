@@ -235,24 +235,6 @@ func Run(ctx context.Context, args []string, cfg Config) int {
 		err = rpcSend(ctx, args[1:], cfg, jsonOut)
 	case "access":
 		err = rpcAccess(ctx, args[1:], cfg, jsonOut)
-	case "proposal", "proposals":
-		err = rpcProposal(ctx, args[1:], cfg, jsonOut)
-	case "own":
-		id, e := rpcItemArgs(ctx, cfg, "own", args[1:])
-		if e != nil {
-			err = e
-			break
-		}
-		value, e := cfg.API.Items.TakeOwnership(ctx, rpcRequest(cfg, &v1.TakeOwnershipRequest{ItemId: id}))
-		if e != nil {
-			err = e
-			break
-		}
-		if jsonOut {
-			err = rpcEmit(cfg, true, value.Msg)
-			break
-		}
-		fmt.Fprintf(cfg.Stdout, "%s is yours now\n", value.Msg.Item.Id)
 	case "events":
 		id, e := rpcItemArgs(ctx, cfg, "events", args[1:])
 		if e != nil {
@@ -373,8 +355,6 @@ func rpcNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	reasoning := fs.String("reasoning", "", "reasoning")
 	deep := fs.Bool("deep", false, "deep work")
 	noDefaults := fs.Bool("no-default-labels", false, "no default labels")
-	propose := fs.Bool("propose", false, "propose the item to its user instead of creating it")
-	from := fs.String("item", "", "proposing item")
 	var labels repeatFlag
 	fs.Var(&labels, "label", "label")
 	if err := rpcParse(fs, args); err != nil {
@@ -382,15 +362,6 @@ func rpcNew(ctx context.Context, args []string, cfg Config, jsonOut bool) error 
 	}
 	if fs.NArg() != 0 {
 		return usageErr{errors.New("new accepts flags only")}
-	}
-	if *propose {
-		if *start || *prompt != "" || *repo != "" || *base != "" || *profile != "" || *slug != "" || *deep || *modelName != "" || *reasoning != "" || *untitled {
-			return usageErr{errors.New("--propose takes a title, a description and labels; the user filing it chooses the rest")}
-		}
-		return rpcPropose(ctx, cfg, *from, *title, *description, labels, jsonOut)
-	}
-	if *from != "" {
-		return usageErr{errors.New("--item names the proposing item, with --propose")}
 	}
 	if *untitled && *title != "" {
 		return usageErr{errors.New("--untitled and --title conflict")}
@@ -646,6 +617,7 @@ func rpcEdit(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 	title := fs.String("title", "", "title")
 	description := fs.String("desc-file", "", "description file")
 	deep := fs.Bool("deep", false, "deep work")
+	owner := fs.String("owner", "", "new owner: me, or an item")
 	var add, remove repeatFlag
 	fs.Var(&add, "label", "add label")
 	fs.Var(&remove, "remove-label", "remove label")
@@ -678,6 +650,17 @@ func rpcEdit(ctx context.Context, args []string, cfg Config, jsonOut bool) error
 			r.DeepWork = deep
 		}
 	})
+	if *owner != "" {
+		if *owner == "me" {
+			r.Owner = "user:operator"
+		} else {
+			ownerID, err := rpcSelect(ctx, cfg, *owner)
+			if err != nil {
+				return err
+			}
+			r.Owner = "item:" + ownerID
+		}
+	}
 	if *description != "" {
 		content, err := readDescriptionFileFlag(cfg, *description)
 		if err != nil {

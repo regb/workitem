@@ -54,9 +54,6 @@ const (
 	ItemServiceMarkReadProcedure = "/wi.core.v1.ItemService/MarkRead"
 	// ItemServiceDeferItemProcedure is the fully-qualified name of the ItemService's DeferItem RPC.
 	ItemServiceDeferItemProcedure = "/wi.core.v1.ItemService/DeferItem"
-	// ItemServiceTakeOwnershipProcedure is the fully-qualified name of the ItemService's TakeOwnership
-	// RPC.
-	ItemServiceTakeOwnershipProcedure = "/wi.core.v1.ItemService/TakeOwnership"
 	// ItemServiceListItemEventsProcedure is the fully-qualified name of the ItemService's
 	// ListItemEvents RPC.
 	ItemServiceListItemEventsProcedure = "/wi.core.v1.ItemService/ListItemEvents"
@@ -74,17 +71,6 @@ const (
 	// ItemServiceReadAttachmentProcedure is the fully-qualified name of the ItemService's
 	// ReadAttachment RPC.
 	ItemServiceReadAttachmentProcedure = "/wi.core.v1.ItemService/ReadAttachment"
-	// ItemServiceProposeItemProcedure is the fully-qualified name of the ItemService's ProposeItem RPC.
-	ItemServiceProposeItemProcedure = "/wi.core.v1.ItemService/ProposeItem"
-	// ItemServiceListProposalsProcedure is the fully-qualified name of the ItemService's ListProposals
-	// RPC.
-	ItemServiceListProposalsProcedure = "/wi.core.v1.ItemService/ListProposals"
-	// ItemServiceFileProposalProcedure is the fully-qualified name of the ItemService's FileProposal
-	// RPC.
-	ItemServiceFileProposalProcedure = "/wi.core.v1.ItemService/FileProposal"
-	// ItemServiceDismissProposalProcedure is the fully-qualified name of the ItemService's
-	// DismissProposal RPC.
-	ItemServiceDismissProposalProcedure = "/wi.core.v1.ItemService/DismissProposal"
 	// ItemServiceListAccessProcedure is the fully-qualified name of the ItemService's ListAccess RPC.
 	ItemServiceListAccessProcedure = "/wi.core.v1.ItemService/ListAccess"
 	// ItemServiceGrantAccessProcedure is the fully-qualified name of the ItemService's GrantAccess RPC.
@@ -122,10 +108,6 @@ type ItemServiceClient interface {
 	// DeferItem records that the operator put a ready item off, so rankings
 	// can move it behind other candidates until something new happens.
 	DeferItem(context.Context, *connect.Request[v1.DeferItemRequest]) (*connect.Response[v1.DeferItemResponse], error)
-	// TakeOwnership makes the caller the item's owner: a person takes an item
-	// an agent delegated, detaching it from that agent's item. Only a user
-	// may take ownership, of an item they own through its owner chain.
-	TakeOwnership(context.Context, *connect.Request[v1.TakeOwnershipRequest]) (*connect.Response[v1.TakeOwnershipResponse], error)
 	// ListItemEvents reads the item's append-only history.
 	ListItemEvents(context.Context, *connect.Request[v1.ListItemEventsRequest]) (*connect.Response[v1.ListItemEventsResponse], error)
 	// AddBlocker makes the item wait for a time, another item, or an event.
@@ -141,17 +123,6 @@ type ItemServiceClient interface {
 	ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error)
 	// ReadAttachment streams attached content in chunks, by digest.
 	ReadAttachment(context.Context, *connect.Request[v1.ReadAttachmentRequest]) (*connect.ServerStreamForClient[v1.ReadAttachmentResponse], error)
-	// ProposeItem asks the item's user to file an item: an agent records work
-	// its conversation found, for the user to own. Nothing is created until a
-	// user files it; it returns at once.
-	ProposeItem(context.Context, *connect.Request[v1.ProposeItemRequest]) (*connect.Response[v1.ProposeItemResponse], error)
-	// ListProposals reads proposals, newest first.
-	ListProposals(context.Context, *connect.Request[v1.ListProposalsRequest]) (*connect.Response[v1.ListProposalsResponse], error)
-	// FileProposal creates the proposed item as the user filing it, who owns
-	// it, with any edits the user made. Only a user may file.
-	FileProposal(context.Context, *connect.Request[v1.FileProposalRequest]) (*connect.Response[v1.FileProposalResponse], error)
-	// DismissProposal declines a proposal. Only a user may dismiss.
-	DismissProposal(context.Context, *connect.Request[v1.DismissProposalRequest]) (*connect.Response[v1.DismissProposalResponse], error)
 	// ListAccess lists what items' agents may do to other items. An item's
 	// agent may always manage its own item and the items it delegated.
 	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
@@ -238,12 +209,6 @@ func NewItemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(itemServiceMethods.ByName("DeferItem")),
 			connect.WithClientOptions(opts...),
 		),
-		takeOwnership: connect.NewClient[v1.TakeOwnershipRequest, v1.TakeOwnershipResponse](
-			httpClient,
-			baseURL+ItemServiceTakeOwnershipProcedure,
-			connect.WithSchema(itemServiceMethods.ByName("TakeOwnership")),
-			connect.WithClientOptions(opts...),
-		),
 		listItemEvents: connect.NewClient[v1.ListItemEventsRequest, v1.ListItemEventsResponse](
 			httpClient,
 			baseURL+ItemServiceListItemEventsProcedure,
@@ -289,31 +254,6 @@ func NewItemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
-		proposeItem: connect.NewClient[v1.ProposeItemRequest, v1.ProposeItemResponse](
-			httpClient,
-			baseURL+ItemServiceProposeItemProcedure,
-			connect.WithSchema(itemServiceMethods.ByName("ProposeItem")),
-			connect.WithClientOptions(opts...),
-		),
-		listProposals: connect.NewClient[v1.ListProposalsRequest, v1.ListProposalsResponse](
-			httpClient,
-			baseURL+ItemServiceListProposalsProcedure,
-			connect.WithSchema(itemServiceMethods.ByName("ListProposals")),
-			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-			connect.WithClientOptions(opts...),
-		),
-		fileProposal: connect.NewClient[v1.FileProposalRequest, v1.FileProposalResponse](
-			httpClient,
-			baseURL+ItemServiceFileProposalProcedure,
-			connect.WithSchema(itemServiceMethods.ByName("FileProposal")),
-			connect.WithClientOptions(opts...),
-		),
-		dismissProposal: connect.NewClient[v1.DismissProposalRequest, v1.DismissProposalResponse](
-			httpClient,
-			baseURL+ItemServiceDismissProposalProcedure,
-			connect.WithSchema(itemServiceMethods.ByName("DismissProposal")),
-			connect.WithClientOptions(opts...),
-		),
 		listAccess: connect.NewClient[v1.ListAccessRequest, v1.ListAccessResponse](
 			httpClient,
 			baseURL+ItemServiceListAccessProcedure,
@@ -338,31 +278,26 @@ func NewItemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // itemServiceClient implements ItemServiceClient.
 type itemServiceClient struct {
-	createItem      *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
-	getItem         *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
-	resolveItem     *connect.Client[v1.ResolveItemRequest, v1.ResolveItemResponse]
-	listItems       *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
-	searchItems     *connect.Client[v1.SearchItemsRequest, v1.SearchItemsResponse]
-	updateItem      *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
-	setItemState    *connect.Client[v1.SetItemStateRequest, v1.SetItemStateResponse]
-	deleteItem      *connect.Client[v1.DeleteItemRequest, v1.DeleteItemResponse]
-	markRead        *connect.Client[v1.MarkReadRequest, v1.MarkReadResponse]
-	deferItem       *connect.Client[v1.DeferItemRequest, v1.DeferItemResponse]
-	takeOwnership   *connect.Client[v1.TakeOwnershipRequest, v1.TakeOwnershipResponse]
-	listItemEvents  *connect.Client[v1.ListItemEventsRequest, v1.ListItemEventsResponse]
-	addBlocker      *connect.Client[v1.AddBlockerRequest, v1.AddBlockerResponse]
-	clearBlocker    *connect.Client[v1.ClearBlockerRequest, v1.ClearBlockerResponse]
-	addNote         *connect.Client[v1.AddNoteRequest, v1.AddNoteResponse]
-	attach          *connect.Client[v1.AttachRequest, v1.AttachResponse]
-	listNotes       *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
-	readAttachment  *connect.Client[v1.ReadAttachmentRequest, v1.ReadAttachmentResponse]
-	proposeItem     *connect.Client[v1.ProposeItemRequest, v1.ProposeItemResponse]
-	listProposals   *connect.Client[v1.ListProposalsRequest, v1.ListProposalsResponse]
-	fileProposal    *connect.Client[v1.FileProposalRequest, v1.FileProposalResponse]
-	dismissProposal *connect.Client[v1.DismissProposalRequest, v1.DismissProposalResponse]
-	listAccess      *connect.Client[v1.ListAccessRequest, v1.ListAccessResponse]
-	grantAccess     *connect.Client[v1.GrantAccessRequest, v1.GrantAccessResponse]
-	revokeAccess    *connect.Client[v1.RevokeAccessRequest, v1.RevokeAccessResponse]
+	createItem     *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
+	getItem        *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
+	resolveItem    *connect.Client[v1.ResolveItemRequest, v1.ResolveItemResponse]
+	listItems      *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
+	searchItems    *connect.Client[v1.SearchItemsRequest, v1.SearchItemsResponse]
+	updateItem     *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
+	setItemState   *connect.Client[v1.SetItemStateRequest, v1.SetItemStateResponse]
+	deleteItem     *connect.Client[v1.DeleteItemRequest, v1.DeleteItemResponse]
+	markRead       *connect.Client[v1.MarkReadRequest, v1.MarkReadResponse]
+	deferItem      *connect.Client[v1.DeferItemRequest, v1.DeferItemResponse]
+	listItemEvents *connect.Client[v1.ListItemEventsRequest, v1.ListItemEventsResponse]
+	addBlocker     *connect.Client[v1.AddBlockerRequest, v1.AddBlockerResponse]
+	clearBlocker   *connect.Client[v1.ClearBlockerRequest, v1.ClearBlockerResponse]
+	addNote        *connect.Client[v1.AddNoteRequest, v1.AddNoteResponse]
+	attach         *connect.Client[v1.AttachRequest, v1.AttachResponse]
+	listNotes      *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
+	readAttachment *connect.Client[v1.ReadAttachmentRequest, v1.ReadAttachmentResponse]
+	listAccess     *connect.Client[v1.ListAccessRequest, v1.ListAccessResponse]
+	grantAccess    *connect.Client[v1.GrantAccessRequest, v1.GrantAccessResponse]
+	revokeAccess   *connect.Client[v1.RevokeAccessRequest, v1.RevokeAccessResponse]
 }
 
 // CreateItem calls wi.core.v1.ItemService.CreateItem.
@@ -415,11 +350,6 @@ func (c *itemServiceClient) DeferItem(ctx context.Context, req *connect.Request[
 	return c.deferItem.CallUnary(ctx, req)
 }
 
-// TakeOwnership calls wi.core.v1.ItemService.TakeOwnership.
-func (c *itemServiceClient) TakeOwnership(ctx context.Context, req *connect.Request[v1.TakeOwnershipRequest]) (*connect.Response[v1.TakeOwnershipResponse], error) {
-	return c.takeOwnership.CallUnary(ctx, req)
-}
-
 // ListItemEvents calls wi.core.v1.ItemService.ListItemEvents.
 func (c *itemServiceClient) ListItemEvents(ctx context.Context, req *connect.Request[v1.ListItemEventsRequest]) (*connect.Response[v1.ListItemEventsResponse], error) {
 	return c.listItemEvents.CallUnary(ctx, req)
@@ -453,26 +383,6 @@ func (c *itemServiceClient) ListNotes(ctx context.Context, req *connect.Request[
 // ReadAttachment calls wi.core.v1.ItemService.ReadAttachment.
 func (c *itemServiceClient) ReadAttachment(ctx context.Context, req *connect.Request[v1.ReadAttachmentRequest]) (*connect.ServerStreamForClient[v1.ReadAttachmentResponse], error) {
 	return c.readAttachment.CallServerStream(ctx, req)
-}
-
-// ProposeItem calls wi.core.v1.ItemService.ProposeItem.
-func (c *itemServiceClient) ProposeItem(ctx context.Context, req *connect.Request[v1.ProposeItemRequest]) (*connect.Response[v1.ProposeItemResponse], error) {
-	return c.proposeItem.CallUnary(ctx, req)
-}
-
-// ListProposals calls wi.core.v1.ItemService.ListProposals.
-func (c *itemServiceClient) ListProposals(ctx context.Context, req *connect.Request[v1.ListProposalsRequest]) (*connect.Response[v1.ListProposalsResponse], error) {
-	return c.listProposals.CallUnary(ctx, req)
-}
-
-// FileProposal calls wi.core.v1.ItemService.FileProposal.
-func (c *itemServiceClient) FileProposal(ctx context.Context, req *connect.Request[v1.FileProposalRequest]) (*connect.Response[v1.FileProposalResponse], error) {
-	return c.fileProposal.CallUnary(ctx, req)
-}
-
-// DismissProposal calls wi.core.v1.ItemService.DismissProposal.
-func (c *itemServiceClient) DismissProposal(ctx context.Context, req *connect.Request[v1.DismissProposalRequest]) (*connect.Response[v1.DismissProposalResponse], error) {
-	return c.dismissProposal.CallUnary(ctx, req)
 }
 
 // ListAccess calls wi.core.v1.ItemService.ListAccess.
@@ -518,10 +428,6 @@ type ItemServiceHandler interface {
 	// DeferItem records that the operator put a ready item off, so rankings
 	// can move it behind other candidates until something new happens.
 	DeferItem(context.Context, *connect.Request[v1.DeferItemRequest]) (*connect.Response[v1.DeferItemResponse], error)
-	// TakeOwnership makes the caller the item's owner: a person takes an item
-	// an agent delegated, detaching it from that agent's item. Only a user
-	// may take ownership, of an item they own through its owner chain.
-	TakeOwnership(context.Context, *connect.Request[v1.TakeOwnershipRequest]) (*connect.Response[v1.TakeOwnershipResponse], error)
 	// ListItemEvents reads the item's append-only history.
 	ListItemEvents(context.Context, *connect.Request[v1.ListItemEventsRequest]) (*connect.Response[v1.ListItemEventsResponse], error)
 	// AddBlocker makes the item wait for a time, another item, or an event.
@@ -537,17 +443,6 @@ type ItemServiceHandler interface {
 	ListNotes(context.Context, *connect.Request[v1.ListNotesRequest]) (*connect.Response[v1.ListNotesResponse], error)
 	// ReadAttachment streams attached content in chunks, by digest.
 	ReadAttachment(context.Context, *connect.Request[v1.ReadAttachmentRequest], *connect.ServerStream[v1.ReadAttachmentResponse]) error
-	// ProposeItem asks the item's user to file an item: an agent records work
-	// its conversation found, for the user to own. Nothing is created until a
-	// user files it; it returns at once.
-	ProposeItem(context.Context, *connect.Request[v1.ProposeItemRequest]) (*connect.Response[v1.ProposeItemResponse], error)
-	// ListProposals reads proposals, newest first.
-	ListProposals(context.Context, *connect.Request[v1.ListProposalsRequest]) (*connect.Response[v1.ListProposalsResponse], error)
-	// FileProposal creates the proposed item as the user filing it, who owns
-	// it, with any edits the user made. Only a user may file.
-	FileProposal(context.Context, *connect.Request[v1.FileProposalRequest]) (*connect.Response[v1.FileProposalResponse], error)
-	// DismissProposal declines a proposal. Only a user may dismiss.
-	DismissProposal(context.Context, *connect.Request[v1.DismissProposalRequest]) (*connect.Response[v1.DismissProposalResponse], error)
 	// ListAccess lists what items' agents may do to other items. An item's
 	// agent may always manage its own item and the items it delegated.
 	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
@@ -630,12 +525,6 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(itemServiceMethods.ByName("DeferItem")),
 		connect.WithHandlerOptions(opts...),
 	)
-	itemServiceTakeOwnershipHandler := connect.NewUnaryHandler(
-		ItemServiceTakeOwnershipProcedure,
-		svc.TakeOwnership,
-		connect.WithSchema(itemServiceMethods.ByName("TakeOwnership")),
-		connect.WithHandlerOptions(opts...),
-	)
 	itemServiceListItemEventsHandler := connect.NewUnaryHandler(
 		ItemServiceListItemEventsProcedure,
 		svc.ListItemEvents,
@@ -681,31 +570,6 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
-	itemServiceProposeItemHandler := connect.NewUnaryHandler(
-		ItemServiceProposeItemProcedure,
-		svc.ProposeItem,
-		connect.WithSchema(itemServiceMethods.ByName("ProposeItem")),
-		connect.WithHandlerOptions(opts...),
-	)
-	itemServiceListProposalsHandler := connect.NewUnaryHandler(
-		ItemServiceListProposalsProcedure,
-		svc.ListProposals,
-		connect.WithSchema(itemServiceMethods.ByName("ListProposals")),
-		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
-		connect.WithHandlerOptions(opts...),
-	)
-	itemServiceFileProposalHandler := connect.NewUnaryHandler(
-		ItemServiceFileProposalProcedure,
-		svc.FileProposal,
-		connect.WithSchema(itemServiceMethods.ByName("FileProposal")),
-		connect.WithHandlerOptions(opts...),
-	)
-	itemServiceDismissProposalHandler := connect.NewUnaryHandler(
-		ItemServiceDismissProposalProcedure,
-		svc.DismissProposal,
-		connect.WithSchema(itemServiceMethods.ByName("DismissProposal")),
-		connect.WithHandlerOptions(opts...),
-	)
 	itemServiceListAccessHandler := connect.NewUnaryHandler(
 		ItemServiceListAccessProcedure,
 		svc.ListAccess,
@@ -747,8 +611,6 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 			itemServiceMarkReadHandler.ServeHTTP(w, r)
 		case ItemServiceDeferItemProcedure:
 			itemServiceDeferItemHandler.ServeHTTP(w, r)
-		case ItemServiceTakeOwnershipProcedure:
-			itemServiceTakeOwnershipHandler.ServeHTTP(w, r)
 		case ItemServiceListItemEventsProcedure:
 			itemServiceListItemEventsHandler.ServeHTTP(w, r)
 		case ItemServiceAddBlockerProcedure:
@@ -763,14 +625,6 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 			itemServiceListNotesHandler.ServeHTTP(w, r)
 		case ItemServiceReadAttachmentProcedure:
 			itemServiceReadAttachmentHandler.ServeHTTP(w, r)
-		case ItemServiceProposeItemProcedure:
-			itemServiceProposeItemHandler.ServeHTTP(w, r)
-		case ItemServiceListProposalsProcedure:
-			itemServiceListProposalsHandler.ServeHTTP(w, r)
-		case ItemServiceFileProposalProcedure:
-			itemServiceFileProposalHandler.ServeHTTP(w, r)
-		case ItemServiceDismissProposalProcedure:
-			itemServiceDismissProposalHandler.ServeHTTP(w, r)
 		case ItemServiceListAccessProcedure:
 			itemServiceListAccessHandler.ServeHTTP(w, r)
 		case ItemServiceGrantAccessProcedure:
@@ -826,10 +680,6 @@ func (UnimplementedItemServiceHandler) DeferItem(context.Context, *connect.Reque
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.DeferItem is not implemented"))
 }
 
-func (UnimplementedItemServiceHandler) TakeOwnership(context.Context, *connect.Request[v1.TakeOwnershipRequest]) (*connect.Response[v1.TakeOwnershipResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.TakeOwnership is not implemented"))
-}
-
 func (UnimplementedItemServiceHandler) ListItemEvents(context.Context, *connect.Request[v1.ListItemEventsRequest]) (*connect.Response[v1.ListItemEventsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.ListItemEvents is not implemented"))
 }
@@ -856,22 +706,6 @@ func (UnimplementedItemServiceHandler) ListNotes(context.Context, *connect.Reque
 
 func (UnimplementedItemServiceHandler) ReadAttachment(context.Context, *connect.Request[v1.ReadAttachmentRequest], *connect.ServerStream[v1.ReadAttachmentResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.ReadAttachment is not implemented"))
-}
-
-func (UnimplementedItemServiceHandler) ProposeItem(context.Context, *connect.Request[v1.ProposeItemRequest]) (*connect.Response[v1.ProposeItemResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.ProposeItem is not implemented"))
-}
-
-func (UnimplementedItemServiceHandler) ListProposals(context.Context, *connect.Request[v1.ListProposalsRequest]) (*connect.Response[v1.ListProposalsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.ListProposals is not implemented"))
-}
-
-func (UnimplementedItemServiceHandler) FileProposal(context.Context, *connect.Request[v1.FileProposalRequest]) (*connect.Response[v1.FileProposalResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.FileProposal is not implemented"))
-}
-
-func (UnimplementedItemServiceHandler) DismissProposal(context.Context, *connect.Request[v1.DismissProposalRequest]) (*connect.Response[v1.DismissProposalResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.DismissProposal is not implemented"))
 }
 
 func (UnimplementedItemServiceHandler) ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error) {

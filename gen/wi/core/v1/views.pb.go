@@ -91,10 +91,8 @@ type GetItemViewResponse struct {
 	Jobs []*Job `protobuf:"bytes,8,rep,name=jobs,proto3" json:"jobs,omitempty"`
 	// read_at is when the daemon read this view. Views from one item are
 	// ordered by it, so a client keeps the newest when several arrive.
-	ReadAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=read_at,json=readAt,proto3" json:"read_at,omitempty"`
-	Warnings []string               `protobuf:"bytes,10,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	// proposals are the items this item's agent proposed, newest first.
-	Proposals     []*Proposal `protobuf:"bytes,11,rep,name=proposals,proto3" json:"proposals,omitempty"`
+	ReadAt        *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=read_at,json=readAt,proto3" json:"read_at,omitempty"`
+	Warnings      []string               `protobuf:"bytes,10,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -199,13 +197,6 @@ func (x *GetItemViewResponse) GetWarnings() []string {
 	return nil
 }
 
-func (x *GetItemViewResponse) GetProposals() []*Proposal {
-	if x != nil {
-		return x.Proposals
-	}
-	return nil
-}
-
 var File_wi_core_v1_views_proto protoreflect.FileDescriptor
 
 const file_wi_core_v1_views_proto_rawDesc = "" +
@@ -214,7 +205,7 @@ const file_wi_core_v1_views_proto_rawDesc = "" +
 	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17wi/core/v1/agents.proto\x1a\x16wi/core/v1/items.proto\x1a\x15wi/core/v1/jobs.proto\x1a\x1bwi/core/v1/workspaces.proto\"U\n" +
 	"\x12GetItemViewRequest\x12\x17\n" +
 	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12&\n" +
-	"\x0fhistory_leaf_id\x18\x02 \x01(\tR\rhistoryLeafId\"\x8a\x04\n" +
+	"\x0fhistory_leaf_id\x18\x02 \x01(\tR\rhistoryLeafId\"\xe7\x03\n" +
 	"\x13GetItemViewResponse\x12$\n" +
 	"\x04item\x18\x01 \x01(\v2\x10.wi.core.v1.ItemR\x04item\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12=\n" +
@@ -226,8 +217,7 @@ const file_wi_core_v1_views_proto_rawDesc = "" +
 	"\x04jobs\x18\b \x03(\v2\x0f.wi.core.v1.JobR\x04jobs\x123\n" +
 	"\aread_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x06readAt\x12\x1a\n" +
 	"\bwarnings\x18\n" +
-	" \x03(\tR\bwarnings\x122\n" +
-	"\tproposals\x18\v \x03(\v2\x14.wi.core.v1.ProposalR\tproposals2b\n" +
+	" \x03(\tR\bwarningsJ\x04\b\v\x10\fR\tproposals2b\n" +
 	"\vViewService\x12S\n" +
 	"\vGetItemView\x12\x1e.wi.core.v1.GetItemViewRequest\x1a\x1f.wi.core.v1.GetItemViewResponse\"\x03\x90\x02\x01B0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
@@ -255,25 +245,23 @@ var file_wi_core_v1_views_proto_goTypes = []any{
 	(*SetupRun)(nil),              // 7: wi.core.v1.SetupRun
 	(*Job)(nil),                   // 8: wi.core.v1.Job
 	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
-	(*Proposal)(nil),              // 10: wi.core.v1.Proposal
 }
 var file_wi_core_v1_views_proto_depIdxs = []int32{
-	2,  // 0: wi.core.v1.GetItemViewResponse.item:type_name -> wi.core.v1.Item
-	3,  // 1: wi.core.v1.GetItemViewResponse.observation:type_name -> wi.core.v1.ItemObservation
-	4,  // 2: wi.core.v1.GetItemViewResponse.agent:type_name -> wi.core.v1.Agent
-	5,  // 3: wi.core.v1.GetItemViewResponse.control:type_name -> wi.core.v1.ControlStatus
-	6,  // 4: wi.core.v1.GetItemViewResponse.history:type_name -> wi.core.v1.GetHistoryResponse
-	7,  // 5: wi.core.v1.GetItemViewResponse.setup:type_name -> wi.core.v1.SetupRun
-	8,  // 6: wi.core.v1.GetItemViewResponse.jobs:type_name -> wi.core.v1.Job
-	9,  // 7: wi.core.v1.GetItemViewResponse.read_at:type_name -> google.protobuf.Timestamp
-	10, // 8: wi.core.v1.GetItemViewResponse.proposals:type_name -> wi.core.v1.Proposal
-	0,  // 9: wi.core.v1.ViewService.GetItemView:input_type -> wi.core.v1.GetItemViewRequest
-	1,  // 10: wi.core.v1.ViewService.GetItemView:output_type -> wi.core.v1.GetItemViewResponse
-	10, // [10:11] is the sub-list for method output_type
-	9,  // [9:10] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	2, // 0: wi.core.v1.GetItemViewResponse.item:type_name -> wi.core.v1.Item
+	3, // 1: wi.core.v1.GetItemViewResponse.observation:type_name -> wi.core.v1.ItemObservation
+	4, // 2: wi.core.v1.GetItemViewResponse.agent:type_name -> wi.core.v1.Agent
+	5, // 3: wi.core.v1.GetItemViewResponse.control:type_name -> wi.core.v1.ControlStatus
+	6, // 4: wi.core.v1.GetItemViewResponse.history:type_name -> wi.core.v1.GetHistoryResponse
+	7, // 5: wi.core.v1.GetItemViewResponse.setup:type_name -> wi.core.v1.SetupRun
+	8, // 6: wi.core.v1.GetItemViewResponse.jobs:type_name -> wi.core.v1.Job
+	9, // 7: wi.core.v1.GetItemViewResponse.read_at:type_name -> google.protobuf.Timestamp
+	0, // 8: wi.core.v1.ViewService.GetItemView:input_type -> wi.core.v1.GetItemViewRequest
+	1, // 9: wi.core.v1.ViewService.GetItemView:output_type -> wi.core.v1.GetItemViewResponse
+	9, // [9:10] is the sub-list for method output_type
+	8, // [8:9] is the sub-list for method input_type
+	8, // [8:8] is the sub-list for extension type_name
+	8, // [8:8] is the sub-list for extension extendee
+	0, // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_views_proto_init() }
