@@ -26,7 +26,7 @@ func repository(value model.OwnedRepository) *v1.Repository {
 	return out
 }
 func (s *Server) repo(ctx context.Context, repositoryID string) (*v1.Repository, error) {
-	source, err := s.Local.RepositorySource(ctx, repositoryID, "")
+	source, err := s.Local.ObservedRepositorySource(ctx, repositoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +101,8 @@ func (s *Server) RestoreRepository(ctx context.Context, req *connect.Request[v1.
 	return response(&v1.RestoreRepositoryResponse{Repository: value}, err)
 }
 func (s *Server) SetUpstream(ctx context.Context, req *connect.Request[v1.SetUpstreamRequest]) (*connect.Response[v1.SetUpstreamResponse], error) {
-	source, err := s.Local.RepositorySource(ctx, req.Msg.RepositoryId, "")
+	// The upstream it replaces is the one Git names now, the edit's fence.
+	source, err := s.Local.ObservedRepositorySource(ctx, req.Msg.RepositoryId)
 	if err != nil {
 		return nil, rpcError(err)
 	}

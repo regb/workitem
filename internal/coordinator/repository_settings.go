@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"time"
 
 	"github.com/regb/workitem/internal/model"
@@ -94,7 +95,7 @@ func (d *Database) RepositorySettings(selector string) (RepositorySettingsResult
 	err := d.db.View(func(tx *bolt.Tx) error {
 		repos := tx.Bucket(bucketProjections).Bucket([]byte(RepositoryProjection))
 		if repos == nil {
-			return fmt.Errorf("repository %q is not registered", selector)
+			return apperr.NotFoundf("repository %q is not registered", selector)
 		}
 		found := false
 		if err := repos.ForEach(func(key, value []byte) error {
@@ -118,7 +119,7 @@ func (d *Database) RepositorySettings(selector string) (RepositorySettingsResult
 			return err
 		}
 		if !found {
-			return fmt.Errorf("repository %q is not registered", selector)
+			return apperr.NotFoundf("repository %q is not registered", selector)
 		}
 		var err error
 		result.Settings, err = readSettingsTx(tx, result.Repository.ID)

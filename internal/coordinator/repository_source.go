@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"github.com/regb/workitem/internal/config"
 	"path/filepath"
 	"strings"
@@ -111,7 +112,15 @@ func (d *Database) RepositorySource(ctx context.Context, request RepositorySourc
 		}
 		return RepositorySourceResult{Repository: view, GitDir: path, Commit: sha, Labels: labels, PendingSync: pendingSync}, nil
 	}
-	return RepositorySourceResult{}, fmt.Errorf("unknown repository %q; onboard it with wi repo add NAME --from SOURCE", request.Selector)
+	return RepositorySourceResult{}, apperr.NotFoundf("unknown repository %q; onboard it with wi repo add NAME --from SOURCE", request.Selector)
+}
+
+// ObservedRepositorySource is RepositorySource of the integration branch,
+// with the upstream its Git configuration names.
+func (c *Client) ObservedRepositorySource(ctx context.Context, selector string) (RepositorySourceResult, error) {
+	var result RepositorySourceResult
+	err := c.Call(ctx, MethodRepositorySource, RepositorySourceRequest{Selector: selector, ObserveUpstream: true}, &result)
+	return result, err
 }
 func (c *Client) RepositorySource(ctx context.Context, selector, revision string) (RepositorySourceResult, error) {
 	var result RepositorySourceResult

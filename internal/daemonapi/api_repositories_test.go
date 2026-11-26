@@ -46,7 +46,8 @@ func TestRepositoriesRegistryAndConfiguration(t *testing.T) {
 		if restored := call(t, clients.Repositories.RestoreRepository, &v1.RestoreRepositoryRequest{RepositoryId: repository}).Repository; restored.Archived {
 			t.Fatalf("restored: %v", restored)
 		}
-		refused(t, connect.CodeFailedPrecondition, clients.Repositories.GetRepository, &v1.GetRepositoryRequest{RepositoryId: "00000000000000000000000000"})
+		refused(t, connect.CodeNotFound, clients.Repositories.GetRepository, &v1.GetRepositoryRequest{RepositoryId: "00000000000000000000000000"})
+		refused(t, connect.CodeNotFound, clients.Repositories.GetRepositorySettings, &v1.GetRepositorySettingsRequest{RepositoryId: "00000000000000000000000000"})
 	})
 
 	t.Run("an unreachable upstream falls back to the local base with a warning", func(t *testing.T) {
@@ -56,9 +57,13 @@ func TestRepositoriesRegistryAndConfiguration(t *testing.T) {
 			t.Fatalf("status of a local repository: %v, item from %s", status, local.CreatedFromCommit)
 		}
 		missing := filepath.Join(f.Root, "missing-upstream.git")
-		call(t, clients.Repositories.SetUpstream, &v1.SetUpstreamRequest{RepositoryId: repository, Url: missing, Branch: "main"})
-		// Only the list reports a repository's upstream: GetRepository and
-		// SetUpstream leave it out.
+		set := call(t, clients.Repositories.SetUpstream, &v1.SetUpstreamRequest{RepositoryId: repository, Url: missing, Branch: "main"}).Repository
+		got := call(t, clients.Repositories.GetRepository, &v1.GetRepositoryRequest{RepositoryId: repository}).Repository
+		for name, value := range map[string]*v1.Repository{"SetUpstream": set, "GetRepository": got} {
+			if value.Upstream.GetUrl() != missing || value.Upstream.GetBranch() != "main" {
+				t.Fatalf("%s's upstream: %v", name, value)
+			}
+		}
 		listed := call(t, clients.Repositories.ListRepositories, &v1.ListRepositoriesRequest{}).Repositories
 		if len(listed) != 1 || listed[0].Upstream.GetUrl() != missing || listed[0].Upstream.GetBranch() != "main" {
 			t.Fatalf("upstream: %v", listed)
@@ -157,7 +162,8 @@ func TestRepositoriesRegistryAndConfiguration(t *testing.T) {
 		if listed := call(t, clients.Repositories.ListRepositoryFiles, &v1.ListRepositoryFilesRequest{RepositoryId: repository}).Files; len(listed) != 0 {
 			t.Fatalf("listed after delete: %v", listed)
 		}
-		refused(t, connect.CodeFailedPrecondition, clients.Repositories.ReadRepositoryFile, &v1.ReadRepositoryFileRequest{RepositoryId: repository, Path: ".env"})
+		refused(t, connect.CodeNotFound, clients.Repositories.ReadRepositoryFile, &v1.ReadRepositoryFileRequest{RepositoryId: repository, Path: ".env"})
+		refused(t, connect.CodeNotFound, clients.Repositories.DeleteRepositoryFile, &v1.DeleteRepositoryFileRequest{RepositoryId: repository, Path: ".env"})
 	})
 
 	// A base relative to a checkout means nothing in the bare store: the
@@ -237,9 +243,10 @@ func TestRepositoriesIntegrateRecordsSquashAndPreservedSeries(t *testing.T) {
 	// Unresolved review feedback warns but does not block the merge.
 	input := call(t, f.Clients.Reviews.CaptureReviewRevision, &v1.CaptureReviewRevisionRequest{ItemId: item.Id, CaptureId: "feedback", ExpectedClaimId: checkout.Claim.Id, ExpectedClaimGeneration: checkout.Claim.Generation}).Revision
 	draft := call(t, f.Clients.Reviews.SaveReviewDraft, &v1.SaveReviewDraftRequest{ItemId: item.Id, OperationId: "draft", Draft: &v1.ReviewDraft{Anchor: &v1.ReviewAnchor{RevisionId: input.Id}, Body: "An unresolved concern"}}).Result
-	// Without an agent to notify, publishing keeps the round and says so.
-	if err := refused(t, connect.CodeFailedPrecondition, f.Clients.Reviews.PublishReviewRound, &v1.PublishReviewRoundRequest{ItemId: item.Id, OperationId: "publish", RevisionId: input.Id, DraftIds: []string{draft.DraftId}}); !strings.Contains(err.Error(), "published review round") {
-		t.Fatalf("publish: %v", err)
+	// Without an agent to notify, publishing succeeds and says why it did
+	// not tell the agent.
+	if published := call(t, f.Clients.Reviews.PublishReviewRound, &v1.PublishReviewRoundRequest{ItemId: item.Id, OperationId: "publish", RevisionId: input.Id, DraftIds: []string{draft.DraftId}}); len(published.Warnings) != 1 || !strings.Contains(published.Warnings[0], "is published, but its agent was not told") {
+		t.Fatalf("publish: %v", published)
 	}
 	integrate := func(request *v1.IntegrateItemRequest) *v1.Job {
 		t.Helper()

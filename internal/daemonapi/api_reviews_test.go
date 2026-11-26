@@ -162,9 +162,9 @@ func TestReviewsRoundsRepliesAndIntent(t *testing.T) {
 	})
 	publish := &v1.PublishReviewRoundRequest{ItemId: item, OperationId: "publish", RevisionId: "r1", DraftIds: []string{draft}}
 	t.Run("a round is published even when no agent can be notified", func(t *testing.T) {
-		_, err := f.Clients.Reviews.PublishReviewRound(t.Context(), connect.NewRequest(publish))
-		if err == nil || !strings.Contains(err.Error(), "published review round q1") {
-			t.Fatalf("the failed notification hid the publication: %v", err)
+		published := call(t, f.Clients.Reviews.PublishReviewRound, publish)
+		if published.Result.RoundId != "q1" || len(published.Warnings) != 1 || !strings.Contains(published.Warnings[0], "review round q1 is published, but its agent was not told") {
+			t.Fatalf("publishing with no agent running: %v", published)
 		}
 		threads := call(t, f.Clients.Reviews.GetReviewThreads, &v1.GetReviewThreadsRequest{ItemId: item})
 		if len(threads.Threads) != 1 || threads.Threads[0].Anchor.Path != "example.txt" || len(threads.Rounds) != 1 || threads.Rounds[0].Id != "q1" || threads.Rounds[0].NotifiedAt != nil || threads.Rounds[0].CommandId != "" {

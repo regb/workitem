@@ -106,8 +106,11 @@ type ReviewServiceClient interface {
 	// SaveReviewDraft adds or replaces a draft comment.
 	SaveReviewDraft(context.Context, *connect.Request[v1.SaveReviewDraftRequest]) (*connect.Response[v1.SaveReviewDraftResponse], error)
 	DeleteReviewDrafts(context.Context, *connect.Request[v1.DeleteReviewDraftsRequest]) (*connect.Response[v1.DeleteReviewDraftsResponse], error)
-	// PublishReviewRound publishes drafts as one round on a revision. It does
-	// not notify the agent; NotifyReviewRound does.
+	// PublishReviewRound publishes drafts as one round on a revision, then
+	// notifies the agent as NotifyReviewRound does when it can. A round whose
+	// agent is not running, or could not be told, is still published: its
+	// round has no notified_at, warnings say why, and NotifyReviewRound tells
+	// the agent later.
 	PublishReviewRound(context.Context, *connect.Request[v1.PublishReviewRoundRequest]) (*connect.Response[v1.PublishReviewRoundResponse], error)
 	// ReplyReviewThreads adds the agent's replies, optionally capturing a new
 	// revision they address. Addressed is evidence, never a resolution.
@@ -385,8 +388,11 @@ type ReviewServiceHandler interface {
 	// SaveReviewDraft adds or replaces a draft comment.
 	SaveReviewDraft(context.Context, *connect.Request[v1.SaveReviewDraftRequest]) (*connect.Response[v1.SaveReviewDraftResponse], error)
 	DeleteReviewDrafts(context.Context, *connect.Request[v1.DeleteReviewDraftsRequest]) (*connect.Response[v1.DeleteReviewDraftsResponse], error)
-	// PublishReviewRound publishes drafts as one round on a revision. It does
-	// not notify the agent; NotifyReviewRound does.
+	// PublishReviewRound publishes drafts as one round on a revision, then
+	// notifies the agent as NotifyReviewRound does when it can. A round whose
+	// agent is not running, or could not be told, is still published: its
+	// round has no notified_at, warnings say why, and NotifyReviewRound tells
+	// the agent later.
 	PublishReviewRound(context.Context, *connect.Request[v1.PublishReviewRoundRequest]) (*connect.Response[v1.PublishReviewRoundResponse], error)
 	// ReplyReviewThreads adds the agent's replies, optionally capturing a new
 	// revision they address. Addressed is evidence, never a resolution.

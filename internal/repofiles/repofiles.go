@@ -9,6 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/apperr"
 	"io/fs"
 	"os"
 	"path"
@@ -97,7 +98,7 @@ func Read(dir, p string) ([]byte, error) {
 	full := filepath.Join(dir, filepath.FromSlash(p))
 	if info, err := os.Lstat(full); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("no repository file %s", p)
+			return nil, apperr.NotFoundf("no repository file %s", p)
 		}
 		return nil, err
 	} else if !info.Mode().IsRegular() {
@@ -150,7 +151,7 @@ func Remove(dir, p string) error {
 	full := filepath.Join(dir, filepath.FromSlash(p))
 	if err := os.Remove(full); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("no repository file %s", p)
+			return apperr.NotFoundf("no repository file %s", p)
 		}
 		return err
 	}

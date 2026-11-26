@@ -95,12 +95,15 @@ func (s *Server) PublishReviewRound(ctx context.Context, req *connect.Request[v1
 	if err != nil {
 		return nil, checkpointError(err)
 	}
+	// The round is published whatever follows: telling the agent is the best
+	// effort NotifyReviewRound repeats later.
+	response := &v1.PublishReviewRoundResponse{Result: reviewMutation(out)}
 	if !out.Reused {
 		if _, err := s.notifyReviewRound(ctx, r.ItemId, out.Receipt.Round, "review-"+r.OperationId); err != nil {
-			return nil, partial(connect.NewError(connect.CodeOf(err), fmt.Errorf("published review round %s; notification failed: %s", out.Receipt.Round, err)), r.ItemId, "published review round "+out.Receipt.Round+"; notification failed")
+			response.Warnings = append(response.Warnings, fmt.Sprintf("review round %s is published, but its agent was not told: %v", out.Receipt.Round, err))
 		}
 	}
-	return response(&v1.PublishReviewRoundResponse{Result: reviewMutation(out)}, nil)
+	return connect.NewResponse(response), nil
 }
 func (s *Server) ReplyReviewThreads(ctx context.Context, req *connect.Request[v1.ReplyReviewThreadsRequest]) (*connect.Response[v1.ReplyReviewThreadsResponse], error) {
 	r := req.Msg

@@ -2762,8 +2762,11 @@ func (x *DeleteReviewDraftsResponse) GetResult() *ReviewMutation {
 }
 
 type PublishReviewRoundResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Result        *ReviewMutation        `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Result *ReviewMutation        `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
+	// warnings say why the agent was not told of the round, such as its not
+	// running; the round is published all the same.
+	Warnings      []string `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2801,6 +2804,13 @@ func (*PublishReviewRoundResponse) Descriptor() ([]byte, []int) {
 func (x *PublishReviewRoundResponse) GetResult() *ReviewMutation {
 	if x != nil {
 		return x.Result
+	}
+	return nil
+}
+
+func (x *PublishReviewRoundResponse) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
 	}
 	return nil
 }
@@ -4095,9 +4105,10 @@ const file_wi_core_v1_reviews_proto_rawDesc = "" +
 	"\x17SaveReviewDraftResponse\x122\n" +
 	"\x06result\x18\x01 \x01(\v2\x1a.wi.core.v1.ReviewMutationR\x06result\"P\n" +
 	"\x1aDeleteReviewDraftsResponse\x122\n" +
-	"\x06result\x18\x01 \x01(\v2\x1a.wi.core.v1.ReviewMutationR\x06result\"P\n" +
+	"\x06result\x18\x01 \x01(\v2\x1a.wi.core.v1.ReviewMutationR\x06result\"l\n" +
 	"\x1aPublishReviewRoundResponse\x122\n" +
-	"\x06result\x18\x01 \x01(\v2\x1a.wi.core.v1.ReviewMutationR\x06result\"P\n" +
+	"\x06result\x18\x01 \x01(\v2\x1a.wi.core.v1.ReviewMutationR\x06result\x12\x1a\n" +
+	"\bwarnings\x18\x02 \x03(\tR\bwarnings\"P\n" +
 	"\x1aReplyReviewThreadsResponse\x122\n" +
 	"\x06result\x18\x01 \x01(\v2\x1a.wi.core.v1.ReviewMutationR\x06result\"R\n" +
 	"\x16GetReviewIntentRequest\x12\x17\n" +

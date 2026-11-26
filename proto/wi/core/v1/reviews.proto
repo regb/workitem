@@ -45,8 +45,11 @@ service ReviewService {
   // SaveReviewDraft adds or replaces a draft comment.
   rpc SaveReviewDraft(SaveReviewDraftRequest) returns (SaveReviewDraftResponse);
   rpc DeleteReviewDrafts(DeleteReviewDraftsRequest) returns (DeleteReviewDraftsResponse);
-  // PublishReviewRound publishes drafts as one round on a revision. It does
-  // not notify the agent; NotifyReviewRound does.
+  // PublishReviewRound publishes drafts as one round on a revision, then
+  // notifies the agent as NotifyReviewRound does when it can. A round whose
+  // agent is not running, or could not be told, is still published: its
+  // round has no notified_at, warnings say why, and NotifyReviewRound tells
+  // the agent later.
   rpc PublishReviewRound(PublishReviewRoundRequest) returns (PublishReviewRoundResponse);
   // ReplyReviewThreads adds the agent's replies, optionally capturing a new
   // revision they address. Addressed is evidence, never a resolution.
@@ -419,6 +422,9 @@ message DeleteReviewDraftsResponse {
 
 message PublishReviewRoundResponse {
   ReviewMutation result = 1;
+  // warnings say why the agent was not told of the round, such as its not
+  // running; the round is published all the same.
+  repeated string warnings = 2;
 }
 
 message ReplyReviewThreadsResponse {
