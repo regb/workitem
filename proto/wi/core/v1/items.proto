@@ -215,6 +215,17 @@ message ItemObservation {
   // a background command or subagent; each re-activates the agent when it
   // completes. While it is nonzero the agent counts as working.
   uint32 background_tasks = 14;
+  // background lists that work, oldest first.
+  repeated BackgroundTask background = 15;
+}
+
+// BackgroundTask is background work an idle agent waits on.
+message BackgroundTask {
+  // id is the agent's own ID for the work.
+  string id = 1;
+  // label says what the work is, as the agent described it; it may be empty.
+  string label = 2;
+  google.protobuf.Timestamp started_at = 3;
 }
 
 // AttentionActivity is when the operator and the agent last acted on an

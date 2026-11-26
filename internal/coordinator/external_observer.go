@@ -69,6 +69,8 @@ type AgentObservation struct {
 	// BackgroundTasks counts background work the idle agent waits on: it
 	// re-activates the agent when it completes.
 	BackgroundTasks int `json:"background_tasks,omitempty"`
+	// Background is that work, oldest first.
+	Background []BackgroundWork `json:"background,omitempty"`
 	// FailureReason is the reason code of the failure behind a problem
 	// status, such as usage_limit.
 	FailureReason string `json:"failure_reason,omitempty"`
@@ -443,9 +445,10 @@ func (o *ExternalObserver) applyActionability(itemID string, observation *AgentO
 		observation.Status = "problem"
 		observation.Reason = "latest conversation activity is incomplete and runtime ownership is offline"
 	}
-	observation.BackgroundTasks = 0
+	observation.BackgroundTasks, observation.Background = 0, nil
 	if observation.Status == "idle" && observation.ProcessOnline && ownerFound && owner.State != model.AgentRuntimeStopped && conversationFound {
-		observation.BackgroundTasks = conversation.PendingBackground(owner.StartedAt)
+		observation.Background = conversation.PendingBackgroundWork(owner.StartedAt)
+		observation.BackgroundTasks = len(observation.Background)
 		switch {
 		case observation.BackgroundTasks == 1:
 			observation.Reason = "waiting on 1 background task that will re-activate the agent"

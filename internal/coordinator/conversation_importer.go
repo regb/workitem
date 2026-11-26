@@ -33,8 +33,10 @@ type ConversationEventFact struct {
 	Failed        bool     `json:"failed,omitempty"`
 	// BackgroundStarted and BackgroundEnded are the driver's background work
 	// facts; see driverprotocol.ConversationFact.
-	BackgroundStarted []string `json:"background_started,omitempty"`
-	BackgroundEnded   []string `json:"background_ended,omitempty"`
+	BackgroundStarted []string          `json:"background_started,omitempty"`
+	BackgroundEnded   []string          `json:"background_ended,omitempty"`
+	BackgroundLabels  map[string]string `json:"background_labels,omitempty"`
+	BackgroundCalls   map[string]string `json:"background_calls,omitempty"`
 }
 
 // maxPendingBackground bounds the background work a conversation index keeps.
@@ -60,6 +62,19 @@ type ConversationIndex struct {
 	// ID, with the time it started. Work outlives no agent process, so readers
 	// count only work started by the current one.
 	Background map[string]time.Time `json:"background,omitempty"`
+	// BackgroundLabels says what each pending background work is, by ID.
+	// BackgroundCallLabels holds, by tool call, what work a call launches
+	// until the line starting it names its ID.
+	BackgroundLabels     map[string]string `json:"background_labels,omitempty"`
+	BackgroundCallLabels map[string]string `json:"background_call_labels,omitempty"`
+}
+
+// BackgroundWork is pending background work: its ID, what it is, and when
+// it started.
+type BackgroundWork struct {
+	ID        string    `json:"id"`
+	Label     string    `json:"label,omitempty"`
+	StartedAt time.Time `json:"started_at"`
 }
 
 type ConversationRecord struct {
@@ -371,8 +386,18 @@ func applyConversationFact(index *ConversationIndex, attention *AttentionActivit
 
 // applyBackgroundFact tracks background work that will re-activate the agent.
 func applyBackgroundFact(index *ConversationIndex, fact ConversationEventFact) {
+	for call, label := range fact.BackgroundLabels {
+		if call == "" || len(call) > 128 {
+			continue
+		}
+		if index.BackgroundCallLabels == nil {
+			index.BackgroundCallLabels = map[string]string{}
+		}
+		index.BackgroundCallLabels[call] = backgroundLabel(label)
+	}
 	for _, id := range fact.BackgroundEnded {
 		delete(index.Background, id)
+		delete(index.BackgroundLabels, id)
 	}
 	for _, id := range fact.BackgroundStarted {
 		if id == "" || len(id) > 128 {
@@ -382,6 +407,19 @@ func applyBackgroundFact(index *ConversationIndex, fact ConversationEventFact) {
 			index.Background = map[string]time.Time{}
 		}
 		index.Background[id] = fact.Timestamp.UTC()
+		label := fact.BackgroundLabels[id]
+		if call := fact.BackgroundCalls[id]; call != "" {
+			if label == "" {
+				label = index.BackgroundCallLabels[call]
+			}
+			delete(index.BackgroundCallLabels, call)
+		}
+		if label = backgroundLabel(label); label != "" {
+			if index.BackgroundLabels == nil {
+				index.BackgroundLabels = map[string]string{}
+			}
+			index.BackgroundLabels[id] = label
+		}
 	}
 	for len(index.Background) > maxPendingBackground {
 		oldest := ""
@@ -392,18 +430,51 @@ func applyBackgroundFact(index *ConversationIndex, fact ConversationEventFact) {
 		}
 		delete(index.Background, oldest)
 	}
+	for id := range index.BackgroundLabels {
+		if _, pending := index.Background[id]; !pending {
+			delete(index.BackgroundLabels, id)
+		}
+	}
+	// A call whose work never started leaves its label behind; keep a few.
+	for call := range index.BackgroundCallLabels {
+		if len(index.BackgroundCallLabels) <= maxPendingBackground {
+			break
+		}
+		delete(index.BackgroundCallLabels, call)
+	}
+}
+
+// backgroundLabel bounds a label to one short line.
+func backgroundLabel(label string) string {
+	label = strings.Join(strings.Fields(label), " ")
+	if runes := []rune(label); len(runes) > 120 {
+		label = string(runes[:119]) + "…"
+	}
+	return label
 }
 
 // PendingBackground counts the background work started since the given
 // time, by the agent process that started then.
 func (index ConversationIndex) PendingBackground(since time.Time) int {
-	count := 0
-	for _, at := range index.Background {
+	return len(index.PendingBackgroundWork(since))
+}
+
+// PendingBackgroundWork is the background work started since the given
+// time, oldest first.
+func (index ConversationIndex) PendingBackgroundWork(since time.Time) []BackgroundWork {
+	var work []BackgroundWork
+	for id, at := range index.Background {
 		if !at.Before(since) {
-			count++
+			work = append(work, BackgroundWork{ID: id, Label: index.BackgroundLabels[id], StartedAt: at})
 		}
 	}
-	return count
+	sort.Slice(work, func(i, j int) bool {
+		if !work[i].StartedAt.Equal(work[j].StartedAt) {
+			return work[i].StartedAt.Before(work[j].StartedAt)
+		}
+		return work[i].ID < work[j].ID
+	})
+	return work
 }
 
 func inferIndexedConversationTurnState(index ConversationIndex) string {

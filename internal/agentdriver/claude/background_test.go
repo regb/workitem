@@ -29,3 +29,18 @@ func TestBackgroundWorkIsReadFromTheTranscript(t *testing.T) {
 		}
 	}
 }
+
+func TestBackgroundWorkIsLabeledFromItsCall(t *testing.T) {
+	call, _ := summarize(1, []byte(`{"type":"assistant","timestamp":"2026-11-26T15:12:21Z","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_ci","name":"Bash","input":{"command":"gh run watch","description":"Rerun failed CI job and wait","run_in_background":true}},{"type":"tool_use","id":"toolu_ls","name":"Bash","input":{"command":"ls","description":"List files"}},{"type":"tool_use","id":"toolu_mon","name":"Monitor","input":{"description":"Watch the deploy"}}]}}`))
+	if want := map[string]string{"toolu_ci": "Rerun failed CI job and wait", "toolu_mon": "Watch the deploy"}; !reflect.DeepEqual(call.BackgroundLabels, want) {
+		t.Fatalf("call labels = %v", call.BackgroundLabels)
+	}
+	launch, _ := summarize(2, []byte(`{"type":"user","timestamp":"2026-11-26T15:12:21Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_ci","content":"Command running in background with ID: bgo9oxjlv."}]},"toolUseResult":{"stdout":"","backgroundTaskId":"bgo9oxjlv"}}`))
+	if !reflect.DeepEqual(launch.BackgroundCalls, map[string]string{"bgo9oxjlv": "toolu_ci"}) || launch.BackgroundLabels != nil {
+		t.Fatalf("launch = %+v", launch)
+	}
+	agent, _ := summarize(3, []byte(`{"type":"user","timestamp":"2026-11-26T15:13:00Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_a","content":"launched"}]},"toolUseResult":{"isAsync":true,"status":"async_launched","agentId":"a1","description":"Map the Otto core"}}`))
+	if !reflect.DeepEqual(agent.BackgroundLabels, map[string]string{"a1": "Map the Otto core"}) || agent.BackgroundCalls["a1"] != "toolu_a" {
+		t.Fatalf("async subagent = %+v", agent)
+	}
+}

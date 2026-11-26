@@ -236,6 +236,9 @@ func summarize(line uint64, data []byte) (protocol.ConversationFact, bool) {
 	fact := protocol.ConversationFact{Line: line, Type: "message", Role: record.Type, Timestamp: record.Timestamp, StopReason: record.Message.Stop, Failed: record.APIError}
 	if record.Type == "user" {
 		fact.BackgroundStarted, fact.BackgroundEnded = backgroundWork(record.ToolUseResult, record.Message.Content)
+		fact.BackgroundLabels, fact.BackgroundCalls = backgroundLaunch(fact.BackgroundStarted, record.ToolUseResult, record.Message.Content)
+	} else {
+		fact.BackgroundLabels = backgroundCalls(record.Message.Content)
 	}
 	// Claude writes a synthetic reply when the API refuses a turn; a usage
 	// limit waits for its reset rather than for a fix.
@@ -317,6 +320,78 @@ func backgroundWork(result, content json.RawMessage) (started, ended []string) {
 		}
 	}
 	return started, ended
+}
+
+// backgroundCalls reads, from an assistant record, what each tool call that
+// launches background work describes it as: a command or subagent run in
+// the background, or a monitor.
+func backgroundCalls(content json.RawMessage) map[string]string {
+	var blocks []struct {
+		Type  string `json:"type"`
+		ID    string `json:"id"`
+		Name  string `json:"name"`
+		Input struct {
+			Description string `json:"description"`
+			Background  bool   `json:"run_in_background"`
+		} `json:"input"`
+	}
+	if json.Unmarshal(content, &blocks) != nil {
+		return nil
+	}
+	var labels map[string]string
+	for _, b := range blocks {
+		if b.Type != "tool_use" || b.ID == "" || b.Input.Description == "" || !b.Input.Background && b.Name != "Monitor" {
+			continue
+		}
+		if labels == nil {
+			labels = map[string]string{}
+		}
+		labels[b.ID] = b.Input.Description
+	}
+	return labels
+}
+
+// backgroundLaunch names, for the work a user record starts, the tool call
+// that launched it, and what the work is when the result says so, as an
+// async subagent's does.
+func backgroundLaunch(started []string, result, content json.RawMessage) (labels, calls map[string]string) {
+	if len(started) == 0 {
+		return nil, nil
+	}
+	var blocks []struct {
+		Type string `json:"type"`
+		Call string `json:"tool_use_id"`
+	}
+	call := ""
+	if json.Unmarshal(content, &blocks) == nil {
+		for _, b := range blocks {
+			if b.Type == "tool_result" && b.Call != "" {
+				call = b.Call
+				break
+			}
+		}
+	}
+	var launched struct {
+		Description string `json:"description"`
+	}
+	if len(result) > 0 && result[0] == '{' {
+		_ = json.Unmarshal(result, &launched)
+	}
+	for _, id := range started {
+		if call != "" {
+			if calls == nil {
+				calls = map[string]string{}
+			}
+			calls[id] = call
+		}
+		if launched.Description != "" {
+			if labels == nil {
+				labels = map[string]string{}
+			}
+			labels[id] = launched.Description
+		}
+	}
+	return labels, calls
 }
 
 var taskNotificationPattern = regexp.MustCompile(`(?s)<task-notification>\s*<task-id>([^<]{1,128})</task-id>(.*?)</task-notification>`)

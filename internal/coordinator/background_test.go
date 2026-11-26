@@ -60,11 +60,34 @@ func TestAnIdleAgentWaitingOnBackgroundWorkCountsIt(t *testing.T) {
 		}
 		return observation
 	}
-	if o := observe(true); o.Status != "idle" || o.BackgroundTasks != 1 {
+	if o := observe(true); o.Status != "idle" || o.BackgroundTasks != 1 || len(o.Background) != 1 || o.Background[0].ID != "agent" {
 		t.Fatalf("online idle agent: %+v", o)
 	}
 	// Background work dies with the agent process.
 	if o := observe(false); o.BackgroundTasks != 0 {
 		t.Fatalf("offline agent: %+v", o)
+	}
+}
+
+func TestBackgroundWorkKeepsWhatItIs(t *testing.T) {
+	start := time.Date(2026, 11, 26, 15, 0, 0, 0, time.UTC)
+	index := ConversationIndex{}
+	attention := AttentionActivity{}
+	apply := func(fact ConversationEventFact) { applyConversationFact(&index, &attention, fact) }
+	apply(ConversationEventFact{Role: "assistant", Timestamp: start, BackgroundLabels: map[string]string{"call-ci": "Rerun failed\nCI job", "call-unused": "never launched"}})
+	apply(ConversationEventFact{Role: "user", Timestamp: start.Add(time.Second), BackgroundStarted: []string{"ci"}, BackgroundCalls: map[string]string{"ci": "call-ci"}})
+	apply(ConversationEventFact{Role: "user", Timestamp: start.Add(2 * time.Second), BackgroundStarted: []string{"agent"}, BackgroundLabels: map[string]string{"agent": "Map the core"}, BackgroundCalls: map[string]string{"agent": "call-agent"}})
+	apply(ConversationEventFact{Role: "user", Timestamp: start.Add(3 * time.Second), BackgroundStarted: []string{"bare"}})
+	work := index.PendingBackgroundWork(start)
+	want := []BackgroundWork{{ID: "ci", Label: "Rerun failed CI job", StartedAt: start.Add(time.Second)}, {ID: "agent", Label: "Map the core", StartedAt: start.Add(2 * time.Second)}, {ID: "bare", StartedAt: start.Add(3 * time.Second)}}
+	if fmt.Sprint(work) != fmt.Sprint(want) {
+		t.Fatalf("work = %+v", work)
+	}
+	if _, kept := index.BackgroundCallLabels["call-ci"]; kept {
+		t.Fatal("a started call's label stayed pending")
+	}
+	apply(ConversationEventFact{Role: "user", Timestamp: start.Add(time.Minute), BackgroundEnded: []string{"ci"}})
+	if _, kept := index.BackgroundLabels["ci"]; kept || index.PendingBackground(start) != 2 {
+		t.Fatalf("ended work kept: %+v", index)
 	}
 }

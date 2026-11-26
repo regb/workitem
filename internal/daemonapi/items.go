@@ -135,6 +135,9 @@ func (s *Server) observation(ctx context.Context, m model.Manifest) *v1.ItemObse
 		out.AgentReason = v.Reason
 		out.ObservedAt = stamp(v.ObservedAt)
 		out.BackgroundTasks = uint32(v.BackgroundTasks)
+		for _, work := range v.Background {
+			out.Background = append(out.Background, &v1.BackgroundTask{Id: work.ID, Label: work.Label, StartedAt: stamp(work.StartedAt)})
+		}
 		if v.Runtime != nil {
 			out.Asking = v.Runtime.Readiness == "waiting_input"
 		}

@@ -137,4 +137,11 @@ type ConversationFact struct {
 	// it completes, such as a background command or subagent.
 	BackgroundStarted []string `json:"background_started,omitempty"`
 	BackgroundEnded   []string `json:"background_ended,omitempty"`
+	// BackgroundLabels says what background work is, for people to read:
+	// keyed by the ID of the tool call that launches it on the line making
+	// the call, or by the work's ID on the line starting it when that line
+	// says. BackgroundCalls names, on the line starting work, the tool call
+	// that launched each of its BackgroundStarted IDs.
+	BackgroundLabels map[string]string `json:"background_labels,omitempty"`
+	BackgroundCalls  map[string]string `json:"background_calls,omitempty"`
 }

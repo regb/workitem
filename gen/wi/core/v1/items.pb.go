@@ -975,8 +975,10 @@ type ItemObservation struct {
 	// a background command or subagent; each re-activates the agent when it
 	// completes. While it is nonzero the agent counts as working.
 	BackgroundTasks uint32 `protobuf:"varint,14,opt,name=background_tasks,json=backgroundTasks,proto3" json:"background_tasks,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// background lists that work, oldest first.
+	Background    []*BackgroundTask `protobuf:"bytes,15,rep,name=background,proto3" json:"background,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ItemObservation) Reset() {
@@ -1100,6 +1102,76 @@ func (x *ItemObservation) GetBackgroundTasks() uint32 {
 	return 0
 }
 
+func (x *ItemObservation) GetBackground() []*BackgroundTask {
+	if x != nil {
+		return x.Background
+	}
+	return nil
+}
+
+// BackgroundTask is background work an idle agent waits on.
+type BackgroundTask struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// id is the agent's own ID for the work.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// label says what the work is, as the agent described it; it may be empty.
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BackgroundTask) Reset() {
+	*x = BackgroundTask{}
+	mi := &file_wi_core_v1_items_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackgroundTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackgroundTask) ProtoMessage() {}
+
+func (x *BackgroundTask) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_items_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackgroundTask.ProtoReflect.Descriptor instead.
+func (*BackgroundTask) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *BackgroundTask) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *BackgroundTask) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *BackgroundTask) GetStartedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.StartedAt
+	}
+	return nil
+}
+
 // AttentionActivity is when the operator and the agent last acted on an
 // item, the facts rankings work from.
 type AttentionActivity struct {
@@ -1115,7 +1187,7 @@ type AttentionActivity struct {
 
 func (x *AttentionActivity) Reset() {
 	*x = AttentionActivity{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[7]
+	mi := &file_wi_core_v1_items_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1127,7 +1199,7 @@ func (x *AttentionActivity) String() string {
 func (*AttentionActivity) ProtoMessage() {}
 
 func (x *AttentionActivity) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[7]
+	mi := &file_wi_core_v1_items_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1140,7 +1212,7 @@ func (x *AttentionActivity) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttentionActivity.ProtoReflect.Descriptor instead.
 func (*AttentionActivity) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{7}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AttentionActivity) GetLastRequestedAt() *timestamppb.Timestamp {
@@ -1208,7 +1280,7 @@ type ItemSummary struct {
 
 func (x *ItemSummary) Reset() {
 	*x = ItemSummary{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[8]
+	mi := &file_wi_core_v1_items_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1220,7 +1292,7 @@ func (x *ItemSummary) String() string {
 func (*ItemSummary) ProtoMessage() {}
 
 func (x *ItemSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[8]
+	mi := &file_wi_core_v1_items_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1233,7 +1305,7 @@ func (x *ItemSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ItemSummary.ProtoReflect.Descriptor instead.
 func (*ItemSummary) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{8}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ItemSummary) GetId() string {
@@ -1385,7 +1457,7 @@ type CreateItemRequest struct {
 
 func (x *CreateItemRequest) Reset() {
 	*x = CreateItemRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[9]
+	mi := &file_wi_core_v1_items_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1397,7 +1469,7 @@ func (x *CreateItemRequest) String() string {
 func (*CreateItemRequest) ProtoMessage() {}
 
 func (x *CreateItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[9]
+	mi := &file_wi_core_v1_items_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1410,7 +1482,7 @@ func (x *CreateItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateItemRequest.ProtoReflect.Descriptor instead.
 func (*CreateItemRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{9}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CreateItemRequest) GetRepositoryId() string {
@@ -1500,7 +1572,7 @@ type CreateItemResponse struct {
 
 func (x *CreateItemResponse) Reset() {
 	*x = CreateItemResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[10]
+	mi := &file_wi_core_v1_items_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1512,7 +1584,7 @@ func (x *CreateItemResponse) String() string {
 func (*CreateItemResponse) ProtoMessage() {}
 
 func (x *CreateItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[10]
+	mi := &file_wi_core_v1_items_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1525,7 +1597,7 @@ func (x *CreateItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateItemResponse.ProtoReflect.Descriptor instead.
 func (*CreateItemResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{10}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CreateItemResponse) GetItem() *Item {
@@ -1553,7 +1625,7 @@ type GetItemRequest struct {
 
 func (x *GetItemRequest) Reset() {
 	*x = GetItemRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[11]
+	mi := &file_wi_core_v1_items_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1565,7 +1637,7 @@ func (x *GetItemRequest) String() string {
 func (*GetItemRequest) ProtoMessage() {}
 
 func (x *GetItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[11]
+	mi := &file_wi_core_v1_items_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1578,7 +1650,7 @@ func (x *GetItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetItemRequest.ProtoReflect.Descriptor instead.
 func (*GetItemRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{11}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetItemRequest) GetItemId() string {
@@ -1606,7 +1678,7 @@ type GetItemResponse struct {
 
 func (x *GetItemResponse) Reset() {
 	*x = GetItemResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[12]
+	mi := &file_wi_core_v1_items_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1618,7 +1690,7 @@ func (x *GetItemResponse) String() string {
 func (*GetItemResponse) ProtoMessage() {}
 
 func (x *GetItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[12]
+	mi := &file_wi_core_v1_items_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1631,7 +1703,7 @@ func (x *GetItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetItemResponse.ProtoReflect.Descriptor instead.
 func (*GetItemResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{12}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetItemResponse) GetItem() *Item {
@@ -1667,7 +1739,7 @@ type ResolveItemRequest struct {
 
 func (x *ResolveItemRequest) Reset() {
 	*x = ResolveItemRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[13]
+	mi := &file_wi_core_v1_items_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1679,7 +1751,7 @@ func (x *ResolveItemRequest) String() string {
 func (*ResolveItemRequest) ProtoMessage() {}
 
 func (x *ResolveItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[13]
+	mi := &file_wi_core_v1_items_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1692,7 +1764,7 @@ func (x *ResolveItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveItemRequest.ProtoReflect.Descriptor instead.
 func (*ResolveItemRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{13}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ResolveItemRequest) GetSelector() string {
@@ -1718,7 +1790,7 @@ type ResolveItemResponse struct {
 
 func (x *ResolveItemResponse) Reset() {
 	*x = ResolveItemResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[14]
+	mi := &file_wi_core_v1_items_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1730,7 +1802,7 @@ func (x *ResolveItemResponse) String() string {
 func (*ResolveItemResponse) ProtoMessage() {}
 
 func (x *ResolveItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[14]
+	mi := &file_wi_core_v1_items_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1743,7 +1815,7 @@ func (x *ResolveItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveItemResponse.ProtoReflect.Descriptor instead.
 func (*ResolveItemResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{14}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ResolveItemResponse) GetItemId() string {
@@ -1768,7 +1840,7 @@ type LabelRule struct {
 
 func (x *LabelRule) Reset() {
 	*x = LabelRule{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[15]
+	mi := &file_wi_core_v1_items_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1780,7 +1852,7 @@ func (x *LabelRule) String() string {
 func (*LabelRule) ProtoMessage() {}
 
 func (x *LabelRule) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[15]
+	mi := &file_wi_core_v1_items_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1793,7 +1865,7 @@ func (x *LabelRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LabelRule.ProtoReflect.Descriptor instead.
 func (*LabelRule) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{15}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *LabelRule) GetRule() isLabelRule_Rule {
@@ -1878,7 +1950,7 @@ type ListItemsRequest struct {
 
 func (x *ListItemsRequest) Reset() {
 	*x = ListItemsRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[16]
+	mi := &file_wi_core_v1_items_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1890,7 +1962,7 @@ func (x *ListItemsRequest) String() string {
 func (*ListItemsRequest) ProtoMessage() {}
 
 func (x *ListItemsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[16]
+	mi := &file_wi_core_v1_items_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1903,7 +1975,7 @@ func (x *ListItemsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListItemsRequest.ProtoReflect.Descriptor instead.
 func (*ListItemsRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{16}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ListItemsRequest) GetStates() []ItemState {
@@ -1980,7 +2052,7 @@ type ListItemsResponse struct {
 
 func (x *ListItemsResponse) Reset() {
 	*x = ListItemsResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[17]
+	mi := &file_wi_core_v1_items_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1992,7 +2064,7 @@ func (x *ListItemsResponse) String() string {
 func (*ListItemsResponse) ProtoMessage() {}
 
 func (x *ListItemsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[17]
+	mi := &file_wi_core_v1_items_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2005,7 +2077,7 @@ func (x *ListItemsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListItemsResponse.ProtoReflect.Descriptor instead.
 func (*ListItemsResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{17}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *ListItemsResponse) GetItems() []*ItemSummary {
@@ -2040,7 +2112,7 @@ type SearchItemsRequest struct {
 
 func (x *SearchItemsRequest) Reset() {
 	*x = SearchItemsRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[18]
+	mi := &file_wi_core_v1_items_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2052,7 +2124,7 @@ func (x *SearchItemsRequest) String() string {
 func (*SearchItemsRequest) ProtoMessage() {}
 
 func (x *SearchItemsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[18]
+	mi := &file_wi_core_v1_items_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2065,7 +2137,7 @@ func (x *SearchItemsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchItemsRequest.ProtoReflect.Descriptor instead.
 func (*SearchItemsRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{18}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *SearchItemsRequest) GetQuery() string {
@@ -2102,7 +2174,7 @@ type SearchHit struct {
 
 func (x *SearchHit) Reset() {
 	*x = SearchHit{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[19]
+	mi := &file_wi_core_v1_items_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2114,7 +2186,7 @@ func (x *SearchHit) String() string {
 func (*SearchHit) ProtoMessage() {}
 
 func (x *SearchHit) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[19]
+	mi := &file_wi_core_v1_items_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2127,7 +2199,7 @@ func (x *SearchHit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchHit.ProtoReflect.Descriptor instead.
 func (*SearchHit) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{19}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SearchHit) GetItem() *ItemSummary {
@@ -2162,7 +2234,7 @@ type SearchItemsResponse struct {
 
 func (x *SearchItemsResponse) Reset() {
 	*x = SearchItemsResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[20]
+	mi := &file_wi_core_v1_items_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2174,7 +2246,7 @@ func (x *SearchItemsResponse) String() string {
 func (*SearchItemsResponse) ProtoMessage() {}
 
 func (x *SearchItemsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[20]
+	mi := &file_wi_core_v1_items_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2187,7 +2259,7 @@ func (x *SearchItemsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchItemsResponse.ProtoReflect.Descriptor instead.
 func (*SearchItemsResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{20}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SearchItemsResponse) GetHits() []*SearchHit {
@@ -2230,7 +2302,7 @@ type UpdateItemRequest struct {
 
 func (x *UpdateItemRequest) Reset() {
 	*x = UpdateItemRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[21]
+	mi := &file_wi_core_v1_items_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2242,7 +2314,7 @@ func (x *UpdateItemRequest) String() string {
 func (*UpdateItemRequest) ProtoMessage() {}
 
 func (x *UpdateItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[21]
+	mi := &file_wi_core_v1_items_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2255,7 +2327,7 @@ func (x *UpdateItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateItemRequest.ProtoReflect.Descriptor instead.
 func (*UpdateItemRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{21}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UpdateItemRequest) GetItemId() string {
@@ -2351,7 +2423,7 @@ type UpdateItemResponse struct {
 
 func (x *UpdateItemResponse) Reset() {
 	*x = UpdateItemResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[22]
+	mi := &file_wi_core_v1_items_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2363,7 +2435,7 @@ func (x *UpdateItemResponse) String() string {
 func (*UpdateItemResponse) ProtoMessage() {}
 
 func (x *UpdateItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[22]
+	mi := &file_wi_core_v1_items_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2376,7 +2448,7 @@ func (x *UpdateItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateItemResponse.ProtoReflect.Descriptor instead.
 func (*UpdateItemResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{22}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *UpdateItemResponse) GetItem() *Item {
@@ -2400,7 +2472,7 @@ type SetItemStateRequest struct {
 
 func (x *SetItemStateRequest) Reset() {
 	*x = SetItemStateRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[23]
+	mi := &file_wi_core_v1_items_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2412,7 +2484,7 @@ func (x *SetItemStateRequest) String() string {
 func (*SetItemStateRequest) ProtoMessage() {}
 
 func (x *SetItemStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[23]
+	mi := &file_wi_core_v1_items_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2425,7 +2497,7 @@ func (x *SetItemStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetItemStateRequest.ProtoReflect.Descriptor instead.
 func (*SetItemStateRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{23}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetItemStateRequest) GetItemId() string {
@@ -2472,7 +2544,7 @@ type SetItemStateResponse struct {
 
 func (x *SetItemStateResponse) Reset() {
 	*x = SetItemStateResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[24]
+	mi := &file_wi_core_v1_items_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2484,7 +2556,7 @@ func (x *SetItemStateResponse) String() string {
 func (*SetItemStateResponse) ProtoMessage() {}
 
 func (x *SetItemStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[24]
+	mi := &file_wi_core_v1_items_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2497,7 +2569,7 @@ func (x *SetItemStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetItemStateResponse.ProtoReflect.Descriptor instead.
 func (*SetItemStateResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{24}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SetItemStateResponse) GetItem() *Item {
@@ -2518,7 +2590,7 @@ type DeleteItemRequest struct {
 
 func (x *DeleteItemRequest) Reset() {
 	*x = DeleteItemRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[25]
+	mi := &file_wi_core_v1_items_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2530,7 +2602,7 @@ func (x *DeleteItemRequest) String() string {
 func (*DeleteItemRequest) ProtoMessage() {}
 
 func (x *DeleteItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[25]
+	mi := &file_wi_core_v1_items_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2543,7 +2615,7 @@ func (x *DeleteItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteItemRequest.ProtoReflect.Descriptor instead.
 func (*DeleteItemRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{25}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *DeleteItemRequest) GetItemId() string {
@@ -2568,7 +2640,7 @@ type DeleteItemResponse struct {
 
 func (x *DeleteItemResponse) Reset() {
 	*x = DeleteItemResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[26]
+	mi := &file_wi_core_v1_items_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2580,7 +2652,7 @@ func (x *DeleteItemResponse) String() string {
 func (*DeleteItemResponse) ProtoMessage() {}
 
 func (x *DeleteItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[26]
+	mi := &file_wi_core_v1_items_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2593,7 +2665,7 @@ func (x *DeleteItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteItemResponse.ProtoReflect.Descriptor instead.
 func (*DeleteItemResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{26}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{27}
 }
 
 type MarkReadRequest struct {
@@ -2608,7 +2680,7 @@ type MarkReadRequest struct {
 
 func (x *MarkReadRequest) Reset() {
 	*x = MarkReadRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[27]
+	mi := &file_wi_core_v1_items_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2620,7 +2692,7 @@ func (x *MarkReadRequest) String() string {
 func (*MarkReadRequest) ProtoMessage() {}
 
 func (x *MarkReadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[27]
+	mi := &file_wi_core_v1_items_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2633,7 +2705,7 @@ func (x *MarkReadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReadRequest.ProtoReflect.Descriptor instead.
 func (*MarkReadRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{27}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *MarkReadRequest) GetItemId() string {
@@ -2665,7 +2737,7 @@ type MarkReadResponse struct {
 
 func (x *MarkReadResponse) Reset() {
 	*x = MarkReadResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[28]
+	mi := &file_wi_core_v1_items_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2677,7 +2749,7 @@ func (x *MarkReadResponse) String() string {
 func (*MarkReadResponse) ProtoMessage() {}
 
 func (x *MarkReadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[28]
+	mi := &file_wi_core_v1_items_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2690,7 +2762,7 @@ func (x *MarkReadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkReadResponse.ProtoReflect.Descriptor instead.
 func (*MarkReadResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{28}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{29}
 }
 
 type DeferItemRequest struct {
@@ -2702,7 +2774,7 @@ type DeferItemRequest struct {
 
 func (x *DeferItemRequest) Reset() {
 	*x = DeferItemRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[29]
+	mi := &file_wi_core_v1_items_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2714,7 +2786,7 @@ func (x *DeferItemRequest) String() string {
 func (*DeferItemRequest) ProtoMessage() {}
 
 func (x *DeferItemRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[29]
+	mi := &file_wi_core_v1_items_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2727,7 +2799,7 @@ func (x *DeferItemRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeferItemRequest.ProtoReflect.Descriptor instead.
 func (*DeferItemRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{29}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *DeferItemRequest) GetItemId() string {
@@ -2745,7 +2817,7 @@ type DeferItemResponse struct {
 
 func (x *DeferItemResponse) Reset() {
 	*x = DeferItemResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[30]
+	mi := &file_wi_core_v1_items_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2757,7 +2829,7 @@ func (x *DeferItemResponse) String() string {
 func (*DeferItemResponse) ProtoMessage() {}
 
 func (x *DeferItemResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[30]
+	mi := &file_wi_core_v1_items_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2770,7 +2842,7 @@ func (x *DeferItemResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeferItemResponse.ProtoReflect.Descriptor instead.
 func (*DeferItemResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{30}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{31}
 }
 
 // ItemEvent is one fact of an item's append-only history.
@@ -2796,7 +2868,7 @@ type ItemEvent struct {
 
 func (x *ItemEvent) Reset() {
 	*x = ItemEvent{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[31]
+	mi := &file_wi_core_v1_items_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2808,7 +2880,7 @@ func (x *ItemEvent) String() string {
 func (*ItemEvent) ProtoMessage() {}
 
 func (x *ItemEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[31]
+	mi := &file_wi_core_v1_items_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2821,7 +2893,7 @@ func (x *ItemEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ItemEvent.ProtoReflect.Descriptor instead.
 func (*ItemEvent) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{31}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ItemEvent) GetId() string {
@@ -2885,7 +2957,7 @@ type ListItemEventsRequest struct {
 
 func (x *ListItemEventsRequest) Reset() {
 	*x = ListItemEventsRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[32]
+	mi := &file_wi_core_v1_items_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2897,7 +2969,7 @@ func (x *ListItemEventsRequest) String() string {
 func (*ListItemEventsRequest) ProtoMessage() {}
 
 func (x *ListItemEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[32]
+	mi := &file_wi_core_v1_items_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2910,7 +2982,7 @@ func (x *ListItemEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListItemEventsRequest.ProtoReflect.Descriptor instead.
 func (*ListItemEventsRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{32}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *ListItemEventsRequest) GetItemId() string {
@@ -2944,7 +3016,7 @@ type ListItemEventsResponse struct {
 
 func (x *ListItemEventsResponse) Reset() {
 	*x = ListItemEventsResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[33]
+	mi := &file_wi_core_v1_items_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2956,7 +3028,7 @@ func (x *ListItemEventsResponse) String() string {
 func (*ListItemEventsResponse) ProtoMessage() {}
 
 func (x *ListItemEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[33]
+	mi := &file_wi_core_v1_items_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2969,7 +3041,7 @@ func (x *ListItemEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListItemEventsResponse.ProtoReflect.Descriptor instead.
 func (*ListItemEventsResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{33}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *ListItemEventsResponse) GetEvents() []*ItemEvent {
@@ -3006,7 +3078,7 @@ type AddBlockerRequest struct {
 
 func (x *AddBlockerRequest) Reset() {
 	*x = AddBlockerRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[34]
+	mi := &file_wi_core_v1_items_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3018,7 +3090,7 @@ func (x *AddBlockerRequest) String() string {
 func (*AddBlockerRequest) ProtoMessage() {}
 
 func (x *AddBlockerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[34]
+	mi := &file_wi_core_v1_items_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3031,7 +3103,7 @@ func (x *AddBlockerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddBlockerRequest.ProtoReflect.Descriptor instead.
 func (*AddBlockerRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{34}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *AddBlockerRequest) GetItemId() string {
@@ -3107,7 +3179,7 @@ type AddBlockerResponse struct {
 
 func (x *AddBlockerResponse) Reset() {
 	*x = AddBlockerResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[35]
+	mi := &file_wi_core_v1_items_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3119,7 +3191,7 @@ func (x *AddBlockerResponse) String() string {
 func (*AddBlockerResponse) ProtoMessage() {}
 
 func (x *AddBlockerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[35]
+	mi := &file_wi_core_v1_items_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3132,7 +3204,7 @@ func (x *AddBlockerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddBlockerResponse.ProtoReflect.Descriptor instead.
 func (*AddBlockerResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{35}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *AddBlockerResponse) GetItem() *Item {
@@ -3162,7 +3234,7 @@ type ClearBlockerRequest struct {
 
 func (x *ClearBlockerRequest) Reset() {
 	*x = ClearBlockerRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[36]
+	mi := &file_wi_core_v1_items_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3174,7 +3246,7 @@ func (x *ClearBlockerRequest) String() string {
 func (*ClearBlockerRequest) ProtoMessage() {}
 
 func (x *ClearBlockerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[36]
+	mi := &file_wi_core_v1_items_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3187,7 +3259,7 @@ func (x *ClearBlockerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearBlockerRequest.ProtoReflect.Descriptor instead.
 func (*ClearBlockerRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{36}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *ClearBlockerRequest) GetItemId() string {
@@ -3227,7 +3299,7 @@ type ClearBlockerResponse struct {
 
 func (x *ClearBlockerResponse) Reset() {
 	*x = ClearBlockerResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[37]
+	mi := &file_wi_core_v1_items_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3239,7 +3311,7 @@ func (x *ClearBlockerResponse) String() string {
 func (*ClearBlockerResponse) ProtoMessage() {}
 
 func (x *ClearBlockerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[37]
+	mi := &file_wi_core_v1_items_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3252,7 +3324,7 @@ func (x *ClearBlockerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ClearBlockerResponse.ProtoReflect.Descriptor instead.
 func (*ClearBlockerResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{37}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *ClearBlockerResponse) GetItem() *Item {
@@ -3279,7 +3351,7 @@ type Attachment struct {
 
 func (x *Attachment) Reset() {
 	*x = Attachment{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[38]
+	mi := &file_wi_core_v1_items_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3291,7 +3363,7 @@ func (x *Attachment) String() string {
 func (*Attachment) ProtoMessage() {}
 
 func (x *Attachment) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[38]
+	mi := &file_wi_core_v1_items_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3304,7 +3376,7 @@ func (x *Attachment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Attachment.ProtoReflect.Descriptor instead.
 func (*Attachment) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{38}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *Attachment) GetName() string {
@@ -3356,7 +3428,7 @@ type Note struct {
 
 func (x *Note) Reset() {
 	*x = Note{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[39]
+	mi := &file_wi_core_v1_items_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3368,7 +3440,7 @@ func (x *Note) String() string {
 func (*Note) ProtoMessage() {}
 
 func (x *Note) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[39]
+	mi := &file_wi_core_v1_items_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3381,7 +3453,7 @@ func (x *Note) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Note.ProtoReflect.Descriptor instead.
 func (*Note) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{39}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *Note) GetTime() *timestamppb.Timestamp {
@@ -3422,7 +3494,7 @@ type AddNoteRequest struct {
 
 func (x *AddNoteRequest) Reset() {
 	*x = AddNoteRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[40]
+	mi := &file_wi_core_v1_items_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3434,7 +3506,7 @@ func (x *AddNoteRequest) String() string {
 func (*AddNoteRequest) ProtoMessage() {}
 
 func (x *AddNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[40]
+	mi := &file_wi_core_v1_items_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3447,7 +3519,7 @@ func (x *AddNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddNoteRequest.ProtoReflect.Descriptor instead.
 func (*AddNoteRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{40}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *AddNoteRequest) GetItemId() string {
@@ -3473,7 +3545,7 @@ type AddNoteResponse struct {
 
 func (x *AddNoteResponse) Reset() {
 	*x = AddNoteResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[41]
+	mi := &file_wi_core_v1_items_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3485,7 +3557,7 @@ func (x *AddNoteResponse) String() string {
 func (*AddNoteResponse) ProtoMessage() {}
 
 func (x *AddNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[41]
+	mi := &file_wi_core_v1_items_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3498,7 +3570,7 @@ func (x *AddNoteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddNoteResponse.ProtoReflect.Descriptor instead.
 func (*AddNoteResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{41}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *AddNoteResponse) GetNote() *Note {
@@ -3523,7 +3595,7 @@ type AttachRequest struct {
 
 func (x *AttachRequest) Reset() {
 	*x = AttachRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[42]
+	mi := &file_wi_core_v1_items_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3535,7 +3607,7 @@ func (x *AttachRequest) String() string {
 func (*AttachRequest) ProtoMessage() {}
 
 func (x *AttachRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[42]
+	mi := &file_wi_core_v1_items_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3548,7 +3620,7 @@ func (x *AttachRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachRequest.ProtoReflect.Descriptor instead.
 func (*AttachRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{42}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *AttachRequest) GetItemId() string {
@@ -3595,7 +3667,7 @@ type AttachResponse struct {
 
 func (x *AttachResponse) Reset() {
 	*x = AttachResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[43]
+	mi := &file_wi_core_v1_items_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3607,7 +3679,7 @@ func (x *AttachResponse) String() string {
 func (*AttachResponse) ProtoMessage() {}
 
 func (x *AttachResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[43]
+	mi := &file_wi_core_v1_items_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3620,7 +3692,7 @@ func (x *AttachResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachResponse.ProtoReflect.Descriptor instead.
 func (*AttachResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{43}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *AttachResponse) GetNote() *Note {
@@ -3639,7 +3711,7 @@ type ListNotesRequest struct {
 
 func (x *ListNotesRequest) Reset() {
 	*x = ListNotesRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[44]
+	mi := &file_wi_core_v1_items_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3651,7 +3723,7 @@ func (x *ListNotesRequest) String() string {
 func (*ListNotesRequest) ProtoMessage() {}
 
 func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[44]
+	mi := &file_wi_core_v1_items_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3664,7 +3736,7 @@ func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesRequest.ProtoReflect.Descriptor instead.
 func (*ListNotesRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{44}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *ListNotesRequest) GetItemId() string {
@@ -3685,7 +3757,7 @@ type CurrentAttachment struct {
 
 func (x *CurrentAttachment) Reset() {
 	*x = CurrentAttachment{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[45]
+	mi := &file_wi_core_v1_items_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3697,7 +3769,7 @@ func (x *CurrentAttachment) String() string {
 func (*CurrentAttachment) ProtoMessage() {}
 
 func (x *CurrentAttachment) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[45]
+	mi := &file_wi_core_v1_items_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3710,7 +3782,7 @@ func (x *CurrentAttachment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CurrentAttachment.ProtoReflect.Descriptor instead.
 func (*CurrentAttachment) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{45}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *CurrentAttachment) GetAttachment() *Attachment {
@@ -3737,7 +3809,7 @@ type ListNotesResponse struct {
 
 func (x *ListNotesResponse) Reset() {
 	*x = ListNotesResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[46]
+	mi := &file_wi_core_v1_items_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3749,7 +3821,7 @@ func (x *ListNotesResponse) String() string {
 func (*ListNotesResponse) ProtoMessage() {}
 
 func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[46]
+	mi := &file_wi_core_v1_items_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3762,7 +3834,7 @@ func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesResponse.ProtoReflect.Descriptor instead.
 func (*ListNotesResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{46}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListNotesResponse) GetNotes() []*Note {
@@ -3789,7 +3861,7 @@ type ReadAttachmentRequest struct {
 
 func (x *ReadAttachmentRequest) Reset() {
 	*x = ReadAttachmentRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[47]
+	mi := &file_wi_core_v1_items_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3801,7 +3873,7 @@ func (x *ReadAttachmentRequest) String() string {
 func (*ReadAttachmentRequest) ProtoMessage() {}
 
 func (x *ReadAttachmentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[47]
+	mi := &file_wi_core_v1_items_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3814,7 +3886,7 @@ func (x *ReadAttachmentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadAttachmentRequest.ProtoReflect.Descriptor instead.
 func (*ReadAttachmentRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{47}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ReadAttachmentRequest) GetItemId() string {
@@ -3842,7 +3914,7 @@ type ReadAttachmentResponse struct {
 
 func (x *ReadAttachmentResponse) Reset() {
 	*x = ReadAttachmentResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[48]
+	mi := &file_wi_core_v1_items_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3854,7 +3926,7 @@ func (x *ReadAttachmentResponse) String() string {
 func (*ReadAttachmentResponse) ProtoMessage() {}
 
 func (x *ReadAttachmentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[48]
+	mi := &file_wi_core_v1_items_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3867,7 +3939,7 @@ func (x *ReadAttachmentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReadAttachmentResponse.ProtoReflect.Descriptor instead.
 func (*ReadAttachmentResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{48}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *ReadAttachmentResponse) GetAttachment() *Attachment {
@@ -3901,7 +3973,7 @@ type AccessEntry struct {
 
 func (x *AccessEntry) Reset() {
 	*x = AccessEntry{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[49]
+	mi := &file_wi_core_v1_items_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3913,7 +3985,7 @@ func (x *AccessEntry) String() string {
 func (*AccessEntry) ProtoMessage() {}
 
 func (x *AccessEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[49]
+	mi := &file_wi_core_v1_items_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3926,7 +3998,7 @@ func (x *AccessEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccessEntry.ProtoReflect.Descriptor instead.
 func (*AccessEntry) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{49}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *AccessEntry) GetId() string {
@@ -3979,7 +4051,7 @@ type ListAccessRequest struct {
 
 func (x *ListAccessRequest) Reset() {
 	*x = ListAccessRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[50]
+	mi := &file_wi_core_v1_items_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3991,7 +4063,7 @@ func (x *ListAccessRequest) String() string {
 func (*ListAccessRequest) ProtoMessage() {}
 
 func (x *ListAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[50]
+	mi := &file_wi_core_v1_items_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4004,7 +4076,7 @@ func (x *ListAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAccessRequest.ProtoReflect.Descriptor instead.
 func (*ListAccessRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{50}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{51}
 }
 
 type ListAccessResponse struct {
@@ -4016,7 +4088,7 @@ type ListAccessResponse struct {
 
 func (x *ListAccessResponse) Reset() {
 	*x = ListAccessResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[51]
+	mi := &file_wi_core_v1_items_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4028,7 +4100,7 @@ func (x *ListAccessResponse) String() string {
 func (*ListAccessResponse) ProtoMessage() {}
 
 func (x *ListAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[51]
+	mi := &file_wi_core_v1_items_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4041,7 +4113,7 @@ func (x *ListAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAccessResponse.ProtoReflect.Descriptor instead.
 func (*ListAccessResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{51}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *ListAccessResponse) GetEntries() []*AccessEntry {
@@ -4063,7 +4135,7 @@ type GrantAccessRequest struct {
 
 func (x *GrantAccessRequest) Reset() {
 	*x = GrantAccessRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[52]
+	mi := &file_wi_core_v1_items_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4075,7 +4147,7 @@ func (x *GrantAccessRequest) String() string {
 func (*GrantAccessRequest) ProtoMessage() {}
 
 func (x *GrantAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[52]
+	mi := &file_wi_core_v1_items_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4088,7 +4160,7 @@ func (x *GrantAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantAccessRequest.ProtoReflect.Descriptor instead.
 func (*GrantAccessRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{52}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *GrantAccessRequest) GetSubject() string {
@@ -4121,7 +4193,7 @@ type GrantAccessResponse struct {
 
 func (x *GrantAccessResponse) Reset() {
 	*x = GrantAccessResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[53]
+	mi := &file_wi_core_v1_items_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4133,7 +4205,7 @@ func (x *GrantAccessResponse) String() string {
 func (*GrantAccessResponse) ProtoMessage() {}
 
 func (x *GrantAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[53]
+	mi := &file_wi_core_v1_items_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4146,7 +4218,7 @@ func (x *GrantAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantAccessResponse.ProtoReflect.Descriptor instead.
 func (*GrantAccessResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{53}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GrantAccessResponse) GetEntry() *AccessEntry {
@@ -4165,7 +4237,7 @@ type RevokeAccessRequest struct {
 
 func (x *RevokeAccessRequest) Reset() {
 	*x = RevokeAccessRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[54]
+	mi := &file_wi_core_v1_items_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4177,7 +4249,7 @@ func (x *RevokeAccessRequest) String() string {
 func (*RevokeAccessRequest) ProtoMessage() {}
 
 func (x *RevokeAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[54]
+	mi := &file_wi_core_v1_items_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4190,7 +4262,7 @@ func (x *RevokeAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeAccessRequest.ProtoReflect.Descriptor instead.
 func (*RevokeAccessRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{54}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *RevokeAccessRequest) GetEntryId() string {
@@ -4208,7 +4280,7 @@ type RevokeAccessResponse struct {
 
 func (x *RevokeAccessResponse) Reset() {
 	*x = RevokeAccessResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[55]
+	mi := &file_wi_core_v1_items_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4220,7 +4292,7 @@ func (x *RevokeAccessResponse) String() string {
 func (*RevokeAccessResponse) ProtoMessage() {}
 
 func (x *RevokeAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[55]
+	mi := &file_wi_core_v1_items_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4233,7 +4305,7 @@ func (x *RevokeAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeAccessResponse.ProtoReflect.Descriptor instead.
 func (*RevokeAccessResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{55}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{56}
 }
 
 // AccessDenied details a PERMISSION_DENIED for an item's agent: the level it
@@ -4250,7 +4322,7 @@ type AccessDenied struct {
 
 func (x *AccessDenied) Reset() {
 	*x = AccessDenied{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[56]
+	mi := &file_wi_core_v1_items_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4262,7 +4334,7 @@ func (x *AccessDenied) String() string {
 func (*AccessDenied) ProtoMessage() {}
 
 func (x *AccessDenied) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[56]
+	mi := &file_wi_core_v1_items_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4275,7 +4347,7 @@ func (x *AccessDenied) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccessDenied.ProtoReflect.Descriptor instead.
 func (*AccessDenied) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{56}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *AccessDenied) GetSubject() string {
@@ -4384,7 +4456,7 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\n" +
 	"blocked_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tblockedAt\x129\n" +
 	"\n" +
-	"cleared_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tclearedAt\"\xc8\x04\n" +
+	"cleared_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tclearedAt\"\x84\x05\n" +
 	"\x0fItemObservation\x12\x1c\n" +
 	"\tcapturing\x18\r \x01(\bR\tcapturing\x12:\n" +
 	"\fagent_status\x18\x01 \x01(\x0e2\x17.wi.core.v1.AgentStatusR\vagentStatus\x12!\n" +
@@ -4400,7 +4472,15 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\x0fneeds_attention\x18\n" +
 	" \x01(\bR\x0eneedsAttention\x129\n" +
 	"\bactivity\x18\v \x01(\v2\x1d.wi.core.v1.AttentionActivityR\bactivity\x12)\n" +
-	"\x10background_tasks\x18\x0e \x01(\rR\x0fbackgroundTasks\"\xe9\x02\n" +
+	"\x10background_tasks\x18\x0e \x01(\rR\x0fbackgroundTasks\x12:\n" +
+	"\n" +
+	"background\x18\x0f \x03(\v2\x1a.wi.core.v1.BackgroundTaskR\n" +
+	"background\"q\n" +
+	"\x0eBackgroundTask\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x129\n" +
+	"\n" +
+	"started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\"\xe9\x02\n" +
 	"\x11AttentionActivity\x12F\n" +
 	"\x11last_requested_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastRequestedAt\x12F\n" +
 	"\x11last_completed_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0flastCompletedAt\x12<\n" +
@@ -4723,7 +4803,7 @@ func file_wi_core_v1_items_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_items_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_wi_core_v1_items_proto_msgTypes = make([]protoimpl.MessageInfo, 61)
+var file_wi_core_v1_items_proto_msgTypes = make([]protoimpl.MessageInfo, 62)
 var file_wi_core_v1_items_proto_goTypes = []any{
 	(BlockerKind)(0),               // 0: wi.core.v1.BlockerKind
 	(AttentionGroup)(0),            // 1: wi.core.v1.AttentionGroup
@@ -4737,189 +4817,192 @@ var file_wi_core_v1_items_proto_goTypes = []any{
 	(*Blocker)(nil),                // 9: wi.core.v1.Blocker
 	(*FollowUp)(nil),               // 10: wi.core.v1.FollowUp
 	(*ItemObservation)(nil),        // 11: wi.core.v1.ItemObservation
-	(*AttentionActivity)(nil),      // 12: wi.core.v1.AttentionActivity
-	(*ItemSummary)(nil),            // 13: wi.core.v1.ItemSummary
-	(*CreateItemRequest)(nil),      // 14: wi.core.v1.CreateItemRequest
-	(*CreateItemResponse)(nil),     // 15: wi.core.v1.CreateItemResponse
-	(*GetItemRequest)(nil),         // 16: wi.core.v1.GetItemRequest
-	(*GetItemResponse)(nil),        // 17: wi.core.v1.GetItemResponse
-	(*ResolveItemRequest)(nil),     // 18: wi.core.v1.ResolveItemRequest
-	(*ResolveItemResponse)(nil),    // 19: wi.core.v1.ResolveItemResponse
-	(*LabelRule)(nil),              // 20: wi.core.v1.LabelRule
-	(*ListItemsRequest)(nil),       // 21: wi.core.v1.ListItemsRequest
-	(*ListItemsResponse)(nil),      // 22: wi.core.v1.ListItemsResponse
-	(*SearchItemsRequest)(nil),     // 23: wi.core.v1.SearchItemsRequest
-	(*SearchHit)(nil),              // 24: wi.core.v1.SearchHit
-	(*SearchItemsResponse)(nil),    // 25: wi.core.v1.SearchItemsResponse
-	(*UpdateItemRequest)(nil),      // 26: wi.core.v1.UpdateItemRequest
-	(*UpdateItemResponse)(nil),     // 27: wi.core.v1.UpdateItemResponse
-	(*SetItemStateRequest)(nil),    // 28: wi.core.v1.SetItemStateRequest
-	(*SetItemStateResponse)(nil),   // 29: wi.core.v1.SetItemStateResponse
-	(*DeleteItemRequest)(nil),      // 30: wi.core.v1.DeleteItemRequest
-	(*DeleteItemResponse)(nil),     // 31: wi.core.v1.DeleteItemResponse
-	(*MarkReadRequest)(nil),        // 32: wi.core.v1.MarkReadRequest
-	(*MarkReadResponse)(nil),       // 33: wi.core.v1.MarkReadResponse
-	(*DeferItemRequest)(nil),       // 34: wi.core.v1.DeferItemRequest
-	(*DeferItemResponse)(nil),      // 35: wi.core.v1.DeferItemResponse
-	(*ItemEvent)(nil),              // 36: wi.core.v1.ItemEvent
-	(*ListItemEventsRequest)(nil),  // 37: wi.core.v1.ListItemEventsRequest
-	(*ListItemEventsResponse)(nil), // 38: wi.core.v1.ListItemEventsResponse
-	(*AddBlockerRequest)(nil),      // 39: wi.core.v1.AddBlockerRequest
-	(*AddBlockerResponse)(nil),     // 40: wi.core.v1.AddBlockerResponse
-	(*ClearBlockerRequest)(nil),    // 41: wi.core.v1.ClearBlockerRequest
-	(*ClearBlockerResponse)(nil),   // 42: wi.core.v1.ClearBlockerResponse
-	(*Attachment)(nil),             // 43: wi.core.v1.Attachment
-	(*Note)(nil),                   // 44: wi.core.v1.Note
-	(*AddNoteRequest)(nil),         // 45: wi.core.v1.AddNoteRequest
-	(*AddNoteResponse)(nil),        // 46: wi.core.v1.AddNoteResponse
-	(*AttachRequest)(nil),          // 47: wi.core.v1.AttachRequest
-	(*AttachResponse)(nil),         // 48: wi.core.v1.AttachResponse
-	(*ListNotesRequest)(nil),       // 49: wi.core.v1.ListNotesRequest
-	(*CurrentAttachment)(nil),      // 50: wi.core.v1.CurrentAttachment
-	(*ListNotesResponse)(nil),      // 51: wi.core.v1.ListNotesResponse
-	(*ReadAttachmentRequest)(nil),  // 52: wi.core.v1.ReadAttachmentRequest
-	(*ReadAttachmentResponse)(nil), // 53: wi.core.v1.ReadAttachmentResponse
-	(*AccessEntry)(nil),            // 54: wi.core.v1.AccessEntry
-	(*ListAccessRequest)(nil),      // 55: wi.core.v1.ListAccessRequest
-	(*ListAccessResponse)(nil),     // 56: wi.core.v1.ListAccessResponse
-	(*GrantAccessRequest)(nil),     // 57: wi.core.v1.GrantAccessRequest
-	(*GrantAccessResponse)(nil),    // 58: wi.core.v1.GrantAccessResponse
-	(*RevokeAccessRequest)(nil),    // 59: wi.core.v1.RevokeAccessRequest
-	(*RevokeAccessResponse)(nil),   // 60: wi.core.v1.RevokeAccessResponse
-	(*AccessDenied)(nil),           // 61: wi.core.v1.AccessDenied
-	nil,                            // 62: wi.core.v1.Item.AgentSettingsEntry
-	nil,                            // 63: wi.core.v1.Blocker.MetaEntry
-	nil,                            // 64: wi.core.v1.CreateItemRequest.AgentSettingsEntry
-	nil,                            // 65: wi.core.v1.AddBlockerRequest.MetaEntry
-	(ItemState)(0),                 // 66: wi.core.v1.ItemState
-	(Resolution)(0),                // 67: wi.core.v1.Resolution
-	(*RepositoryRef)(nil),          // 68: wi.core.v1.RepositoryRef
-	(*timestamppb.Timestamp)(nil),  // 69: google.protobuf.Timestamp
-	(AgentStatus)(0),               // 70: wi.core.v1.AgentStatus
-	(WorktreeStatus)(0),            // 71: wi.core.v1.WorktreeStatus
+	(*BackgroundTask)(nil),         // 12: wi.core.v1.BackgroundTask
+	(*AttentionActivity)(nil),      // 13: wi.core.v1.AttentionActivity
+	(*ItemSummary)(nil),            // 14: wi.core.v1.ItemSummary
+	(*CreateItemRequest)(nil),      // 15: wi.core.v1.CreateItemRequest
+	(*CreateItemResponse)(nil),     // 16: wi.core.v1.CreateItemResponse
+	(*GetItemRequest)(nil),         // 17: wi.core.v1.GetItemRequest
+	(*GetItemResponse)(nil),        // 18: wi.core.v1.GetItemResponse
+	(*ResolveItemRequest)(nil),     // 19: wi.core.v1.ResolveItemRequest
+	(*ResolveItemResponse)(nil),    // 20: wi.core.v1.ResolveItemResponse
+	(*LabelRule)(nil),              // 21: wi.core.v1.LabelRule
+	(*ListItemsRequest)(nil),       // 22: wi.core.v1.ListItemsRequest
+	(*ListItemsResponse)(nil),      // 23: wi.core.v1.ListItemsResponse
+	(*SearchItemsRequest)(nil),     // 24: wi.core.v1.SearchItemsRequest
+	(*SearchHit)(nil),              // 25: wi.core.v1.SearchHit
+	(*SearchItemsResponse)(nil),    // 26: wi.core.v1.SearchItemsResponse
+	(*UpdateItemRequest)(nil),      // 27: wi.core.v1.UpdateItemRequest
+	(*UpdateItemResponse)(nil),     // 28: wi.core.v1.UpdateItemResponse
+	(*SetItemStateRequest)(nil),    // 29: wi.core.v1.SetItemStateRequest
+	(*SetItemStateResponse)(nil),   // 30: wi.core.v1.SetItemStateResponse
+	(*DeleteItemRequest)(nil),      // 31: wi.core.v1.DeleteItemRequest
+	(*DeleteItemResponse)(nil),     // 32: wi.core.v1.DeleteItemResponse
+	(*MarkReadRequest)(nil),        // 33: wi.core.v1.MarkReadRequest
+	(*MarkReadResponse)(nil),       // 34: wi.core.v1.MarkReadResponse
+	(*DeferItemRequest)(nil),       // 35: wi.core.v1.DeferItemRequest
+	(*DeferItemResponse)(nil),      // 36: wi.core.v1.DeferItemResponse
+	(*ItemEvent)(nil),              // 37: wi.core.v1.ItemEvent
+	(*ListItemEventsRequest)(nil),  // 38: wi.core.v1.ListItemEventsRequest
+	(*ListItemEventsResponse)(nil), // 39: wi.core.v1.ListItemEventsResponse
+	(*AddBlockerRequest)(nil),      // 40: wi.core.v1.AddBlockerRequest
+	(*AddBlockerResponse)(nil),     // 41: wi.core.v1.AddBlockerResponse
+	(*ClearBlockerRequest)(nil),    // 42: wi.core.v1.ClearBlockerRequest
+	(*ClearBlockerResponse)(nil),   // 43: wi.core.v1.ClearBlockerResponse
+	(*Attachment)(nil),             // 44: wi.core.v1.Attachment
+	(*Note)(nil),                   // 45: wi.core.v1.Note
+	(*AddNoteRequest)(nil),         // 46: wi.core.v1.AddNoteRequest
+	(*AddNoteResponse)(nil),        // 47: wi.core.v1.AddNoteResponse
+	(*AttachRequest)(nil),          // 48: wi.core.v1.AttachRequest
+	(*AttachResponse)(nil),         // 49: wi.core.v1.AttachResponse
+	(*ListNotesRequest)(nil),       // 50: wi.core.v1.ListNotesRequest
+	(*CurrentAttachment)(nil),      // 51: wi.core.v1.CurrentAttachment
+	(*ListNotesResponse)(nil),      // 52: wi.core.v1.ListNotesResponse
+	(*ReadAttachmentRequest)(nil),  // 53: wi.core.v1.ReadAttachmentRequest
+	(*ReadAttachmentResponse)(nil), // 54: wi.core.v1.ReadAttachmentResponse
+	(*AccessEntry)(nil),            // 55: wi.core.v1.AccessEntry
+	(*ListAccessRequest)(nil),      // 56: wi.core.v1.ListAccessRequest
+	(*ListAccessResponse)(nil),     // 57: wi.core.v1.ListAccessResponse
+	(*GrantAccessRequest)(nil),     // 58: wi.core.v1.GrantAccessRequest
+	(*GrantAccessResponse)(nil),    // 59: wi.core.v1.GrantAccessResponse
+	(*RevokeAccessRequest)(nil),    // 60: wi.core.v1.RevokeAccessRequest
+	(*RevokeAccessResponse)(nil),   // 61: wi.core.v1.RevokeAccessResponse
+	(*AccessDenied)(nil),           // 62: wi.core.v1.AccessDenied
+	nil,                            // 63: wi.core.v1.Item.AgentSettingsEntry
+	nil,                            // 64: wi.core.v1.Blocker.MetaEntry
+	nil,                            // 65: wi.core.v1.CreateItemRequest.AgentSettingsEntry
+	nil,                            // 66: wi.core.v1.AddBlockerRequest.MetaEntry
+	(ItemState)(0),                 // 67: wi.core.v1.ItemState
+	(Resolution)(0),                // 68: wi.core.v1.Resolution
+	(*RepositoryRef)(nil),          // 69: wi.core.v1.RepositoryRef
+	(*timestamppb.Timestamp)(nil),  // 70: google.protobuf.Timestamp
+	(AgentStatus)(0),               // 71: wi.core.v1.AgentStatus
+	(WorktreeStatus)(0),            // 72: wi.core.v1.WorktreeStatus
 }
 var file_wi_core_v1_items_proto_depIdxs = []int32{
-	66, // 0: wi.core.v1.Item.state:type_name -> wi.core.v1.ItemState
-	67, // 1: wi.core.v1.Item.resolution:type_name -> wi.core.v1.Resolution
-	68, // 2: wi.core.v1.Item.repository:type_name -> wi.core.v1.RepositoryRef
+	67, // 0: wi.core.v1.Item.state:type_name -> wi.core.v1.ItemState
+	68, // 1: wi.core.v1.Item.resolution:type_name -> wi.core.v1.Resolution
+	69, // 2: wi.core.v1.Item.repository:type_name -> wi.core.v1.RepositoryRef
 	6,  // 3: wi.core.v1.Item.checkout:type_name -> wi.core.v1.Checkout
 	8,  // 4: wi.core.v1.Item.conversation:type_name -> wi.core.v1.ConversationRef
-	62, // 5: wi.core.v1.Item.agent_settings:type_name -> wi.core.v1.Item.AgentSettingsEntry
+	63, // 5: wi.core.v1.Item.agent_settings:type_name -> wi.core.v1.Item.AgentSettingsEntry
 	9,  // 6: wi.core.v1.Item.blockers:type_name -> wi.core.v1.Blocker
-	69, // 7: wi.core.v1.Item.created_at:type_name -> google.protobuf.Timestamp
-	69, // 8: wi.core.v1.Item.updated_at:type_name -> google.protobuf.Timestamp
-	69, // 9: wi.core.v1.Item.state_changed_at:type_name -> google.protobuf.Timestamp
-	69, // 10: wi.core.v1.Item.snoozed_until:type_name -> google.protobuf.Timestamp
+	70, // 7: wi.core.v1.Item.created_at:type_name -> google.protobuf.Timestamp
+	70, // 8: wi.core.v1.Item.updated_at:type_name -> google.protobuf.Timestamp
+	70, // 9: wi.core.v1.Item.state_changed_at:type_name -> google.protobuf.Timestamp
+	70, // 10: wi.core.v1.Item.snoozed_until:type_name -> google.protobuf.Timestamp
 	10, // 11: wi.core.v1.Item.follow_ups:type_name -> wi.core.v1.FollowUp
 	7,  // 12: wi.core.v1.Checkout.claim:type_name -> wi.core.v1.WorkspaceClaim
 	0,  // 13: wi.core.v1.Blocker.kind:type_name -> wi.core.v1.BlockerKind
-	69, // 14: wi.core.v1.Blocker.until:type_name -> google.protobuf.Timestamp
-	63, // 15: wi.core.v1.Blocker.meta:type_name -> wi.core.v1.Blocker.MetaEntry
-	69, // 16: wi.core.v1.Blocker.created_at:type_name -> google.protobuf.Timestamp
-	69, // 17: wi.core.v1.FollowUp.blocked_at:type_name -> google.protobuf.Timestamp
-	69, // 18: wi.core.v1.FollowUp.cleared_at:type_name -> google.protobuf.Timestamp
-	70, // 19: wi.core.v1.ItemObservation.agent_status:type_name -> wi.core.v1.AgentStatus
-	71, // 20: wi.core.v1.ItemObservation.worktree_status:type_name -> wi.core.v1.WorktreeStatus
-	69, // 21: wi.core.v1.ItemObservation.observed_at:type_name -> google.protobuf.Timestamp
-	12, // 22: wi.core.v1.ItemObservation.activity:type_name -> wi.core.v1.AttentionActivity
-	69, // 23: wi.core.v1.AttentionActivity.last_requested_at:type_name -> google.protobuf.Timestamp
-	69, // 24: wi.core.v1.AttentionActivity.last_completed_at:type_name -> google.protobuf.Timestamp
-	69, // 25: wi.core.v1.AttentionActivity.last_read_at:type_name -> google.protobuf.Timestamp
-	69, // 26: wi.core.v1.AttentionActivity.last_unread_at:type_name -> google.protobuf.Timestamp
-	69, // 27: wi.core.v1.AttentionActivity.last_deferred_at:type_name -> google.protobuf.Timestamp
-	66, // 28: wi.core.v1.ItemSummary.state:type_name -> wi.core.v1.ItemState
-	67, // 29: wi.core.v1.ItemSummary.resolution:type_name -> wi.core.v1.Resolution
-	9,  // 30: wi.core.v1.ItemSummary.blockers:type_name -> wi.core.v1.Blocker
-	11, // 31: wi.core.v1.ItemSummary.observation:type_name -> wi.core.v1.ItemObservation
-	69, // 32: wi.core.v1.ItemSummary.snoozed_until:type_name -> google.protobuf.Timestamp
-	69, // 33: wi.core.v1.ItemSummary.updated_at:type_name -> google.protobuf.Timestamp
-	1,  // 34: wi.core.v1.ItemSummary.attention_group:type_name -> wi.core.v1.AttentionGroup
-	2,  // 35: wi.core.v1.ItemSummary.section:type_name -> wi.core.v1.ListSection
-	64, // 36: wi.core.v1.CreateItemRequest.agent_settings:type_name -> wi.core.v1.CreateItemRequest.AgentSettingsEntry
-	5,  // 37: wi.core.v1.CreateItemResponse.item:type_name -> wi.core.v1.Item
-	5,  // 38: wi.core.v1.GetItemResponse.item:type_name -> wi.core.v1.Item
-	11, // 39: wi.core.v1.GetItemResponse.observation:type_name -> wi.core.v1.ItemObservation
-	66, // 40: wi.core.v1.ListItemsRequest.states:type_name -> wi.core.v1.ItemState
-	20, // 41: wi.core.v1.ListItemsRequest.label_rules:type_name -> wi.core.v1.LabelRule
-	3,  // 42: wi.core.v1.ListItemsRequest.order:type_name -> wi.core.v1.ListOrder
-	13, // 43: wi.core.v1.ListItemsResponse.items:type_name -> wi.core.v1.ItemSummary
-	66, // 44: wi.core.v1.SearchItemsRequest.states:type_name -> wi.core.v1.ItemState
-	13, // 45: wi.core.v1.SearchHit.item:type_name -> wi.core.v1.ItemSummary
-	24, // 46: wi.core.v1.SearchItemsResponse.hits:type_name -> wi.core.v1.SearchHit
-	69, // 47: wi.core.v1.UpdateItemRequest.snoozed_until:type_name -> google.protobuf.Timestamp
-	5,  // 48: wi.core.v1.UpdateItemResponse.item:type_name -> wi.core.v1.Item
-	66, // 49: wi.core.v1.SetItemStateRequest.state:type_name -> wi.core.v1.ItemState
-	67, // 50: wi.core.v1.SetItemStateRequest.resolution:type_name -> wi.core.v1.Resolution
-	5,  // 51: wi.core.v1.SetItemStateResponse.item:type_name -> wi.core.v1.Item
-	69, // 52: wi.core.v1.ItemEvent.time:type_name -> google.protobuf.Timestamp
-	36, // 53: wi.core.v1.ListItemEventsResponse.events:type_name -> wi.core.v1.ItemEvent
-	0,  // 54: wi.core.v1.AddBlockerRequest.kind:type_name -> wi.core.v1.BlockerKind
-	69, // 55: wi.core.v1.AddBlockerRequest.until:type_name -> google.protobuf.Timestamp
-	65, // 56: wi.core.v1.AddBlockerRequest.meta:type_name -> wi.core.v1.AddBlockerRequest.MetaEntry
-	5,  // 57: wi.core.v1.AddBlockerResponse.item:type_name -> wi.core.v1.Item
-	9,  // 58: wi.core.v1.AddBlockerResponse.blocker:type_name -> wi.core.v1.Blocker
-	5,  // 59: wi.core.v1.ClearBlockerResponse.item:type_name -> wi.core.v1.Item
-	69, // 60: wi.core.v1.Note.time:type_name -> google.protobuf.Timestamp
-	43, // 61: wi.core.v1.Note.attachment:type_name -> wi.core.v1.Attachment
-	44, // 62: wi.core.v1.AddNoteResponse.note:type_name -> wi.core.v1.Note
-	44, // 63: wi.core.v1.AttachResponse.note:type_name -> wi.core.v1.Note
-	43, // 64: wi.core.v1.CurrentAttachment.attachment:type_name -> wi.core.v1.Attachment
-	69, // 65: wi.core.v1.CurrentAttachment.time:type_name -> google.protobuf.Timestamp
-	44, // 66: wi.core.v1.ListNotesResponse.notes:type_name -> wi.core.v1.Note
-	50, // 67: wi.core.v1.ListNotesResponse.attachments:type_name -> wi.core.v1.CurrentAttachment
-	43, // 68: wi.core.v1.ReadAttachmentResponse.attachment:type_name -> wi.core.v1.Attachment
-	4,  // 69: wi.core.v1.AccessEntry.level:type_name -> wi.core.v1.AccessLevel
-	69, // 70: wi.core.v1.AccessEntry.granted_at:type_name -> google.protobuf.Timestamp
-	54, // 71: wi.core.v1.ListAccessResponse.entries:type_name -> wi.core.v1.AccessEntry
-	4,  // 72: wi.core.v1.GrantAccessRequest.level:type_name -> wi.core.v1.AccessLevel
-	54, // 73: wi.core.v1.GrantAccessResponse.entry:type_name -> wi.core.v1.AccessEntry
-	4,  // 74: wi.core.v1.AccessDenied.needed:type_name -> wi.core.v1.AccessLevel
-	4,  // 75: wi.core.v1.AccessDenied.has:type_name -> wi.core.v1.AccessLevel
-	14, // 76: wi.core.v1.ItemService.CreateItem:input_type -> wi.core.v1.CreateItemRequest
-	16, // 77: wi.core.v1.ItemService.GetItem:input_type -> wi.core.v1.GetItemRequest
-	18, // 78: wi.core.v1.ItemService.ResolveItem:input_type -> wi.core.v1.ResolveItemRequest
-	21, // 79: wi.core.v1.ItemService.ListItems:input_type -> wi.core.v1.ListItemsRequest
-	23, // 80: wi.core.v1.ItemService.SearchItems:input_type -> wi.core.v1.SearchItemsRequest
-	26, // 81: wi.core.v1.ItemService.UpdateItem:input_type -> wi.core.v1.UpdateItemRequest
-	28, // 82: wi.core.v1.ItemService.SetItemState:input_type -> wi.core.v1.SetItemStateRequest
-	30, // 83: wi.core.v1.ItemService.DeleteItem:input_type -> wi.core.v1.DeleteItemRequest
-	32, // 84: wi.core.v1.ItemService.MarkRead:input_type -> wi.core.v1.MarkReadRequest
-	34, // 85: wi.core.v1.ItemService.DeferItem:input_type -> wi.core.v1.DeferItemRequest
-	37, // 86: wi.core.v1.ItemService.ListItemEvents:input_type -> wi.core.v1.ListItemEventsRequest
-	39, // 87: wi.core.v1.ItemService.AddBlocker:input_type -> wi.core.v1.AddBlockerRequest
-	41, // 88: wi.core.v1.ItemService.ClearBlocker:input_type -> wi.core.v1.ClearBlockerRequest
-	45, // 89: wi.core.v1.ItemService.AddNote:input_type -> wi.core.v1.AddNoteRequest
-	47, // 90: wi.core.v1.ItemService.Attach:input_type -> wi.core.v1.AttachRequest
-	49, // 91: wi.core.v1.ItemService.ListNotes:input_type -> wi.core.v1.ListNotesRequest
-	52, // 92: wi.core.v1.ItemService.ReadAttachment:input_type -> wi.core.v1.ReadAttachmentRequest
-	55, // 93: wi.core.v1.ItemService.ListAccess:input_type -> wi.core.v1.ListAccessRequest
-	57, // 94: wi.core.v1.ItemService.GrantAccess:input_type -> wi.core.v1.GrantAccessRequest
-	59, // 95: wi.core.v1.ItemService.RevokeAccess:input_type -> wi.core.v1.RevokeAccessRequest
-	15, // 96: wi.core.v1.ItemService.CreateItem:output_type -> wi.core.v1.CreateItemResponse
-	17, // 97: wi.core.v1.ItemService.GetItem:output_type -> wi.core.v1.GetItemResponse
-	19, // 98: wi.core.v1.ItemService.ResolveItem:output_type -> wi.core.v1.ResolveItemResponse
-	22, // 99: wi.core.v1.ItemService.ListItems:output_type -> wi.core.v1.ListItemsResponse
-	25, // 100: wi.core.v1.ItemService.SearchItems:output_type -> wi.core.v1.SearchItemsResponse
-	27, // 101: wi.core.v1.ItemService.UpdateItem:output_type -> wi.core.v1.UpdateItemResponse
-	29, // 102: wi.core.v1.ItemService.SetItemState:output_type -> wi.core.v1.SetItemStateResponse
-	31, // 103: wi.core.v1.ItemService.DeleteItem:output_type -> wi.core.v1.DeleteItemResponse
-	33, // 104: wi.core.v1.ItemService.MarkRead:output_type -> wi.core.v1.MarkReadResponse
-	35, // 105: wi.core.v1.ItemService.DeferItem:output_type -> wi.core.v1.DeferItemResponse
-	38, // 106: wi.core.v1.ItemService.ListItemEvents:output_type -> wi.core.v1.ListItemEventsResponse
-	40, // 107: wi.core.v1.ItemService.AddBlocker:output_type -> wi.core.v1.AddBlockerResponse
-	42, // 108: wi.core.v1.ItemService.ClearBlocker:output_type -> wi.core.v1.ClearBlockerResponse
-	46, // 109: wi.core.v1.ItemService.AddNote:output_type -> wi.core.v1.AddNoteResponse
-	48, // 110: wi.core.v1.ItemService.Attach:output_type -> wi.core.v1.AttachResponse
-	51, // 111: wi.core.v1.ItemService.ListNotes:output_type -> wi.core.v1.ListNotesResponse
-	53, // 112: wi.core.v1.ItemService.ReadAttachment:output_type -> wi.core.v1.ReadAttachmentResponse
-	56, // 113: wi.core.v1.ItemService.ListAccess:output_type -> wi.core.v1.ListAccessResponse
-	58, // 114: wi.core.v1.ItemService.GrantAccess:output_type -> wi.core.v1.GrantAccessResponse
-	60, // 115: wi.core.v1.ItemService.RevokeAccess:output_type -> wi.core.v1.RevokeAccessResponse
-	96, // [96:116] is the sub-list for method output_type
-	76, // [76:96] is the sub-list for method input_type
-	76, // [76:76] is the sub-list for extension type_name
-	76, // [76:76] is the sub-list for extension extendee
-	0,  // [0:76] is the sub-list for field type_name
+	70, // 14: wi.core.v1.Blocker.until:type_name -> google.protobuf.Timestamp
+	64, // 15: wi.core.v1.Blocker.meta:type_name -> wi.core.v1.Blocker.MetaEntry
+	70, // 16: wi.core.v1.Blocker.created_at:type_name -> google.protobuf.Timestamp
+	70, // 17: wi.core.v1.FollowUp.blocked_at:type_name -> google.protobuf.Timestamp
+	70, // 18: wi.core.v1.FollowUp.cleared_at:type_name -> google.protobuf.Timestamp
+	71, // 19: wi.core.v1.ItemObservation.agent_status:type_name -> wi.core.v1.AgentStatus
+	72, // 20: wi.core.v1.ItemObservation.worktree_status:type_name -> wi.core.v1.WorktreeStatus
+	70, // 21: wi.core.v1.ItemObservation.observed_at:type_name -> google.protobuf.Timestamp
+	13, // 22: wi.core.v1.ItemObservation.activity:type_name -> wi.core.v1.AttentionActivity
+	12, // 23: wi.core.v1.ItemObservation.background:type_name -> wi.core.v1.BackgroundTask
+	70, // 24: wi.core.v1.BackgroundTask.started_at:type_name -> google.protobuf.Timestamp
+	70, // 25: wi.core.v1.AttentionActivity.last_requested_at:type_name -> google.protobuf.Timestamp
+	70, // 26: wi.core.v1.AttentionActivity.last_completed_at:type_name -> google.protobuf.Timestamp
+	70, // 27: wi.core.v1.AttentionActivity.last_read_at:type_name -> google.protobuf.Timestamp
+	70, // 28: wi.core.v1.AttentionActivity.last_unread_at:type_name -> google.protobuf.Timestamp
+	70, // 29: wi.core.v1.AttentionActivity.last_deferred_at:type_name -> google.protobuf.Timestamp
+	67, // 30: wi.core.v1.ItemSummary.state:type_name -> wi.core.v1.ItemState
+	68, // 31: wi.core.v1.ItemSummary.resolution:type_name -> wi.core.v1.Resolution
+	9,  // 32: wi.core.v1.ItemSummary.blockers:type_name -> wi.core.v1.Blocker
+	11, // 33: wi.core.v1.ItemSummary.observation:type_name -> wi.core.v1.ItemObservation
+	70, // 34: wi.core.v1.ItemSummary.snoozed_until:type_name -> google.protobuf.Timestamp
+	70, // 35: wi.core.v1.ItemSummary.updated_at:type_name -> google.protobuf.Timestamp
+	1,  // 36: wi.core.v1.ItemSummary.attention_group:type_name -> wi.core.v1.AttentionGroup
+	2,  // 37: wi.core.v1.ItemSummary.section:type_name -> wi.core.v1.ListSection
+	65, // 38: wi.core.v1.CreateItemRequest.agent_settings:type_name -> wi.core.v1.CreateItemRequest.AgentSettingsEntry
+	5,  // 39: wi.core.v1.CreateItemResponse.item:type_name -> wi.core.v1.Item
+	5,  // 40: wi.core.v1.GetItemResponse.item:type_name -> wi.core.v1.Item
+	11, // 41: wi.core.v1.GetItemResponse.observation:type_name -> wi.core.v1.ItemObservation
+	67, // 42: wi.core.v1.ListItemsRequest.states:type_name -> wi.core.v1.ItemState
+	21, // 43: wi.core.v1.ListItemsRequest.label_rules:type_name -> wi.core.v1.LabelRule
+	3,  // 44: wi.core.v1.ListItemsRequest.order:type_name -> wi.core.v1.ListOrder
+	14, // 45: wi.core.v1.ListItemsResponse.items:type_name -> wi.core.v1.ItemSummary
+	67, // 46: wi.core.v1.SearchItemsRequest.states:type_name -> wi.core.v1.ItemState
+	14, // 47: wi.core.v1.SearchHit.item:type_name -> wi.core.v1.ItemSummary
+	25, // 48: wi.core.v1.SearchItemsResponse.hits:type_name -> wi.core.v1.SearchHit
+	70, // 49: wi.core.v1.UpdateItemRequest.snoozed_until:type_name -> google.protobuf.Timestamp
+	5,  // 50: wi.core.v1.UpdateItemResponse.item:type_name -> wi.core.v1.Item
+	67, // 51: wi.core.v1.SetItemStateRequest.state:type_name -> wi.core.v1.ItemState
+	68, // 52: wi.core.v1.SetItemStateRequest.resolution:type_name -> wi.core.v1.Resolution
+	5,  // 53: wi.core.v1.SetItemStateResponse.item:type_name -> wi.core.v1.Item
+	70, // 54: wi.core.v1.ItemEvent.time:type_name -> google.protobuf.Timestamp
+	37, // 55: wi.core.v1.ListItemEventsResponse.events:type_name -> wi.core.v1.ItemEvent
+	0,  // 56: wi.core.v1.AddBlockerRequest.kind:type_name -> wi.core.v1.BlockerKind
+	70, // 57: wi.core.v1.AddBlockerRequest.until:type_name -> google.protobuf.Timestamp
+	66, // 58: wi.core.v1.AddBlockerRequest.meta:type_name -> wi.core.v1.AddBlockerRequest.MetaEntry
+	5,  // 59: wi.core.v1.AddBlockerResponse.item:type_name -> wi.core.v1.Item
+	9,  // 60: wi.core.v1.AddBlockerResponse.blocker:type_name -> wi.core.v1.Blocker
+	5,  // 61: wi.core.v1.ClearBlockerResponse.item:type_name -> wi.core.v1.Item
+	70, // 62: wi.core.v1.Note.time:type_name -> google.protobuf.Timestamp
+	44, // 63: wi.core.v1.Note.attachment:type_name -> wi.core.v1.Attachment
+	45, // 64: wi.core.v1.AddNoteResponse.note:type_name -> wi.core.v1.Note
+	45, // 65: wi.core.v1.AttachResponse.note:type_name -> wi.core.v1.Note
+	44, // 66: wi.core.v1.CurrentAttachment.attachment:type_name -> wi.core.v1.Attachment
+	70, // 67: wi.core.v1.CurrentAttachment.time:type_name -> google.protobuf.Timestamp
+	45, // 68: wi.core.v1.ListNotesResponse.notes:type_name -> wi.core.v1.Note
+	51, // 69: wi.core.v1.ListNotesResponse.attachments:type_name -> wi.core.v1.CurrentAttachment
+	44, // 70: wi.core.v1.ReadAttachmentResponse.attachment:type_name -> wi.core.v1.Attachment
+	4,  // 71: wi.core.v1.AccessEntry.level:type_name -> wi.core.v1.AccessLevel
+	70, // 72: wi.core.v1.AccessEntry.granted_at:type_name -> google.protobuf.Timestamp
+	55, // 73: wi.core.v1.ListAccessResponse.entries:type_name -> wi.core.v1.AccessEntry
+	4,  // 74: wi.core.v1.GrantAccessRequest.level:type_name -> wi.core.v1.AccessLevel
+	55, // 75: wi.core.v1.GrantAccessResponse.entry:type_name -> wi.core.v1.AccessEntry
+	4,  // 76: wi.core.v1.AccessDenied.needed:type_name -> wi.core.v1.AccessLevel
+	4,  // 77: wi.core.v1.AccessDenied.has:type_name -> wi.core.v1.AccessLevel
+	15, // 78: wi.core.v1.ItemService.CreateItem:input_type -> wi.core.v1.CreateItemRequest
+	17, // 79: wi.core.v1.ItemService.GetItem:input_type -> wi.core.v1.GetItemRequest
+	19, // 80: wi.core.v1.ItemService.ResolveItem:input_type -> wi.core.v1.ResolveItemRequest
+	22, // 81: wi.core.v1.ItemService.ListItems:input_type -> wi.core.v1.ListItemsRequest
+	24, // 82: wi.core.v1.ItemService.SearchItems:input_type -> wi.core.v1.SearchItemsRequest
+	27, // 83: wi.core.v1.ItemService.UpdateItem:input_type -> wi.core.v1.UpdateItemRequest
+	29, // 84: wi.core.v1.ItemService.SetItemState:input_type -> wi.core.v1.SetItemStateRequest
+	31, // 85: wi.core.v1.ItemService.DeleteItem:input_type -> wi.core.v1.DeleteItemRequest
+	33, // 86: wi.core.v1.ItemService.MarkRead:input_type -> wi.core.v1.MarkReadRequest
+	35, // 87: wi.core.v1.ItemService.DeferItem:input_type -> wi.core.v1.DeferItemRequest
+	38, // 88: wi.core.v1.ItemService.ListItemEvents:input_type -> wi.core.v1.ListItemEventsRequest
+	40, // 89: wi.core.v1.ItemService.AddBlocker:input_type -> wi.core.v1.AddBlockerRequest
+	42, // 90: wi.core.v1.ItemService.ClearBlocker:input_type -> wi.core.v1.ClearBlockerRequest
+	46, // 91: wi.core.v1.ItemService.AddNote:input_type -> wi.core.v1.AddNoteRequest
+	48, // 92: wi.core.v1.ItemService.Attach:input_type -> wi.core.v1.AttachRequest
+	50, // 93: wi.core.v1.ItemService.ListNotes:input_type -> wi.core.v1.ListNotesRequest
+	53, // 94: wi.core.v1.ItemService.ReadAttachment:input_type -> wi.core.v1.ReadAttachmentRequest
+	56, // 95: wi.core.v1.ItemService.ListAccess:input_type -> wi.core.v1.ListAccessRequest
+	58, // 96: wi.core.v1.ItemService.GrantAccess:input_type -> wi.core.v1.GrantAccessRequest
+	60, // 97: wi.core.v1.ItemService.RevokeAccess:input_type -> wi.core.v1.RevokeAccessRequest
+	16, // 98: wi.core.v1.ItemService.CreateItem:output_type -> wi.core.v1.CreateItemResponse
+	18, // 99: wi.core.v1.ItemService.GetItem:output_type -> wi.core.v1.GetItemResponse
+	20, // 100: wi.core.v1.ItemService.ResolveItem:output_type -> wi.core.v1.ResolveItemResponse
+	23, // 101: wi.core.v1.ItemService.ListItems:output_type -> wi.core.v1.ListItemsResponse
+	26, // 102: wi.core.v1.ItemService.SearchItems:output_type -> wi.core.v1.SearchItemsResponse
+	28, // 103: wi.core.v1.ItemService.UpdateItem:output_type -> wi.core.v1.UpdateItemResponse
+	30, // 104: wi.core.v1.ItemService.SetItemState:output_type -> wi.core.v1.SetItemStateResponse
+	32, // 105: wi.core.v1.ItemService.DeleteItem:output_type -> wi.core.v1.DeleteItemResponse
+	34, // 106: wi.core.v1.ItemService.MarkRead:output_type -> wi.core.v1.MarkReadResponse
+	36, // 107: wi.core.v1.ItemService.DeferItem:output_type -> wi.core.v1.DeferItemResponse
+	39, // 108: wi.core.v1.ItemService.ListItemEvents:output_type -> wi.core.v1.ListItemEventsResponse
+	41, // 109: wi.core.v1.ItemService.AddBlocker:output_type -> wi.core.v1.AddBlockerResponse
+	43, // 110: wi.core.v1.ItemService.ClearBlocker:output_type -> wi.core.v1.ClearBlockerResponse
+	47, // 111: wi.core.v1.ItemService.AddNote:output_type -> wi.core.v1.AddNoteResponse
+	49, // 112: wi.core.v1.ItemService.Attach:output_type -> wi.core.v1.AttachResponse
+	52, // 113: wi.core.v1.ItemService.ListNotes:output_type -> wi.core.v1.ListNotesResponse
+	54, // 114: wi.core.v1.ItemService.ReadAttachment:output_type -> wi.core.v1.ReadAttachmentResponse
+	57, // 115: wi.core.v1.ItemService.ListAccess:output_type -> wi.core.v1.ListAccessResponse
+	59, // 116: wi.core.v1.ItemService.GrantAccess:output_type -> wi.core.v1.GrantAccessResponse
+	61, // 117: wi.core.v1.ItemService.RevokeAccess:output_type -> wi.core.v1.RevokeAccessResponse
+	98, // [98:118] is the sub-list for method output_type
+	78, // [78:98] is the sub-list for method input_type
+	78, // [78:78] is the sub-list for extension type_name
+	78, // [78:78] is the sub-list for extension extendee
+	0,  // [0:78] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_items_proto_init() }
@@ -4928,19 +5011,19 @@ func file_wi_core_v1_items_proto_init() {
 		return
 	}
 	file_wi_core_v1_common_proto_init()
-	file_wi_core_v1_items_proto_msgTypes[15].OneofWrappers = []any{
+	file_wi_core_v1_items_proto_msgTypes[16].OneofWrappers = []any{
 		(*LabelRule_Require)(nil),
 		(*LabelRule_Exclude)(nil),
 		(*LabelRule_Unlabeled)(nil),
 	}
-	file_wi_core_v1_items_proto_msgTypes[21].OneofWrappers = []any{}
+	file_wi_core_v1_items_proto_msgTypes[22].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_items_proto_rawDesc), len(file_wi_core_v1_items_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   61,
+			NumMessages:   62,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
