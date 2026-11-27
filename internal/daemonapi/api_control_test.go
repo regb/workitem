@@ -162,11 +162,12 @@ func TestControlLeasesAndPlans(t *testing.T) {
 			t.Fatalf("releasing another principal's lease: %v", err)
 		}
 		call(t, f.Clients.Control.RenewControl, &v1.RenewControlRequest{LeaseId: leaseID})
-		// What a command line sends takes over what another command line holds.
+		// What a command line sends takes over what another command line
+		// holds, and gives it back once delivered.
 		if _, err := agent.Agents.AbortTurn(t.Context(), controlAs(&v1.AbortTurnRequest{ItemId: item}, "", model.LeaseHolderCLI)); err != nil {
 			t.Fatalf("a command line taking over another's control: %v", err)
 		}
-		if lease := call(t, f.Clients.Control.GetControl, &v1.GetControlRequest{ItemId: item}).Control.Lease; lease.GetClientId() != "item:"+other+"/cli" {
+		if lease := call(t, f.Clients.Control.GetControl, &v1.GetControlRequest{ItemId: item}).Control.Lease; lease != nil {
 			t.Fatalf("lease after the handover: %v", lease)
 		}
 		// A browser tab keeps what it holds.
@@ -190,4 +191,43 @@ func TestControlLeasesAndPlans(t *testing.T) {
 			t.Fatalf("created a conversation: %v", value.Item.Conversation)
 		}
 	})
+}
+
+// A command line that takes an item's vacant control to deliver a request
+// gives it back once the request is done, so a browser tab finds it free;
+// control a command line takes on purpose is kept.
+func TestControlTakenToDeliverIsGivenBack(t *testing.T) {
+	t.Parallel()
+	f := apitest.New(t)
+	item, _ := activeItem(t, f, f.Repository(t, "test"), "given back")
+	lease := func() *v1.ControlLease {
+		t.Helper()
+		return call(t, f.Clients.Control.GetControl, &v1.GetControlRequest{ItemId: item.Id}).Control.Lease
+	}
+	if _, err := f.Clients.Agents.AbortTurn(t.Context(), controlAs(&v1.AbortTurnRequest{ItemId: item.Id}, "cli", model.LeaseHolderCLI)); err != nil {
+		t.Fatal(err)
+	}
+	if held := lease(); held != nil {
+		t.Fatalf("a command line kept control after delivering: %v", held)
+	}
+	// A browser tab takes it, then keeps it through a command line's try.
+	if _, err := f.Clients.Control.AcquireControl(t.Context(), controlAs(&v1.AcquireControlRequest{ItemId: item.Id, ClientId: "tab"}, "tab", model.LeaseHolderWeb)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.Clients.Agents.AbortTurn(t.Context(), controlAs(&v1.AbortTurnRequest{ItemId: item.Id}, "cli", model.LeaseHolderCLI)); connect.CodeOf(err) != connect.CodePermissionDenied {
+		t.Fatalf("a command line took a tab's control: %v", err)
+	}
+	if held := lease(); held.GetHolder() != model.LeaseHolderWeb {
+		t.Fatalf("the tab's control: %v", held)
+	}
+	if _, err := f.Clients.Control.ReleaseControl(t.Context(), controlAs(&v1.ReleaseControlRequest{ItemId: item.Id}, "tab", model.LeaseHolderWeb)); err != nil {
+		t.Fatal(err)
+	}
+	// Control a command line takes on purpose stays.
+	if _, err := f.Clients.Control.AcquireControl(t.Context(), controlAs(&v1.AcquireControlRequest{ItemId: item.Id, ClientId: "cli"}, "cli", model.LeaseHolderCLI)); err != nil {
+		t.Fatal(err)
+	}
+	if held := lease(); held.GetHolder() != model.LeaseHolderCLI {
+		t.Fatalf("control taken on purpose: %v", held)
+	}
 }

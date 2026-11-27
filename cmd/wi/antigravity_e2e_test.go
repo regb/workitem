@@ -75,7 +75,11 @@ func TestAntigravityDriverEndToEnd(t *testing.T) {
 	}
 	send := func(text string, delivery v1.Delivery) {
 		t.Helper()
-		if _, err := f.clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: text, Delivery: delivery})); err != nil {
+		// Sent as wi send does: a command line, which gives control back once
+		// delivered, so wi agent settings below finds it free.
+		request := connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: text, Delivery: delivery})
+		request.Header().Set("Wi-Client-Kind", "cli")
+		if _, err := f.clients.Agents.SendMessage(ctx, request); err != nil {
 			t.Fatalf("send %q: %v", text, err)
 		}
 	}
@@ -98,7 +102,9 @@ func TestAntigravityDriverEndToEnd(t *testing.T) {
 
 	// A message sent with a client ID comes back in history marked with it:
 	// the driver links the prompt to its entry, and the daemon keeps it.
-	if _, err := f.clients.Agents.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: "linked", Delivery: v1.Delivery_DELIVERY_PROMPT, ClientMessageId: "page-1"})); err != nil {
+	linkedRequest := connect.NewRequest(&v1.SendMessageRequest{ItemId: item, Text: "linked", Delivery: v1.Delivery_DELIVERY_PROMPT, ClientMessageId: "page-1"})
+	linkedRequest.Header().Set("Wi-Client-Kind", "cli")
+	if _, err := f.clients.Agents.SendMessage(ctx, linkedRequest); err != nil {
 		t.Fatal(err)
 	}
 	waitReply("Echo: linked")

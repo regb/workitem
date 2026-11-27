@@ -20,6 +20,8 @@ func (s *Server) startJobKey(request context.Context, kind, key, item, repo stri
 	origin := model.OriginFrom(request)
 	return s.jobs.startKey(kind, key, item, repo, func(ctx context.Context, j *jobRun) error {
 		ctx = model.WithOrigin(ctx, origin)
+		ctx, giveBack := s.withTransientLeases(ctx)
+		defer giveBack()
 		done := make(chan struct{})
 		finished := make(chan struct{})
 		monitorSetup := item != "" && (kind == "start_item" || kind == "setup_workspace" || kind == "send_message")

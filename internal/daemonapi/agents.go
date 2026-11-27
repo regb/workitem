@@ -256,6 +256,7 @@ func (s *Server) controlLeaseStarting(ctx context.Context, itemID, leaseID strin
 		return nil, s.refuseControl(ctx, itemID, connect.CodeFailedPrecondition, "control lease was not granted")
 	}
 	s.rememberLease(result.Lease)
+	tookTransiently(ctx, result.Lease)
 	return result.Lease, nil
 }
 

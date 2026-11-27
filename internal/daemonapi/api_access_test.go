@@ -565,7 +565,11 @@ func TestAccessAgentsMessagesAndNotices(t *testing.T) {
 		call(t, f.Clients.Agents.StopAgent, &v1.StopAgentRequest{ItemId: parent, Force: true})
 		refused(t, connect.CodeUnauthenticated, asParent.System.GetInfo, &v1.GetInfoRequest{})
 		question := accessPendingQuestion(t, f, child)
-		call(t, f.Clients.Agents.AnswerQuestion, &v1.AnswerQuestionRequest{ItemId: child, ToolCallId: question, Answers: map[string]string{"Which color?": "Red"}})
+		// Answered as wi agent answer does, a command line, which gives
+		// control back once delivered.
+		if _, err := f.Clients.Agents.AnswerQuestion(t.Context(), accessAsCLI(&v1.AnswerQuestionRequest{ItemId: child, ToolCallId: question, Answers: map[string]string{"Which color?": "Red"}})); err != nil {
+			t.Fatal(err)
+		}
 		eventually(t, "the notice of the answered turn", func() bool {
 			for _, notice := range notices() {
 				if strings.Contains(notice, "Chosen: Red") {

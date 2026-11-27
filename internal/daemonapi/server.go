@@ -219,7 +219,9 @@ func (s *Server) unaryInterceptor() connect.UnaryInterceptorFunc {
 					defer s.lock(":profiles")()
 				}
 			}
+			ctx, giveBack := s.withTransientLeases(ctx)
 			result, err := next(ctx, req)
+			giveBack()
 			if storeErr := s.jobs.healthError(); storeErr != nil {
 				return nil, connect.NewError(connect.CodeUnavailable, storeErr)
 			}
