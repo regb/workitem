@@ -4167,6 +4167,282 @@ func (x *ListAccessResponse) GetEntries() []*AccessEntry {
 	return nil
 }
 
+type ListAccessRequestsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// subject, when set, lists only that item's agent's requests:
+	// "item:<id>".
+	Subject       string `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAccessRequestsRequest) Reset() {
+	*x = ListAccessRequestsRequest{}
+	mi := &file_wi_core_v1_items_proto_msgTypes[53]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAccessRequestsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAccessRequestsRequest) ProtoMessage() {}
+
+func (x *ListAccessRequestsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_items_proto_msgTypes[53]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAccessRequestsRequest.ProtoReflect.Descriptor instead.
+func (*ListAccessRequestsRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{53}
+}
+
+func (x *ListAccessRequestsRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+type ListAccessRequestsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Requests      []*AccessRequest       `protobuf:"bytes,1,rep,name=requests,proto3" json:"requests,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAccessRequestsResponse) Reset() {
+	*x = ListAccessRequestsResponse{}
+	mi := &file_wi_core_v1_items_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAccessRequestsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAccessRequestsResponse) ProtoMessage() {}
+
+func (x *ListAccessRequestsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_items_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAccessRequestsResponse.ProtoReflect.Descriptor instead.
+func (*ListAccessRequestsResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *ListAccessRequestsResponse) GetRequests() []*AccessRequest {
+	if x != nil {
+		return x.Requests
+	}
+	return nil
+}
+
+// AccessRequest is access an item's agent was refused and a person may
+// grant.
+type AccessRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// subject is the agent refused, "item:<id>".
+	Subject string `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	// item_id is the item it wanted to act on.
+	ItemId string      `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	Needed AccessLevel `protobuf:"varint,3,opt,name=needed,proto3,enum=wi.core.v1.AccessLevel" json:"needed,omitempty"`
+	Has    AccessLevel `protobuf:"varint,4,opt,name=has,proto3,enum=wi.core.v1.AccessLevel" json:"has,omitempty"`
+	// procedure is the last call refused, such as
+	// "/wi.core.v1.AgentService/SendMessage".
+	Procedure     string                 `protobuf:"bytes,5,opt,name=procedure,proto3" json:"procedure,omitempty"`
+	LastRefusedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_refused_at,json=lastRefusedAt,proto3" json:"last_refused_at,omitempty"`
+	Refusals      uint32                 `protobuf:"varint,7,opt,name=refusals,proto3" json:"refusals,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AccessRequest) Reset() {
+	*x = AccessRequest{}
+	mi := &file_wi_core_v1_items_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccessRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccessRequest) ProtoMessage() {}
+
+func (x *AccessRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_items_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccessRequest.ProtoReflect.Descriptor instead.
+func (*AccessRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *AccessRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *AccessRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+func (x *AccessRequest) GetNeeded() AccessLevel {
+	if x != nil {
+		return x.Needed
+	}
+	return AccessLevel_ACCESS_LEVEL_UNSPECIFIED
+}
+
+func (x *AccessRequest) GetHas() AccessLevel {
+	if x != nil {
+		return x.Has
+	}
+	return AccessLevel_ACCESS_LEVEL_UNSPECIFIED
+}
+
+func (x *AccessRequest) GetProcedure() string {
+	if x != nil {
+		return x.Procedure
+	}
+	return ""
+}
+
+func (x *AccessRequest) GetLastRefusedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.LastRefusedAt
+	}
+	return nil
+}
+
+func (x *AccessRequest) GetRefusals() uint32 {
+	if x != nil {
+		return x.Refusals
+	}
+	return 0
+}
+
+type DismissAccessRequestRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Subject       string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	ItemId        string                 `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissAccessRequestRequest) Reset() {
+	*x = DismissAccessRequestRequest{}
+	mi := &file_wi_core_v1_items_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissAccessRequestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissAccessRequestRequest) ProtoMessage() {}
+
+func (x *DismissAccessRequestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_items_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissAccessRequestRequest.ProtoReflect.Descriptor instead.
+func (*DismissAccessRequestRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *DismissAccessRequestRequest) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *DismissAccessRequestRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+type DismissAccessRequestResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DismissAccessRequestResponse) Reset() {
+	*x = DismissAccessRequestResponse{}
+	mi := &file_wi_core_v1_items_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DismissAccessRequestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DismissAccessRequestResponse) ProtoMessage() {}
+
+func (x *DismissAccessRequestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_items_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DismissAccessRequestResponse.ProtoReflect.Descriptor instead.
+func (*DismissAccessRequestResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{57}
+}
+
 type CheckAccessRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// subject is the item's agent, "item:<id>".
@@ -4178,7 +4454,7 @@ type CheckAccessRequest struct {
 
 func (x *CheckAccessRequest) Reset() {
 	*x = CheckAccessRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[53]
+	mi := &file_wi_core_v1_items_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4190,7 +4466,7 @@ func (x *CheckAccessRequest) String() string {
 func (*CheckAccessRequest) ProtoMessage() {}
 
 func (x *CheckAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[53]
+	mi := &file_wi_core_v1_items_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4203,7 +4479,7 @@ func (x *CheckAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckAccessRequest.ProtoReflect.Descriptor instead.
 func (*CheckAccessRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{53}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *CheckAccessRequest) GetSubject() string {
@@ -4230,7 +4506,7 @@ type CheckAccessResponse struct {
 
 func (x *CheckAccessResponse) Reset() {
 	*x = CheckAccessResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[54]
+	mi := &file_wi_core_v1_items_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4242,7 +4518,7 @@ func (x *CheckAccessResponse) String() string {
 func (*CheckAccessResponse) ProtoMessage() {}
 
 func (x *CheckAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[54]
+	mi := &file_wi_core_v1_items_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4255,7 +4531,7 @@ func (x *CheckAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckAccessResponse.ProtoReflect.Descriptor instead.
 func (*CheckAccessResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{54}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *CheckAccessResponse) GetAccess() []*ItemAccess {
@@ -4276,7 +4552,7 @@ type ItemAccess struct {
 
 func (x *ItemAccess) Reset() {
 	*x = ItemAccess{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[55]
+	mi := &file_wi_core_v1_items_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4288,7 +4564,7 @@ func (x *ItemAccess) String() string {
 func (*ItemAccess) ProtoMessage() {}
 
 func (x *ItemAccess) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[55]
+	mi := &file_wi_core_v1_items_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4301,7 +4577,7 @@ func (x *ItemAccess) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ItemAccess.ProtoReflect.Descriptor instead.
 func (*ItemAccess) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{55}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ItemAccess) GetItemId() string {
@@ -4330,7 +4606,7 @@ type GrantAccessRequest struct {
 
 func (x *GrantAccessRequest) Reset() {
 	*x = GrantAccessRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[56]
+	mi := &file_wi_core_v1_items_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4342,7 +4618,7 @@ func (x *GrantAccessRequest) String() string {
 func (*GrantAccessRequest) ProtoMessage() {}
 
 func (x *GrantAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[56]
+	mi := &file_wi_core_v1_items_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4355,7 +4631,7 @@ func (x *GrantAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantAccessRequest.ProtoReflect.Descriptor instead.
 func (*GrantAccessRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{56}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *GrantAccessRequest) GetSubject() string {
@@ -4388,7 +4664,7 @@ type GrantAccessResponse struct {
 
 func (x *GrantAccessResponse) Reset() {
 	*x = GrantAccessResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[57]
+	mi := &file_wi_core_v1_items_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4400,7 +4676,7 @@ func (x *GrantAccessResponse) String() string {
 func (*GrantAccessResponse) ProtoMessage() {}
 
 func (x *GrantAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[57]
+	mi := &file_wi_core_v1_items_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4413,7 +4689,7 @@ func (x *GrantAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrantAccessResponse.ProtoReflect.Descriptor instead.
 func (*GrantAccessResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{57}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *GrantAccessResponse) GetEntry() *AccessEntry {
@@ -4432,7 +4708,7 @@ type RevokeAccessRequest struct {
 
 func (x *RevokeAccessRequest) Reset() {
 	*x = RevokeAccessRequest{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[58]
+	mi := &file_wi_core_v1_items_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4444,7 +4720,7 @@ func (x *RevokeAccessRequest) String() string {
 func (*RevokeAccessRequest) ProtoMessage() {}
 
 func (x *RevokeAccessRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[58]
+	mi := &file_wi_core_v1_items_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4457,7 +4733,7 @@ func (x *RevokeAccessRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeAccessRequest.ProtoReflect.Descriptor instead.
 func (*RevokeAccessRequest) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{58}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *RevokeAccessRequest) GetEntryId() string {
@@ -4475,7 +4751,7 @@ type RevokeAccessResponse struct {
 
 func (x *RevokeAccessResponse) Reset() {
 	*x = RevokeAccessResponse{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[59]
+	mi := &file_wi_core_v1_items_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4487,7 +4763,7 @@ func (x *RevokeAccessResponse) String() string {
 func (*RevokeAccessResponse) ProtoMessage() {}
 
 func (x *RevokeAccessResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[59]
+	mi := &file_wi_core_v1_items_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4500,7 +4776,7 @@ func (x *RevokeAccessResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeAccessResponse.ProtoReflect.Descriptor instead.
 func (*RevokeAccessResponse) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{59}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{64}
 }
 
 // AccessDenied details a PERMISSION_DENIED for an item's agent: the level it
@@ -4517,7 +4793,7 @@ type AccessDenied struct {
 
 func (x *AccessDenied) Reset() {
 	*x = AccessDenied{}
-	mi := &file_wi_core_v1_items_proto_msgTypes[60]
+	mi := &file_wi_core_v1_items_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4529,7 +4805,7 @@ func (x *AccessDenied) String() string {
 func (*AccessDenied) ProtoMessage() {}
 
 func (x *AccessDenied) ProtoReflect() protoreflect.Message {
-	mi := &file_wi_core_v1_items_proto_msgTypes[60]
+	mi := &file_wi_core_v1_items_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4542,7 +4818,7 @@ func (x *AccessDenied) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AccessDenied.ProtoReflect.Descriptor instead.
 func (*AccessDenied) Descriptor() ([]byte, []int) {
-	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{60}
+	return file_wi_core_v1_items_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *AccessDenied) GetSubject() string {
@@ -4915,7 +5191,23 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"granted_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tgrantedAt\"\x13\n" +
 	"\x11ListAccessRequest\"G\n" +
 	"\x12ListAccessResponse\x121\n" +
-	"\aentries\x18\x01 \x03(\v2\x17.wi.core.v1.AccessEntryR\aentries\"I\n" +
+	"\aentries\x18\x01 \x03(\v2\x17.wi.core.v1.AccessEntryR\aentries\"5\n" +
+	"\x19ListAccessRequestsRequest\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\"S\n" +
+	"\x1aListAccessRequestsResponse\x125\n" +
+	"\brequests\x18\x01 \x03(\v2\x19.wi.core.v1.AccessRequestR\brequests\"\x9c\x02\n" +
+	"\rAccessRequest\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\x12\x17\n" +
+	"\aitem_id\x18\x02 \x01(\tR\x06itemId\x12/\n" +
+	"\x06needed\x18\x03 \x01(\x0e2\x17.wi.core.v1.AccessLevelR\x06needed\x12)\n" +
+	"\x03has\x18\x04 \x01(\x0e2\x17.wi.core.v1.AccessLevelR\x03has\x12\x1c\n" +
+	"\tprocedure\x18\x05 \x01(\tR\tprocedure\x12B\n" +
+	"\x0flast_refused_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\rlastRefusedAt\x12\x1a\n" +
+	"\brefusals\x18\a \x01(\rR\brefusals\"P\n" +
+	"\x1bDismissAccessRequestRequest\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\x12\x17\n" +
+	"\aitem_id\x18\x02 \x01(\tR\x06itemId\"\x1e\n" +
+	"\x1cDismissAccessRequestResponse\"I\n" +
 	"\x12CheckAccessRequest\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x19\n" +
 	"\bitem_ids\x18\x02 \x03(\tR\aitemIds\"E\n" +
@@ -4971,7 +5263,7 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\x14ACCESS_LEVEL_MESSAGE\x10\x02\x12\x18\n" +
 	"\x14ACCESS_LEVEL_CONTROL\x10\x03\x12\x1a\n" +
 	"\x16ACCESS_LEVEL_INTEGRATE\x10\x04\x12\x17\n" +
-	"\x13ACCESS_LEVEL_MANAGE\x10\x052\x96\r\n" +
+	"\x13ACCESS_LEVEL_MANAGE\x10\x052\xeb\x0e\n" +
 	"\vItemService\x12K\n" +
 	"\n" +
 	"CreateItem\x12\x1d.wi.core.v1.CreateItemRequest\x1a\x1e.wi.core.v1.CreateItemResponse\x12G\n" +
@@ -4995,7 +5287,9 @@ const file_wi_core_v1_items_proto_rawDesc = "" +
 	"\tListNotes\x12\x1c.wi.core.v1.ListNotesRequest\x1a\x1d.wi.core.v1.ListNotesResponse\"\x03\x90\x02\x01\x12^\n" +
 	"\x0eReadAttachment\x12!.wi.core.v1.ReadAttachmentRequest\x1a\".wi.core.v1.ReadAttachmentResponse\"\x03\x90\x02\x010\x01\x12P\n" +
 	"\n" +
-	"ListAccess\x12\x1d.wi.core.v1.ListAccessRequest\x1a\x1e.wi.core.v1.ListAccessResponse\"\x03\x90\x02\x01\x12S\n" +
+	"ListAccess\x12\x1d.wi.core.v1.ListAccessRequest\x1a\x1e.wi.core.v1.ListAccessResponse\"\x03\x90\x02\x01\x12h\n" +
+	"\x12ListAccessRequests\x12%.wi.core.v1.ListAccessRequestsRequest\x1a&.wi.core.v1.ListAccessRequestsResponse\"\x03\x90\x02\x01\x12i\n" +
+	"\x14DismissAccessRequest\x12'.wi.core.v1.DismissAccessRequestRequest\x1a(.wi.core.v1.DismissAccessRequestResponse\x12S\n" +
 	"\vCheckAccess\x12\x1e.wi.core.v1.CheckAccessRequest\x1a\x1f.wi.core.v1.CheckAccessResponse\"\x03\x90\x02\x01\x12N\n" +
 	"\vGrantAccess\x12\x1e.wi.core.v1.GrantAccessRequest\x1a\x1f.wi.core.v1.GrantAccessResponse\x12Q\n" +
 	"\fRevokeAccess\x12\x1f.wi.core.v1.RevokeAccessRequest\x1a .wi.core.v1.RevokeAccessResponseB0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
@@ -5013,213 +5307,226 @@ func file_wi_core_v1_items_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_items_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
-var file_wi_core_v1_items_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
+var file_wi_core_v1_items_proto_msgTypes = make([]protoimpl.MessageInfo, 70)
 var file_wi_core_v1_items_proto_goTypes = []any{
-	(BlockerKind)(0),               // 0: wi.core.v1.BlockerKind
-	(AttentionGroup)(0),            // 1: wi.core.v1.AttentionGroup
-	(ListSection)(0),               // 2: wi.core.v1.ListSection
-	(ListOrder)(0),                 // 3: wi.core.v1.ListOrder
-	(AccessLevel)(0),               // 4: wi.core.v1.AccessLevel
-	(*Item)(nil),                   // 5: wi.core.v1.Item
-	(*Checkout)(nil),               // 6: wi.core.v1.Checkout
-	(*WorkspaceClaim)(nil),         // 7: wi.core.v1.WorkspaceClaim
-	(*ConversationRef)(nil),        // 8: wi.core.v1.ConversationRef
-	(*Blocker)(nil),                // 9: wi.core.v1.Blocker
-	(*FollowUp)(nil),               // 10: wi.core.v1.FollowUp
-	(*ItemObservation)(nil),        // 11: wi.core.v1.ItemObservation
-	(*BackgroundTask)(nil),         // 12: wi.core.v1.BackgroundTask
-	(*AttentionActivity)(nil),      // 13: wi.core.v1.AttentionActivity
-	(*ItemSummary)(nil),            // 14: wi.core.v1.ItemSummary
-	(*CreateItemRequest)(nil),      // 15: wi.core.v1.CreateItemRequest
-	(*CreateItemResponse)(nil),     // 16: wi.core.v1.CreateItemResponse
-	(*GetItemRequest)(nil),         // 17: wi.core.v1.GetItemRequest
-	(*GetItemResponse)(nil),        // 18: wi.core.v1.GetItemResponse
-	(*ResolveItemRequest)(nil),     // 19: wi.core.v1.ResolveItemRequest
-	(*ResolveItemResponse)(nil),    // 20: wi.core.v1.ResolveItemResponse
-	(*LabelRule)(nil),              // 21: wi.core.v1.LabelRule
-	(*ListItemsRequest)(nil),       // 22: wi.core.v1.ListItemsRequest
-	(*ListItemsResponse)(nil),      // 23: wi.core.v1.ListItemsResponse
-	(*SearchItemsRequest)(nil),     // 24: wi.core.v1.SearchItemsRequest
-	(*SearchHit)(nil),              // 25: wi.core.v1.SearchHit
-	(*SearchItemsResponse)(nil),    // 26: wi.core.v1.SearchItemsResponse
-	(*UpdateItemRequest)(nil),      // 27: wi.core.v1.UpdateItemRequest
-	(*UpdateItemResponse)(nil),     // 28: wi.core.v1.UpdateItemResponse
-	(*SetItemStateRequest)(nil),    // 29: wi.core.v1.SetItemStateRequest
-	(*SetItemStateResponse)(nil),   // 30: wi.core.v1.SetItemStateResponse
-	(*DeleteItemRequest)(nil),      // 31: wi.core.v1.DeleteItemRequest
-	(*DeleteItemResponse)(nil),     // 32: wi.core.v1.DeleteItemResponse
-	(*MarkReadRequest)(nil),        // 33: wi.core.v1.MarkReadRequest
-	(*MarkReadResponse)(nil),       // 34: wi.core.v1.MarkReadResponse
-	(*DeferItemRequest)(nil),       // 35: wi.core.v1.DeferItemRequest
-	(*DeferItemResponse)(nil),      // 36: wi.core.v1.DeferItemResponse
-	(*ItemEvent)(nil),              // 37: wi.core.v1.ItemEvent
-	(*ListItemEventsRequest)(nil),  // 38: wi.core.v1.ListItemEventsRequest
-	(*ListItemEventsResponse)(nil), // 39: wi.core.v1.ListItemEventsResponse
-	(*AddBlockerRequest)(nil),      // 40: wi.core.v1.AddBlockerRequest
-	(*AddBlockerResponse)(nil),     // 41: wi.core.v1.AddBlockerResponse
-	(*ClearBlockerRequest)(nil),    // 42: wi.core.v1.ClearBlockerRequest
-	(*ClearBlockerResponse)(nil),   // 43: wi.core.v1.ClearBlockerResponse
-	(*Attachment)(nil),             // 44: wi.core.v1.Attachment
-	(*Note)(nil),                   // 45: wi.core.v1.Note
-	(*AddNoteRequest)(nil),         // 46: wi.core.v1.AddNoteRequest
-	(*AddNoteResponse)(nil),        // 47: wi.core.v1.AddNoteResponse
-	(*AttachRequest)(nil),          // 48: wi.core.v1.AttachRequest
-	(*AttachResponse)(nil),         // 49: wi.core.v1.AttachResponse
-	(*ListNotesRequest)(nil),       // 50: wi.core.v1.ListNotesRequest
-	(*CurrentAttachment)(nil),      // 51: wi.core.v1.CurrentAttachment
-	(*ListNotesResponse)(nil),      // 52: wi.core.v1.ListNotesResponse
-	(*ReadAttachmentRequest)(nil),  // 53: wi.core.v1.ReadAttachmentRequest
-	(*ReadAttachmentResponse)(nil), // 54: wi.core.v1.ReadAttachmentResponse
-	(*AccessEntry)(nil),            // 55: wi.core.v1.AccessEntry
-	(*ListAccessRequest)(nil),      // 56: wi.core.v1.ListAccessRequest
-	(*ListAccessResponse)(nil),     // 57: wi.core.v1.ListAccessResponse
-	(*CheckAccessRequest)(nil),     // 58: wi.core.v1.CheckAccessRequest
-	(*CheckAccessResponse)(nil),    // 59: wi.core.v1.CheckAccessResponse
-	(*ItemAccess)(nil),             // 60: wi.core.v1.ItemAccess
-	(*GrantAccessRequest)(nil),     // 61: wi.core.v1.GrantAccessRequest
-	(*GrantAccessResponse)(nil),    // 62: wi.core.v1.GrantAccessResponse
-	(*RevokeAccessRequest)(nil),    // 63: wi.core.v1.RevokeAccessRequest
-	(*RevokeAccessResponse)(nil),   // 64: wi.core.v1.RevokeAccessResponse
-	(*AccessDenied)(nil),           // 65: wi.core.v1.AccessDenied
-	nil,                            // 66: wi.core.v1.Item.AgentSettingsEntry
-	nil,                            // 67: wi.core.v1.Blocker.MetaEntry
-	nil,                            // 68: wi.core.v1.CreateItemRequest.AgentSettingsEntry
-	nil,                            // 69: wi.core.v1.AddBlockerRequest.MetaEntry
-	(ItemState)(0),                 // 70: wi.core.v1.ItemState
-	(Resolution)(0),                // 71: wi.core.v1.Resolution
-	(*RepositoryRef)(nil),          // 72: wi.core.v1.RepositoryRef
-	(*timestamppb.Timestamp)(nil),  // 73: google.protobuf.Timestamp
-	(AgentStatus)(0),               // 74: wi.core.v1.AgentStatus
-	(WorktreeStatus)(0),            // 75: wi.core.v1.WorktreeStatus
+	(BlockerKind)(0),                     // 0: wi.core.v1.BlockerKind
+	(AttentionGroup)(0),                  // 1: wi.core.v1.AttentionGroup
+	(ListSection)(0),                     // 2: wi.core.v1.ListSection
+	(ListOrder)(0),                       // 3: wi.core.v1.ListOrder
+	(AccessLevel)(0),                     // 4: wi.core.v1.AccessLevel
+	(*Item)(nil),                         // 5: wi.core.v1.Item
+	(*Checkout)(nil),                     // 6: wi.core.v1.Checkout
+	(*WorkspaceClaim)(nil),               // 7: wi.core.v1.WorkspaceClaim
+	(*ConversationRef)(nil),              // 8: wi.core.v1.ConversationRef
+	(*Blocker)(nil),                      // 9: wi.core.v1.Blocker
+	(*FollowUp)(nil),                     // 10: wi.core.v1.FollowUp
+	(*ItemObservation)(nil),              // 11: wi.core.v1.ItemObservation
+	(*BackgroundTask)(nil),               // 12: wi.core.v1.BackgroundTask
+	(*AttentionActivity)(nil),            // 13: wi.core.v1.AttentionActivity
+	(*ItemSummary)(nil),                  // 14: wi.core.v1.ItemSummary
+	(*CreateItemRequest)(nil),            // 15: wi.core.v1.CreateItemRequest
+	(*CreateItemResponse)(nil),           // 16: wi.core.v1.CreateItemResponse
+	(*GetItemRequest)(nil),               // 17: wi.core.v1.GetItemRequest
+	(*GetItemResponse)(nil),              // 18: wi.core.v1.GetItemResponse
+	(*ResolveItemRequest)(nil),           // 19: wi.core.v1.ResolveItemRequest
+	(*ResolveItemResponse)(nil),          // 20: wi.core.v1.ResolveItemResponse
+	(*LabelRule)(nil),                    // 21: wi.core.v1.LabelRule
+	(*ListItemsRequest)(nil),             // 22: wi.core.v1.ListItemsRequest
+	(*ListItemsResponse)(nil),            // 23: wi.core.v1.ListItemsResponse
+	(*SearchItemsRequest)(nil),           // 24: wi.core.v1.SearchItemsRequest
+	(*SearchHit)(nil),                    // 25: wi.core.v1.SearchHit
+	(*SearchItemsResponse)(nil),          // 26: wi.core.v1.SearchItemsResponse
+	(*UpdateItemRequest)(nil),            // 27: wi.core.v1.UpdateItemRequest
+	(*UpdateItemResponse)(nil),           // 28: wi.core.v1.UpdateItemResponse
+	(*SetItemStateRequest)(nil),          // 29: wi.core.v1.SetItemStateRequest
+	(*SetItemStateResponse)(nil),         // 30: wi.core.v1.SetItemStateResponse
+	(*DeleteItemRequest)(nil),            // 31: wi.core.v1.DeleteItemRequest
+	(*DeleteItemResponse)(nil),           // 32: wi.core.v1.DeleteItemResponse
+	(*MarkReadRequest)(nil),              // 33: wi.core.v1.MarkReadRequest
+	(*MarkReadResponse)(nil),             // 34: wi.core.v1.MarkReadResponse
+	(*DeferItemRequest)(nil),             // 35: wi.core.v1.DeferItemRequest
+	(*DeferItemResponse)(nil),            // 36: wi.core.v1.DeferItemResponse
+	(*ItemEvent)(nil),                    // 37: wi.core.v1.ItemEvent
+	(*ListItemEventsRequest)(nil),        // 38: wi.core.v1.ListItemEventsRequest
+	(*ListItemEventsResponse)(nil),       // 39: wi.core.v1.ListItemEventsResponse
+	(*AddBlockerRequest)(nil),            // 40: wi.core.v1.AddBlockerRequest
+	(*AddBlockerResponse)(nil),           // 41: wi.core.v1.AddBlockerResponse
+	(*ClearBlockerRequest)(nil),          // 42: wi.core.v1.ClearBlockerRequest
+	(*ClearBlockerResponse)(nil),         // 43: wi.core.v1.ClearBlockerResponse
+	(*Attachment)(nil),                   // 44: wi.core.v1.Attachment
+	(*Note)(nil),                         // 45: wi.core.v1.Note
+	(*AddNoteRequest)(nil),               // 46: wi.core.v1.AddNoteRequest
+	(*AddNoteResponse)(nil),              // 47: wi.core.v1.AddNoteResponse
+	(*AttachRequest)(nil),                // 48: wi.core.v1.AttachRequest
+	(*AttachResponse)(nil),               // 49: wi.core.v1.AttachResponse
+	(*ListNotesRequest)(nil),             // 50: wi.core.v1.ListNotesRequest
+	(*CurrentAttachment)(nil),            // 51: wi.core.v1.CurrentAttachment
+	(*ListNotesResponse)(nil),            // 52: wi.core.v1.ListNotesResponse
+	(*ReadAttachmentRequest)(nil),        // 53: wi.core.v1.ReadAttachmentRequest
+	(*ReadAttachmentResponse)(nil),       // 54: wi.core.v1.ReadAttachmentResponse
+	(*AccessEntry)(nil),                  // 55: wi.core.v1.AccessEntry
+	(*ListAccessRequest)(nil),            // 56: wi.core.v1.ListAccessRequest
+	(*ListAccessResponse)(nil),           // 57: wi.core.v1.ListAccessResponse
+	(*ListAccessRequestsRequest)(nil),    // 58: wi.core.v1.ListAccessRequestsRequest
+	(*ListAccessRequestsResponse)(nil),   // 59: wi.core.v1.ListAccessRequestsResponse
+	(*AccessRequest)(nil),                // 60: wi.core.v1.AccessRequest
+	(*DismissAccessRequestRequest)(nil),  // 61: wi.core.v1.DismissAccessRequestRequest
+	(*DismissAccessRequestResponse)(nil), // 62: wi.core.v1.DismissAccessRequestResponse
+	(*CheckAccessRequest)(nil),           // 63: wi.core.v1.CheckAccessRequest
+	(*CheckAccessResponse)(nil),          // 64: wi.core.v1.CheckAccessResponse
+	(*ItemAccess)(nil),                   // 65: wi.core.v1.ItemAccess
+	(*GrantAccessRequest)(nil),           // 66: wi.core.v1.GrantAccessRequest
+	(*GrantAccessResponse)(nil),          // 67: wi.core.v1.GrantAccessResponse
+	(*RevokeAccessRequest)(nil),          // 68: wi.core.v1.RevokeAccessRequest
+	(*RevokeAccessResponse)(nil),         // 69: wi.core.v1.RevokeAccessResponse
+	(*AccessDenied)(nil),                 // 70: wi.core.v1.AccessDenied
+	nil,                                  // 71: wi.core.v1.Item.AgentSettingsEntry
+	nil,                                  // 72: wi.core.v1.Blocker.MetaEntry
+	nil,                                  // 73: wi.core.v1.CreateItemRequest.AgentSettingsEntry
+	nil,                                  // 74: wi.core.v1.AddBlockerRequest.MetaEntry
+	(ItemState)(0),                       // 75: wi.core.v1.ItemState
+	(Resolution)(0),                      // 76: wi.core.v1.Resolution
+	(*RepositoryRef)(nil),                // 77: wi.core.v1.RepositoryRef
+	(*timestamppb.Timestamp)(nil),        // 78: google.protobuf.Timestamp
+	(AgentStatus)(0),                     // 79: wi.core.v1.AgentStatus
+	(WorktreeStatus)(0),                  // 80: wi.core.v1.WorktreeStatus
 }
 var file_wi_core_v1_items_proto_depIdxs = []int32{
-	70,  // 0: wi.core.v1.Item.state:type_name -> wi.core.v1.ItemState
-	71,  // 1: wi.core.v1.Item.resolution:type_name -> wi.core.v1.Resolution
-	72,  // 2: wi.core.v1.Item.repository:type_name -> wi.core.v1.RepositoryRef
+	75,  // 0: wi.core.v1.Item.state:type_name -> wi.core.v1.ItemState
+	76,  // 1: wi.core.v1.Item.resolution:type_name -> wi.core.v1.Resolution
+	77,  // 2: wi.core.v1.Item.repository:type_name -> wi.core.v1.RepositoryRef
 	6,   // 3: wi.core.v1.Item.checkout:type_name -> wi.core.v1.Checkout
 	8,   // 4: wi.core.v1.Item.conversation:type_name -> wi.core.v1.ConversationRef
-	66,  // 5: wi.core.v1.Item.agent_settings:type_name -> wi.core.v1.Item.AgentSettingsEntry
+	71,  // 5: wi.core.v1.Item.agent_settings:type_name -> wi.core.v1.Item.AgentSettingsEntry
 	9,   // 6: wi.core.v1.Item.blockers:type_name -> wi.core.v1.Blocker
-	73,  // 7: wi.core.v1.Item.created_at:type_name -> google.protobuf.Timestamp
-	73,  // 8: wi.core.v1.Item.updated_at:type_name -> google.protobuf.Timestamp
-	73,  // 9: wi.core.v1.Item.state_changed_at:type_name -> google.protobuf.Timestamp
-	73,  // 10: wi.core.v1.Item.snoozed_until:type_name -> google.protobuf.Timestamp
+	78,  // 7: wi.core.v1.Item.created_at:type_name -> google.protobuf.Timestamp
+	78,  // 8: wi.core.v1.Item.updated_at:type_name -> google.protobuf.Timestamp
+	78,  // 9: wi.core.v1.Item.state_changed_at:type_name -> google.protobuf.Timestamp
+	78,  // 10: wi.core.v1.Item.snoozed_until:type_name -> google.protobuf.Timestamp
 	10,  // 11: wi.core.v1.Item.follow_ups:type_name -> wi.core.v1.FollowUp
 	7,   // 12: wi.core.v1.Checkout.claim:type_name -> wi.core.v1.WorkspaceClaim
 	0,   // 13: wi.core.v1.Blocker.kind:type_name -> wi.core.v1.BlockerKind
-	73,  // 14: wi.core.v1.Blocker.until:type_name -> google.protobuf.Timestamp
-	67,  // 15: wi.core.v1.Blocker.meta:type_name -> wi.core.v1.Blocker.MetaEntry
-	73,  // 16: wi.core.v1.Blocker.created_at:type_name -> google.protobuf.Timestamp
-	73,  // 17: wi.core.v1.FollowUp.blocked_at:type_name -> google.protobuf.Timestamp
-	73,  // 18: wi.core.v1.FollowUp.cleared_at:type_name -> google.protobuf.Timestamp
-	74,  // 19: wi.core.v1.ItemObservation.agent_status:type_name -> wi.core.v1.AgentStatus
-	75,  // 20: wi.core.v1.ItemObservation.worktree_status:type_name -> wi.core.v1.WorktreeStatus
-	73,  // 21: wi.core.v1.ItemObservation.observed_at:type_name -> google.protobuf.Timestamp
+	78,  // 14: wi.core.v1.Blocker.until:type_name -> google.protobuf.Timestamp
+	72,  // 15: wi.core.v1.Blocker.meta:type_name -> wi.core.v1.Blocker.MetaEntry
+	78,  // 16: wi.core.v1.Blocker.created_at:type_name -> google.protobuf.Timestamp
+	78,  // 17: wi.core.v1.FollowUp.blocked_at:type_name -> google.protobuf.Timestamp
+	78,  // 18: wi.core.v1.FollowUp.cleared_at:type_name -> google.protobuf.Timestamp
+	79,  // 19: wi.core.v1.ItemObservation.agent_status:type_name -> wi.core.v1.AgentStatus
+	80,  // 20: wi.core.v1.ItemObservation.worktree_status:type_name -> wi.core.v1.WorktreeStatus
+	78,  // 21: wi.core.v1.ItemObservation.observed_at:type_name -> google.protobuf.Timestamp
 	13,  // 22: wi.core.v1.ItemObservation.activity:type_name -> wi.core.v1.AttentionActivity
 	12,  // 23: wi.core.v1.ItemObservation.background:type_name -> wi.core.v1.BackgroundTask
-	73,  // 24: wi.core.v1.BackgroundTask.started_at:type_name -> google.protobuf.Timestamp
-	73,  // 25: wi.core.v1.AttentionActivity.last_requested_at:type_name -> google.protobuf.Timestamp
-	73,  // 26: wi.core.v1.AttentionActivity.last_completed_at:type_name -> google.protobuf.Timestamp
-	73,  // 27: wi.core.v1.AttentionActivity.last_read_at:type_name -> google.protobuf.Timestamp
-	73,  // 28: wi.core.v1.AttentionActivity.last_unread_at:type_name -> google.protobuf.Timestamp
-	73,  // 29: wi.core.v1.AttentionActivity.last_deferred_at:type_name -> google.protobuf.Timestamp
-	70,  // 30: wi.core.v1.ItemSummary.state:type_name -> wi.core.v1.ItemState
-	71,  // 31: wi.core.v1.ItemSummary.resolution:type_name -> wi.core.v1.Resolution
+	78,  // 24: wi.core.v1.BackgroundTask.started_at:type_name -> google.protobuf.Timestamp
+	78,  // 25: wi.core.v1.AttentionActivity.last_requested_at:type_name -> google.protobuf.Timestamp
+	78,  // 26: wi.core.v1.AttentionActivity.last_completed_at:type_name -> google.protobuf.Timestamp
+	78,  // 27: wi.core.v1.AttentionActivity.last_read_at:type_name -> google.protobuf.Timestamp
+	78,  // 28: wi.core.v1.AttentionActivity.last_unread_at:type_name -> google.protobuf.Timestamp
+	78,  // 29: wi.core.v1.AttentionActivity.last_deferred_at:type_name -> google.protobuf.Timestamp
+	75,  // 30: wi.core.v1.ItemSummary.state:type_name -> wi.core.v1.ItemState
+	76,  // 31: wi.core.v1.ItemSummary.resolution:type_name -> wi.core.v1.Resolution
 	9,   // 32: wi.core.v1.ItemSummary.blockers:type_name -> wi.core.v1.Blocker
 	11,  // 33: wi.core.v1.ItemSummary.observation:type_name -> wi.core.v1.ItemObservation
-	73,  // 34: wi.core.v1.ItemSummary.snoozed_until:type_name -> google.protobuf.Timestamp
-	73,  // 35: wi.core.v1.ItemSummary.updated_at:type_name -> google.protobuf.Timestamp
+	78,  // 34: wi.core.v1.ItemSummary.snoozed_until:type_name -> google.protobuf.Timestamp
+	78,  // 35: wi.core.v1.ItemSummary.updated_at:type_name -> google.protobuf.Timestamp
 	1,   // 36: wi.core.v1.ItemSummary.attention_group:type_name -> wi.core.v1.AttentionGroup
 	2,   // 37: wi.core.v1.ItemSummary.section:type_name -> wi.core.v1.ListSection
-	68,  // 38: wi.core.v1.CreateItemRequest.agent_settings:type_name -> wi.core.v1.CreateItemRequest.AgentSettingsEntry
+	73,  // 38: wi.core.v1.CreateItemRequest.agent_settings:type_name -> wi.core.v1.CreateItemRequest.AgentSettingsEntry
 	5,   // 39: wi.core.v1.CreateItemResponse.item:type_name -> wi.core.v1.Item
 	5,   // 40: wi.core.v1.GetItemResponse.item:type_name -> wi.core.v1.Item
 	11,  // 41: wi.core.v1.GetItemResponse.observation:type_name -> wi.core.v1.ItemObservation
-	70,  // 42: wi.core.v1.ListItemsRequest.states:type_name -> wi.core.v1.ItemState
+	75,  // 42: wi.core.v1.ListItemsRequest.states:type_name -> wi.core.v1.ItemState
 	21,  // 43: wi.core.v1.ListItemsRequest.label_rules:type_name -> wi.core.v1.LabelRule
 	3,   // 44: wi.core.v1.ListItemsRequest.order:type_name -> wi.core.v1.ListOrder
 	14,  // 45: wi.core.v1.ListItemsResponse.items:type_name -> wi.core.v1.ItemSummary
-	70,  // 46: wi.core.v1.SearchItemsRequest.states:type_name -> wi.core.v1.ItemState
+	75,  // 46: wi.core.v1.SearchItemsRequest.states:type_name -> wi.core.v1.ItemState
 	14,  // 47: wi.core.v1.SearchHit.item:type_name -> wi.core.v1.ItemSummary
 	25,  // 48: wi.core.v1.SearchItemsResponse.hits:type_name -> wi.core.v1.SearchHit
-	73,  // 49: wi.core.v1.UpdateItemRequest.snoozed_until:type_name -> google.protobuf.Timestamp
+	78,  // 49: wi.core.v1.UpdateItemRequest.snoozed_until:type_name -> google.protobuf.Timestamp
 	5,   // 50: wi.core.v1.UpdateItemResponse.item:type_name -> wi.core.v1.Item
-	70,  // 51: wi.core.v1.SetItemStateRequest.state:type_name -> wi.core.v1.ItemState
-	71,  // 52: wi.core.v1.SetItemStateRequest.resolution:type_name -> wi.core.v1.Resolution
+	75,  // 51: wi.core.v1.SetItemStateRequest.state:type_name -> wi.core.v1.ItemState
+	76,  // 52: wi.core.v1.SetItemStateRequest.resolution:type_name -> wi.core.v1.Resolution
 	5,   // 53: wi.core.v1.SetItemStateResponse.item:type_name -> wi.core.v1.Item
-	73,  // 54: wi.core.v1.ItemEvent.time:type_name -> google.protobuf.Timestamp
+	78,  // 54: wi.core.v1.ItemEvent.time:type_name -> google.protobuf.Timestamp
 	37,  // 55: wi.core.v1.ListItemEventsResponse.events:type_name -> wi.core.v1.ItemEvent
 	0,   // 56: wi.core.v1.AddBlockerRequest.kind:type_name -> wi.core.v1.BlockerKind
-	73,  // 57: wi.core.v1.AddBlockerRequest.until:type_name -> google.protobuf.Timestamp
-	69,  // 58: wi.core.v1.AddBlockerRequest.meta:type_name -> wi.core.v1.AddBlockerRequest.MetaEntry
+	78,  // 57: wi.core.v1.AddBlockerRequest.until:type_name -> google.protobuf.Timestamp
+	74,  // 58: wi.core.v1.AddBlockerRequest.meta:type_name -> wi.core.v1.AddBlockerRequest.MetaEntry
 	5,   // 59: wi.core.v1.AddBlockerResponse.item:type_name -> wi.core.v1.Item
 	9,   // 60: wi.core.v1.AddBlockerResponse.blocker:type_name -> wi.core.v1.Blocker
 	5,   // 61: wi.core.v1.ClearBlockerResponse.item:type_name -> wi.core.v1.Item
-	73,  // 62: wi.core.v1.Note.time:type_name -> google.protobuf.Timestamp
+	78,  // 62: wi.core.v1.Note.time:type_name -> google.protobuf.Timestamp
 	44,  // 63: wi.core.v1.Note.attachment:type_name -> wi.core.v1.Attachment
 	45,  // 64: wi.core.v1.AddNoteResponse.note:type_name -> wi.core.v1.Note
 	45,  // 65: wi.core.v1.AttachResponse.note:type_name -> wi.core.v1.Note
 	44,  // 66: wi.core.v1.CurrentAttachment.attachment:type_name -> wi.core.v1.Attachment
-	73,  // 67: wi.core.v1.CurrentAttachment.time:type_name -> google.protobuf.Timestamp
+	78,  // 67: wi.core.v1.CurrentAttachment.time:type_name -> google.protobuf.Timestamp
 	45,  // 68: wi.core.v1.ListNotesResponse.notes:type_name -> wi.core.v1.Note
 	51,  // 69: wi.core.v1.ListNotesResponse.attachments:type_name -> wi.core.v1.CurrentAttachment
 	44,  // 70: wi.core.v1.ReadAttachmentResponse.attachment:type_name -> wi.core.v1.Attachment
 	4,   // 71: wi.core.v1.AccessEntry.level:type_name -> wi.core.v1.AccessLevel
-	73,  // 72: wi.core.v1.AccessEntry.granted_at:type_name -> google.protobuf.Timestamp
+	78,  // 72: wi.core.v1.AccessEntry.granted_at:type_name -> google.protobuf.Timestamp
 	55,  // 73: wi.core.v1.ListAccessResponse.entries:type_name -> wi.core.v1.AccessEntry
-	60,  // 74: wi.core.v1.CheckAccessResponse.access:type_name -> wi.core.v1.ItemAccess
-	4,   // 75: wi.core.v1.ItemAccess.level:type_name -> wi.core.v1.AccessLevel
-	4,   // 76: wi.core.v1.GrantAccessRequest.level:type_name -> wi.core.v1.AccessLevel
-	55,  // 77: wi.core.v1.GrantAccessResponse.entry:type_name -> wi.core.v1.AccessEntry
-	4,   // 78: wi.core.v1.AccessDenied.needed:type_name -> wi.core.v1.AccessLevel
-	4,   // 79: wi.core.v1.AccessDenied.has:type_name -> wi.core.v1.AccessLevel
-	15,  // 80: wi.core.v1.ItemService.CreateItem:input_type -> wi.core.v1.CreateItemRequest
-	17,  // 81: wi.core.v1.ItemService.GetItem:input_type -> wi.core.v1.GetItemRequest
-	19,  // 82: wi.core.v1.ItemService.ResolveItem:input_type -> wi.core.v1.ResolveItemRequest
-	22,  // 83: wi.core.v1.ItemService.ListItems:input_type -> wi.core.v1.ListItemsRequest
-	24,  // 84: wi.core.v1.ItemService.SearchItems:input_type -> wi.core.v1.SearchItemsRequest
-	27,  // 85: wi.core.v1.ItemService.UpdateItem:input_type -> wi.core.v1.UpdateItemRequest
-	29,  // 86: wi.core.v1.ItemService.SetItemState:input_type -> wi.core.v1.SetItemStateRequest
-	31,  // 87: wi.core.v1.ItemService.DeleteItem:input_type -> wi.core.v1.DeleteItemRequest
-	33,  // 88: wi.core.v1.ItemService.MarkRead:input_type -> wi.core.v1.MarkReadRequest
-	35,  // 89: wi.core.v1.ItemService.DeferItem:input_type -> wi.core.v1.DeferItemRequest
-	38,  // 90: wi.core.v1.ItemService.ListItemEvents:input_type -> wi.core.v1.ListItemEventsRequest
-	40,  // 91: wi.core.v1.ItemService.AddBlocker:input_type -> wi.core.v1.AddBlockerRequest
-	42,  // 92: wi.core.v1.ItemService.ClearBlocker:input_type -> wi.core.v1.ClearBlockerRequest
-	46,  // 93: wi.core.v1.ItemService.AddNote:input_type -> wi.core.v1.AddNoteRequest
-	48,  // 94: wi.core.v1.ItemService.Attach:input_type -> wi.core.v1.AttachRequest
-	50,  // 95: wi.core.v1.ItemService.ListNotes:input_type -> wi.core.v1.ListNotesRequest
-	53,  // 96: wi.core.v1.ItemService.ReadAttachment:input_type -> wi.core.v1.ReadAttachmentRequest
-	56,  // 97: wi.core.v1.ItemService.ListAccess:input_type -> wi.core.v1.ListAccessRequest
-	58,  // 98: wi.core.v1.ItemService.CheckAccess:input_type -> wi.core.v1.CheckAccessRequest
-	61,  // 99: wi.core.v1.ItemService.GrantAccess:input_type -> wi.core.v1.GrantAccessRequest
-	63,  // 100: wi.core.v1.ItemService.RevokeAccess:input_type -> wi.core.v1.RevokeAccessRequest
-	16,  // 101: wi.core.v1.ItemService.CreateItem:output_type -> wi.core.v1.CreateItemResponse
-	18,  // 102: wi.core.v1.ItemService.GetItem:output_type -> wi.core.v1.GetItemResponse
-	20,  // 103: wi.core.v1.ItemService.ResolveItem:output_type -> wi.core.v1.ResolveItemResponse
-	23,  // 104: wi.core.v1.ItemService.ListItems:output_type -> wi.core.v1.ListItemsResponse
-	26,  // 105: wi.core.v1.ItemService.SearchItems:output_type -> wi.core.v1.SearchItemsResponse
-	28,  // 106: wi.core.v1.ItemService.UpdateItem:output_type -> wi.core.v1.UpdateItemResponse
-	30,  // 107: wi.core.v1.ItemService.SetItemState:output_type -> wi.core.v1.SetItemStateResponse
-	32,  // 108: wi.core.v1.ItemService.DeleteItem:output_type -> wi.core.v1.DeleteItemResponse
-	34,  // 109: wi.core.v1.ItemService.MarkRead:output_type -> wi.core.v1.MarkReadResponse
-	36,  // 110: wi.core.v1.ItemService.DeferItem:output_type -> wi.core.v1.DeferItemResponse
-	39,  // 111: wi.core.v1.ItemService.ListItemEvents:output_type -> wi.core.v1.ListItemEventsResponse
-	41,  // 112: wi.core.v1.ItemService.AddBlocker:output_type -> wi.core.v1.AddBlockerResponse
-	43,  // 113: wi.core.v1.ItemService.ClearBlocker:output_type -> wi.core.v1.ClearBlockerResponse
-	47,  // 114: wi.core.v1.ItemService.AddNote:output_type -> wi.core.v1.AddNoteResponse
-	49,  // 115: wi.core.v1.ItemService.Attach:output_type -> wi.core.v1.AttachResponse
-	52,  // 116: wi.core.v1.ItemService.ListNotes:output_type -> wi.core.v1.ListNotesResponse
-	54,  // 117: wi.core.v1.ItemService.ReadAttachment:output_type -> wi.core.v1.ReadAttachmentResponse
-	57,  // 118: wi.core.v1.ItemService.ListAccess:output_type -> wi.core.v1.ListAccessResponse
-	59,  // 119: wi.core.v1.ItemService.CheckAccess:output_type -> wi.core.v1.CheckAccessResponse
-	62,  // 120: wi.core.v1.ItemService.GrantAccess:output_type -> wi.core.v1.GrantAccessResponse
-	64,  // 121: wi.core.v1.ItemService.RevokeAccess:output_type -> wi.core.v1.RevokeAccessResponse
-	101, // [101:122] is the sub-list for method output_type
-	80,  // [80:101] is the sub-list for method input_type
-	80,  // [80:80] is the sub-list for extension type_name
-	80,  // [80:80] is the sub-list for extension extendee
-	0,   // [0:80] is the sub-list for field type_name
+	60,  // 74: wi.core.v1.ListAccessRequestsResponse.requests:type_name -> wi.core.v1.AccessRequest
+	4,   // 75: wi.core.v1.AccessRequest.needed:type_name -> wi.core.v1.AccessLevel
+	4,   // 76: wi.core.v1.AccessRequest.has:type_name -> wi.core.v1.AccessLevel
+	78,  // 77: wi.core.v1.AccessRequest.last_refused_at:type_name -> google.protobuf.Timestamp
+	65,  // 78: wi.core.v1.CheckAccessResponse.access:type_name -> wi.core.v1.ItemAccess
+	4,   // 79: wi.core.v1.ItemAccess.level:type_name -> wi.core.v1.AccessLevel
+	4,   // 80: wi.core.v1.GrantAccessRequest.level:type_name -> wi.core.v1.AccessLevel
+	55,  // 81: wi.core.v1.GrantAccessResponse.entry:type_name -> wi.core.v1.AccessEntry
+	4,   // 82: wi.core.v1.AccessDenied.needed:type_name -> wi.core.v1.AccessLevel
+	4,   // 83: wi.core.v1.AccessDenied.has:type_name -> wi.core.v1.AccessLevel
+	15,  // 84: wi.core.v1.ItemService.CreateItem:input_type -> wi.core.v1.CreateItemRequest
+	17,  // 85: wi.core.v1.ItemService.GetItem:input_type -> wi.core.v1.GetItemRequest
+	19,  // 86: wi.core.v1.ItemService.ResolveItem:input_type -> wi.core.v1.ResolveItemRequest
+	22,  // 87: wi.core.v1.ItemService.ListItems:input_type -> wi.core.v1.ListItemsRequest
+	24,  // 88: wi.core.v1.ItemService.SearchItems:input_type -> wi.core.v1.SearchItemsRequest
+	27,  // 89: wi.core.v1.ItemService.UpdateItem:input_type -> wi.core.v1.UpdateItemRequest
+	29,  // 90: wi.core.v1.ItemService.SetItemState:input_type -> wi.core.v1.SetItemStateRequest
+	31,  // 91: wi.core.v1.ItemService.DeleteItem:input_type -> wi.core.v1.DeleteItemRequest
+	33,  // 92: wi.core.v1.ItemService.MarkRead:input_type -> wi.core.v1.MarkReadRequest
+	35,  // 93: wi.core.v1.ItemService.DeferItem:input_type -> wi.core.v1.DeferItemRequest
+	38,  // 94: wi.core.v1.ItemService.ListItemEvents:input_type -> wi.core.v1.ListItemEventsRequest
+	40,  // 95: wi.core.v1.ItemService.AddBlocker:input_type -> wi.core.v1.AddBlockerRequest
+	42,  // 96: wi.core.v1.ItemService.ClearBlocker:input_type -> wi.core.v1.ClearBlockerRequest
+	46,  // 97: wi.core.v1.ItemService.AddNote:input_type -> wi.core.v1.AddNoteRequest
+	48,  // 98: wi.core.v1.ItemService.Attach:input_type -> wi.core.v1.AttachRequest
+	50,  // 99: wi.core.v1.ItemService.ListNotes:input_type -> wi.core.v1.ListNotesRequest
+	53,  // 100: wi.core.v1.ItemService.ReadAttachment:input_type -> wi.core.v1.ReadAttachmentRequest
+	56,  // 101: wi.core.v1.ItemService.ListAccess:input_type -> wi.core.v1.ListAccessRequest
+	58,  // 102: wi.core.v1.ItemService.ListAccessRequests:input_type -> wi.core.v1.ListAccessRequestsRequest
+	61,  // 103: wi.core.v1.ItemService.DismissAccessRequest:input_type -> wi.core.v1.DismissAccessRequestRequest
+	63,  // 104: wi.core.v1.ItemService.CheckAccess:input_type -> wi.core.v1.CheckAccessRequest
+	66,  // 105: wi.core.v1.ItemService.GrantAccess:input_type -> wi.core.v1.GrantAccessRequest
+	68,  // 106: wi.core.v1.ItemService.RevokeAccess:input_type -> wi.core.v1.RevokeAccessRequest
+	16,  // 107: wi.core.v1.ItemService.CreateItem:output_type -> wi.core.v1.CreateItemResponse
+	18,  // 108: wi.core.v1.ItemService.GetItem:output_type -> wi.core.v1.GetItemResponse
+	20,  // 109: wi.core.v1.ItemService.ResolveItem:output_type -> wi.core.v1.ResolveItemResponse
+	23,  // 110: wi.core.v1.ItemService.ListItems:output_type -> wi.core.v1.ListItemsResponse
+	26,  // 111: wi.core.v1.ItemService.SearchItems:output_type -> wi.core.v1.SearchItemsResponse
+	28,  // 112: wi.core.v1.ItemService.UpdateItem:output_type -> wi.core.v1.UpdateItemResponse
+	30,  // 113: wi.core.v1.ItemService.SetItemState:output_type -> wi.core.v1.SetItemStateResponse
+	32,  // 114: wi.core.v1.ItemService.DeleteItem:output_type -> wi.core.v1.DeleteItemResponse
+	34,  // 115: wi.core.v1.ItemService.MarkRead:output_type -> wi.core.v1.MarkReadResponse
+	36,  // 116: wi.core.v1.ItemService.DeferItem:output_type -> wi.core.v1.DeferItemResponse
+	39,  // 117: wi.core.v1.ItemService.ListItemEvents:output_type -> wi.core.v1.ListItemEventsResponse
+	41,  // 118: wi.core.v1.ItemService.AddBlocker:output_type -> wi.core.v1.AddBlockerResponse
+	43,  // 119: wi.core.v1.ItemService.ClearBlocker:output_type -> wi.core.v1.ClearBlockerResponse
+	47,  // 120: wi.core.v1.ItemService.AddNote:output_type -> wi.core.v1.AddNoteResponse
+	49,  // 121: wi.core.v1.ItemService.Attach:output_type -> wi.core.v1.AttachResponse
+	52,  // 122: wi.core.v1.ItemService.ListNotes:output_type -> wi.core.v1.ListNotesResponse
+	54,  // 123: wi.core.v1.ItemService.ReadAttachment:output_type -> wi.core.v1.ReadAttachmentResponse
+	57,  // 124: wi.core.v1.ItemService.ListAccess:output_type -> wi.core.v1.ListAccessResponse
+	59,  // 125: wi.core.v1.ItemService.ListAccessRequests:output_type -> wi.core.v1.ListAccessRequestsResponse
+	62,  // 126: wi.core.v1.ItemService.DismissAccessRequest:output_type -> wi.core.v1.DismissAccessRequestResponse
+	64,  // 127: wi.core.v1.ItemService.CheckAccess:output_type -> wi.core.v1.CheckAccessResponse
+	67,  // 128: wi.core.v1.ItemService.GrantAccess:output_type -> wi.core.v1.GrantAccessResponse
+	69,  // 129: wi.core.v1.ItemService.RevokeAccess:output_type -> wi.core.v1.RevokeAccessResponse
+	107, // [107:130] is the sub-list for method output_type
+	84,  // [84:107] is the sub-list for method input_type
+	84,  // [84:84] is the sub-list for extension type_name
+	84,  // [84:84] is the sub-list for extension extendee
+	0,   // [0:84] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_items_proto_init() }
@@ -5240,7 +5547,7 @@ func file_wi_core_v1_items_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_items_proto_rawDesc), len(file_wi_core_v1_items_proto_rawDesc)),
 			NumEnums:      5,
-			NumMessages:   65,
+			NumMessages:   70,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

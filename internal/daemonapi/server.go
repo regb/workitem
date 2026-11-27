@@ -35,6 +35,8 @@ const HolderHeader = "Wi-Client-Kind"
 // Server owns use-case composition, operation serialization and background jobs.
 // All structured writes still pass through the coordinator's database.
 type Server struct {
+	// accessRequests are refusals a person may grant.
+	accessRequests  accessRequests
 	App             *app.App
 	Core            *coordinator.Server
 	Local           *coordinator.Client

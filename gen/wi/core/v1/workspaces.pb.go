@@ -1565,6 +1565,113 @@ func (x *SearchWorkspaceFilesResponse) GetPaths() []string {
 	return nil
 }
 
+type RunCommandRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	ItemId string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	// command is shell code, run with sh -c.
+	Command string `protobuf:"bytes,2,opt,name=command,proto3" json:"command,omitempty"`
+	// timeout_seconds bounds how long it runs: zero is five minutes, and at
+	// most an hour.
+	TimeoutSeconds uint32 `protobuf:"varint,3,opt,name=timeout_seconds,json=timeoutSeconds,proto3" json:"timeout_seconds,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RunCommandRequest) Reset() {
+	*x = RunCommandRequest{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunCommandRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunCommandRequest) ProtoMessage() {}
+
+func (x *RunCommandRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunCommandRequest.ProtoReflect.Descriptor instead.
+func (*RunCommandRequest) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *RunCommandRequest) GetItemId() string {
+	if x != nil {
+		return x.ItemId
+	}
+	return ""
+}
+
+func (x *RunCommandRequest) GetCommand() string {
+	if x != nil {
+		return x.Command
+	}
+	return ""
+}
+
+func (x *RunCommandRequest) GetTimeoutSeconds() uint32 {
+	if x != nil {
+		return x.TimeoutSeconds
+	}
+	return 0
+}
+
+type RunCommandResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Job           *Job                   `protobuf:"bytes,1,opt,name=job,proto3" json:"job,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RunCommandResponse) Reset() {
+	*x = RunCommandResponse{}
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RunCommandResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RunCommandResponse) ProtoMessage() {}
+
+func (x *RunCommandResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_workspaces_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RunCommandResponse.ProtoReflect.Descriptor instead.
+func (*RunCommandResponse) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_workspaces_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *RunCommandResponse) GetJob() *Job {
+	if x != nil {
+		return x.Job
+	}
+	return nil
+}
+
 var File_wi_core_v1_workspaces_proto protoreflect.FileDescriptor
 
 const file_wi_core_v1_workspaces_proto_rawDesc = "" +
@@ -1672,13 +1779,19 @@ const file_wi_core_v1_workspaces_proto_rawDesc = "" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x14\n" +
 	"\x05limit\x18\x03 \x01(\rR\x05limit\"4\n" +
 	"\x1cSearchWorkspaceFilesResponse\x12\x14\n" +
-	"\x05paths\x18\x01 \x03(\tR\x05paths*u\n" +
+	"\x05paths\x18\x01 \x03(\tR\x05paths\"o\n" +
+	"\x11RunCommandRequest\x12\x17\n" +
+	"\aitem_id\x18\x01 \x01(\tR\x06itemId\x12\x18\n" +
+	"\acommand\x18\x02 \x01(\tR\acommand\x12'\n" +
+	"\x0ftimeout_seconds\x18\x03 \x01(\rR\x0etimeoutSeconds\"7\n" +
+	"\x12RunCommandResponse\x12!\n" +
+	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job*u\n" +
 	"\n" +
 	"SetupState\x12\x1b\n" +
 	"\x17SETUP_STATE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13SETUP_STATE_RUNNING\x10\x01\x12\x19\n" +
 	"\x15SETUP_STATE_SUCCEEDED\x10\x02\x12\x16\n" +
-	"\x12SETUP_STATE_FAILED\x10\x032\xdd\b\n" +
+	"\x12SETUP_STATE_FAILED\x10\x032\xaa\t\n" +
 	"\x10WorkspaceService\x12V\n" +
 	"\fGetWorkspace\x12\x1f.wi.core.v1.GetWorkspaceRequest\x1a .wi.core.v1.GetWorkspaceResponse\"\x03\x90\x02\x01\x12Z\n" +
 	"\x0fEnsureWorkspace\x12\".wi.core.v1.EnsureWorkspaceRequest\x1a#.wi.core.v1.EnsureWorkspaceResponse\x12W\n" +
@@ -1690,7 +1803,9 @@ const file_wi_core_v1_workspaces_proto_rawDesc = "" +
 	"\x12ListWorkspaceFiles\x12%.wi.core.v1.ListWorkspaceFilesRequest\x1a&.wi.core.v1.ListWorkspaceFilesResponse\"\x03\x90\x02\x01\x12b\n" +
 	"\x10GetWorkspaceFile\x12#.wi.core.v1.GetWorkspaceFileRequest\x1a$.wi.core.v1.GetWorkspaceFileResponse\"\x03\x90\x02\x01\x12n\n" +
 	"\x14GetWorkspaceDocument\x12'.wi.core.v1.GetWorkspaceDocumentRequest\x1a(.wi.core.v1.GetWorkspaceDocumentResponse\"\x03\x90\x02\x01\x12`\n" +
-	"\x11SaveWorkspaceFile\x12$.wi.core.v1.SaveWorkspaceFileRequest\x1a%.wi.core.v1.SaveWorkspaceFileResponseB0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
+	"\x11SaveWorkspaceFile\x12$.wi.core.v1.SaveWorkspaceFileRequest\x1a%.wi.core.v1.SaveWorkspaceFileResponse\x12K\n" +
+	"\n" +
+	"RunCommand\x12\x1d.wi.core.v1.RunCommandRequest\x1a\x1e.wi.core.v1.RunCommandResponseB0Z.github.com/regb/workitem/gen/wi/core/v1;corev1b\x06proto3"
 
 var (
 	file_wi_core_v1_workspaces_proto_rawDescOnce sync.Once
@@ -1705,7 +1820,7 @@ func file_wi_core_v1_workspaces_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_workspaces_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_wi_core_v1_workspaces_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
+var file_wi_core_v1_workspaces_proto_msgTypes = make([]protoimpl.MessageInfo, 27)
 var file_wi_core_v1_workspaces_proto_goTypes = []any{
 	(SetupState)(0),                       // 0: wi.core.v1.SetupState
 	(*SourceFile)(nil),                    // 1: wi.core.v1.SourceFile
@@ -1733,53 +1848,58 @@ var file_wi_core_v1_workspaces_proto_goTypes = []any{
 	(*GetUncommittedChangesResponse)(nil), // 23: wi.core.v1.GetUncommittedChangesResponse
 	(*SearchWorkspaceFilesRequest)(nil),   // 24: wi.core.v1.SearchWorkspaceFilesRequest
 	(*SearchWorkspaceFilesResponse)(nil),  // 25: wi.core.v1.SearchWorkspaceFilesResponse
-	(*timestamppb.Timestamp)(nil),         // 26: google.protobuf.Timestamp
-	(*Checkout)(nil),                      // 27: wi.core.v1.Checkout
-	(WorktreeStatus)(0),                   // 28: wi.core.v1.WorktreeStatus
-	(*Job)(nil),                           // 29: wi.core.v1.Job
-	(*Item)(nil),                          // 30: wi.core.v1.Item
+	(*RunCommandRequest)(nil),             // 26: wi.core.v1.RunCommandRequest
+	(*RunCommandResponse)(nil),            // 27: wi.core.v1.RunCommandResponse
+	(*timestamppb.Timestamp)(nil),         // 28: google.protobuf.Timestamp
+	(*Checkout)(nil),                      // 29: wi.core.v1.Checkout
+	(WorktreeStatus)(0),                   // 30: wi.core.v1.WorktreeStatus
+	(*Job)(nil),                           // 31: wi.core.v1.Job
+	(*Item)(nil),                          // 32: wi.core.v1.Item
 }
 var file_wi_core_v1_workspaces_proto_depIdxs = []int32{
 	1,  // 0: wi.core.v1.GetWorkspaceFileResponse.file:type_name -> wi.core.v1.SourceFile
 	1,  // 1: wi.core.v1.SaveWorkspaceFileResponse.file:type_name -> wi.core.v1.SourceFile
 	0,  // 2: wi.core.v1.SetupRun.state:type_name -> wi.core.v1.SetupState
-	26, // 3: wi.core.v1.SetupRun.started_at:type_name -> google.protobuf.Timestamp
-	26, // 4: wi.core.v1.SetupRun.finished_at:type_name -> google.protobuf.Timestamp
-	27, // 5: wi.core.v1.GetWorkspaceResponse.checkout:type_name -> wi.core.v1.Checkout
-	28, // 6: wi.core.v1.GetWorkspaceResponse.status:type_name -> wi.core.v1.WorktreeStatus
+	28, // 3: wi.core.v1.SetupRun.started_at:type_name -> google.protobuf.Timestamp
+	28, // 4: wi.core.v1.SetupRun.finished_at:type_name -> google.protobuf.Timestamp
+	29, // 5: wi.core.v1.GetWorkspaceResponse.checkout:type_name -> wi.core.v1.Checkout
+	30, // 6: wi.core.v1.GetWorkspaceResponse.status:type_name -> wi.core.v1.WorktreeStatus
 	11, // 7: wi.core.v1.GetWorkspaceResponse.git:type_name -> wi.core.v1.GitState
 	10, // 8: wi.core.v1.GetWorkspaceResponse.setup:type_name -> wi.core.v1.SetupRun
-	27, // 9: wi.core.v1.EnsureWorkspaceResponse.checkout:type_name -> wi.core.v1.Checkout
-	29, // 10: wi.core.v1.EnsureWorkspaceResponse.job:type_name -> wi.core.v1.Job
-	29, // 11: wi.core.v1.SetupWorkspaceResponse.job:type_name -> wi.core.v1.Job
-	30, // 12: wi.core.v1.ReleaseWorkspaceResponse.item:type_name -> wi.core.v1.Item
-	12, // 13: wi.core.v1.WorkspaceService.GetWorkspace:input_type -> wi.core.v1.GetWorkspaceRequest
-	14, // 14: wi.core.v1.WorkspaceService.EnsureWorkspace:input_type -> wi.core.v1.EnsureWorkspaceRequest
-	16, // 15: wi.core.v1.WorkspaceService.SetupWorkspace:input_type -> wi.core.v1.SetupWorkspaceRequest
-	18, // 16: wi.core.v1.WorkspaceService.CommitWorkspace:input_type -> wi.core.v1.CommitWorkspaceRequest
-	20, // 17: wi.core.v1.WorkspaceService.ReleaseWorkspace:input_type -> wi.core.v1.ReleaseWorkspaceRequest
-	22, // 18: wi.core.v1.WorkspaceService.GetUncommittedChanges:input_type -> wi.core.v1.GetUncommittedChangesRequest
-	24, // 19: wi.core.v1.WorkspaceService.SearchWorkspaceFiles:input_type -> wi.core.v1.SearchWorkspaceFilesRequest
-	2,  // 20: wi.core.v1.WorkspaceService.ListWorkspaceFiles:input_type -> wi.core.v1.ListWorkspaceFilesRequest
-	4,  // 21: wi.core.v1.WorkspaceService.GetWorkspaceFile:input_type -> wi.core.v1.GetWorkspaceFileRequest
-	6,  // 22: wi.core.v1.WorkspaceService.GetWorkspaceDocument:input_type -> wi.core.v1.GetWorkspaceDocumentRequest
-	8,  // 23: wi.core.v1.WorkspaceService.SaveWorkspaceFile:input_type -> wi.core.v1.SaveWorkspaceFileRequest
-	13, // 24: wi.core.v1.WorkspaceService.GetWorkspace:output_type -> wi.core.v1.GetWorkspaceResponse
-	15, // 25: wi.core.v1.WorkspaceService.EnsureWorkspace:output_type -> wi.core.v1.EnsureWorkspaceResponse
-	17, // 26: wi.core.v1.WorkspaceService.SetupWorkspace:output_type -> wi.core.v1.SetupWorkspaceResponse
-	19, // 27: wi.core.v1.WorkspaceService.CommitWorkspace:output_type -> wi.core.v1.CommitWorkspaceResponse
-	21, // 28: wi.core.v1.WorkspaceService.ReleaseWorkspace:output_type -> wi.core.v1.ReleaseWorkspaceResponse
-	23, // 29: wi.core.v1.WorkspaceService.GetUncommittedChanges:output_type -> wi.core.v1.GetUncommittedChangesResponse
-	25, // 30: wi.core.v1.WorkspaceService.SearchWorkspaceFiles:output_type -> wi.core.v1.SearchWorkspaceFilesResponse
-	3,  // 31: wi.core.v1.WorkspaceService.ListWorkspaceFiles:output_type -> wi.core.v1.ListWorkspaceFilesResponse
-	5,  // 32: wi.core.v1.WorkspaceService.GetWorkspaceFile:output_type -> wi.core.v1.GetWorkspaceFileResponse
-	7,  // 33: wi.core.v1.WorkspaceService.GetWorkspaceDocument:output_type -> wi.core.v1.GetWorkspaceDocumentResponse
-	9,  // 34: wi.core.v1.WorkspaceService.SaveWorkspaceFile:output_type -> wi.core.v1.SaveWorkspaceFileResponse
-	24, // [24:35] is the sub-list for method output_type
-	13, // [13:24] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	29, // 9: wi.core.v1.EnsureWorkspaceResponse.checkout:type_name -> wi.core.v1.Checkout
+	31, // 10: wi.core.v1.EnsureWorkspaceResponse.job:type_name -> wi.core.v1.Job
+	31, // 11: wi.core.v1.SetupWorkspaceResponse.job:type_name -> wi.core.v1.Job
+	32, // 12: wi.core.v1.ReleaseWorkspaceResponse.item:type_name -> wi.core.v1.Item
+	31, // 13: wi.core.v1.RunCommandResponse.job:type_name -> wi.core.v1.Job
+	12, // 14: wi.core.v1.WorkspaceService.GetWorkspace:input_type -> wi.core.v1.GetWorkspaceRequest
+	14, // 15: wi.core.v1.WorkspaceService.EnsureWorkspace:input_type -> wi.core.v1.EnsureWorkspaceRequest
+	16, // 16: wi.core.v1.WorkspaceService.SetupWorkspace:input_type -> wi.core.v1.SetupWorkspaceRequest
+	18, // 17: wi.core.v1.WorkspaceService.CommitWorkspace:input_type -> wi.core.v1.CommitWorkspaceRequest
+	20, // 18: wi.core.v1.WorkspaceService.ReleaseWorkspace:input_type -> wi.core.v1.ReleaseWorkspaceRequest
+	22, // 19: wi.core.v1.WorkspaceService.GetUncommittedChanges:input_type -> wi.core.v1.GetUncommittedChangesRequest
+	24, // 20: wi.core.v1.WorkspaceService.SearchWorkspaceFiles:input_type -> wi.core.v1.SearchWorkspaceFilesRequest
+	2,  // 21: wi.core.v1.WorkspaceService.ListWorkspaceFiles:input_type -> wi.core.v1.ListWorkspaceFilesRequest
+	4,  // 22: wi.core.v1.WorkspaceService.GetWorkspaceFile:input_type -> wi.core.v1.GetWorkspaceFileRequest
+	6,  // 23: wi.core.v1.WorkspaceService.GetWorkspaceDocument:input_type -> wi.core.v1.GetWorkspaceDocumentRequest
+	8,  // 24: wi.core.v1.WorkspaceService.SaveWorkspaceFile:input_type -> wi.core.v1.SaveWorkspaceFileRequest
+	26, // 25: wi.core.v1.WorkspaceService.RunCommand:input_type -> wi.core.v1.RunCommandRequest
+	13, // 26: wi.core.v1.WorkspaceService.GetWorkspace:output_type -> wi.core.v1.GetWorkspaceResponse
+	15, // 27: wi.core.v1.WorkspaceService.EnsureWorkspace:output_type -> wi.core.v1.EnsureWorkspaceResponse
+	17, // 28: wi.core.v1.WorkspaceService.SetupWorkspace:output_type -> wi.core.v1.SetupWorkspaceResponse
+	19, // 29: wi.core.v1.WorkspaceService.CommitWorkspace:output_type -> wi.core.v1.CommitWorkspaceResponse
+	21, // 30: wi.core.v1.WorkspaceService.ReleaseWorkspace:output_type -> wi.core.v1.ReleaseWorkspaceResponse
+	23, // 31: wi.core.v1.WorkspaceService.GetUncommittedChanges:output_type -> wi.core.v1.GetUncommittedChangesResponse
+	25, // 32: wi.core.v1.WorkspaceService.SearchWorkspaceFiles:output_type -> wi.core.v1.SearchWorkspaceFilesResponse
+	3,  // 33: wi.core.v1.WorkspaceService.ListWorkspaceFiles:output_type -> wi.core.v1.ListWorkspaceFilesResponse
+	5,  // 34: wi.core.v1.WorkspaceService.GetWorkspaceFile:output_type -> wi.core.v1.GetWorkspaceFileResponse
+	7,  // 35: wi.core.v1.WorkspaceService.GetWorkspaceDocument:output_type -> wi.core.v1.GetWorkspaceDocumentResponse
+	9,  // 36: wi.core.v1.WorkspaceService.SaveWorkspaceFile:output_type -> wi.core.v1.SaveWorkspaceFileResponse
+	27, // 37: wi.core.v1.WorkspaceService.RunCommand:output_type -> wi.core.v1.RunCommandResponse
+	26, // [26:38] is the sub-list for method output_type
+	14, // [14:26] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_workspaces_proto_init() }
@@ -1796,7 +1916,7 @@ func file_wi_core_v1_workspaces_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_workspaces_proto_rawDesc), len(file_wi_core_v1_workspaces_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   25,
+			NumMessages:   27,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

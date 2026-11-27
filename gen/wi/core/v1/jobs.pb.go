@@ -115,6 +115,7 @@ type Job struct {
 	//	*Job_RepositorySync
 	//	*Job_AgentStart
 	//	*Job_Title
+	//	*Job_Command
 	Result        isJob_Result `protobuf_oneof:"result"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -284,6 +285,15 @@ func (x *Job) GetTitle() *TitleResult {
 	return nil
 }
 
+func (x *Job) GetCommand() *CommandResult {
+	if x != nil {
+		if x, ok := x.Result.(*Job_Command); ok {
+			return x.Command
+		}
+	}
+	return nil
+}
+
 type isJob_Result interface {
 	isJob_Result()
 }
@@ -309,6 +319,11 @@ type Job_Title struct {
 	Title *TitleResult `protobuf:"bytes,18,opt,name=title,proto3,oneof"`
 }
 
+type Job_Command struct {
+	// command is how a run_command's command ended.
+	Command *CommandResult `protobuf:"bytes,19,opt,name=command,proto3,oneof"`
+}
+
 func (*Job_Integration) isJob_Result() {}
 
 func (*Job_RepositorySync) isJob_Result() {}
@@ -316,6 +331,8 @@ func (*Job_RepositorySync) isJob_Result() {}
 func (*Job_AgentStart) isJob_Result() {}
 
 func (*Job_Title) isJob_Result() {}
+
+func (*Job_Command) isJob_Result() {}
 
 // IntegrationResult is what integrating an item did.
 type IntegrationResult struct {
@@ -942,12 +959,59 @@ func (x *CancelJobResponse) GetJob() *Job {
 	return nil
 }
 
+// CommandResult is how a command a person ran ended.
+type CommandResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// exit_code is its exit status; a command stopped by a signal, such as
+	// its timeout, is -1.
+	ExitCode      int32 `protobuf:"varint,1,opt,name=exit_code,json=exitCode,proto3" json:"exit_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CommandResult) Reset() {
+	*x = CommandResult{}
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CommandResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CommandResult) ProtoMessage() {}
+
+func (x *CommandResult) ProtoReflect() protoreflect.Message {
+	mi := &file_wi_core_v1_jobs_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CommandResult.ProtoReflect.Descriptor instead.
+func (*CommandResult) Descriptor() ([]byte, []int) {
+	return file_wi_core_v1_jobs_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *CommandResult) GetExitCode() int32 {
+	if x != nil {
+		return x.ExitCode
+	}
+	return 0
+}
+
 var File_wi_core_v1_jobs_proto protoreflect.FileDescriptor
 
 const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\n" +
 	"\x15wi/core/v1/jobs.proto\x12\n" +
-	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17wi/core/v1/common.proto\"\xfb\x05\n" +
+	"wi.core.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x17wi/core/v1/common.proto\"\xb2\x06\n" +
 	"\x03Job\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12*\n" +
@@ -970,7 +1034,8 @@ const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\x0frepository_sync\x18\x10 \x01(\v2 .wi.core.v1.RepositorySyncResultH\x00R\x0erepositorySync\x12?\n" +
 	"\vagent_start\x18\x11 \x01(\v2\x1c.wi.core.v1.AgentStartResultH\x00R\n" +
 	"agentStart\x12/\n" +
-	"\x05title\x18\x12 \x01(\v2\x17.wi.core.v1.TitleResultH\x00R\x05titleB\b\n" +
+	"\x05title\x18\x12 \x01(\v2\x17.wi.core.v1.TitleResultH\x00R\x05title\x125\n" +
+	"\acommand\x18\x13 \x01(\v2\x19.wi.core.v1.CommandResultH\x00R\acommandB\b\n" +
 	"\x06resultJ\x04\b\b\x10\tR\bapproval\"q\n" +
 	"\x11IntegrationResult\x12\x16\n" +
 	"\x06commit\x18\x01 \x01(\tR\x06commit\x12#\n" +
@@ -1009,7 +1074,9 @@ const file_wi_core_v1_jobs_proto_rawDesc = "" +
 	"\x10CancelJobRequest\x12\x15\n" +
 	"\x06job_id\x18\x01 \x01(\tR\x05jobId\"6\n" +
 	"\x11CancelJobResponse\x12!\n" +
-	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job*\xc0\x01\n" +
+	"\x03job\x18\x01 \x01(\v2\x0f.wi.core.v1.JobR\x03job\",\n" +
+	"\rCommandResult\x12\x1b\n" +
+	"\texit_code\x18\x01 \x01(\x05R\bexitCode*\xc0\x01\n" +
 	"\bJobState\x12\x19\n" +
 	"\x15JOB_STATE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10JOB_STATE_QUEUED\x10\x01\x12\x15\n" +
@@ -1037,7 +1104,7 @@ func file_wi_core_v1_jobs_proto_rawDescGZIP() []byte {
 }
 
 var file_wi_core_v1_jobs_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_wi_core_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_wi_core_v1_jobs_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_wi_core_v1_jobs_proto_goTypes = []any{
 	(JobState)(0),                 // 0: wi.core.v1.JobState
 	(*Job)(nil),                   // 1: wi.core.v1.Job
@@ -1053,38 +1120,40 @@ var file_wi_core_v1_jobs_proto_goTypes = []any{
 	(*WatchJobResponse)(nil),      // 11: wi.core.v1.WatchJobResponse
 	(*CancelJobRequest)(nil),      // 12: wi.core.v1.CancelJobRequest
 	(*CancelJobResponse)(nil),     // 13: wi.core.v1.CancelJobResponse
-	(*PartialOutcome)(nil),        // 14: wi.core.v1.PartialOutcome
-	(*timestamppb.Timestamp)(nil), // 15: google.protobuf.Timestamp
-	(AgentMode)(0),                // 16: wi.core.v1.AgentMode
+	(*CommandResult)(nil),         // 14: wi.core.v1.CommandResult
+	(*PartialOutcome)(nil),        // 15: wi.core.v1.PartialOutcome
+	(*timestamppb.Timestamp)(nil), // 16: google.protobuf.Timestamp
+	(AgentMode)(0),                // 17: wi.core.v1.AgentMode
 }
 var file_wi_core_v1_jobs_proto_depIdxs = []int32{
 	0,  // 0: wi.core.v1.Job.state:type_name -> wi.core.v1.JobState
-	14, // 1: wi.core.v1.Job.partial:type_name -> wi.core.v1.PartialOutcome
-	15, // 2: wi.core.v1.Job.created_at:type_name -> google.protobuf.Timestamp
-	15, // 3: wi.core.v1.Job.started_at:type_name -> google.protobuf.Timestamp
-	15, // 4: wi.core.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
+	15, // 1: wi.core.v1.Job.partial:type_name -> wi.core.v1.PartialOutcome
+	16, // 2: wi.core.v1.Job.created_at:type_name -> google.protobuf.Timestamp
+	16, // 3: wi.core.v1.Job.started_at:type_name -> google.protobuf.Timestamp
+	16, // 4: wi.core.v1.Job.finished_at:type_name -> google.protobuf.Timestamp
 	2,  // 5: wi.core.v1.Job.integration:type_name -> wi.core.v1.IntegrationResult
 	3,  // 6: wi.core.v1.Job.repository_sync:type_name -> wi.core.v1.RepositorySyncResult
 	4,  // 7: wi.core.v1.Job.agent_start:type_name -> wi.core.v1.AgentStartResult
 	5,  // 8: wi.core.v1.Job.title:type_name -> wi.core.v1.TitleResult
-	16, // 9: wi.core.v1.AgentStartResult.mode:type_name -> wi.core.v1.AgentMode
-	1,  // 10: wi.core.v1.GetJobResponse.job:type_name -> wi.core.v1.Job
-	1,  // 11: wi.core.v1.ListJobsResponse.jobs:type_name -> wi.core.v1.Job
-	1,  // 12: wi.core.v1.WatchJobResponse.job:type_name -> wi.core.v1.Job
-	1,  // 13: wi.core.v1.CancelJobResponse.job:type_name -> wi.core.v1.Job
-	6,  // 14: wi.core.v1.JobService.GetJob:input_type -> wi.core.v1.GetJobRequest
-	8,  // 15: wi.core.v1.JobService.ListJobs:input_type -> wi.core.v1.ListJobsRequest
-	10, // 16: wi.core.v1.JobService.WatchJob:input_type -> wi.core.v1.WatchJobRequest
-	12, // 17: wi.core.v1.JobService.CancelJob:input_type -> wi.core.v1.CancelJobRequest
-	7,  // 18: wi.core.v1.JobService.GetJob:output_type -> wi.core.v1.GetJobResponse
-	9,  // 19: wi.core.v1.JobService.ListJobs:output_type -> wi.core.v1.ListJobsResponse
-	11, // 20: wi.core.v1.JobService.WatchJob:output_type -> wi.core.v1.WatchJobResponse
-	13, // 21: wi.core.v1.JobService.CancelJob:output_type -> wi.core.v1.CancelJobResponse
-	18, // [18:22] is the sub-list for method output_type
-	14, // [14:18] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	14, // 9: wi.core.v1.Job.command:type_name -> wi.core.v1.CommandResult
+	17, // 10: wi.core.v1.AgentStartResult.mode:type_name -> wi.core.v1.AgentMode
+	1,  // 11: wi.core.v1.GetJobResponse.job:type_name -> wi.core.v1.Job
+	1,  // 12: wi.core.v1.ListJobsResponse.jobs:type_name -> wi.core.v1.Job
+	1,  // 13: wi.core.v1.WatchJobResponse.job:type_name -> wi.core.v1.Job
+	1,  // 14: wi.core.v1.CancelJobResponse.job:type_name -> wi.core.v1.Job
+	6,  // 15: wi.core.v1.JobService.GetJob:input_type -> wi.core.v1.GetJobRequest
+	8,  // 16: wi.core.v1.JobService.ListJobs:input_type -> wi.core.v1.ListJobsRequest
+	10, // 17: wi.core.v1.JobService.WatchJob:input_type -> wi.core.v1.WatchJobRequest
+	12, // 18: wi.core.v1.JobService.CancelJob:input_type -> wi.core.v1.CancelJobRequest
+	7,  // 19: wi.core.v1.JobService.GetJob:output_type -> wi.core.v1.GetJobResponse
+	9,  // 20: wi.core.v1.JobService.ListJobs:output_type -> wi.core.v1.ListJobsResponse
+	11, // 21: wi.core.v1.JobService.WatchJob:output_type -> wi.core.v1.WatchJobResponse
+	13, // 22: wi.core.v1.JobService.CancelJob:output_type -> wi.core.v1.CancelJobResponse
+	19, // [19:23] is the sub-list for method output_type
+	15, // [15:19] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_wi_core_v1_jobs_proto_init() }
@@ -1098,6 +1167,7 @@ func file_wi_core_v1_jobs_proto_init() {
 		(*Job_RepositorySync)(nil),
 		(*Job_AgentStart)(nil),
 		(*Job_Title)(nil),
+		(*Job_Command)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1105,7 +1175,7 @@ func file_wi_core_v1_jobs_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_wi_core_v1_jobs_proto_rawDesc), len(file_wi_core_v1_jobs_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

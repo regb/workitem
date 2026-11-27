@@ -66,6 +66,9 @@ const (
 	// WorkspaceServiceSaveWorkspaceFileProcedure is the fully-qualified name of the WorkspaceService's
 	// SaveWorkspaceFile RPC.
 	WorkspaceServiceSaveWorkspaceFileProcedure = "/wi.core.v1.WorkspaceService/SaveWorkspaceFile"
+	// WorkspaceServiceRunCommandProcedure is the fully-qualified name of the WorkspaceService's
+	// RunCommand RPC.
+	WorkspaceServiceRunCommandProcedure = "/wi.core.v1.WorkspaceService/RunCommand"
 )
 
 // WorkspaceServiceClient is a client for the wi.core.v1.WorkspaceService service.
@@ -109,6 +112,14 @@ type WorkspaceServiceClient interface {
 	// locks, so this detects concurrent edits but cannot exclude them;
 	// callers keep their unsaved text on failure.
 	SaveWorkspaceFile(context.Context, *connect.Request[v1.SaveWorkspaceFileRequest]) (*connect.Response[v1.SaveWorkspaceFileResponse], error)
+	// RunCommand runs a shell command in the item's checkout as a terminal the
+	// person opened there would: with the repository's variables and its
+	// loaded .envrc, and as the person, not the item's agent, so wi commands
+	// act with the person's access. It runs as a job: its log tail is the
+	// command's output, CancelJob stops it, and its result is the exit status.
+	// A command that runs longer than its timeout is stopped. Only a user may
+	// run one.
+	RunCommand(context.Context, *connect.Request[v1.RunCommandRequest]) (*connect.Response[v1.RunCommandResponse], error)
 }
 
 // NewWorkspaceServiceClient constructs a client for the wi.core.v1.WorkspaceService service. By
@@ -194,6 +205,12 @@ func NewWorkspaceServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(workspaceServiceMethods.ByName("SaveWorkspaceFile")),
 			connect.WithClientOptions(opts...),
 		),
+		runCommand: connect.NewClient[v1.RunCommandRequest, v1.RunCommandResponse](
+			httpClient,
+			baseURL+WorkspaceServiceRunCommandProcedure,
+			connect.WithSchema(workspaceServiceMethods.ByName("RunCommand")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -210,6 +227,7 @@ type workspaceServiceClient struct {
 	getWorkspaceFile      *connect.Client[v1.GetWorkspaceFileRequest, v1.GetWorkspaceFileResponse]
 	getWorkspaceDocument  *connect.Client[v1.GetWorkspaceDocumentRequest, v1.GetWorkspaceDocumentResponse]
 	saveWorkspaceFile     *connect.Client[v1.SaveWorkspaceFileRequest, v1.SaveWorkspaceFileResponse]
+	runCommand            *connect.Client[v1.RunCommandRequest, v1.RunCommandResponse]
 }
 
 // GetWorkspace calls wi.core.v1.WorkspaceService.GetWorkspace.
@@ -267,6 +285,11 @@ func (c *workspaceServiceClient) SaveWorkspaceFile(ctx context.Context, req *con
 	return c.saveWorkspaceFile.CallUnary(ctx, req)
 }
 
+// RunCommand calls wi.core.v1.WorkspaceService.RunCommand.
+func (c *workspaceServiceClient) RunCommand(ctx context.Context, req *connect.Request[v1.RunCommandRequest]) (*connect.Response[v1.RunCommandResponse], error) {
+	return c.runCommand.CallUnary(ctx, req)
+}
+
 // WorkspaceServiceHandler is an implementation of the wi.core.v1.WorkspaceService service.
 type WorkspaceServiceHandler interface {
 	// GetWorkspace reads the claim, the checkout's Git state and its setup.
@@ -308,6 +331,14 @@ type WorkspaceServiceHandler interface {
 	// locks, so this detects concurrent edits but cannot exclude them;
 	// callers keep their unsaved text on failure.
 	SaveWorkspaceFile(context.Context, *connect.Request[v1.SaveWorkspaceFileRequest]) (*connect.Response[v1.SaveWorkspaceFileResponse], error)
+	// RunCommand runs a shell command in the item's checkout as a terminal the
+	// person opened there would: with the repository's variables and its
+	// loaded .envrc, and as the person, not the item's agent, so wi commands
+	// act with the person's access. It runs as a job: its log tail is the
+	// command's output, CancelJob stops it, and its result is the exit status.
+	// A command that runs longer than its timeout is stopped. Only a user may
+	// run one.
+	RunCommand(context.Context, *connect.Request[v1.RunCommandRequest]) (*connect.Response[v1.RunCommandResponse], error)
 }
 
 // NewWorkspaceServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -389,6 +420,12 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 		connect.WithSchema(workspaceServiceMethods.ByName("SaveWorkspaceFile")),
 		connect.WithHandlerOptions(opts...),
 	)
+	workspaceServiceRunCommandHandler := connect.NewUnaryHandler(
+		WorkspaceServiceRunCommandProcedure,
+		svc.RunCommand,
+		connect.WithSchema(workspaceServiceMethods.ByName("RunCommand")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/wi.core.v1.WorkspaceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case WorkspaceServiceGetWorkspaceProcedure:
@@ -413,6 +450,8 @@ func NewWorkspaceServiceHandler(svc WorkspaceServiceHandler, opts ...connect.Han
 			workspaceServiceGetWorkspaceDocumentHandler.ServeHTTP(w, r)
 		case WorkspaceServiceSaveWorkspaceFileProcedure:
 			workspaceServiceSaveWorkspaceFileHandler.ServeHTTP(w, r)
+		case WorkspaceServiceRunCommandProcedure:
+			workspaceServiceRunCommandHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -464,4 +503,8 @@ func (UnimplementedWorkspaceServiceHandler) GetWorkspaceDocument(context.Context
 
 func (UnimplementedWorkspaceServiceHandler) SaveWorkspaceFile(context.Context, *connect.Request[v1.SaveWorkspaceFileRequest]) (*connect.Response[v1.SaveWorkspaceFileResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.WorkspaceService.SaveWorkspaceFile is not implemented"))
+}
+
+func (UnimplementedWorkspaceServiceHandler) RunCommand(context.Context, *connect.Request[v1.RunCommandRequest]) (*connect.Response[v1.RunCommandResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.WorkspaceService.RunCommand is not implemented"))
 }

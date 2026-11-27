@@ -98,6 +98,9 @@ var usersOnly = map[string]string{
 	corev1connect.ItemServiceDeleteItemProcedure:                     "deleting an item",
 	corev1connect.ItemServiceListAccessProcedure:                     "reading access",
 	corev1connect.ItemServiceCheckAccessProcedure:                    "reading access",
+	corev1connect.WorkspaceServiceRunCommandProcedure:                "running a command as a person",
+	corev1connect.ItemServiceListAccessRequestsProcedure:             "reading access",
+	corev1connect.ItemServiceDismissAccessRequestProcedure:           "changing access",
 	corev1connect.ItemServiceGrantAccessProcedure:                    "granting access",
 	corev1connect.ItemServiceRevokeAccessProcedure:                   "revoking access",
 	corev1connect.SystemServiceShutdownProcedure:                     "stopping the daemon",
@@ -215,6 +218,8 @@ func (s *Server) authorize(ctx context.Context, procedure, itemID string) error 
 	if has >= needed {
 		return nil
 	}
+	// A person may grant what was refused: it waits for them as a request.
+	s.accessRequests.record(who.String(), itemID, procedure, needed, has)
 	refusal := connect.NewError(connect.CodePermissionDenied, fmt.Errorf("%s has %s access to item %s and needs %s; a user can grant it with: wi access grant --item %s --on %s --level %s", who, has, itemID, needed, who.itemID, itemID, needed))
 	if detail, detailErr := connect.NewErrorDetail(&v1.AccessDenied{Subject: who.String(), ItemId: itemID, Needed: v1.AccessLevel(needed), Has: v1.AccessLevel(has)}); detailErr == nil {
 		refusal.AddDetail(detail)

@@ -71,6 +71,16 @@ service ItemService {
   rpc ListAccess(ListAccessRequest) returns (ListAccessResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
+  // ListAccessRequests lists what items' agents were refused for want of
+  // access a person can grant: the level an agent needed on an item, until
+  // it is granted or the request dismissed, latest first. The daemon keeps
+  // them in memory: a restart forgets them, and the next refusal records
+  // one again. Only a user may read them.
+  rpc ListAccessRequests(ListAccessRequestsRequest) returns (ListAccessRequestsResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
+  }
+  // DismissAccessRequest forgets a request without granting it.
+  rpc DismissAccessRequest(DismissAccessRequestRequest) returns (DismissAccessRequestResponse);
   // CheckAccess says what an item's agent may do to items: the level its
   // own item, its delegations and the access entries give it on each. Only a
   // user may read access.
@@ -656,6 +666,39 @@ message ListAccessRequest {}
 message ListAccessResponse {
   repeated AccessEntry entries = 1;
 }
+
+message ListAccessRequestsRequest {
+  // subject, when set, lists only that item's agent's requests:
+  // "item:<id>".
+  string subject = 1;
+}
+
+message ListAccessRequestsResponse {
+  repeated AccessRequest requests = 1;
+}
+
+// AccessRequest is access an item's agent was refused and a person may
+// grant.
+message AccessRequest {
+  // subject is the agent refused, "item:<id>".
+  string subject = 1;
+  // item_id is the item it wanted to act on.
+  string item_id = 2;
+  AccessLevel needed = 3;
+  AccessLevel has = 4;
+  // procedure is the last call refused, such as
+  // "/wi.core.v1.AgentService/SendMessage".
+  string procedure = 5;
+  google.protobuf.Timestamp last_refused_at = 6;
+  uint32 refusals = 7;
+}
+
+message DismissAccessRequestRequest {
+  string subject = 1;
+  string item_id = 2;
+}
+
+message DismissAccessRequestResponse {}
 
 message CheckAccessRequest {
   // subject is the item's agent, "item:<id>".

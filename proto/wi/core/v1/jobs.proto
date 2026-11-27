@@ -85,6 +85,8 @@ message Job {
     AgentStartResult agent_start = 17;
     // title is the title a suggest_title gave the item.
     TitleResult title = 18;
+    // command is how a run_command's command ended.
+    CommandResult command = 19;
   }
 }
 
@@ -161,4 +163,11 @@ message CancelJobRequest {
 
 message CancelJobResponse {
   Job job = 1;
+}
+
+// CommandResult is how a command a person ran ended.
+message CommandResult {
+  // exit_code is its exit status; a command stopped by a signal, such as
+  // its timeout, is -1.
+  int32 exit_code = 1;
 }

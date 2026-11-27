@@ -73,6 +73,12 @@ const (
 	ItemServiceReadAttachmentProcedure = "/wi.core.v1.ItemService/ReadAttachment"
 	// ItemServiceListAccessProcedure is the fully-qualified name of the ItemService's ListAccess RPC.
 	ItemServiceListAccessProcedure = "/wi.core.v1.ItemService/ListAccess"
+	// ItemServiceListAccessRequestsProcedure is the fully-qualified name of the ItemService's
+	// ListAccessRequests RPC.
+	ItemServiceListAccessRequestsProcedure = "/wi.core.v1.ItemService/ListAccessRequests"
+	// ItemServiceDismissAccessRequestProcedure is the fully-qualified name of the ItemService's
+	// DismissAccessRequest RPC.
+	ItemServiceDismissAccessRequestProcedure = "/wi.core.v1.ItemService/DismissAccessRequest"
 	// ItemServiceCheckAccessProcedure is the fully-qualified name of the ItemService's CheckAccess RPC.
 	ItemServiceCheckAccessProcedure = "/wi.core.v1.ItemService/CheckAccess"
 	// ItemServiceGrantAccessProcedure is the fully-qualified name of the ItemService's GrantAccess RPC.
@@ -128,6 +134,14 @@ type ItemServiceClient interface {
 	// ListAccess lists what items' agents may do to other items. An item's
 	// agent may always manage its own item and the items it delegated.
 	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
+	// ListAccessRequests lists what items' agents were refused for want of
+	// access a person can grant: the level an agent needed on an item, until
+	// it is granted or the request dismissed, latest first. The daemon keeps
+	// them in memory: a restart forgets them, and the next refusal records
+	// one again. Only a user may read them.
+	ListAccessRequests(context.Context, *connect.Request[v1.ListAccessRequestsRequest]) (*connect.Response[v1.ListAccessRequestsResponse], error)
+	// DismissAccessRequest forgets a request without granting it.
+	DismissAccessRequest(context.Context, *connect.Request[v1.DismissAccessRequestRequest]) (*connect.Response[v1.DismissAccessRequestResponse], error)
 	// CheckAccess says what an item's agent may do to items: the level its
 	// own item, its delegations and the access entries give it on each. Only a
 	// user may read access.
@@ -267,6 +281,19 @@ func NewItemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
+		listAccessRequests: connect.NewClient[v1.ListAccessRequestsRequest, v1.ListAccessRequestsResponse](
+			httpClient,
+			baseURL+ItemServiceListAccessRequestsProcedure,
+			connect.WithSchema(itemServiceMethods.ByName("ListAccessRequests")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+			connect.WithClientOptions(opts...),
+		),
+		dismissAccessRequest: connect.NewClient[v1.DismissAccessRequestRequest, v1.DismissAccessRequestResponse](
+			httpClient,
+			baseURL+ItemServiceDismissAccessRequestProcedure,
+			connect.WithSchema(itemServiceMethods.ByName("DismissAccessRequest")),
+			connect.WithClientOptions(opts...),
+		),
 		checkAccess: connect.NewClient[v1.CheckAccessRequest, v1.CheckAccessResponse](
 			httpClient,
 			baseURL+ItemServiceCheckAccessProcedure,
@@ -291,27 +318,29 @@ func NewItemServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // itemServiceClient implements ItemServiceClient.
 type itemServiceClient struct {
-	createItem     *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
-	getItem        *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
-	resolveItem    *connect.Client[v1.ResolveItemRequest, v1.ResolveItemResponse]
-	listItems      *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
-	searchItems    *connect.Client[v1.SearchItemsRequest, v1.SearchItemsResponse]
-	updateItem     *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
-	setItemState   *connect.Client[v1.SetItemStateRequest, v1.SetItemStateResponse]
-	deleteItem     *connect.Client[v1.DeleteItemRequest, v1.DeleteItemResponse]
-	markRead       *connect.Client[v1.MarkReadRequest, v1.MarkReadResponse]
-	deferItem      *connect.Client[v1.DeferItemRequest, v1.DeferItemResponse]
-	listItemEvents *connect.Client[v1.ListItemEventsRequest, v1.ListItemEventsResponse]
-	addBlocker     *connect.Client[v1.AddBlockerRequest, v1.AddBlockerResponse]
-	clearBlocker   *connect.Client[v1.ClearBlockerRequest, v1.ClearBlockerResponse]
-	addNote        *connect.Client[v1.AddNoteRequest, v1.AddNoteResponse]
-	attach         *connect.Client[v1.AttachRequest, v1.AttachResponse]
-	listNotes      *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
-	readAttachment *connect.Client[v1.ReadAttachmentRequest, v1.ReadAttachmentResponse]
-	listAccess     *connect.Client[v1.ListAccessRequest, v1.ListAccessResponse]
-	checkAccess    *connect.Client[v1.CheckAccessRequest, v1.CheckAccessResponse]
-	grantAccess    *connect.Client[v1.GrantAccessRequest, v1.GrantAccessResponse]
-	revokeAccess   *connect.Client[v1.RevokeAccessRequest, v1.RevokeAccessResponse]
+	createItem           *connect.Client[v1.CreateItemRequest, v1.CreateItemResponse]
+	getItem              *connect.Client[v1.GetItemRequest, v1.GetItemResponse]
+	resolveItem          *connect.Client[v1.ResolveItemRequest, v1.ResolveItemResponse]
+	listItems            *connect.Client[v1.ListItemsRequest, v1.ListItemsResponse]
+	searchItems          *connect.Client[v1.SearchItemsRequest, v1.SearchItemsResponse]
+	updateItem           *connect.Client[v1.UpdateItemRequest, v1.UpdateItemResponse]
+	setItemState         *connect.Client[v1.SetItemStateRequest, v1.SetItemStateResponse]
+	deleteItem           *connect.Client[v1.DeleteItemRequest, v1.DeleteItemResponse]
+	markRead             *connect.Client[v1.MarkReadRequest, v1.MarkReadResponse]
+	deferItem            *connect.Client[v1.DeferItemRequest, v1.DeferItemResponse]
+	listItemEvents       *connect.Client[v1.ListItemEventsRequest, v1.ListItemEventsResponse]
+	addBlocker           *connect.Client[v1.AddBlockerRequest, v1.AddBlockerResponse]
+	clearBlocker         *connect.Client[v1.ClearBlockerRequest, v1.ClearBlockerResponse]
+	addNote              *connect.Client[v1.AddNoteRequest, v1.AddNoteResponse]
+	attach               *connect.Client[v1.AttachRequest, v1.AttachResponse]
+	listNotes            *connect.Client[v1.ListNotesRequest, v1.ListNotesResponse]
+	readAttachment       *connect.Client[v1.ReadAttachmentRequest, v1.ReadAttachmentResponse]
+	listAccess           *connect.Client[v1.ListAccessRequest, v1.ListAccessResponse]
+	listAccessRequests   *connect.Client[v1.ListAccessRequestsRequest, v1.ListAccessRequestsResponse]
+	dismissAccessRequest *connect.Client[v1.DismissAccessRequestRequest, v1.DismissAccessRequestResponse]
+	checkAccess          *connect.Client[v1.CheckAccessRequest, v1.CheckAccessResponse]
+	grantAccess          *connect.Client[v1.GrantAccessRequest, v1.GrantAccessResponse]
+	revokeAccess         *connect.Client[v1.RevokeAccessRequest, v1.RevokeAccessResponse]
 }
 
 // CreateItem calls wi.core.v1.ItemService.CreateItem.
@@ -404,6 +433,16 @@ func (c *itemServiceClient) ListAccess(ctx context.Context, req *connect.Request
 	return c.listAccess.CallUnary(ctx, req)
 }
 
+// ListAccessRequests calls wi.core.v1.ItemService.ListAccessRequests.
+func (c *itemServiceClient) ListAccessRequests(ctx context.Context, req *connect.Request[v1.ListAccessRequestsRequest]) (*connect.Response[v1.ListAccessRequestsResponse], error) {
+	return c.listAccessRequests.CallUnary(ctx, req)
+}
+
+// DismissAccessRequest calls wi.core.v1.ItemService.DismissAccessRequest.
+func (c *itemServiceClient) DismissAccessRequest(ctx context.Context, req *connect.Request[v1.DismissAccessRequestRequest]) (*connect.Response[v1.DismissAccessRequestResponse], error) {
+	return c.dismissAccessRequest.CallUnary(ctx, req)
+}
+
 // CheckAccess calls wi.core.v1.ItemService.CheckAccess.
 func (c *itemServiceClient) CheckAccess(ctx context.Context, req *connect.Request[v1.CheckAccessRequest]) (*connect.Response[v1.CheckAccessResponse], error) {
 	return c.checkAccess.CallUnary(ctx, req)
@@ -465,6 +504,14 @@ type ItemServiceHandler interface {
 	// ListAccess lists what items' agents may do to other items. An item's
 	// agent may always manage its own item and the items it delegated.
 	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
+	// ListAccessRequests lists what items' agents were refused for want of
+	// access a person can grant: the level an agent needed on an item, until
+	// it is granted or the request dismissed, latest first. The daemon keeps
+	// them in memory: a restart forgets them, and the next refusal records
+	// one again. Only a user may read them.
+	ListAccessRequests(context.Context, *connect.Request[v1.ListAccessRequestsRequest]) (*connect.Response[v1.ListAccessRequestsResponse], error)
+	// DismissAccessRequest forgets a request without granting it.
+	DismissAccessRequest(context.Context, *connect.Request[v1.DismissAccessRequestRequest]) (*connect.Response[v1.DismissAccessRequestResponse], error)
 	// CheckAccess says what an item's agent may do to items: the level its
 	// own item, its delegations and the access entries give it on each. Only a
 	// user may read access.
@@ -600,6 +647,19 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
+	itemServiceListAccessRequestsHandler := connect.NewUnaryHandler(
+		ItemServiceListAccessRequestsProcedure,
+		svc.ListAccessRequests,
+		connect.WithSchema(itemServiceMethods.ByName("ListAccessRequests")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
+		connect.WithHandlerOptions(opts...),
+	)
+	itemServiceDismissAccessRequestHandler := connect.NewUnaryHandler(
+		ItemServiceDismissAccessRequestProcedure,
+		svc.DismissAccessRequest,
+		connect.WithSchema(itemServiceMethods.ByName("DismissAccessRequest")),
+		connect.WithHandlerOptions(opts...),
+	)
 	itemServiceCheckAccessHandler := connect.NewUnaryHandler(
 		ItemServiceCheckAccessProcedure,
 		svc.CheckAccess,
@@ -657,6 +717,10 @@ func NewItemServiceHandler(svc ItemServiceHandler, opts ...connect.HandlerOption
 			itemServiceReadAttachmentHandler.ServeHTTP(w, r)
 		case ItemServiceListAccessProcedure:
 			itemServiceListAccessHandler.ServeHTTP(w, r)
+		case ItemServiceListAccessRequestsProcedure:
+			itemServiceListAccessRequestsHandler.ServeHTTP(w, r)
+		case ItemServiceDismissAccessRequestProcedure:
+			itemServiceDismissAccessRequestHandler.ServeHTTP(w, r)
 		case ItemServiceCheckAccessProcedure:
 			itemServiceCheckAccessHandler.ServeHTTP(w, r)
 		case ItemServiceGrantAccessProcedure:
@@ -742,6 +806,14 @@ func (UnimplementedItemServiceHandler) ReadAttachment(context.Context, *connect.
 
 func (UnimplementedItemServiceHandler) ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.ListAccess is not implemented"))
+}
+
+func (UnimplementedItemServiceHandler) ListAccessRequests(context.Context, *connect.Request[v1.ListAccessRequestsRequest]) (*connect.Response[v1.ListAccessRequestsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.ListAccessRequests is not implemented"))
+}
+
+func (UnimplementedItemServiceHandler) DismissAccessRequest(context.Context, *connect.Request[v1.DismissAccessRequestRequest]) (*connect.Response[v1.DismissAccessRequestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("wi.core.v1.ItemService.DismissAccessRequest is not implemented"))
 }
 
 func (UnimplementedItemServiceHandler) CheckAccess(context.Context, *connect.Request[v1.CheckAccessRequest]) (*connect.Response[v1.CheckAccessResponse], error) {

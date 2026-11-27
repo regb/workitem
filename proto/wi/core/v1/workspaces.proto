@@ -64,6 +64,14 @@ service WorkspaceService {
   // locks, so this detects concurrent edits but cannot exclude them;
   // callers keep their unsaved text on failure.
   rpc SaveWorkspaceFile(SaveWorkspaceFileRequest) returns (SaveWorkspaceFileResponse);
+  // RunCommand runs a shell command in the item's checkout as a terminal the
+  // person opened there would: with the repository's variables and its
+  // loaded .envrc, and as the person, not the item's agent, so wi commands
+  // act with the person's access. It runs as a job: its log tail is the
+  // command's output, CancelJob stops it, and its result is the exit status.
+  // A command that runs longer than its timeout is stopped. Only a user may
+  // run one.
+  rpc RunCommand(RunCommandRequest) returns (RunCommandResponse);
 }
 
 // SourceFile is a file's text as read, up to 1 MiB.
@@ -233,4 +241,17 @@ message SearchWorkspaceFilesRequest {
 
 message SearchWorkspaceFilesResponse {
   repeated string paths = 1;
+}
+
+message RunCommandRequest {
+  string item_id = 1;
+  // command is shell code, run with sh -c.
+  string command = 2;
+  // timeout_seconds bounds how long it runs: zero is five minutes, and at
+  // most an hour.
+  uint32 timeout_seconds = 3;
+}
+
+message RunCommandResponse {
+  Job job = 1;
 }
