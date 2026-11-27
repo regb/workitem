@@ -38,6 +38,11 @@ func TestAnswersGoBackToTheItemThatAsked(t *testing.T) {
 		}
 		return false
 	})
+	// The turn answered an item's agent: it is not unread for the person
+	// whose item it is.
+	eventually(t, "the answering item to read as read", func() bool {
+		return !call(t, f.Clients.Items.GetItem, &v1.GetItemRequest{ItemId: answerer.Id}).Observation.GetUnread()
+	})
 	apitest.WaitIdle(t, f.Clients, asker.Id)
 	time.Sleep(time.Second)
 	for _, text := range userMessages(answerer.Id) {

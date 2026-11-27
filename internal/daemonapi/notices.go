@@ -114,6 +114,12 @@ func (s *Server) noticeOwner(ctx context.Context, event coordinator.RuntimeSeman
 	if err != nil || asker.Manifest.State == model.StateClosed {
 		return err
 	}
+	if kind == "settled" && !answering.Delegated() {
+		// The turn answered an item's agent, not the person whose item this
+		// is: it does not wait for them as unread. Its conversation still
+		// shows it, named as another item's agent's.
+		_, _ = s.App.MarkRead(ctx, resolve(answering.ID))
+	}
 	if kind == "settled" {
 		// The asker waits on this very turn: the reply is its result.
 		if latest, found, err := s.Core.Database().LatestAPIMessage(answering.ID); err == nil && found && latest.AwaitsReply && latest.Sender == model.ItemPrincipal(askerID) {
