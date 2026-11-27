@@ -552,9 +552,18 @@ func TestAccessAgentsMessagesAndNotices(t *testing.T) {
 	})
 
 	t.Run("notices", func(t *testing.T) {
+		// A person's turn on the delegation is answered to them: the owner
+		// hears nothing of it.
+		if answer := ask(t, f.Clients, child, "from the person"); answer != "Echo: from the person" {
+			t.Fatalf("the person's message: %q", answer)
+		}
+		time.Sleep(time.Second)
+		if got := notices(); len(got) != 1 {
+			t.Fatalf("the owner heard of a turn a person asked for: %q", got)
+		}
 		// The turns the parent awaited above sent no notice: the next one is
-		// the child's question.
-		accessSend(t, f.Clients, &v1.SendMessageRequest{ItemId: child, Text: "please ask me something"})
+		// the child's question, which the parent asked for.
+		accessSend(t, asParent, &v1.SendMessageRequest{ItemId: child, Text: "please ask me something"})
 		awaitNotice(2, "waiting on a question")
 		if got := notices(); len(got) != 2 {
 			t.Fatalf("an awaited turn was noticed: %q", got)

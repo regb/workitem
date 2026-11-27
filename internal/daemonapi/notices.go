@@ -13,15 +13,17 @@ import (
 	"github.com/regb/workitem/internal/model"
 )
 
-// A delegated item's attention goes to the item that owns it, as a person's
-// items' attention goes to them: when the delegation's turn ends, or it waits
-// on a question, the daemon sends the owning item's agent a notice. The
-// notice is a message from the delegation, so it arrives in the usual
-// envelope; it waits for the owner's current turn rather than interrupting
-// it, and starts the owner's agent when it is not running. No notice is sent
-// for a turn the owner is already waiting on with wi send --wait, the reply
-// being that command's result, nor to a closed owner, which gave its
-// delegations back to its own owner when it closed.
+// An agent's answer goes back to whoever asked. When an item's agent sends
+// another a message, the turn that answers it ends with a notice to the
+// sender: the reply, or the question the agent waits on. A delegation's
+// owner hears of the turns it asked for, its first prompt included, as any
+// item would. A person's own messages are answered where they asked, with no
+// notice. The notice is a message from the answering item, so it arrives in
+// the usual envelope; it waits for the asker's current turn rather than
+// interrupting it, and starts its agent when it is not running. No notice is
+// sent for a turn the asker waits on with wi send --wait, the reply being
+// that command's result, for a turn that answered a notice, which would
+// bounce answers between agents, nor to a closed item.
 
 // noticeClient is the control client notices are sent under when no client
 // holds the owning item's control.
@@ -89,43 +91,47 @@ func (s *Server) observeRuntimeEvent(event coordinator.RuntimeSemanticEvent) {
 	}()
 }
 
-// noticeOwner sends the owning item's agent a notice of what its delegation
-// did, when it has a running agent to read it.
+// noticeOwner returns the answer of an agent's turn to whoever asked for
+// it: the item whose message started it, its owner or another, gets a
+// notice of the reply or question. A turn a person asked for, from the web,
+// the command line or the agent's terminal, is answered to them where they
+// asked: no item is noticed. Nor is one for a turn that answered a notice,
+// which would bounce answers between agents.
 func (s *Server) noticeOwner(ctx context.Context, event coordinator.RuntimeSemanticEvent, kind string) error {
 	current, err := s.canonical(ctx, event.WorkItemID, 0)
 	if err != nil {
 		return err
 	}
-	delegation := current.Manifest
-	ownerID := model.PrincipalItem(delegation.Owner)
-	if ownerID == "" {
+	answering := current.Manifest
+	askerID := s.turnAsker(ctx, answering.ID)
+	if askerID == "" || askerID == answering.ID {
 		return nil
 	}
-	// A closed owner gave its delegations back when it closed; no notice
-	// wakes it again. Any other owner gets the notice, its agent started
-	// if it is not running, as a message to it would.
-	owner, err := s.canonical(ctx, ownerID, 0)
-	if err != nil || owner.Manifest.State == model.StateClosed {
+	// A closed item gets no notice; an owner that closed gave its
+	// delegations back. Any other gets it, its agent started if it is not
+	// running, as a message to it would.
+	asker, err := s.canonical(ctx, askerID, 0)
+	if err != nil || asker.Manifest.State == model.StateClosed {
 		return err
 	}
 	if kind == "settled" {
-		// The owner is waiting on this very turn: the reply is its result.
-		if latest, found, err := s.Core.Database().LatestAPIMessage(delegation.ID); err == nil && found && latest.AwaitsReply && latest.Sender == model.ItemPrincipal(ownerID) {
+		// The asker waits on this very turn: the reply is its result.
+		if latest, found, err := s.Core.Database().LatestAPIMessage(answering.ID); err == nil && found && latest.AwaitsReply && latest.Sender == model.ItemPrincipal(askerID) {
 			return nil
 		}
 	}
-	text := s.noticeText(ctx, delegation, kind)
-	origin := model.Origin{Actor: model.ItemPrincipal(delegation.ID), Cause: "notice:" + kind}
-	ctx, done := s.actOnItself(ctx, ownerID, noticeClient, "notice", origin)
+	text := s.noticeText(ctx, answering, askerID, kind)
+	origin := model.Origin{Actor: model.ItemPrincipal(answering.ID), Cause: "notice:" + kind}
+	ctx, done := s.actOnItself(ctx, askerID, noticeClient, "notice", origin)
 	delivery := v1.Delivery_DELIVERY_PROMPT
-	if s.App.AgentBusy(ctx, ownerID) {
+	if s.App.AgentBusy(ctx, askerID) {
 		delivery = v1.Delivery_DELIVERY_FOLLOW_UP
 	}
-	unlock := s.lock(ownerID)
-	if running, _ := s.App.AgentRuntimeStatus(ctx, resolve(ownerID)); !running.Online {
+	unlock := s.lock(askerID)
+	if running, _ := s.App.AgentRuntimeStatus(ctx, resolve(askerID)); !running.Online {
 		delivery = v1.Delivery_DELIVERY_UNSPECIFIED
 	}
-	sent, err := s.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: ownerID, Text: text, Delivery: delivery, ClientMessageId: "notice-" + event.ID, StartMode: v1.AgentMode_AGENT_MODE_HEADLESS}))
+	sent, err := s.SendMessage(ctx, connect.NewRequest(&v1.SendMessageRequest{ItemId: askerID, Text: text, Delivery: delivery, ClientMessageId: noticePrefix + event.ID, StartMode: v1.AgentMode_AGENT_MODE_HEADLESS}))
 	unlock()
 	var job *v1.Job
 	if err == nil {
@@ -135,33 +141,75 @@ func (s *Server) noticeOwner(ctx context.Context, event coordinator.RuntimeSeman
 	return err
 }
 
+// noticePrefix begins a notice's message ID.
+const noticePrefix = "notice-"
+
+// turnAsker is the item whose message the agent's latest turn answers: the
+// sender of the last prompt in its conversation, if an item's agent sent it
+// and it was not a notice. Completions of background work are not prompts:
+// they continue the turn that started the work.
+func (s *Server) turnAsker(ctx context.Context, itemID string) string {
+	history, err := s.GetHistory(ctx, connect.NewRequest(&v1.GetHistoryRequest{ItemId: itemID}))
+	if err != nil {
+		return ""
+	}
+	messages := history.Msg.Messages
+	for i := len(messages) - 1; i >= 0; i-- {
+		m := messages[i]
+		if m.Role != v1.MessageRole_MESSAGE_ROLE_USER {
+			continue
+		}
+		var text strings.Builder
+		for _, part := range m.Parts {
+			text.WriteString(part.GetText())
+		}
+		if strings.HasPrefix(strings.TrimSpace(text.String()), "<task-notification>") {
+			continue
+		}
+		if strings.HasPrefix(m.ClientMessageId, noticePrefix) {
+			return ""
+		}
+		return model.PrincipalItem(m.Sender)
+	}
+	return ""
+}
+
 // noticeText says what the delegation did, quoting its reply or question.
-func (s *Server) noticeText(ctx context.Context, delegation model.Manifest, kind string) string {
+func (s *Server) noticeText(ctx context.Context, delegation model.Manifest, askerID, kind string) string {
 	name := fmt.Sprintf("%q (%s)", delegation.Title, delegation.ID)
+	if delegation.Owner == model.ItemPrincipal(askerID) {
+		name = "your delegation " + name
+	} else {
+		name = "the item you messaged, " + name + ","
+	}
 	var b strings.Builder
 	switch kind {
 	case "question":
 		reason := s.observation(ctx, delegation).GetAgentReason()
-		fmt.Fprintf(&b, "wi notice: your delegation %s is waiting on a question", name)
+		fmt.Fprintf(&b, "wi notice: %s is waiting on a question", name)
 		if reason != "" {
 			fmt.Fprintf(&b, ": %s", reason)
 		}
 		fmt.Fprintf(&b, ".\nIts conversation shows the question; answer it with wi send %s, or ask your user.", delegation.ID)
 	case "failed":
 		reason := s.observation(ctx, delegation).GetAgentReason()
-		fmt.Fprintf(&b, "wi notice: your delegation %s stopped with a problem", name)
+		fmt.Fprintf(&b, "wi notice: %s stopped with a problem", name)
 		if reason != "" {
 			fmt.Fprintf(&b, ": %s", reason)
 		}
 		fmt.Fprintf(&b, ".\nSee wi show %s; tell your user if you cannot resolve it.", delegation.ID)
 	default:
-		fmt.Fprintf(&b, "wi notice: your delegation %s finished its turn.", name)
+		fmt.Fprintf(&b, "wi notice: %s finished its turn.", name)
 		if reply := s.lastReply(ctx, delegation.ID); reply != "" {
 			fmt.Fprintf(&b, " Its last reply:\n\n%s", reply)
 		} else {
 			b.WriteString(" It did not reply.")
 		}
-		fmt.Fprintf(&b, "\n\nAnswer it with wi send %s, or merge or close it when its work is done.", delegation.ID)
+		if delegation.Owner == model.ItemPrincipal(askerID) {
+			fmt.Fprintf(&b, "\n\nAnswer it with wi send %s, or merge or close it when its work is done.", delegation.ID)
+		} else {
+			fmt.Fprintf(&b, "\n\nAnswer it with wi send %s if you need more; its next reply comes back the same way.", delegation.ID)
+		}
 	}
 	return b.String()
 }

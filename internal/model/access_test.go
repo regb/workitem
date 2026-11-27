@@ -54,7 +54,12 @@ func TestItemAccess(t *testing.T) {
 		{"highest matching grant", model.ItemPrincipal(stranger), root, grants, lookup, model.AccessControl},
 		{"grant to every item", model.ItemPrincipal(stranger), child, grants, lookup, model.AccessMessage},
 		{"grant on every item", model.ItemPrincipal(child), root, grants, lookup, model.AccessIntegrate},
-		{"no grant", model.ItemPrincipal(stranger), grand, grants, lookup, model.AccessNone},
+		// Reading an item covers what it delegated, however far down, and
+		// a higher grant on it still gives only reading there.
+		{"read through the owner chain", model.ItemPrincipal(stranger), grand, grants, lookup, model.AccessView},
+		{"read needs the owner chain", model.ItemPrincipal(stranger), grand, grants, nil, model.AccessNone},
+		{"a grant on the item itself stands", model.ItemPrincipal(stranger), child, grants, lookup, model.AccessMessage},
+		{"no grant", model.ItemPrincipal(stranger), grand, nil, lookup, model.AccessNone},
 	} {
 		if got := model.ItemAccess(tc.subject, items[tc.target], tc.entries, tc.lookup); got != tc.want {
 			t.Errorf("%s: ItemAccess = %v, want %v", tc.name, got, tc.want)
