@@ -488,6 +488,15 @@ func (s *Server) UpdateItem(ctx context.Context, req *connect.Request[v1.UpdateI
 		if err != nil {
 			return nil, rpcError(err)
 		}
+		// The item that owned it hears that it no longer does, after this
+		// request: telling it may wait on its agent.
+		if from, to := c.Manifest.OwnerPrincipal(), changed.Manifest.OwnerPrincipal(); from != to && s.startCallback() {
+			noticeCtx := model.WithOrigin(s.ctx, model.ActingOrigin(ctx))
+			go func() {
+				defer s.callbacks.Done()
+				s.noticeTakeover(noticeCtx, changed.Manifest, from, to)
+			}()
+		}
 		if !metadataEdited(r) {
 			return response(&v1.UpdateItemResponse{Item: item(changed.Manifest, changed.Revision)}, nil)
 		}

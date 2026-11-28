@@ -3,6 +3,7 @@ package daemonapi
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -252,3 +253,44 @@ func (s *Server) lastReply(ctx context.Context, itemID string) string {
 }
 
 func utf8RuneStart(b byte) bool { return b&0xC0 != 0x80 }
+
+// noticeTakeover tells an item's agent that an item it owned has another
+// owner now, so that it stops following it up. Ownership was all its access
+// to that item, so the notice says it has none left. A running agent is told;
+// one that is not running sees the change when it next looks.
+func (s *Server) noticeTakeover(ctx context.Context, taken model.Manifest, from, to string) {
+	formerID := model.PrincipalItem(from)
+	if formerID == "" || from == to {
+		return
+	}
+	former, err := s.canonical(ctx, formerID, 0)
+	if err != nil || former.Manifest.State == model.StateClosed {
+		return
+	}
+	if running, _ := s.App.AgentRuntimeStatus(ctx, resolve(formerID)); !running.Online {
+		return
+	}
+	who := "Your user took it over"
+	if newID := model.PrincipalItem(to); newID != "" {
+		who = "It was handed to item " + newID
+		if owner, err := s.canonical(ctx, newID, 0); err == nil {
+			who += fmt.Sprintf(" (%q)", owner.Manifest.Title)
+		}
+	}
+	text := fmt.Sprintf("wi notice: item %s (%q), which you delegated, is no longer yours. %s. You no longer follow it up: do not merge, close or manage it, and expect no notices from it. Owning it was your access to it: you keep only what your user granted.", taken.ID, taken.Title, who)
+	origin := model.ActingOrigin(ctx)
+	origin.Cause = "notice:owner"
+	noticeCtx, done := s.actOnItself(ctx, formerID, noticeClient, "notice", origin)
+	delivery := v1.Delivery_DELIVERY_PROMPT
+	if s.App.AgentBusy(noticeCtx, formerID) {
+		delivery = v1.Delivery_DELIVERY_FOLLOW_UP
+	}
+	unlock := s.lock(formerID)
+	sent, err := s.SendMessage(noticeCtx, connect.NewRequest(&v1.SendMessageRequest{ItemId: formerID, Text: text, Delivery: delivery, ClientMessageId: noticePrefix + "owner-" + taken.ID + "-" + strconv.FormatInt(time.Now().UnixNano(), 36)}))
+	unlock()
+	var job *v1.Job
+	if err == nil {
+		job = sent.Msg.Job
+	}
+	done(job)
+}

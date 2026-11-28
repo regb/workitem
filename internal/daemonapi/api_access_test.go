@@ -599,6 +599,21 @@ func TestAccessAgentsMessagesAndNotices(t *testing.T) {
 			t.Fatalf("an agent's message to its own item: %q", answer)
 		}
 	})
+
+	// A person taking the child tells its former owner, which no longer
+	// follows it up.
+	t.Run("taking an item tells its former owner", func(t *testing.T) {
+		apitest.WaitIdle(t, f.Clients, parent)
+		call(t, f.Clients.Items.UpdateItem, &v1.UpdateItemRequest{ItemId: child, Owner: model.OperatorUser})
+		eventually(t, "the takeover notice", func() bool {
+			for _, notice := range notices() {
+				if strings.Contains(notice, child) && strings.Contains(notice, "is no longer yours") && strings.Contains(notice, "Your user took it over") {
+					return true
+				}
+			}
+			return false
+		})
+	})
 }
 
 // accessRuntimeClients connects with the credential the daemon gave item's
