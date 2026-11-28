@@ -397,19 +397,31 @@ func (s *Server) send(ctx context.Context, r *v1.SendMessageRequest) error {
 	return err
 }
 
-// messageEnvelope says how a message from sender reaches itemID's agent: as
-// typed when a person sent it, or the item's own agent; wrapped when another
-// item's agent did, naming it and how it relates to the item.
+// messageEnvelope says how a message from sender reaches itemID's agent. An
+// item's owner is its agent's user: what the owner sends arrives as typed,
+// whether the owner is a person or an item's agent, and so does what the
+// item's own agent sends. Anyone else's message is wrapped, naming the
+// sender and how it relates to the item: another item's agent, or a person
+// writing directly to an item an item owns.
 func (s *Server) messageEnvelope(ctx context.Context, itemID, sender string) (model.Envelope, error) {
 	from := model.PrincipalItem(sender)
-	if from == "" || from == itemID {
+	if from == itemID || sender == "" || sender == model.SystemActor {
 		return model.Envelope{}, nil
 	}
-	source, err := s.canonical(ctx, from, 0)
+	target, err := s.canonical(ctx, itemID, 0)
 	if err != nil {
 		return model.Envelope{}, err
 	}
-	target, err := s.canonical(ctx, itemID, 0)
+	if target.Manifest.OwnerPrincipal() == sender {
+		return model.Envelope{}, nil
+	}
+	if from == "" {
+		if !target.Manifest.Delegated() {
+			return model.Envelope{}, nil
+		}
+		return model.Envelope{Marker: model.NewEnvelopeMarker(), From: sender, Relation: model.RelationPerson}, nil
+	}
+	source, err := s.canonical(ctx, from, 0)
 	if err != nil {
 		return model.Envelope{}, err
 	}

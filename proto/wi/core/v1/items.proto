@@ -67,7 +67,7 @@ service ItemService {
     option idempotency_level = NO_SIDE_EFFECTS;
   }
   // ListAccess lists what items' agents may do to other items. An item's
-  // agent may always manage its own item and the items it delegated.
+  // agent may always manage the items it delegated, and integrate its own.
   rpc ListAccess(ListAccessRequest) returns (ListAccessResponse) {
     option idempotency_level = NO_SIDE_EFFECTS;
   }

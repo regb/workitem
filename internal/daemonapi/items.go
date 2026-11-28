@@ -543,6 +543,12 @@ func (s *Server) SetItemState(ctx context.Context, req *connect.Request[v1.SetIt
 	if c.Manifest.State == model.StateClosed && r.State == v1.ItemState_ITEM_STATE_ACTIVE {
 		return nil, precondition("reopen to backlog before activating")
 	}
+	// Closing and reopening need what CloseItem and ReopenItem do.
+	if r.State == v1.ItemState_ITEM_STATE_CLOSED || c.Manifest.State == model.StateClosed {
+		if err := s.requireLevel(ctx, req.Spec().Procedure, r.ItemId, model.AccessManage); err != nil {
+			return nil, err
+		}
+	}
 	if r.State != v1.ItemState_ITEM_STATE_ACTIVE {
 		if c.Manifest.Checkout.Claim != nil {
 			return nil, precondition("item still holds a workspace claim")

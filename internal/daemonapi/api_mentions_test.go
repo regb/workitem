@@ -23,7 +23,7 @@ func TestMentionsLetTheAgentReadTheItem(t *testing.T) {
 	level := func() v1.AccessLevel {
 		t.Helper()
 		access := call(t, f.Clients.Items.CheckAccess, &v1.CheckAccessRequest{Subject: subject, ItemIds: []string{mentioned.Id, agentItem.Id}}).Access
-		if len(access) != 2 || access[1].Level != v1.AccessLevel_ACCESS_LEVEL_MANAGE {
+		if len(access) != 2 || access[1].Level != v1.AccessLevel_ACCESS_LEVEL_INTEGRATE {
 			t.Fatalf("access: %v", access)
 		}
 		return access[0].Level

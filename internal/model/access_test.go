@@ -46,7 +46,9 @@ func TestItemAccess(t *testing.T) {
 		lookup  func(string) (model.Manifest, bool)
 		want    model.AccessLevel
 	}{
-		{"itself", model.ItemPrincipal(root), root, nil, lookup, model.AccessManage},
+		// Closing and reopening an item are its owner's.
+		{"itself", model.ItemPrincipal(root), root, nil, lookup, model.AccessIntegrate},
+		{"itself, granted more", model.ItemPrincipal(root), root, []model.AccessEntry{{Subject: model.ItemPrincipal(root), ItemID: root, Level: model.AccessManage}}, lookup, model.AccessManage},
 		{"direct delegate", model.ItemPrincipal(root), child, nil, nil, model.AccessManage},
 		{"transitive delegate", model.ItemPrincipal(root), grand, nil, lookup, model.AccessManage},
 		{"transitive without lookup", model.ItemPrincipal(root), grand, nil, nil, model.AccessNone},

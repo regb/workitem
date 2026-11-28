@@ -211,6 +211,16 @@ func (s *Server) authorize(ctx context.Context, procedure, itemID string) error 
 		}
 		return invalid("valid item_id is required")
 	}
+	return s.requireLevel(ctx, procedure, itemID, needed)
+}
+
+// requireLevel refuses an item's agent with less than needed on an item,
+// recording the refusal for a person to grant. Users pass.
+func (s *Server) requireLevel(ctx context.Context, procedure, itemID string, needed model.AccessLevel) error {
+	who := caller(ctx).principal
+	if !who.item() {
+		return nil
+	}
 	has, err := s.itemAccess(ctx, who.String(), itemID)
 	if err != nil {
 		return err

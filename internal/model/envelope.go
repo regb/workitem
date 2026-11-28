@@ -19,6 +19,8 @@ const (
 	RelationOwner      = "owner"      // the sender owns the receiving item
 	RelationDelegation = "delegation" // the receiving item owns the sender
 	RelationOther      = "other"
+	// RelationPerson is a person writing to an item another item owns.
+	RelationPerson = "person"
 )
 
 // NewEnvelopeMarker makes an envelope's random marker.
@@ -40,8 +42,11 @@ func (e Envelope) tag() string { return "wi-message-" + e.Marker }
 // Wrap puts text in the envelope.
 func (e Envelope) Wrap(text string) string {
 	body := strings.NewReplacer("<wi-message", "<wi_message", "</wi-message", "</wi_message").Replace(text)
-	title := strings.NewReplacer(`"`, "'", "\n", " ", "\r", " ").Replace(e.Title)
-	return fmt.Sprintf("<%s from=%q title=%q relation=%q>\n%s\n</%s>", e.tag(), e.From, title, e.Relation, body, e.tag())
+	title := ""
+	if e.Title != "" {
+		title = fmt.Sprintf(" title=%q", strings.NewReplacer(`"`, "'", "\n", " ", "\r", " ").Replace(e.Title))
+	}
+	return fmt.Sprintf("<%s from=%q%s relation=%q>\n%s\n</%s>", e.tag(), e.From, title, e.Relation, body, e.tag())
 }
 
 // Unwrap returns the text a message wrapped by this envelope carried, or the

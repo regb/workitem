@@ -188,6 +188,16 @@ func TestAccessLevels(t *testing.T) {
 	}
 	anyLevel := v1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED
 
+	// An agent does all but close or reopen its own item, which is its
+	// owner's; what it delegated it closes.
+	t.Run("its own item", func(t *testing.T) {
+		_, err := agent.Lifecycle.CloseItem(t.Context(), connect.NewRequest(&v1.CloseItemRequest{ItemId: a, Resolution: v1.Resolution_RESOLUTION_COMPLETED}))
+		denied(t, v1.AccessLevel_ACCESS_LEVEL_MANAGE, err)
+		_, err = agent.Items.SetItemState(t.Context(), connect.NewRequest(&v1.SetItemStateRequest{ItemId: a, State: v1.ItemState_ITEM_STATE_CLOSED, Resolution: v1.Resolution_RESOLUTION_COMPLETED}))
+		denied(t, v1.AccessLevel_ACCESS_LEVEL_MANAGE, err)
+		call(t, agent.Items.UpdateItem, &v1.UpdateItemRequest{ItemId: a, AddLabels: []string{"mine"}})
+	})
+
 	t.Run("without access", func(t *testing.T) {
 		_, err := agent.Items.GetItem(t.Context(), connect.NewRequest(&v1.GetItemRequest{ItemId: b.Id}))
 		denied(t, anyLevel, err)
@@ -514,7 +524,10 @@ func TestAccessAgentsMessagesAndNotices(t *testing.T) {
 				}
 			}
 		}
-		envelope(ask(t, asParent, child, "ping"), model.ItemPrincipal(parent), "Parent", model.RelationOwner)
+		// The owner is its delegation's user: what it sends arrives as typed.
+		if answer := ask(t, asParent, child, "ping"); answer != "Echo: ping" {
+			t.Fatalf("the owner's message: %q", answer)
+		}
 		envelope(ask(t, asParent, other.Id, "Do the checks pass?"), model.ItemPrincipal(parent), "Parent", model.RelationOther)
 		asChild := accessRuntimeClients(t, f, child)
 		envelope(ask(t, asChild, parent, "status"), model.ItemPrincipal(child), "Child", model.RelationDelegation)
@@ -548,9 +561,10 @@ func TestAccessAgentsMessagesAndNotices(t *testing.T) {
 	})
 
 	t.Run("notices", func(t *testing.T) {
-		// A person's turn on the delegation is answered to them: the owner
-		// hears nothing of it.
-		if answer := ask(t, f.Clients, child, "from the person"); answer != "Echo: from the person" {
+		// A person writing to a delegation directly is named in an
+		// envelope, as its owner is its user; their turn is answered to
+		// them: the owner hears nothing of it.
+		if answer := ask(t, f.Clients, child, "from the person"); !strings.Contains(answer, `from="`+model.OperatorUser+`" relation="`+model.RelationPerson+`">`+"\nfrom the person\n") {
 			t.Fatalf("the person's message: %q", answer)
 		}
 		time.Sleep(time.Second)
@@ -600,6 +614,7 @@ func TestAccessAgentsMessagesAndNotices(t *testing.T) {
 	// follows it up.
 	t.Run("taking an item tells its former owner", func(t *testing.T) {
 		apitest.WaitIdle(t, f.Clients, parent)
+		apitest.WaitIdle(t, f.Clients, child)
 		call(t, f.Clients.Items.UpdateItem, &v1.UpdateItemRequest{ItemId: child, Owner: model.OperatorUser})
 		eventually(t, "the takeover notice", func() bool {
 			for _, notice := range notices() {

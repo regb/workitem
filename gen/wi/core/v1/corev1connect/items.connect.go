@@ -132,7 +132,7 @@ type ItemServiceClient interface {
 	// ReadAttachment streams attached content in chunks, by digest.
 	ReadAttachment(context.Context, *connect.Request[v1.ReadAttachmentRequest]) (*connect.ServerStreamForClient[v1.ReadAttachmentResponse], error)
 	// ListAccess lists what items' agents may do to other items. An item's
-	// agent may always manage its own item and the items it delegated.
+	// agent may always manage the items it delegated, and integrate its own.
 	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
 	// ListAccessRequests lists what items' agents were refused for want of
 	// access a person can grant: the level an agent needed on an item, until
@@ -502,7 +502,7 @@ type ItemServiceHandler interface {
 	// ReadAttachment streams attached content in chunks, by digest.
 	ReadAttachment(context.Context, *connect.Request[v1.ReadAttachmentRequest], *connect.ServerStream[v1.ReadAttachmentResponse]) error
 	// ListAccess lists what items' agents may do to other items. An item's
-	// agent may always manage its own item and the items it delegated.
+	// agent may always manage the items it delegated, and integrate its own.
 	ListAccess(context.Context, *connect.Request[v1.ListAccessRequest]) (*connect.Response[v1.ListAccessResponse], error)
 	// ListAccessRequests lists what items' agents were refused for want of
 	// access a person can grant: the level an agent needed on an item, until
