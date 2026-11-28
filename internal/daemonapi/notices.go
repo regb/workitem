@@ -212,7 +212,7 @@ func (s *Server) noticeText(ctx context.Context, delegation model.Manifest, aske
 			b.WriteString(" It did not reply.")
 		}
 		if delegation.Owner == model.ItemPrincipal(askerID) {
-			fmt.Fprintf(&b, "\n\nAnswer it with wi send %s, or merge or close it when its work is done.", delegation.ID)
+			fmt.Fprintf(&b, "\n\nAnswer it with wi send %s. Once its work is done, merge it and close it yourself.", delegation.ID)
 		} else {
 			fmt.Fprintf(&b, "\n\nAnswer it with wi send %s if you need more; its next reply comes back the same way.", delegation.ID)
 		}

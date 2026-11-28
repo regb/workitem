@@ -41,7 +41,7 @@ Short-lived work has a durable record: restarting an agent, releasing a worktree
 - `internal/model/`, `internal/store/`: record types and filesystem access. Live structured state belongs to the coordinator; drivers own native conversations.
 - `agentdriver/`, `internal/agent/`, `internal/agentdriver/`, `skills/`: public driver contracts, runtime support, process host/clients, bundled Pi and Claude implementations, and embedded skills.
 - `internal/git/`, `internal/tmux/`, `internal/direnv/`, `internal/process/`: system adapters. `internal/plugin/`, `internal/plugins/`: the plugin host and bundled native plugins (direnv, setup, files). `internal/usage/`: subscription usage providers. `internal/app/adapter/tmux/` separates terminal operations from interactive navigation.
-- Support and tooling: configuration/path/locking/ranking/version/test helpers under `internal/`; offline conversion in `internal/migraterepositories/`; install/release and popup helpers in `scripts/`.
+- Support and tooling: configuration/path/locking/ranking/version/test helpers under `internal/`; install/release and popup helpers in `scripts/`.
 
 ## Architectural constraints
 
@@ -70,30 +70,17 @@ Package-boundary tests enforce allowed imports. Child packages must not import t
 
 Do not create Git commits unless the user explicitly asks for a commit. Leave completed changes in the working tree for review.
 
-After a successful change that affects the `wi` executable, install the development build unless the user says not to:
+After a successful change that affects the `wi` executable, build it unless the user says not to:
 
    ```bash
    scripts/install-local
    ```
 
-A dirty-build warning is expected before commit. The script installs through `go install -buildvcs=true` and prints the installed path and version. Use `scripts/install-local --clean` only when an exact clean-commit build is required.
+Run by an item's agent, the script builds into that item's own directory (`$XDG_STATE_HOME/wi/builds/ITEM/bin`) and leaves the shared `wi` and its daemon alone, so agents working in parallel do not replace each other's builds. Try that build by its path with its own HOME and XDG roots. Install for everyone with `scripts/install-local --shared` only when the user asks to deploy: it stops the running daemon, installs, starts the daemon again with the new build, and updates the sandbox copy in `~/.agentbox/tools/bin` when that directory exists. The daemon accepts only agents of its own build, and `wi version` reports when it runs another build than the installed `wi`.
 
-Running agents keep the build that started them. After a change to drivers or runtime behavior, restart idle agents with `wi agent runtime stop --item ID` then `wi resume ID --agent-mode tui|headless`.
+The script records the commit, branch, and whether the checkout was modified; a dirty-build warning is expected before commit. Use `--clean` only when an exact clean-commit build is required.
 
-If `~/.agentbox/tools/bin` exists, also update its sandbox copy after installing:
-
-```bash
-gobin=$(go env GOBIN)
-if [ -z "$gobin" ]; then
-    gopath=$(go env GOPATH)
-    gobin=${gopath%%:*}/bin
-fi
-agentbox_tmp="$HOME/.agentbox/tools/bin/.wi.$$"
-trap 'rm -f "$agentbox_tmp"' EXIT HUP INT TERM
-cp -p "$gobin/wi" "$agentbox_tmp"
-mv -f "$agentbox_tmp" "$HOME/.agentbox/tools/bin/wi"
-trap - EXIT HUP INT TERM
-```
+Running agents keep the build that started them. After a shared install that changes drivers or runtime behavior, restart idle agents with `wi agent runtime stop --item ID` then `wi resume ID --agent-mode tui|headless`.
 
 Documentation-only and test-only changes do not require reinstalling the binary.
 
@@ -105,5 +92,5 @@ Documentation-only and test-only changes do not require reinstalling the binary.
 - Test both TUI and headless composition when changing runtime startup or lifecycle behavior.
 - CLI `--json` output is the API's JSON (protojson with proto field names): keep it consistent with the contract and preserve documented exit-code distinctions.
 - `cmd/wi/e2e_test.go` drives the real binary end to end in an isolated environment with a fake driver; extend it when changing client or daemon behavior.
-- A build with a changed daemon protocol cannot stop an older daemon: stop the running daemon with its own binary before installing, then start the new one.
+- A build with a changed daemon protocol cannot stop an older daemon. `scripts/install-local --shared` stops it with the old binary before installing; installing any other way, stop the running daemon with its own binary first, then start the new one.
 - For persistence changes, test malformed input, interrupted/rebuildable state, locking, and path-escape safety where relevant.

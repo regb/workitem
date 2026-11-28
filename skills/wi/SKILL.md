@@ -71,7 +71,7 @@ You act as your work item: every `wi` command you run is recorded as done by it,
 wi new --title "Item title" --desc-file DESC_FILE
 ```
 
-The item is owned by your item: it is a delegation, kept out of the user's main list and shown on your item's page, where the user can take it over. Whether the user asked you to file it for later or you split off part of your work, it is the same command. When a delegation finishes the turn you asked for or waits on a question, you receive a notice from it; follow it up, and merge or close it when its work is done.
+The item is owned by your item: it is a delegation, kept out of the user's main list and shown on your item's page, where the user can take it over. Whether the user asked you to file it for later or you split off part of your work, it is the same command. When a delegation finishes the turn you asked for or waits on a question, you receive a notice from it; follow it up, and once its work is done, merge it and close it (see below).
 
 It defaults to the repo of the current work item; use `--repo REPO_NAME` to file it in another repo. It is not started unless you pass `--start` or `--prompt`.
 
@@ -119,13 +119,13 @@ wi merge
 to merge it to the default integration branch.
 This command synchronizes a configured upstream before merging, but does not push.
 
-Once an item is merged and all work scoped to the task is settled (or accounted for in follow-up items), an item can be closed.
-Never close an item without explicit instructions from the user.
-Usually this is rather ran as part of review and management of items, not directly within an item, so use:
+Once an item is merged and all work scoped to the task is settled (or accounted for in follow-up items), it is closed:
 
 ```bash
 wi close --item ITEM_NAME --resolution completed|abandoned|superseded
 ```
+
+Close the items you delegated yourself, without asking: once one's work is merged (or, for work with nothing to merge such as a review, done), close it as `completed`; one that is no longer needed, as `abandoned` or `superseded`. Leaving finished delegations open makes them look active. Your own item is closed by whoever owns it; what you may do to other items is what your access allows.
 
 ## Update item state
 
