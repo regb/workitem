@@ -4,37 +4,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
-	"time"
 
 	"github.com/regb/workitem/internal/apperr"
 	"github.com/regb/workitem/internal/model"
 	bolt "go.etcd.io/bbolt"
 )
 
-// AccessProjection holds what items' agents may do to other items. A
-// default entry is an entry like any other, so what applies can always be
-// listed and changed.
+// AccessProjection holds what items' agents may do to other items, as
+// people granted it.
 const AccessProjection = "access_entries"
 
-// DefaultAccessID names the entry every installation starts with: every
-// item's agent may manage every item, as before access lists existed. The
-// operator lowers or removes it.
-const DefaultAccessID = "default-every-item"
+// legacyDefaultAccessID names the entry installations used to start with:
+// every item's agent could manage every item. Agents now start with access
+// only to their own item and what it delegated, and what a person grants.
+const legacyDefaultAccessID = "default-every-item"
 
-var keyAccessInitialized = []byte("access_initialized")
-
-// ensureDefaultAccess records the default entry once per database, when it
-// opens: removing it later sticks.
-func ensureDefaultAccess(tx *bolt.Tx) error {
-	meta := tx.Bucket(bucketMeta)
-	if meta.Get(keyAccessInitialized) != nil {
+// removeLegacyDefaultAccess deletes that entry, as wi recorded it, when the
+// database opens.
+func removeLegacyDefaultAccess(tx *bolt.Tx) error {
+	bucket := tx.Bucket(bucketProjections).Bucket([]byte(AccessProjection))
+	if bucket == nil {
 		return nil
 	}
-	entry := model.AccessEntry{ID: DefaultAccessID, Subject: model.EveryItemPrincipal, ItemID: model.EveryItem, Level: model.AccessManage, GrantedBy: model.SystemActor, GrantedAt: time.Now().UTC()}
-	if err := putProjectionValue(tx, AccessProjection, entry.ID, entry); err != nil {
-		return err
+	raw := bucket.Get([]byte(legacyDefaultAccessID))
+	if raw == nil {
+		return nil
 	}
-	return meta.Put(keyAccessInitialized, []byte("1"))
+	var entry model.AccessEntry
+	if err := json.Unmarshal(raw, &entry); err != nil || entry.GrantedBy != model.SystemActor {
+		return nil
+	}
+	return bucket.Delete([]byte(legacyDefaultAccessID))
 }
 
 // AccessEntries lists every entry, oldest first.

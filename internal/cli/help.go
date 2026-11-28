@@ -297,10 +297,10 @@ var helpDocs = map[string]helpDoc{
 		Usage:   []string{"wi access [list]", "wi access grant (--item <selector> | --every-item) (--on <selector> | --everything) --level <level>", "wi access revoke <entry-id>"},
 		Description: []string{
 			"An item's agent may always manage its own item and the items it delegated. What it may do to other items is what these entries grant: to one item's agent or every item's, on one item or every item, up to a level. Each level includes the ones before it: view (read the item, its conversation, notes, review and checkout files), message (send its agent messages; add notes, attachments, blockers and review comments), control (drive its agent and checkout, edit it, shelve it), integrate (capture and approve its revisions, merge it), manage (close and reopen it).",
-			"Every installation starts with one entry, every item's agent may manage every item, which keeps what agents could do before access lists. Revoke it, and grant what you mean, to limit them. Granting again replaces an entry's level. Deleting items, changing who owns an item, changing access, repositories, profiles and schedules, and stopping the daemon are yours only.",
+			"Agents start with no entries: grant what you mean. Granting again replaces an entry's level. Deleting items, changing who owns an item, changing access, repositories, profiles and schedules, and stopping the daemon are yours only.",
 			"A refused agent is told which level it lacks and the command to grant it.",
 		},
-		Examples: []string{"wi access", "wi access revoke default-every-item", "wi access grant --every-item --everything --level view", "wi access grant --item reviewer --on parser-fix --level integrate"},
+		Examples: []string{"wi access", "wi access grant --every-item --everything --level view", "wi access grant --item reviewer --on parser-fix --level integrate"},
 		SeeAlso:  []string{"edit"},
 	},
 	"show": {

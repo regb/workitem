@@ -155,6 +155,7 @@ func TestControlLeasesAndPlans(t *testing.T) {
 		// names the same client.
 		other := newItem(t, f, repository, "other").Id
 		agent, _ := f.AgentClients(t, other)
+		call(t, f.Clients.Items.GrantAccess, &v1.GrantAccessRequest{Subject: model.ItemPrincipal(other), OnItemId: item, Level: v1.AccessLevel_ACCESS_LEVEL_CONTROL})
 		if _, err := agent.Control.RenewControl(t.Context(), connect.NewRequest(&v1.RenewControlRequest{LeaseId: leaseID})); connect.CodeOf(err) != connect.CodePermissionDenied {
 			t.Fatalf("renewing another principal's lease: %v", err)
 		}

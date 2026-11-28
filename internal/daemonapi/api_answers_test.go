@@ -29,6 +29,7 @@ func TestAnswersGoBackToTheItemThatAsked(t *testing.T) {
 		}
 		return out
 	}
+	call(t, f.Clients.Items.GrantAccess, &v1.GrantAccessRequest{Subject: "item:" + asker.Id, OnItemId: answerer.Id, Level: v1.AccessLevel_ACCESS_LEVEL_MESSAGE})
 	accessSend(t, accessRuntimeClients(t, f, asker.Id), &v1.SendMessageRequest{ItemId: answerer.Id, Text: "what do you think"})
 	eventually(t, "the asker's notice", func() bool {
 		for _, text := range userMessages(asker.Id) {

@@ -10,10 +10,6 @@ import (
 func TestAccessFromTheCommandLine(t *testing.T) {
 	f := newClientFixture(t)
 	a, b := f.create(t, "Alpha"), f.create(t, "Beta")
-	if !strings.Contains(f.run(t, "access"), "default-every-item") {
-		t.Fatal(f.out.String())
-	}
-	f.run(t, "access", "revoke", "default-every-item")
 	operator := f.cfg.API
 	f.cfg.API, _ = f.api.AgentClients(t, a.Id)
 	f.errs.Reset()

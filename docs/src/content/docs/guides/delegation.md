@@ -71,11 +71,10 @@ Each item's history records who did what: you (`user:operator`), an item's agent
 
 An agent's `wi` commands act as its item, not as you. Each time an agent starts, the daemon gives it a credential, in the file `WI_ITEM_CREDENTIAL_FILE` names in its environment, and every call the agent and its tools make presents it. The credential stops working when that agent stops or is replaced; `wi` then fails rather than acting as you. Your own commands, including those in an item's shell windows, act as you.
 
-What an agent may do to items other than its own and its delegations is what `wi access` grants, up to a level: view, message, control (drive its agent and checkout), integrate (approve and merge) or manage (close and reopen). Each installation starts with one entry, every item's agent may manage every item, which keeps what agents could always do; revoke it and grant what you mean:
+What an agent may do to items other than its own and its delegations is what `wi access` grants, up to a level, and reading an item covers the items it delegated, however far down; higher levels do not pass down: view, message, control (drive its agent and checkout), integrate (approve and merge) or manage (close and reopen). An agent starts with no access to other items: grant what you mean. Installations that began with an entry letting every item's agent manage every item (`default-every-item`) lose it when the daemon opens their database.
 
 ```bash
 wi access                                   # what applies
-wi access revoke default-every-item
 wi access grant --every-item --everything --level view
 wi access grant --item orchestrator --on parser-fix --level integrate
 ```

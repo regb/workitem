@@ -13,7 +13,6 @@ import (
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/apitest"
 	"github.com/regb/workitem/internal/apitransport"
-	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/credential"
 	"github.com/regb/workitem/internal/daemonapi"
 	"github.com/regb/workitem/internal/model"
@@ -188,10 +187,6 @@ func TestAccessLevels(t *testing.T) {
 		}
 	}
 	anyLevel := v1.AccessLevel_ACCESS_LEVEL_UNSPECIFIED
-
-	// By default every item's agent may manage every item.
-	call(t, agent.Items.GetItem, &v1.GetItemRequest{ItemId: b.Id})
-	call(t, f.Clients.Items.RevokeAccess, &v1.RevokeAccessRequest{EntryId: coordinator.DefaultAccessID})
 
 	t.Run("without access", func(t *testing.T) {
 		_, err := agent.Items.GetItem(t.Context(), connect.NewRequest(&v1.GetItemRequest{ItemId: b.Id}))
@@ -401,7 +396,6 @@ func TestAccessDelegation(t *testing.T) {
 	t.Run("rights reach down the owner chain", func(t *testing.T) {
 		childAgent, _ := f.AgentClients(t, delegated[1])
 		grandchild := call(t, childAgent.Items.CreateItem, &v1.CreateItemRequest{RepositoryId: repo, Title: "grandchild"}).Item.Id
-		call(t, f.Clients.Items.RevokeAccess, &v1.RevokeAccessRequest{EntryId: coordinator.DefaultAccessID})
 		call(t, agent.Items.UpdateItem, &v1.UpdateItemRequest{ItemId: grandchild, AddLabels: []string{"x"}})
 		setState(grandchild, v1.ItemState_ITEM_STATE_CLOSED, v1.Resolution_RESOLUTION_ABANDONED)
 	})
@@ -509,6 +503,8 @@ func TestAccessAgentsMessagesAndNotices(t *testing.T) {
 	apitest.WaitIdle(t, f.Clients, child)
 
 	t.Run("envelopes", func(t *testing.T) {
+		// Agents message items other than theirs as they are granted.
+		call(t, f.Clients.Items.GrantAccess, &v1.GrantAccessRequest{Subject: "item:*", OnItemId: "*", Level: v1.AccessLevel_ACCESS_LEVEL_MESSAGE})
 		// The fake agent echoes what it received: the envelope wi wrote.
 		envelope := func(answer, from, title, relation string) {
 			t.Helper()

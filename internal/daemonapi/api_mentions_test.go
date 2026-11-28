@@ -6,7 +6,6 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/apitest"
-	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -17,7 +16,6 @@ func TestMentionsLetTheAgentReadTheItem(t *testing.T) {
 	t.Parallel()
 	f := apitest.New(t, apitest.WithAgents())
 	repo := f.Repository(t, "test")
-	call(t, f.Clients.Items.RevokeAccess, &v1.RevokeAccessRequest{EntryId: coordinator.DefaultAccessID})
 	agentItem, _ := activeItem(t, f, repo, "Composer")
 	startAgent(t, f, agentItem.Id)
 	mentioned := newItem(t, f, repo, "Mentioned")

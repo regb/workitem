@@ -6,7 +6,6 @@ import (
 	"connectrpc.com/connect"
 	v1 "github.com/regb/workitem/gen/wi/core/v1"
 	"github.com/regb/workitem/internal/apitest"
-	"github.com/regb/workitem/internal/coordinator"
 	"github.com/regb/workitem/internal/model"
 )
 
@@ -19,7 +18,6 @@ func TestAccessRequestsWaitForAPerson(t *testing.T) {
 	a := newItem(t, f, repo, "asker").Id
 	b := newItem(t, f, repo, "wanted").Id
 	c := newItem(t, f, repo, "dismissed").Id
-	call(t, f.Clients.Items.RevokeAccess, &v1.RevokeAccessRequest{EntryId: coordinator.DefaultAccessID})
 	agent, _ := f.AgentClients(t, a)
 	subject := model.ItemPrincipal(a)
 	refused(t, connect.CodePermissionDenied, agent.Items.AddNote, &v1.AddNoteRequest{ItemId: b, Text: "hello"})
