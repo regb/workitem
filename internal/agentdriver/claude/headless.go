@@ -84,6 +84,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 	go readHeadlessFrames(readCtx, output, frames)
 	sequence := uint64(0)
 	eventParent := ctx
+	resend := protocol.NewStateResender(ctx, r.Runtime.EventSocketPath)
 	emit := func(event protocol.RuntimeEvent) {
 		sequence++
 		if event.Type == protocol.EventAgentSettled {
@@ -99,7 +100,7 @@ func launchHeadless(ctx context.Context, r protocol.LaunchRequest, c Config, rep
 		event.Timestamp = time.Now().UTC()
 		eventCtx, cancel := context.WithTimeout(eventParent, 500*time.Millisecond)
 		defer cancel()
-		_ = protocol.SubmitEvent(eventCtx, r.Runtime.EventSocketPath, event)
+		resend.Sent(event, protocol.SubmitEvent(eventCtx, r.Runtime.EventSocketPath, event))
 	}
 	reported := &settingsReport{emit: emit, aliases: map[string]string{}}
 	replies := &transcriptFeed{factAfter: time.Now()}

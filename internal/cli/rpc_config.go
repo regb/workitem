@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/regb/workitem/internal/version"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -31,7 +32,13 @@ func rpcInfo(ctx context.Context, command string, args []string, cfg Config, jso
 		if jsonOut {
 			return rpcEmit(cfg, true, value.Msg)
 		}
-		fmt.Fprintln(cfg.Stdout, "wi", value.Msg.Version)
+		// This executable's build, then the daemon's when it differs: the
+		// daemon accepts agents only of its own build.
+		own := version.Current().Version
+		fmt.Fprintln(cfg.Stdout, "wi", own)
+		if value.Msg.Version != own {
+			fmt.Fprintf(cfg.Stdout, "daemon %s (another build: agents started from this wi will not run until the daemon restarts with it)\n", value.Msg.Version)
+		}
 		return nil
 	}
 	paths := cfg.Paths

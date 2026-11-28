@@ -3,21 +3,34 @@ set -eu
 
 usage() {
     cat <<'EOF'
-usage: scripts/install-local [--clean] [--quiet]
+usage: scripts/install-local [--clean] [--quiet] [--shared]
 
 Build and install the current checkout as a development version.
 
-  --clean  Refuse to install when tracked, staged, or untracked changes exist.
-  --quiet  Do not print the installed version after a successful install.
+The installed wi serves every item, and its daemon accepts only agents of
+its own build. Installing it stops the running daemon with the old build
+and starts it again with the new one, and records the branch and commit
+the build came from: wi version names them.
+
+An item's agent, run with its item credential, builds into a directory of
+its own instead and leaves the shared wi and its daemon alone: agents
+working in parallel would otherwise replace each other's builds. --shared
+installs for everyone all the same.
+
+  --clean   Refuse to install when tracked, staged, or untracked changes exist.
+  --quiet   Do not print the installed version after a successful install.
+  --shared  Install for everyone even when run by an item's agent.
 EOF
 }
 
 require_clean=0
 quiet=0
+shared=0
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --clean) require_clean=1 ;;
         --quiet) quiet=1 ;;
+        --shared) shared=1 ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; exit 2 ;;
     esac
@@ -39,7 +52,13 @@ if [ -n "$dirty" ]; then
     echo "install-local: warning: installing a dirty development build" >&2
 fi
 
-go install -buildvcs=true ./cmd/wi ./cmd/wi-github ./cmd/wi-usage
+# The build records where it came from.
+revision=$(git rev-parse HEAD)
+branch=$(git branch --show-current)
+modified=false
+[ -n "$dirty" ] && modified=true
+pkg=github.com/regb/workitem/internal/version
+ldflags="-X $pkg.sourceRevision=$revision -X $pkg.sourceModified=$modified -X $pkg.sourceBranch=$branch"
 
 gobin=$(go env GOBIN)
 if [ -z "$gobin" ]; then
@@ -47,9 +66,55 @@ if [ -z "$gobin" ]; then
     gobin=${gopath%%:*}/bin
 fi
 
+# An item's agent builds for itself unless told to install for everyone.
+if [ -n "${WI_ITEM_CREDENTIAL_FILE:-}" ] && [ "$shared" -eq 0 ]; then
+    private="${XDG_STATE_HOME:-$HOME/.local/state}/wi/builds/${WI_ID:-item}/bin"
+    mkdir -p "$private"
+    GOBIN="$private" go install -ldflags "$ldflags" ./cmd/wi ./cmd/wi-github ./cmd/wi-usage
+    echo "built: $private/wi ($("$private/wi" version 2>/dev/null | head -1 || true))"
+    echo "The shared wi and its daemon are unchanged: run that build by its path,"
+    echo "with its own HOME and XDG roots, or install it with --shared."
+    exit 0
+fi
+
+# The daemon accepts only agents of its own build: stop it with the build
+# that started it, and start it again with the new one.
+running=0
+if [ -x "$gobin/wi" ] && "$gobin/wi" daemon status >/dev/null 2>&1; then
+    running=1
+    "$gobin/wi" daemon stop >/dev/null
+fi
+
+go install -ldflags "$ldflags" ./cmd/wi ./cmd/wi-github ./cmd/wi-usage
+
+if [ "$running" -eq 1 ]; then
+    started=0
+    for _ in 1 2 3 4 5 6; do
+        if "$gobin/wi" daemon start >/dev/null 2>&1; then
+            started=1
+            break
+        fi
+        sleep 2
+    done
+    if [ "$started" -eq 0 ]; then
+        echo "install-local: the daemon did not start again; run wi daemon start" >&2
+        exit 1
+    fi
+fi
+
+# A sandbox's copy of wi follows the installed one.
+if [ -d "$HOME/.agentbox/tools/bin" ]; then
+    agentbox_tmp="$HOME/.agentbox/tools/bin/.wi.$$"
+    trap 'rm -f "$agentbox_tmp"' EXIT HUP INT TERM
+    cp -p "$gobin/wi" "$agentbox_tmp"
+    mv -f "$agentbox_tmp" "$HOME/.agentbox/tools/bin/wi"
+    trap - EXIT HUP INT TERM
+fi
+
 if [ "$quiet" -eq 0 ]; then
     "$gobin/wi" version
     echo "installed: $gobin/wi"
     echo "installed: $gobin/wi-github (optional plugin, enabled through [plugins.github])"
     echo "installed: $gobin/wi-usage (optional plugin, enabled through [plugins.usage])"
+    [ "$running" -eq 1 ] && echo "restarted the daemon with this build"
 fi

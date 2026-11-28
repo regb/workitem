@@ -176,6 +176,7 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 	go func() { done <- cmd.Wait() }()
 	var sequence atomic.Uint64
 	var closingDeadline time.Time
+	resend := protocol.NewStateResender(ctx, r.Runtime.EventSocketPath)
 	emitFact := func(event protocol.RuntimeEvent) error {
 		deadline := time.Now().Add(3 * time.Second)
 		if !closingDeadline.IsZero() && closingDeadline.Before(deadline) {
@@ -194,7 +195,9 @@ func launch(ctx context.Context, r protocol.LaunchRequest, c Config, reply func(
 		event.RuntimeID = r.Runtime.ID
 		event.WorkItemID = r.Runtime.WorkItemID
 		event.Timestamp = time.Now().UTC()
-		return protocol.SubmitEvent(eventCtx, r.Runtime.EventSocketPath, event)
+		err := protocol.SubmitEvent(eventCtx, r.Runtime.EventSocketPath, event)
+		resend.Sent(event, err)
+		return err
 	}
 	emit := func(kind string, failed bool, tool string) error {
 		return emitFact(protocol.RuntimeEvent{Type: kind, Failed: failed, ToolName: tool})

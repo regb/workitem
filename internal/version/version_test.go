@@ -18,7 +18,7 @@ func TestFromBuildInfoDevelopmentRevision(t *testing.T) {
 		},
 	}
 	info := fromBuildInfo("", build)
-	if info.Version != "devel+aaaaaaaaaaaa" || info.ShortRevision != "aaaaaaaaaaaa" || !info.Modified || info.GoVersion != "go1.test" {
+	if info.Version != "devel+aaaaaaaaaaaa-dirty" || info.ShortRevision != "aaaaaaaaaaaa" || !info.Modified || info.GoVersion != "go1.test" {
 		t.Fatalf("info = %+v", info)
 	}
 	wantTime := time.Date(2026, 8, 9, 10, 11, 12, 0, time.UTC)
@@ -37,6 +37,15 @@ func TestFromBuildInfoReleasePrecedence(t *testing.T) {
 	}
 }
 
+func TestSourceBranchNamesTheWork(t *testing.T) {
+	sourceBranch = "wi/item-abc"
+	defer func() { sourceBranch = "" }()
+	info := fromBuildInfoWithSource("", nil, strings.Repeat("c", 40), "true")
+	if info.Version != "devel+cccccccccccc-dirty (wi/item-abc)" || info.Branch != "wi/item-abc" {
+		t.Fatalf("info = %+v", info)
+	}
+}
+
 func TestSourceSnapshotIdentity(t *testing.T) {
 	build := &debug.BuildInfo{
 		Main: debug.Module{Version: "v0.2.0"},
@@ -50,7 +59,7 @@ func TestSourceSnapshotIdentity(t *testing.T) {
 		wantModified                          bool
 	}{
 		{"clean", strings.Repeat("b", 40), "false", "devel+bbbbbbbbbbbb", false},
-		{"dirty", strings.Repeat("b", 40), "true", "devel+bbbbbbbbbbbb", true},
+		{"dirty", strings.Repeat("b", 40), "true", "devel+bbbbbbbbbbbb-dirty", true},
 		{"unknown", "", "true", "devel", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

@@ -161,6 +161,7 @@ func launchEnvironment(extra map[string]string, tmp string) []string {
 
 func eventEmitter(ctx context.Context, r protocol.LaunchRequest) func(protocol.RuntimeEvent) {
 	sequence := uint64(0)
+	resend := protocol.NewStateResender(ctx, r.Runtime.EventSocketPath)
 	return func(event protocol.RuntimeEvent) {
 		sequence++
 		if event.Type == protocol.EventAgentSettled {
@@ -176,7 +177,7 @@ func eventEmitter(ctx context.Context, r protocol.LaunchRequest) func(protocol.R
 		event.Timestamp = time.Now().UTC()
 		eventCtx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
-		_ = protocol.SubmitEvent(eventCtx, r.Runtime.EventSocketPath, event)
+		resend.Sent(event, protocol.SubmitEvent(eventCtx, r.Runtime.EventSocketPath, event))
 	}
 }
 

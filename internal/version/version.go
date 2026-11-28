@@ -23,6 +23,10 @@ var release string
 // sourceRevision then means unknown, not a tagged release or a clean checkout.
 var sourceRevision, sourceModified string
 
+// sourceBranch is the branch a development build was installed from, such
+// as an item's wi/<slug> branch: it says which work the installed wi is.
+var sourceBranch string
+
 var buildIdentityOnce = sync.OnceValue(func() string {
 	info := Current()
 	executable, err := os.Executable()
@@ -53,6 +57,7 @@ type Info struct {
 	ShortRevision string     `json:"short_revision,omitempty"`
 	CommitTime    *time.Time `json:"commit_time,omitempty"`
 	Modified      bool       `json:"modified"`
+	Branch        string     `json:"branch,omitempty"`
 	GoVersion     string     `json:"go_version"`
 }
 
@@ -92,6 +97,7 @@ func fromBuildInfoWithSource(linkedRelease string, build *debug.BuildInfo, revis
 	if modified == "true" || modified == "false" {
 		info.Revision = strings.TrimSpace(revision)
 		info.Modified = modified == "true"
+		info.Branch = strings.TrimSpace(sourceBranch)
 		info.CommitTime = nil
 		moduleVersion = ""
 	}
@@ -107,6 +113,12 @@ func fromBuildInfoWithSource(linkedRelease string, build *debug.BuildInfo, revis
 		info.Version = info.Release
 	} else if info.ShortRevision != "" {
 		info.Version = "devel+" + info.ShortRevision
+		if info.Modified {
+			info.Version += "-dirty"
+		}
+		if info.Branch != "" {
+			info.Version += " (" + info.Branch + ")"
+		}
 	} else {
 		info.Version = "devel"
 	}
