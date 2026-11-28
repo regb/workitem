@@ -150,12 +150,14 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 	case agent.EventRuntimeFailed:
 		activity.RuntimeState = model.AgentRuntimeProblem
 	case agent.EventCommandAccepted:
+		activity.RuntimeState = recovered(activity.RuntimeState)
 		if activity.AgentState != "active" {
 			activity.AgentState = ""
 		}
 		activity.TurnState = "busy"
 		activity.LastRequestedAt = &at
 	case agent.EventTurnStarted, agent.EventToolStarted:
+		activity.RuntimeState = recovered(activity.RuntimeState)
 		activity.TurnState = "busy"
 		activity.LastRequestedAt = &at
 	case agent.EventTurnEnded:
@@ -182,9 +184,23 @@ func applyRuntimeActivity(activity *RuntimeActivity, event runtimeEventHeader, i
 		}
 		activity.LastCompletedAt = &at
 	case agent.EventMessageCompleted:
+		activity.RuntimeState = recovered(activity.RuntimeState)
 		if activity.AgentState != "active" && (event.Role == "assistant" || event.Role == "") {
 			activity.LastCompletedAt = &at
 		}
+	case agent.EventToolCompleted:
+		activity.RuntimeState = recovered(activity.RuntimeState)
 	}
 	return true
+}
+
+// recovered is a runtime's state once it reports new work after a failure:
+// a runtime that goes on working is running, not failed. A report of its
+// state alone does not prove it works, and a failed turn is the agent
+// state's to say; other states are kept.
+func recovered(state string) string {
+	if state == model.AgentRuntimeProblem {
+		return model.AgentRuntimeRunning
+	}
+	return state
 }

@@ -203,6 +203,17 @@ func (a *App) AgentBusy(ctx context.Context, itemID string) bool {
 	return err != nil || status.Status == "busy"
 }
 
+// AgentIdle reports an agent observed idle: one with nothing to stop. An
+// agent in a problem state, or not observed, may still be working.
+func (a *App) AgentIdle(ctx context.Context, itemID string) bool {
+	if a.WorkListObserver != nil {
+		observation, err := a.WorkListObserver(ctx, itemID)
+		return err == nil && observation.Status == "idle"
+	}
+	status, err := a.AgentStatus(ctx, AgentStatusOptions{ResolveOptions: ResolveOptions{Selector: itemID}})
+	return err == nil && status.Status == "idle"
+}
+
 func (a *App) planControl(status ControlStatus, request ControlRequest, modes driverprotocol.RuntimeModes) ControlPlan {
 	plan := ControlPlan{Holder: request.Holder, Reasons: []string{}}
 	switch {

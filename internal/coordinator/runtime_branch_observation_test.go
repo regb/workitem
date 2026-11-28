@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -141,5 +142,31 @@ func TestAFailedBranchKeepsAKnownFailureReason(t *testing.T) {
 	}
 	if observation.Status != "problem" || observation.Reason != driverprotocol.RuntimeReasonText("usage_limit") || observation.FailureProvider != "claude" {
 		t.Fatal("selected failed branch hid the usage limit", observation)
+	}
+}
+
+// A runtime that reports a failure and then goes on working is working: the
+// failure does not stay its status until the next prompt.
+func TestRuntimeWorkAfterAFailureIsWork(t *testing.T) {
+	db, _ := attentionTestDatabase(t)
+	seedRuntimeOwner(t, db, importTestID, "owner")
+	now := time.Now().UTC()
+	for i, event := range []RuntimeSemanticEvent{
+		{Type: agent.EventAgentStarted},
+		{Type: agent.EventRuntimeFailed, Failed: true},
+		{Type: agent.EventToolStarted, ToolName: "bash"},
+	} {
+		event.ID, event.RuntimeID, event.WorkItemID, event.Timestamp = fmt.Sprintf("work-%d", i), "owner", importTestID, now.Add(time.Duration(i)*time.Second)
+		if _, err := IngestRuntimeEvent(context.Background(), db, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+	activity, _, _ := loadRuntimeActivity(db, importTestID)
+	if activity.RuntimeState != model.AgentRuntimeRunning {
+		t.Fatal("work after a failure left the runtime failed", activity)
+	}
+	var observation AgentObservation
+	if _, err := db.ReadProjection(AgentObservationProjection, importTestID, &observation); err != nil || observation.Status != "busy" {
+		t.Fatal("work after a failure is not shown busy", err, observation)
 	}
 }

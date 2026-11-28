@@ -573,7 +573,9 @@ func (s *Server) AbortTurn(ctx context.Context, req *connect.Request[v1.AbortTur
 	if err != nil {
 		return nil, rpcError(err)
 	}
-	if !s.App.AgentBusy(ctx, req.Msg.ItemId) {
+	// Only an agent seen idle has nothing to stop: one shown with a
+	// problem may still be at work, and is told to stop all the same.
+	if s.App.AgentIdle(ctx, req.Msg.ItemId) {
 		return response(&v1.AbortTurnResponse{}, nil)
 	}
 	runtime, err := s.App.AgentRuntimeStatus(ctx, resolve(req.Msg.ItemId))
